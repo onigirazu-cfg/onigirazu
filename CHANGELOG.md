@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] - 2024-09-26
+
+### Added
+
+- Dynamic version support in compiled binaries
+- Build information display with commit hash and build date
+- Cross-platform binary releases via GoReleaser
+- Pre-built binaries for Linux (amd64, arm64, arm v6/v7)
+- Pre-built binaries for macOS (amd64, arm64 - Apple Silicon)
+- Pre-built binaries for Windows (amd64)
+- Pre-built binaries for FreeBSD (amd64)
+- Linux distribution packages (DEB, RPM, APK, ArchLinux)
+- Docker images for containerized deployments
+- Homebrew formula for easy installation on macOS/Linux
+
+### Changed
+
+- Version information now injected at build time via ldflags
+- Improved `--version` flag output with detailed build information
+- Updated GoReleaser configuration for better release automation
+
+### Fixed
+
+- Fixed .gitignore to properly exclude binary while allowing source code
+- Corrected version injection in GoReleaser configuration
+
 ## [1.0.0] - 2024-09-26
 
 ### Added
