@@ -1,4 +1,4 @@
-.PHONY: build test clean run-example install lint fmt vet security coverage release-test ci-setup ci-status ci-validate ci-pipeline ci-pre-check ci-release-prepare ci-release-create test-race test-coverage
+.PHONY: build test clean run-example install lint fmt vet security coverage release-test ci-setup ci-status ci-validate ci-pipeline ci-pre-check ci-release-prepare ci-release-create test-race test-coverage docs docs-generate docs-serve docs-open docs-clean
 
 # Variables
 BINARY_NAME=onigirazu
