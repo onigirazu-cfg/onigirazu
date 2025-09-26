@@ -37,10 +37,6 @@ builds:
         goarch: arm64
     ldflags:
       - -s -w
-      - -X main.version={{.Version}}
-      - -X main.commit={{.Commit}}
-      - -X main.date={{.Date}}
-      - -X main.builtBy=goreleaser
       - -X github.com/onigirazu-cfg/onigirazu/internal/version.Version={{.Version}}
       - -X github.com/onigirazu-cfg/onigirazu/internal/version.Commit={{.Commit}}
       - -X github.com/onigirazu-cfg/onigirazu/internal/version.Date={{.Date}}
