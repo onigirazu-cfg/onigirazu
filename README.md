@@ -29,7 +29,54 @@ Onigirazu is a modern, high-performance configuration management tool written in
 
 ## Installation
 
-### From Source
+### 📦 Pre-built Binaries (Recommended)
+
+Download the latest release for your platform:
+
+```bash
+# Linux x86_64
+curl -LO https://github.com/onigirazu-cfg/onigirazu/releases/latest/download/onigirazu_Linux_x86_64.tar.gz
+tar -xzf onigirazu_Linux_x86_64.tar.gz
+sudo mv onigirazu /usr/local/bin/
+
+# macOS (Intel)
+curl -LO https://github.com/onigirazu-cfg/onigirazu/releases/latest/download/onigirazu_Darwin_x86_64.tar.gz
+tar -xzf onigirazu_Darwin_x86_64.tar.gz
+sudo mv onigirazu /usr/local/bin/
+
+# macOS (Apple Silicon)
+curl -LO https://github.com/onigirazu-cfg/onigirazu/releases/latest/download/onigirazu_Darwin_arm64.tar.gz
+tar -xzf onigirazu_Darwin_arm64.tar.gz
+sudo mv onigirazu /usr/local/bin/
+```
+
+**Available for**: Linux (amd64, arm64, arm), macOS (amd64, arm64), Windows (amd64), FreeBSD (amd64)
+
+### 🍺 Homebrew
+
+```bash
+brew tap onigirazu-cfg/tap
+brew install onigirazu
+```
+
+### 🐳 Docker
+
+```bash
+# Docker Hub
+docker run --rm onigirazu/onigirazu:latest --version
+
+# GitHub Container Registry
+docker run --rm ghcr.io/onigirazu-cfg/onigirazu:latest --version
+```
+
+### 📋 Package Managers
+
+- **Debian/Ubuntu**: Download `.deb` from [releases](https://github.com/onigirazu-cfg/onigirazu/releases)
+- **Red Hat/CentOS/Fedora**: Download `.rpm` from [releases](https://github.com/onigirazu-cfg/onigirazu/releases)
+- **Alpine Linux**: Download `.apk` from [releases](https://github.com/onigirazu-cfg/onigirazu/releases)
+- **Arch Linux**: Download `.pkg.tar.xz` from [releases](https://github.com/onigirazu-cfg/onigirazu/releases)
+
+### 🔧 From Source
 
 ```bash
 # Clone the repository
@@ -48,6 +95,8 @@ make install
 ```bash
 go install github.com/onigirazu-cfg/onigirazu/cmd/onigirazu@latest
 ```
+
+📚 **For detailed installation instructions, see [INSTALLATION.md](INSTALLATION.md)**
 
 ## Quick Start
 
