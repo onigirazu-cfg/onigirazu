@@ -78,6 +78,13 @@ clean:
 	rm -rf bin/ dist/
 	rm -f .onigirazu-state coverage.out coverage.html
 
+# Clean documentation
+docs-clean:
+	@echo "Cleaning generated documentation..."
+	rm -rf docs/api/pkg docs/api/internal
+	rm -f docs/api/*.md docs/api/index.html
+	@echo "✅ Documentation cleaned"
+
 # Run example
 run-example: build
 	./bin/onigirazu -playbook examples/simple-playbook.yml -inventory examples/simple-inventory.yml -verbose
@@ -227,15 +234,53 @@ help:
 	@echo "Development commands:"
 	@echo "  dev-setup     - Setup development environment"
 	@echo "  clean         - Clean build artifacts"
+	@echo ""
+	@echo "Documentation commands:"
 	@echo "  docs          - Show documentation info"
+	@echo "  docs-generate - Generate API documentation"
+	@echo "  docs-serve    - Start documentation server"
+	@echo "  docs-open     - Open documentation in browser"
+	@echo "  docs-clean    - Clean generated documentation"
+	@echo ""
+	@echo "Other commands:"
 	@echo "  help          - Show this help"
+
+# Generate API documentation
+docs-generate:
+	@echo "Generating API documentation..."
+	./scripts/generate-docs.sh
+	go run scripts/docgen/main.go
+	@echo "✅ Documentation generated:"
+	@echo "  📄 Markdown: docs/api/"
+	@echo "  🌐 HTML: docs/api/index.html"
+	@echo "  🚀 View: open docs/api/index.html"
+
+# Start documentation server
+docs-serve:
+	@echo "Starting documentation server..."
+	@echo "📖 Documentation will be available at: http://localhost:8080"
+	@echo "🔗 Direct link: http://localhost:8080/github.com/onigirazu-cfg/onigirazu"
+	@echo ""
+	@echo "Press Ctrl+C to stop the server"
+	@echo ""
+	~/go/bin/pkgsite -http=:8080
+
+# Open documentation in browser
+docs-open:
+	@echo "Opening documentation..."
+	open docs/api/index.html
 
 # Show documentation info
 docs:
-	@echo "Documentation:"
+	@echo "Documentation commands:"
+	@echo "  docs-generate - Generate API documentation (markdown + HTML)"
+	@echo "  docs-serve    - Start local documentation server"
+	@echo "  docs-open     - Open HTML documentation in browser"
+	@echo ""
+	@echo "Documentation files:"
 	@echo "  README.md     - Main project documentation"
+	@echo "  docs/api/     - Auto-generated API documentation"
 	@echo "  docs/logo.md  - Logo design guidelines"
-	@echo "  docs/README.md - Documentation overview"
 	@echo ""
 	@echo "Logo files:"
 	@echo "  docs/logo.png - Main logo (200px width)"

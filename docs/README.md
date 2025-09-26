@@ -1,99 +1,142 @@
-# Onigirazu - Advanced Configuration Management System
+# Onigirazu Documentation
 
-Onigirazu is a powerful, Go-based configuration management and automation platform inspired by Ansible. It provides comprehensive infrastructure automation capabilities with advanced monitoring, security validation, and workflow orchestration.
-
-## 🚀 Features
-
-### Core Capabilities
-
-- **Multi-Platform Support**: Linux, macOS, Windows
-- **Modular Architecture**: Extensible plugin system
-- **Advanced Security**: Built-in security validation and audit trails
-- **Real-time Monitoring**: Comprehensive metrics and performance tracking
-- **Workflow Orchestration**: Complex automation workflows with dependencies
-- **Configuration Management**: Multi-format configuration file handling
-
-### Advanced Components
-
-- **Facts Gathering**: Comprehensive system information collection
-- **Service Management**: Cross-platform service control
-- **Package Management**: Universal package manager support
-- **Security Framework**: Multi-layer security validation
-- **Metrics System**: Real-time performance monitoring
-- **Workflow Engine**: Event-driven automation orchestration
+Welcome to the Onigirazu documentation directory! This contains comprehensive documentation for the Onigirazu automation tool.
 
 ## 📚 Documentation Structure
 
-- [Quick Start Guide](./quick-start.md)
-- [Architecture Overview](./architecture.md)
-- [Core Modules](./modules/README.md)
-- [Plugin Development](./plugins/README.md)
-- [API Reference](./api/README.md)
-- [Security Guide](./security.md)
-- [Monitoring & Metrics](./monitoring.md)
-- [Workflow Orchestration](./workflows.md)
-- [Examples](./examples/README.md)
-- [Troubleshooting](./troubleshooting.md)
+### API Documentation
 
-## 🎯 Quick Example
+- **[api/](api/)** - Auto-generated API documentation
+  - **[index.html](api/index.html)** - Beautiful HTML documentation (open in browser)
+  - **[README.md](api/README.md)** - API documentation overview
+  - **[pkg/](api/pkg/)** - Public package documentation
+  - **[internal/](api/internal/)** - Internal package documentation
 
-```yaml
-# playbook.yml
-name: "System Setup"
-plays:
-  - name: "Configure Web Server"
-    hosts: "webservers"
-    tasks:
-      - name: "Install Nginx"
-        module: "package"
-        args:
-          name: "nginx"
-          state: "present"
+### Design Documentation
 
-      - name: "Start Nginx Service"
-        module: "service"
-        args:
-          name: "nginx"
-          state: "started"
-          enabled: true
-```
+- **[logo.md](logo.md)** - Logo design guidelines and assets
+- **[logo.png](logo.png)** - Main project logo (200px)
+- **[logo.svg](logo.svg)** - Vector version of the logo
 
-```bash
-# Run playbook
-onigirazu-playbook -i inventory.yml playbook.yml
-```
+## 🚀 Quick Start
 
-## 🔧 Installation
+### View API Documentation
 
-### From Source
+1. **HTML Documentation** (Recommended):
 
-```bash
-git clone https://github.com/your-org/onigirazu.git
-cd onigirazu
-go build -o onigirazu ./cmd/onigirazu
-```
+   ```bash
+   make docs-open
+   # or manually: open docs/api/index.html
+   ```
 
-### Using Go Install
+2. **Interactive Documentation Server**:
+
+   ```bash
+   make docs-serve
+   # Opens http://localhost:8080
+   ```
+
+3. **Command Line**:
+
+   ```bash
+   go doc github.com/onigirazu-cfg/onigirazu/pkg/types
+   ```
+
+### Generate Documentation
+
+To regenerate the API documentation:
 
 ```bash
-go install github.com/your-org/onigirazu/cmd/onigirazu@latest
+make docs-generate
 ```
 
-## 🏗️ Architecture
+This will:
 
-Onigirazu follows a modular architecture with the following key components:
+- Generate markdown documentation for all packages
+- Create a beautiful HTML documentation page
+- Update the API index
 
-- **Core Engine**: Task execution and playbook processing
-- **Module System**: Extensible modules for different operations
-- **Security Layer**: Validation and audit framework
-- **Monitoring System**: Metrics collection and reporting
-- **Workflow Engine**: Complex automation orchestration
-- **Plugin Framework**: Custom extension development
+## 📖 Available Documentation
 
-## 🤝 Contributing
+### Core Types (`pkg/types`)
 
-We welcome contributions! Please see our [Contributing Guide](./CONTRIBUTING.md) for details.
+- **Playbook** - YAML playbook structure
+- **Task** - Individual task definition
+- **Host** - Target host configuration
+- **TaskResult** - Execution results
+- **ExecutionContext** - Runtime context
 
-## 📄 License
+### Configuration (`internal/config`)
 
-This project is licensed under the MIT License - see the [LICENSE](../LICENSE) file for details.
+- Configuration loading and validation
+- Environment variable handling
+- Default settings
+
+### Core Engine (`internal/core`)
+
+- Main execution engine
+- Task orchestration
+- Error handling
+
+### Modules (`internal/modules`)
+
+- Built-in modules (command, file, template, etc.)
+- Module interface and implementation
+- Custom module development
+
+### Parser (`internal/parser`)
+
+- YAML parsing and validation
+- Playbook structure parsing
+- Variable interpolation
+
+### Workflow (`internal/workflow`)
+
+- Workflow orchestration
+- Event handling
+- Progress tracking
+
+## 🛠 Documentation Commands
+
+| Command | Description |
+|---------|-------------|
+| `make docs` | Show documentation info |
+| `make docs-generate` | Generate API documentation |
+| `make docs-serve` | Start documentation server |
+| `make docs-open` | Open HTML docs in browser |
+
+## 📝 Contributing to Documentation
+
+When adding new features or modifying existing code:
+
+1. **Add Go doc comments** to all exported functions and types
+2. **Update examples** if the API changes
+3. **Regenerate documentation** with `make docs-generate`
+4. **Test documentation** by viewing the HTML output
+
+### Documentation Standards
+
+- Use clear, concise language
+- Include code examples where helpful
+- Document all parameters and return values
+- Explain complex concepts with examples
+- Keep documentation up-to-date with code changes
+
+## 🔗 External Resources
+
+- [Go Documentation Guidelines](https://go.dev/doc/effective_go#commentary)
+- [Godoc Best Practices](https://go.dev/blog/godoc)
+- [Conventional Commits](https://www.conventionalcommits.org/)
+
+## 📧 Support
+
+If you have questions about the documentation or need help:
+
+1. Check the [main README](../README.md)
+2. Browse the [API documentation](api/)
+3. Open an issue on GitHub
+4. Join our community discussions
+
+---
+
+*Documentation auto-generated from Go source code. Last updated: $(date)*
