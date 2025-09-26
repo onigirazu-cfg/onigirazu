@@ -21,7 +21,7 @@ env:
 
 jobs:
   validate:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux]
     outputs:
       tag: ${{ steps.tag.outputs.tag }}
       is_prerelease: ${{ steps.tag.outputs.is_prerelease }}
@@ -57,7 +57,7 @@ jobs:
         fi
 
   test:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux]
     needs: validate
 
     steps:
@@ -83,7 +83,7 @@ jobs:
         args: './...'
 
   release:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux]
     needs: [validate, test]
 
     steps:
@@ -114,7 +114,7 @@ jobs:
         FURY_TOKEN: ${{ secrets.FURY_TOKEN }}
 
   docker:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux]
     needs: [validate, release]
 
     steps:
@@ -167,7 +167,7 @@ jobs:
           DATE=${{ github.event.head_commit.timestamp }}
 
   notify:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux]
     needs: [validate, release, docker]
     if: always()
 

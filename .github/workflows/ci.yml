@@ -12,12 +12,11 @@ env:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux]
     strategy:
       fail-fast: false
       matrix:
         go-version: ['1.22', '1.23', '1.24']
-        os: [ubuntu-latest, macos-latest, windows-latest]
 
     steps:
     - name: Checkout code
@@ -37,10 +36,10 @@ jobs:
         path: |
           ~/.cache/go-build
           ~/go/pkg/mod
-        key: ${{ runner.os }}-go-${{ matrix.go-version }}-${{ hashFiles('**/go.sum') }}
+        key: linux-go-${{ matrix.go-version }}-${{ hashFiles('**/go.sum') }}
         restore-keys: |
-          ${{ runner.os }}-go-${{ matrix.go-version }}-
-          ${{ runner.os }}-go-
+          linux-go-${{ matrix.go-version }}-
+          linux-go-
 
     - name: Download dependencies
       run: go mod download
@@ -64,7 +63,7 @@ jobs:
       run: go test -bench=. -benchmem ./... || true
 
     - name: Upload coverage to Codecov
-      if: matrix.os == 'ubuntu-latest' && matrix.go-version == '1.23'
+      if: matrix.go-version == '1.23'
       uses: codecov/codecov-action@v4
       with:
         file: ./coverage.out
@@ -73,7 +72,7 @@ jobs:
         token: ${{ secrets.CODECOV_TOKEN }}
 
   build:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux]
     needs: test
     strategy:
       matrix:
@@ -115,7 +114,7 @@ jobs:
         retention-days: 7
 
   lint:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux]
 
     steps:
     - name: Checkout code
@@ -134,7 +133,7 @@ jobs:
         args: --timeout=10m --verbose
 
   integration-tests:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux]
     needs: build
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
 
@@ -182,7 +181,7 @@ jobs:
         ./dist/onigirazu-linux-amd64 -playbook test-integration/playbook.yml -inventory test-integration/inventory.yml -check || true
 
   docker-build:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux]
     needs: build
     if: github.event_name == 'push'
 
@@ -204,7 +203,7 @@ jobs:
         cache-to: type=gha,mode=max
 
   quality-gate:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux]
     needs: [test, build, lint, integration-tests]
     if: always()
 
