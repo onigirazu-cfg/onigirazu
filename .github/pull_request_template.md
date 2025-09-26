@@ -1,3 +1,5 @@
+# Pull Request
+
 ## Description
 
 Brief description of the changes in this PR.
@@ -10,14 +12,22 @@ Brief description of the changes in this PR.
 - [ ] Documentation update
 - [ ] Performance improvement
 - [ ] Code refactoring
-- [ ] Test improvements
+
+## Related Issues
+
+Fixes #(issue number)
+
+## Changes Made
+
+- List the main changes made in this PR
+- Be specific about what was added, modified, or removed
 
 ## Testing
 
-- [ ] Tests pass locally
-- [ ] New tests added for new functionality
+- [ ] Unit tests pass
 - [ ] Integration tests pass
 - [ ] Manual testing completed
+- [ ] New tests added for new functionality
 
 ## Checklist
 
@@ -28,11 +38,6 @@ Brief description of the changes in this PR.
 - [ ] My changes generate no new warnings
 - [ ] I have added tests that prove my fix is effective or that my feature works
 - [ ] New and existing unit tests pass locally with my changes
-- [ ] Any dependent changes have been merged and published in downstream modules
-
-## Related Issues
-
-Fixes #(issue number)
 
 ## Screenshots (if applicable)
 
