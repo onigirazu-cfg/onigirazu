@@ -1,0 +1,334 @@
+# Onigirazu Playbook Example
+# This playbook demonstrates various features of Onigirazu
+
+# Global playbook variables
+vars:
+  app_name: "myapp"
+  app_version: "1.0.0"
+  deploy_user: "deploy"
+  config_dir: "/etc/{{ app_name }}"
+
+plays:
+  # Play 1: System Setup
+  - name: "System Setup and Configuration"
+    hosts:
+      - "all_servers"
+
+    gather_facts: true
+    serial: false  # Run in parallel
+    ignore_errors: false
+
+    vars:
+      packages_to_install:
+        - "curl"
+        - "wget"
+        - "git"
+        - "htop"
+
+    pre_tasks:
+      - name: "Update package cache"
+        module: "package"
+        args:
+          name: "*"
+          state: "latest"
+          update_cache: true
+        tags:
+          - "system"
+          - "updates"
+
+      - name: "Install essential packages"
+        module: "package"
+        args:
+          name: "{{ item }}"
+          state: "present"
+        loop:
+          items: "{{ packages_to_install }}"
+        tags:
+          - "system"
+          - "packages"
+
+    tasks:
+      - name: "Create application user"
+        module: "user"
+        args:
+          name: "{{ deploy_user }}"
+          shell: "/bin/bash"
+          home: "/home/{{ deploy_user }}"
+          create_home: true
+        tags:
+          - "users"
+
+      - name: "Create application directories"
+        module: "file"
+        args:
+          path: "{{ item }}"
+          state: "directory"
+          owner: "{{ deploy_user }}"
+          group: "{{ deploy_user }}"
+          mode: "0755"
+        loop:
+          items:
+            - "{{ config_dir }}"
+            - "/var/log/{{ app_name }}"
+            - "/var/lib/{{ app_name }}"
+        tags:
+          - "directories"
+
+      - name: "Configure timezone"
+        module: "file"
+        args:
+          src: "/usr/share/zoneinfo/{{ timezone }}"
+          dest: "/etc/localtime"
+          state: "link"
+          force: true
+        when: "{{ timezone is defined }}"
+        tags:
+          - "system"
+          - "timezone"
+
+    post_tasks:
+      - name: "Restart services if needed"
+        module: "service"
+        args:
+          name: "{{ item }}"
+          state: "restarted"
+        loop:
+          items:
+            - "cron"
+            - "rsyslog"
+        when: "{{ ansible_facts.services is defined }}"
+        ignore_errors: true
+        tags:
+          - "services"
+
+  # Play 2: Web Server Configuration
+  - name: "Web Server Setup"
+    hosts:
+      - "webservers"
+
+    gather_facts: false
+    serial: true  # Run serially for web servers
+
+    vars:
+      nginx_conf_template: "nginx.conf.j2"
+      ssl_cert_path: "/etc/ssl/certs"
+
+    tasks:
+      - name: "Install Nginx"
+        module: "package"
+        args:
+          name: "nginx"
+          state: "present"
+        tags:
+          - "nginx"
+          - "webserver"
+
+      - name: "Create SSL certificate directory"
+        module: "file"
+        args:
+          path: "{{ ssl_cert_path }}"
+          state: "directory"
+          mode: "0755"
+        when: "{{ ssl_enabled }}"
+        tags:
+          - "ssl"
+          - "certificates"
+
+      - name: "Generate Nginx configuration"
+        module: "template"
+        args:
+          src: "templates/{{ nginx_conf_template }}"
+          dest: "/etc/nginx/nginx.conf"
+          owner: "root"
+          group: "root"
+          mode: "0644"
+          backup: true
+        notify:
+          - "restart nginx"
+        tags:
+          - "nginx"
+          - "configuration"
+
+      - name: "Start and enable Nginx"
+        module: "service"
+        args:
+          name: "nginx"
+          state: "started"
+          enabled: true
+        tags:
+          - "nginx"
+          - "services"
+
+      - name: "Check Nginx status"
+        module: "command"
+        args:
+          cmd: "nginx -t"
+        register: "nginx_test"
+        changed_when: false
+        tags:
+          - "nginx"
+          - "validation"
+
+  # Play 3: Database Configuration
+  - name: "Database Server Setup"
+    hosts:
+      - "databases"
+
+    gather_facts: true
+
+    vars:
+      mysql_root_password: "{{ vault_mysql_root_password | default('changeme') }}"
+      mysql_databases:
+        - name: "{{ app_name }}"
+          encoding: "utf8mb4"
+          collation: "utf8mb4_unicode_ci"
+
+    tasks:
+      - name: "Install MySQL server"
+        module: "package"
+        args:
+          name: "mysql-server"
+          state: "present"
+        tags:
+          - "mysql"
+          - "database"
+
+      - name: "Start and enable MySQL"
+        module: "service"
+        args:
+          name: "mysql"
+          state: "started"
+          enabled: true
+        tags:
+          - "mysql"
+          - "services"
+
+      - name: "Create application database"
+        module: "command"
+        args:
+          cmd: "mysql -e 'CREATE DATABASE IF NOT EXISTS {{ item.name }} CHARACTER SET {{ item.encoding }} COLLATE {{ item.collation }};'"
+        loop:
+          items: "{{ mysql_databases }}"
+        tags:
+          - "mysql"
+          - "database"
+        retries: 3
+        retry_delay: 5
+
+  # Play 4: Application Deployment
+  - name: "Application Deployment"
+    hosts:
+      - "webservers"
+
+    gather_facts: false
+
+    vars:
+      app_repo: "https://github.com/example/myapp.git"
+      app_dest: "/opt/{{ app_name }}"
+      app_branch: "{{ app_version }}"
+
+    tasks:
+      - name: "Clone application repository"
+        module: "git"
+        args:
+          repo: "{{ app_repo }}"
+          dest: "{{ app_dest }}"
+          version: "{{ app_branch }}"
+          force: true
+        notify:
+          - "restart application"
+        tags:
+          - "deployment"
+          - "git"
+
+      - name: "Set application permissions"
+        module: "file"
+        args:
+          path: "{{ app_dest }}"
+          owner: "{{ deploy_user }}"
+          group: "{{ deploy_user }}"
+          recurse: true
+        tags:
+          - "deployment"
+          - "permissions"
+
+      - name: "Create application configuration"
+        module: "template"
+        args:
+          src: "templates/app.conf.j2"
+          dest: "{{ config_dir }}/app.conf"
+          owner: "{{ deploy_user }}"
+          group: "{{ deploy_user }}"
+          mode: "0640"
+        tags:
+          - "deployment"
+          - "configuration"
+
+      - name: "Install application dependencies"
+        module: "command"
+        args:
+          cmd: "pip install -r requirements.txt"
+          chdir: "{{ app_dest }}"
+        when: "{{ ansible_facts.python is defined }}"
+        tags:
+          - "deployment"
+          - "dependencies"
+
+  # Play 5: Health Checks and Validation
+  - name: "Health Checks and Validation"
+    hosts:
+      - "all_servers"
+
+    gather_facts: false
+    serial: false
+
+    tasks:
+      - name: "Check disk space"
+        module: "command"
+        args:
+          cmd: "df -h /"
+        register: "disk_usage"
+        changed_when: false
+        tags:
+          - "health"
+          - "monitoring"
+
+      - name: "Check memory usage"
+        module: "command"
+        args:
+          cmd: "free -m"
+        register: "memory_usage"
+        changed_when: false
+        tags:
+          - "health"
+          - "monitoring"
+
+      - name: "Validate service status"
+        module: "command"
+        args:
+          cmd: "systemctl is-active {{ item }}"
+        loop:
+          items:
+            - "nginx"
+            - "mysql"
+        when: "{{ item in ansible_facts.services }}"
+        register: "service_status"
+        changed_when: false
+        ignore_errors: true
+        tags:
+          - "health"
+          - "services"
+
+# Handlers (triggered by notify)
+handlers:
+  - name: "restart nginx"
+    module: "service"
+    args:
+      name: "nginx"
+      state: "restarted"
+
+  - name: "restart application"
+    module: "service"
+    args:
+      name: "{{ app_name }}"
+      state: "restarted"

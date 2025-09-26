@@ -1,0 +1,285 @@
+project_name: onigirazu
+
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+    - go generate ./...
+    - go test ./...
+
+builds:
+  - id: onigirazu
+    main: ./cmd/onigirazu
+    binary: onigirazu
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+      - darwin
+      - freebsd
+    goarch:
+      - amd64
+      - arm64
+      - arm
+    goarm:
+      - 6
+      - 7
+    ignore:
+      - goos: windows
+        goarch: arm64
+      - goos: windows
+        goarch: arm
+      - goos: freebsd
+        goarch: arm
+      - goos: freebsd
+        goarch: arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+      - -X main.builtBy=goreleaser
+      - -X github.com/onigirazu-cfg/onigirazu/internal/version.Version={{.Version}}
+      - -X github.com/onigirazu-cfg/onigirazu/internal/version.Commit={{.Commit}}
+      - -X github.com/onigirazu-cfg/onigirazu/internal/version.Date={{.Date}}
+    flags:
+      - -trimpath
+    mod_timestamp: '{{ .CommitTimestamp }}'
+
+archives:
+  - id: onigirazu
+    builds:
+      - onigirazu
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - README.md
+      - LICENSE*
+      - docs/**/*
+      - examples/**/*
+
+checksum:
+  name_template: 'checksums.txt'
+  algorithm: sha256
+
+signs:
+  - artifacts: checksum
+    args:
+      - "--batch"
+      - "--local-user"
+      - "{{ .Env.GPG_FINGERPRINT }}"
+      - "--output"
+      - "${signature}"
+      - "--detach-sign"
+      - "${artifact}"
+
+sboms:
+  - artifacts: archive
+  - id: source
+    artifacts: source
+
+snapshot:
+  name_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^ci:'
+      - '^chore:'
+      - '^style:'
+      - Merge pull request
+      - Merge branch
+  groups:
+    - title: 'New Features'
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: 'Bug Fixes'
+      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: 'Performance Improvements'
+      regexp: '^.*?perf(\([[:word:]]+\))??!?:.+$'
+      order: 2
+    - title: 'Refactors'
+      regexp: '^.*?refactor(\([[:word:]]+\))??!?:.+$'
+      order: 3
+    - title: 'Documentation'
+      regexp: '^.*?docs(\([[:word:]]+\))??!?:.+$'
+      order: 4
+    - title: 'Other'
+      order: 999
+
+release:
+  github:
+    owner: onigirazu-cfg
+    name: onigirazu
+  draft: false
+  prerelease: auto
+  mode: replace
+  header: |
+    ## Onigirazu {{ .Tag }}
+
+    Welcome to this new release of Onigirazu!
+
+  footer: |
+    ## Docker Images
+
+    Docker images are available on:
+    - Docker Hub: `docker pull onigirazu/onigirazu:{{ .Tag }}`
+    - GitHub Container Registry: `docker pull ghcr.io/onigirazu-cfg/onigirazu:{{ .Tag }}`
+
+    ## Installation
+
+    ### Using Go
+    ```bash
+    go install github.com/onigirazu-cfg/onigirazu/cmd/onigirazu@{{ .Tag }}
+    ```
+
+    ### Using Homebrew (macOS/Linux)
+    ```bash
+    brew install onigirazu-cfg/tap/onigirazu
+    ```
+
+    ### Manual Installation
+    Download the appropriate binary for your platform from the assets below.
+
+brews:
+  - name: onigirazu
+    repository:
+      owner: onigirazu-cfg
+      name: homebrew-tap
+    folder: Formula
+    homepage: https://github.com/onigirazu-cfg/onigirazu
+    description: "Modern configuration management tool inspired by Ansible"
+    license: MIT
+    test: |
+      system "#{bin}/onigirazu --version"
+    dependencies:
+      - name: go
+        type: optional
+    install: |-
+      bin.install "onigirazu"
+
+nfpms:
+  - id: onigirazu
+    package_name: onigirazu
+    file_name_template: '{{ .ConventionalFileName }}'
+    vendor: Onigirazu Team
+    homepage: https://github.com/onigirazu-cfg/onigirazu
+    maintainer: Onigirazu Team <team@onigirazu.dev>
+    description: |-
+      Modern configuration management tool inspired by Ansible.
+      Onigirazu provides a simple, powerful way to manage system configurations
+      with YAML playbooks and an extensive module system.
+    license: MIT
+    formats:
+      - apk
+      - deb
+      - rpm
+      - archlinux
+    dependencies:
+      - git
+    recommends:
+      - ansible
+    suggests:
+      - docker
+      - podman
+    bindir: /usr/bin
+    section: utils
+    priority: optional
+    contents:
+      - src: ./README.md
+        dst: /usr/share/doc/onigirazu/README.md
+        file_info:
+          mode: 0644
+      - src: ./docs/**/*
+        dst: /usr/share/doc/onigirazu/
+        file_info:
+          mode: 0644
+      - src: ./examples/**/*
+        dst: /usr/share/onigirazu/examples/
+        file_info:
+          mode: 0644
+      - dst: /var/log/onigirazu
+        type: dir
+        file_info:
+          mode: 0755
+      - dst: /etc/onigirazu
+        type: dir
+        file_info:
+          mode: 0755
+    scripts:
+      postinstall: "scripts/postinstall.sh"
+      preremove: "scripts/preremove.sh"
+    rpm:
+      group: System Environment/Base
+      compression: lzma
+    deb:
+      lintian_overrides:
+        - statically-linked-binary
+        - changelog-file-missing-in-native-package
+
+publishers:
+  - name: fury.io
+    ids:
+      - onigirazu
+    dir: "{{ dir .ArtifactPath }}"
+    cmd: curl -F package=@{{ .ArtifactName }} https://{{ .Env.FURY_TOKEN }}@push.fury.io/onigirazu/
+
+dockers:
+  - image_templates:
+      - "onigirazu/onigirazu:{{ .Tag }}-amd64"
+      - "ghcr.io/onigirazu-cfg/onigirazu:{{ .Tag }}-amd64"
+    dockerfile: Dockerfile
+    use: buildx
+    build_flag_templates:
+      - "--pull"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.title={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+      - "--platform=linux/amd64"
+  - image_templates:
+      - "onigirazu/onigirazu:{{ .Tag }}-arm64v8"
+      - "ghcr.io/onigirazu-cfg/onigirazu:{{ .Tag }}-arm64v8"
+    dockerfile: Dockerfile
+    use: buildx
+    build_flag_templates:
+      - "--pull"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.title={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+      - "--platform=linux/arm64/v8"
+    goarch: arm64
+
+docker_manifests:
+  - name_template: "onigirazu/onigirazu:{{ .Tag }}"
+    image_templates:
+      - "onigirazu/onigirazu:{{ .Tag }}-amd64"
+      - "onigirazu/onigirazu:{{ .Tag }}-arm64v8"
+  - name_template: "ghcr.io/onigirazu-cfg/onigirazu:{{ .Tag }}"
+    image_templates:
+      - "ghcr.io/onigirazu-cfg/onigirazu:{{ .Tag }}-amd64"
+      - "ghcr.io/onigirazu-cfg/onigirazu:{{ .Tag }}-arm64v8"
+  - name_template: "onigirazu/onigirazu:latest"
+    image_templates:
+      - "onigirazu/onigirazu:{{ .Tag }}-amd64"
+      - "onigirazu/onigirazu:{{ .Tag }}-arm64v8"
+  - name_template: "ghcr.io/onigirazu-cfg/onigirazu:latest"
+    image_templates:
+      - "ghcr.io/onigirazu-cfg/onigirazu:{{ .Tag }}-amd64"
+      - "ghcr.io/onigirazu-cfg/onigirazu:{{ .Tag }}-arm64v8"

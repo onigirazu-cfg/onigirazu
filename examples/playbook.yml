@@ -1,0 +1,69 @@
+name: "Web server setup"
+
+plays:
+  - name: "Install and configure web server"
+    hosts: "web_servers"
+    become: true
+    vars:
+      web_root: "/var/www/html"
+      nginx_user: "www-data"
+    
+    tasks:
+      - name: "Update package list"
+        module: "package"
+        args:
+          name: "apt"
+          state: "latest"
+      
+      - name: "Install nginx"
+        module: "package"
+        args:
+          name: "nginx"
+          state: "present"
+      
+      - name: "Start nginx"
+        module: "service"
+        args:
+          name: "nginx"
+          state: "started"
+      
+      - name: "Enable nginx autostart"
+        module: "service"
+        args:
+          name: "nginx"
+          state: "enabled"
+      
+      - name: "Create website directory"
+        module: "file"
+        args:
+          path: "{{ web_root }}"
+          state: "directory"
+      
+      - name: "Create test page"
+        module: "file"
+        args:
+          path: "{{ web_root }}/index.html"
+          state: "present"
+
+  - name: "Database setup"
+    hosts: "db_servers"
+    become: true
+    
+    tasks:
+      - name: "Install MySQL"
+        module: "package"
+        args:
+          name: "mysql-server"
+          state: "present"
+      
+      - name: "Start MySQL"
+        module: "service"
+        args:
+          name: "mysql"
+          state: "started"
+      
+      - name: "Enable MySQL autostart"
+        module: "service"
+        args:
+          name: "mysql"
+          state: "enabled"

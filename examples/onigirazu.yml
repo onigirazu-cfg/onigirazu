@@ -1,0 +1,61 @@
+# Onigirazu Configuration File
+# This file contains default settings for Onigirazu execution
+
+# Execution settings
+max_concurrency: 10
+default_timeout: 30s
+retry_attempts: 3
+retry_delay: 5s
+
+# File paths
+state_file: ".onigirazu-state"
+config_file: "onigirazu.yml"
+
+# Logging
+log_level: "info"  # debug, info, warn, error
+log_format: "text"  # text, json
+
+# Security
+allow_shell_commands: true
+blocked_commands:
+  - "rm -rf"
+  - "format"
+  - "mkfs"
+  - "dd if="
+  - ":(){ :|:& };:"
+
+# Performance
+enable_caching: true
+cache_ttl: 5m
+enable_checksum: true
+enable_parallel: false
+parallel_strategy: "linear"  # linear, free
+
+# Execution modes
+dry_run: false
+check_mode: false
+verbose: false
+show_diff: false
+
+# UI/UX
+color_output: true
+progress_bar: true
+interactive_mode: false
+output_format: "text"  # text, json, yaml
+
+# Monitoring
+enable_metrics: false
+metrics_port: 9090
+metrics_path: "/metrics"
+enable_profiling: false
+
+# SSH/Connection settings
+ssh_timeout: 30s
+ssh_keepalive: 60s
+ssh_max_sessions: 10
+connection_reuse: true
+
+# Vault integration (optional)
+vault_enabled: false
+vault_address: ""
+vault_token: ""

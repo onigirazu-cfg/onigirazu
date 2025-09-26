@@ -1,0 +1,62 @@
+# Onigirazu Configuration File
+# This file contains default configuration settings for Onigirazu
+
+# Execution settings
+max_concurrency: 10          # Maximum number of concurrent tasks
+default_timeout: 300s        # Default timeout for tasks
+retry_attempts: 3            # Default number of retry attempts
+retry_delay: 5s              # Default delay between retries
+
+# File paths
+state_file: ".onigirazu-state"     # Path to state file
+config_file: "onigirazu.yaml"      # Path to this config file
+
+# Logging configuration
+log_level: "info"            # Log level: debug, info, warn, error, fatal
+log_format: "text"           # Log format: text, json
+
+# Security settings
+allow_shell_commands: true   # Allow execution of shell commands
+blocked_commands:            # List of blocked commands
+  - "rm -rf /"
+  - "format"
+  - "mkfs"
+
+# Performance settings
+enable_caching: true         # Enable result caching
+cache_ttl: 300s              # Cache time-to-live
+enable_checksum: true        # Enable checksum-based change detection
+
+# SSH connection settings
+ssh_timeout: 30s             # SSH connection timeout
+ssh_retries: 3               # SSH connection retry attempts
+ssh_key_file: "~/.ssh/id_rsa" # Default SSH private key file
+
+# Module-specific settings
+modules:
+  file:
+    backup_dir: "/tmp/onigirazu-backups"  # Directory for file backups
+    max_backup_files: 10                   # Maximum number of backup files to keep
+
+  git:
+    default_branch: "main"                 # Default Git branch
+    clone_timeout: 300s                    # Git clone timeout
+
+  template:
+    template_dirs:                         # Template search directories
+      - "templates"
+      - "/etc/onigirazu/templates"
+
+# Notification settings (future feature)
+notifications:
+  enabled: false
+  webhook_url: ""
+  slack_channel: ""
+  email_recipients: []
+
+# Vault settings (future feature)
+vault:
+  enabled: false
+  vault_addr: ""
+  vault_token: ""
+  vault_path: "secret/"

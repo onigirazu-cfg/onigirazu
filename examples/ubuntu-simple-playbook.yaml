@@ -1,0 +1,78 @@
+# Simple Ubuntu Playbook
+# This playbook demonstrates basic Onigirazu features on Ubuntu
+
+name: "Simple Ubuntu Setup"
+
+plays:
+  # Play 1: Basic Ubuntu Setup
+  - name: "Basic Ubuntu System Setup"
+    hosts: "localhost"
+
+    tasks:
+      - name: "Create application directory"
+        module: "file"
+        args:
+          path: "/opt/myapp"
+          state: "directory"
+          mode: "0755"
+        tags:
+          - "app"
+          - "directories"
+
+      - name: "Create configuration directory"
+        module: "file"
+        args:
+          path: "/etc/myapp"
+          state: "directory"
+          mode: "0755"
+        tags:
+          - "app"
+          - "config"
+
+      - name: "Install curl"
+        module: "package"
+        args:
+          name: "curl"
+          state: "present"
+        tags:
+          - "packages"
+
+      - name: "Install git"
+        module: "package"
+        args:
+          name: "git"
+          state: "present"
+        tags:
+          - "packages"
+
+      - name: "Install htop"
+        module: "package"
+        args:
+          name: "htop"
+          state: "present"
+        tags:
+          - "packages"
+
+      - name: "Create test file"
+        module: "file"
+        args:
+          path: "/tmp/ubuntu-test.txt"
+          state: "present"
+        tags:
+          - "test"
+
+      - name: "Show system information"
+        module: "command"
+        args:
+          command: "uname -a"
+          shell: true
+        tags:
+          - "info"
+
+      - name: "Show disk usage"
+        module: "command"
+        args:
+          command: "df -h"
+          shell: true
+        tags:
+          - "info"

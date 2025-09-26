@@ -1,0 +1,78 @@
+# Ubuntu Inventory Example
+# This file defines Ubuntu hosts for testing
+
+groups:
+  # Local Ubuntu development
+  localhost:
+    hosts:
+      localhost:
+        address: "127.0.0.1"
+        port: 22
+        user: "ubuntu"
+        vars:
+          connection: "local"
+          os_family: "Debian"
+          os_name: "Ubuntu"
+          os_version: "22.04"
+
+  # Ubuntu web servers
+  ubuntu_webservers:
+    hosts:
+      ubuntu-web1:
+        address: "192.168.1.10"
+        port: 22
+        user: "ubuntu"
+        vars:
+          server_role: "web"
+          http_port: 80
+          https_port: 443
+
+      ubuntu-web2:
+        address: "192.168.1.11"
+        port: 22
+        user: "ubuntu"
+        vars:
+          server_role: "web"
+          http_port: 80
+          https_port: 443
+
+    vars:
+      # Group-level variables for Ubuntu web servers
+      nginx_version: "1.20"
+      ssl_enabled: true
+      backup_enabled: true
+
+  # Ubuntu database servers
+  ubuntu_databases:
+    hosts:
+      ubuntu-db1:
+        address: "192.168.1.20"
+        port: 22
+        user: "ubuntu"
+        vars:
+          server_role: "database"
+          mysql_port: 3306
+          backup_schedule: "daily"
+
+    vars:
+      mysql_version: "8.0"
+      replication_enabled: true
+      backup_retention: "30d"
+
+  # All Ubuntu servers
+  all_ubuntu:
+    hosts: {}  # No direct hosts
+
+    vars:
+      # Global variables for all Ubuntu servers
+      timezone: "UTC"
+      ntp_servers:
+        - "pool.ntp.org"
+        - "time.google.com"
+      log_retention: "7d"
+      security_updates: true
+      package_manager: "apt"
+
+    children:
+      - "ubuntu_webservers"
+      - "ubuntu_databases"
