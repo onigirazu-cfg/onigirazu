@@ -10,9 +10,10 @@ By participating in this project, you agree to abide by our Code of Conduct. Ple
 
 ### Prerequisites
 
-- Go 1.21 or later
+- Go 1.23 or later
 - Git
 - Make (optional, for using Makefile commands)
+- golangci-lint (for code linting)
 
 ### Setting up the Development Environment
 
@@ -36,7 +37,13 @@ By participating in this project, you agree to abide by our Code of Conduct. Ple
    go mod download
    ```
 
-5. Run tests to ensure everything works:
+5. Install golangci-lint:
+
+   ```bash
+   go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+   ```
+
+6. Run tests to ensure everything works:
 
    ```bash
    go test ./...
@@ -72,25 +79,31 @@ By participating in this project, you agree to abide by our Code of Conduct. Ple
    go test ./...
    ```
 
-5. Run linting:
+5. Install golangci-lint (if not already installed):
+
+   ```bash
+   go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+   ```
+
+6. Run linting:
 
    ```bash
    golangci-lint run
    ```
 
-6. Commit your changes with a descriptive message:
+7. Commit your changes with a descriptive message:
 
    ```bash
    git commit -m "feat: add new feature description"
    ```
 
-7. Push to your fork:
+8. Push to your fork:
 
    ```bash
    git push origin feature/your-feature-name
    ```
 
-8. Create a Pull Request
+9. Create a Pull Request
 
 ## Coding Standards
 

@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"fmt"
 	"sync"
 	"time"
 )
@@ -108,6 +109,3 @@ func (eb *EventBus) addToLog(event Event) {
 func generateEventID() string {
 	return fmt.Sprintf("event_%d", time.Now().UnixNano())
 }
-
-// Import fmt package
-import "fmt"

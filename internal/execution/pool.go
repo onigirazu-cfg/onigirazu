@@ -6,19 +6,19 @@ import (
 	"sync"
 	"time"
 
-	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 	"github.com/onigirazu-cfg/onigirazu/internal/interfaces"
+	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
 // Pool manages parallel execution of tasks
 type Pool struct {
-	maxWorkers   int
-	semaphore    chan struct{}
-	logger       interfaces.Logger
-	results      chan TaskExecution
-	wg           sync.WaitGroup
-	ctx          context.Context
-	cancel       context.CancelFunc
+	maxWorkers int
+	semaphore  chan struct{}
+	logger     interfaces.Logger
+	results    chan TaskExecution
+	wg         sync.WaitGroup
+	ctx        context.Context
+	cancel     context.CancelFunc
 }
 
 // TaskExecution represents a task execution request

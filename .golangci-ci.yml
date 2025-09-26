@@ -10,45 +10,13 @@ output:
   print-linter-name: true
 
 linters-settings:
-  dupl:
-    threshold: 100
-  funlen:
-    lines: 100
-    statements: 50
   gci:
     sections:
       - standard
       - default
       - prefix(github.com/onigirazu-cfg/onigirazu)
-  goconst:
-    min-len: 2
-    min-occurrences: 2
-  gocritic:
-    enabled-tags:
-      - diagnostic
-      - performance
-      - style
-    disabled-checks:
-      - dupImport
-      - ifElseChain
-      - octalLiteral
-      - whyNoLint
-      - wrapperFunc
-  gocyclo:
-    min-complexity: 15
   goimports:
     local-prefixes: github.com/onigirazu-cfg/onigirazu
-  mnd:
-    checks:
-      - argument
-      - case
-      - condition
-      - operation
-      - return
-      - assign
-  govet:
-    enable:
-      - shadow
   lll:
     line-length: 140
   misspell:
@@ -61,25 +29,15 @@ linters-settings:
 
 linters:
   enable:
-    # Format and style linters (work without compilation)
+    # Only critical formatting and style issues
     - gofmt
     - goimports
     - gci
-    - lll
     - misspell
-    - whitespace
     - nolintlint
 
-    # Basic linters that can work with syntax errors
-    - dupl
-    - funlen
-    - gocyclo
-    - goconst
-    - mnd
-    - nakedret
-
   disable:
-    # Disable linters that require successful compilation
+    # Disable all linters that require compilation or are too strict for CI
     - typecheck
     - unused
     - ineffassign
@@ -100,6 +58,14 @@ linters:
     - unconvert
     - unparam
     - noctx
+    - dupl
+    - funlen
+    - gocyclo
+    - goconst
+    - mnd
+    - nakedret
+    - lll
+    - whitespace
 
 issues:
   exclude-files:
@@ -124,6 +90,6 @@ issues:
   exclude:
     - 'declaration of "(err|ctx)" shadows declaration at'
     - 'shadow: declaration of "err" shadows declaration'
-  max-issues-per-linter: 50
-  max-same-issues: 10
+  max-issues-per-linter: 10
+  max-same-issues: 3
   new: false

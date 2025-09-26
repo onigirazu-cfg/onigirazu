@@ -1,10 +1,10 @@
 package monitoring
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -13,14 +13,14 @@ import (
 
 // MetricsCollector collects and manages system metrics
 type MetricsCollector struct {
-	metrics     map[string]*Metric
-	mutex       sync.RWMutex
-	collectors  []Collector
-	startTime   time.Time
-	enabled     bool
-	interval    time.Duration
-	stopChan    chan struct{}
-	wg          sync.WaitGroup
+	metrics    map[string]*Metric
+	mutex      sync.RWMutex
+	collectors []Collector
+	startTime  time.Time
+	enabled    bool
+	interval   time.Duration
+	stopChan   chan struct{}
+	wg         sync.WaitGroup
 }
 
 // Metric represents a single metric
@@ -55,46 +55,46 @@ type Collector interface {
 
 // SystemMetrics holds system-level metrics
 type SystemMetrics struct {
-	CPU        CPUMetrics        `json:"cpu"`
-	Memory     MemoryMetrics     `json:"memory"`
-	Goroutines GoroutineMetrics  `json:"goroutines"`
-	GC         GCMetrics         `json:"gc"`
-	Runtime    RuntimeMetrics    `json:"runtime"`
-	Uptime     time.Duration     `json:"uptime"`
-	Timestamp  time.Time         `json:"timestamp"`
+	CPU        CPUMetrics       `json:"cpu"`
+	Memory     MemoryMetrics    `json:"memory"`
+	Goroutines GoroutineMetrics `json:"goroutines"`
+	GC         GCMetrics        `json:"gc"`
+	Runtime    RuntimeMetrics   `json:"runtime"`
+	Uptime     time.Duration    `json:"uptime"`
+	Timestamp  time.Time        `json:"timestamp"`
 }
 
 // CPUMetrics holds CPU-related metrics
 type CPUMetrics struct {
-	NumCPU      int     `json:"num_cpu"`
-	NumGoroutine int    `json:"num_goroutine"`
-	CGOCalls    int64   `json:"cgo_calls"`
+	NumCPU       int   `json:"num_cpu"`
+	NumGoroutine int   `json:"num_goroutine"`
+	CGOCalls     int64 `json:"cgo_calls"`
 }
 
 // MemoryMetrics holds memory-related metrics
 type MemoryMetrics struct {
-	Alloc         uint64 `json:"alloc"`
-	TotalAlloc    uint64 `json:"total_alloc"`
-	Sys           uint64 `json:"sys"`
-	Lookups       uint64 `json:"lookups"`
-	Mallocs       uint64 `json:"mallocs"`
-	Frees         uint64 `json:"frees"`
-	HeapAlloc     uint64 `json:"heap_alloc"`
-	HeapSys       uint64 `json:"heap_sys"`
-	HeapIdle      uint64 `json:"heap_idle"`
-	HeapInuse     uint64 `json:"heap_inuse"`
-	HeapReleased  uint64 `json:"heap_released"`
-	HeapObjects   uint64 `json:"heap_objects"`
-	StackInuse    uint64 `json:"stack_inuse"`
-	StackSys      uint64 `json:"stack_sys"`
-	MSpanInuse    uint64 `json:"mspan_inuse"`
-	MSpanSys      uint64 `json:"mspan_sys"`
-	MCacheInuse   uint64 `json:"mcache_inuse"`
-	MCacheSys     uint64 `json:"mcache_sys"`
-	BuckHashSys   uint64 `json:"buck_hash_sys"`
-	GCSys         uint64 `json:"gc_sys"`
-	OtherSys      uint64 `json:"other_sys"`
-	NextGC        uint64 `json:"next_gc"`
+	Alloc        uint64 `json:"alloc"`
+	TotalAlloc   uint64 `json:"total_alloc"`
+	Sys          uint64 `json:"sys"`
+	Lookups      uint64 `json:"lookups"`
+	Mallocs      uint64 `json:"mallocs"`
+	Frees        uint64 `json:"frees"`
+	HeapAlloc    uint64 `json:"heap_alloc"`
+	HeapSys      uint64 `json:"heap_sys"`
+	HeapIdle     uint64 `json:"heap_idle"`
+	HeapInuse    uint64 `json:"heap_inuse"`
+	HeapReleased uint64 `json:"heap_released"`
+	HeapObjects  uint64 `json:"heap_objects"`
+	StackInuse   uint64 `json:"stack_inuse"`
+	StackSys     uint64 `json:"stack_sys"`
+	MSpanInuse   uint64 `json:"mspan_inuse"`
+	MSpanSys     uint64 `json:"mspan_sys"`
+	MCacheInuse  uint64 `json:"mcache_inuse"`
+	MCacheSys    uint64 `json:"mcache_sys"`
+	BuckHashSys  uint64 `json:"buck_hash_sys"`
+	GCSys        uint64 `json:"gc_sys"`
+	OtherSys     uint64 `json:"other_sys"`
+	NextGC       uint64 `json:"next_gc"`
 }
 
 // GoroutineMetrics holds goroutine-related metrics
@@ -106,54 +106,54 @@ type GoroutineMetrics struct {
 
 // GCMetrics holds garbage collection metrics
 type GCMetrics struct {
-	NumGC        uint32        `json:"num_gc"`
-	NumForcedGC  uint32        `json:"num_forced_gc"`
-	PauseTotalNs uint64        `json:"pause_total_ns"`
-	PauseNs      []uint64      `json:"pause_ns"`
-	PauseEnd     []uint64      `json:"pause_end"`
-	LastGC       time.Time     `json:"last_gc"`
-	NextGC       uint64        `json:"next_gc"`
-	GCCPUFraction float64      `json:"gc_cpu_fraction"`
+	NumGC         uint32    `json:"num_gc"`
+	NumForcedGC   uint32    `json:"num_forced_gc"`
+	PauseTotalNs  uint64    `json:"pause_total_ns"`
+	PauseNs       []uint64  `json:"pause_ns"`
+	PauseEnd      []uint64  `json:"pause_end"`
+	LastGC        time.Time `json:"last_gc"`
+	NextGC        uint64    `json:"next_gc"`
+	GCCPUFraction float64   `json:"gc_cpu_fraction"`
 }
 
 // RuntimeMetrics holds Go runtime metrics
 type RuntimeMetrics struct {
-	Version   string `json:"version"`
-	GOOS      string `json:"goos"`
-	GOARCH    string `json:"goarch"`
-	Compiler  string `json:"compiler"`
-	NumCPU    int    `json:"num_cpu"`
+	Version  string `json:"version"`
+	GOOS     string `json:"goos"`
+	GOARCH   string `json:"goarch"`
+	Compiler string `json:"compiler"`
+	NumCPU   int    `json:"num_cpu"`
 }
 
 // TaskMetrics holds task execution metrics
 type TaskMetrics struct {
-	TaskName      string        `json:"task_name"`
-	Module        string        `json:"module"`
-	Host          string        `json:"host"`
-	Duration      time.Duration `json:"duration"`
-	Success       bool          `json:"success"`
-	Changed       bool          `json:"changed"`
-	RetryCount    int           `json:"retry_count"`
-	Timestamp     time.Time     `json:"timestamp"`
-	MemoryBefore  uint64        `json:"memory_before"`
-	MemoryAfter   uint64        `json:"memory_after"`
-	MemoryDelta   int64         `json:"memory_delta"`
+	TaskName     string        `json:"task_name"`
+	Module       string        `json:"module"`
+	Host         string        `json:"host"`
+	Duration     time.Duration `json:"duration"`
+	Success      bool          `json:"success"`
+	Changed      bool          `json:"changed"`
+	RetryCount   int           `json:"retry_count"`
+	Timestamp    time.Time     `json:"timestamp"`
+	MemoryBefore uint64        `json:"memory_before"`
+	MemoryAfter  uint64        `json:"memory_after"`
+	MemoryDelta  int64         `json:"memory_delta"`
 }
 
 // PlaybookMetrics holds playbook execution metrics
 type PlaybookMetrics struct {
-	PlaybookName   string                 `json:"playbook_name"`
-	TotalTasks     int                    `json:"total_tasks"`
-	SuccessfulTasks int                   `json:"successful_tasks"`
-	FailedTasks    int                    `json:"failed_tasks"`
-	ChangedTasks   int                    `json:"changed_tasks"`
-	SkippedTasks   int                    `json:"skipped_tasks"`
-	TotalHosts     int                    `json:"total_hosts"`
-	Duration       time.Duration          `json:"duration"`
-	StartTime      time.Time              `json:"start_time"`
-	EndTime        time.Time              `json:"end_time"`
-	HostMetrics    map[string]HostMetrics `json:"host_metrics"`
-	TaskMetrics    []TaskMetrics          `json:"task_metrics"`
+	PlaybookName    string                 `json:"playbook_name"`
+	TotalTasks      int                    `json:"total_tasks"`
+	SuccessfulTasks int                    `json:"successful_tasks"`
+	FailedTasks     int                    `json:"failed_tasks"`
+	ChangedTasks    int                    `json:"changed_tasks"`
+	SkippedTasks    int                    `json:"skipped_tasks"`
+	TotalHosts      int                    `json:"total_hosts"`
+	Duration        time.Duration          `json:"duration"`
+	StartTime       time.Time              `json:"start_time"`
+	EndTime         time.Time              `json:"end_time"`
+	HostMetrics     map[string]HostMetrics `json:"host_metrics"`
+	TaskMetrics     []TaskMetrics          `json:"task_metrics"`
 }
 
 // HostMetrics holds per-host metrics
@@ -522,14 +522,14 @@ type MetricsReporter struct {
 
 // Report represents a metrics report
 type Report struct {
-	ID          string                 `json:"id"`
-	Name        string                 `json:"name"`
-	Type        string                 `json:"type"`
-	Timestamp   time.Time              `json:"timestamp"`
-	Duration    time.Duration          `json:"duration"`
-	Metrics     map[string]*Metric     `json:"metrics"`
-	Summary     map[string]interface{} `json:"summary"`
-	Metadata    map[string]interface{} `json:"metadata"`
+	ID        string                 `json:"id"`
+	Name      string                 `json:"name"`
+	Type      string                 `json:"type"`
+	Timestamp time.Time              `json:"timestamp"`
+	Duration  time.Duration          `json:"duration"`
+	Metrics   map[string]*Metric     `json:"metrics"`
+	Summary   map[string]interface{} `json:"summary"`
+	Metadata  map[string]interface{} `json:"metadata"`
 }
 
 // NewMetricsReporter creates a new metrics reporter
@@ -574,12 +574,12 @@ func (mr *MetricsReporter) generateSystemSummary() map[string]interface{} {
 	systemMetrics := mr.collector.GetSystemMetrics()
 
 	return map[string]interface{}{
-		"uptime":           systemMetrics.Uptime.String(),
-		"memory_usage":     systemMetrics.Memory.Alloc,
-		"goroutines":       systemMetrics.Goroutines.Total,
-		"gc_runs":          systemMetrics.GC.NumGC,
-		"cpu_count":        systemMetrics.CPU.NumCPU,
-		"go_version":       systemMetrics.Runtime.Version,
+		"uptime":       systemMetrics.Uptime.String(),
+		"memory_usage": systemMetrics.Memory.Alloc,
+		"goroutines":   systemMetrics.Goroutines.Total,
+		"gc_runs":      systemMetrics.GC.NumGC,
+		"cpu_count":    systemMetrics.CPU.NumCPU,
+		"go_version":   systemMetrics.Runtime.Version,
 	}
 }
 
@@ -640,6 +640,3 @@ func (mr *MetricsReporter) GetReports() []Report {
 	copy(reports, mr.reports)
 	return reports
 }
-
-// Helper function to import strings package
-import "strings"

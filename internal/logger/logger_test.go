@@ -168,10 +168,10 @@ func TestRetryLogging(t *testing.T) {
 
 	output := buf.String()
 	if !strings.Contains(output, "test-task") ||
-	   !strings.Contains(output, "test-host") ||
-	   !strings.Contains(output, "2/3") ||
-	   !strings.Contains(output, "5s") ||
-	   !strings.Contains(output, "test error") {
+		!strings.Contains(output, "test-host") ||
+		!strings.Contains(output, "2/3") ||
+		!strings.Contains(output, "5s") ||
+		!strings.Contains(output, "test error") {
 		t.Error("Retry output should contain all expected information")
 	}
 }

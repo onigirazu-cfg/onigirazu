@@ -5,18 +5,16 @@ import (
 	"fmt"
 	"sync"
 	"time"
-
-	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
 // WorkflowOrchestrator manages complex workflow execution
 type WorkflowOrchestrator struct {
-	workflows    map[string]*Workflow
-	executions   map[string]*WorkflowExecution
-	scheduler    *WorkflowScheduler
-	eventBus     *EventBus
-	mutex        sync.RWMutex
-	config       OrchestratorConfig
+	workflows  map[string]*Workflow
+	executions map[string]*WorkflowExecution
+	scheduler  *WorkflowScheduler
+	eventBus   *EventBus
+	mutex      sync.RWMutex
+	config     OrchestratorConfig
 }
 
 // OrchestratorConfig holds orchestrator configuration
@@ -65,14 +63,14 @@ type WorkflowStep struct {
 type StepType string
 
 const (
-	StepTypeTask        StepType = "task"
-	StepTypePlaybook    StepType = "playbook"
-	StepTypeCondition   StepType = "condition"
-	StepTypeLoop        StepType = "loop"
-	StepTypeParallel    StepType = "parallel"
-	StepTypeWait        StepType = "wait"
+	StepTypeTask         StepType = "task"
+	StepTypePlaybook     StepType = "playbook"
+	StepTypeCondition    StepType = "condition"
+	StepTypeLoop         StepType = "loop"
+	StepTypeParallel     StepType = "parallel"
+	StepTypeWait         StepType = "wait"
 	StepTypeNotification StepType = "notification"
-	StepTypeCustom      StepType = "custom"
+	StepTypeCustom       StepType = "custom"
 )
 
 // StepAction represents an action to be performed
@@ -98,11 +96,11 @@ const (
 
 // StepCondition represents a condition for step execution
 type StepCondition struct {
-	Type      ConditionType `json:"type"`
-	Variable  string        `json:"variable"`
-	Operator  string        `json:"operator"`
-	Value     interface{}   `json:"value"`
-	Expression string       `json:"expression"`
+	Type       ConditionType `json:"type"`
+	Variable   string        `json:"variable"`
+	Operator   string        `json:"operator"`
+	Value      interface{}   `json:"value"`
+	Expression string        `json:"expression"`
 }
 
 // ConditionType represents the type of condition
@@ -145,19 +143,19 @@ type TriggerCondition struct {
 
 // WorkflowExecution represents a workflow execution instance
 type WorkflowExecution struct {
-	ID           string                    `json:"id"`
-	WorkflowID   string                    `json:"workflow_id"`
-	Status       ExecutionStatus           `json:"status"`
-	StartTime    time.Time                 `json:"start_time"`
-	EndTime      time.Time                 `json:"end_time"`
-	Duration     time.Duration             `json:"duration"`
-	Steps        map[string]*StepExecution `json:"steps"`
-	Variables    map[string]interface{}    `json:"variables"`
-	Trigger      *WorkflowTrigger          `json:"trigger"`
-	Error        string                    `json:"error,omitempty"`
-	Metadata     map[string]interface{}    `json:"metadata"`
-	Context      context.Context           `json:"-"`
-	CancelFunc   context.CancelFunc        `json:"-"`
+	ID         string                    `json:"id"`
+	WorkflowID string                    `json:"workflow_id"`
+	Status     ExecutionStatus           `json:"status"`
+	StartTime  time.Time                 `json:"start_time"`
+	EndTime    time.Time                 `json:"end_time"`
+	Duration   time.Duration             `json:"duration"`
+	Steps      map[string]*StepExecution `json:"steps"`
+	Variables  map[string]interface{}    `json:"variables"`
+	Trigger    *WorkflowTrigger          `json:"trigger"`
+	Error      string                    `json:"error,omitempty"`
+	Metadata   map[string]interface{}    `json:"metadata"`
+	Context    context.Context           `json:"-"`
+	CancelFunc context.CancelFunc        `json:"-"`
 }
 
 // StepExecution represents a step execution instance
@@ -182,7 +180,7 @@ const (
 	StatusRunning   ExecutionStatus = "running"
 	StatusCompleted ExecutionStatus = "completed"
 	StatusFailed    ExecutionStatus = "failed"
-	StatusCancelled ExecutionStatus = "cancelled"
+	StatusCancelled ExecutionStatus = "canceled"
 	StatusSkipped   ExecutionStatus = "skipped"
 )
 

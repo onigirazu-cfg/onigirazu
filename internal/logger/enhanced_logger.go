@@ -50,17 +50,17 @@ const (
 
 // EnhancedLogger provides structured logging with multiple levels and formats
 type EnhancedLogger struct {
-	level      LogLevel
-	format     LogFormat
-	output     io.Writer
-	logger     *log.Logger
-	useColors  bool
-	mutex      sync.RWMutex
-	fields     map[string]interface{}
+	level     LogLevel
+	format    LogFormat
+	output    io.Writer
+	logger    *log.Logger
+	useColors bool
+	mutex     sync.RWMutex
+	fields    map[string]interface{}
 
 	// Performance metrics
-	logCount   map[LogLevel]int64
-	startTime  time.Time
+	logCount  map[LogLevel]int64
+	startTime time.Time
 
 	// Buffering for performance
 	buffer     []LogEntry
@@ -396,21 +396,21 @@ func (l *EnhancedLogger) GetStats() LogStats {
 	}
 
 	return LogStats{
-		Uptime:       uptime,
-		TotalLogs:    totalLogs,
-		LogsByLevel:  l.logCount,
-		BufferSize:   len(l.buffer),
-		MaxBuffer:    l.bufferSize,
+		Uptime:      uptime,
+		TotalLogs:   totalLogs,
+		LogsByLevel: l.logCount,
+		BufferSize:  len(l.buffer),
+		MaxBuffer:   l.bufferSize,
 	}
 }
 
 // LogStats holds logging statistics
 type LogStats struct {
-	Uptime      time.Duration         `json:"uptime"`
-	TotalLogs   int64                 `json:"total_logs"`
-	LogsByLevel map[LogLevel]int64    `json:"logs_by_level"`
-	BufferSize  int                   `json:"buffer_size"`
-	MaxBuffer   int                   `json:"max_buffer"`
+	Uptime      time.Duration      `json:"uptime"`
+	TotalLogs   int64              `json:"total_logs"`
+	LogsByLevel map[LogLevel]int64 `json:"logs_by_level"`
+	BufferSize  int                `json:"buffer_size"`
+	MaxBuffer   int                `json:"max_buffer"`
 }
 
 // SetBufferSize changes the buffer size
@@ -586,12 +586,12 @@ func (l *EnhancedLogger) Progress(completed, total int, currentTask, currentHost
 	percentage := float64(completed) / float64(total) * 100
 
 	l.WithFields(map[string]interface{}{
-		"completed":     completed,
-		"total":         total,
-		"percentage":    fmt.Sprintf("%.1f%%", percentage),
-		"current_task":  currentTask,
-		"current_host":  currentHost,
-		"type":          "progress",
+		"completed":    completed,
+		"total":        total,
+		"percentage":   fmt.Sprintf("%.1f%%", percentage),
+		"current_task": currentTask,
+		"current_host": currentHost,
+		"type":         "progress",
 	}).Info("Progress: %d/%d (%.1f%%) - %s on %s", completed, total, percentage, currentTask, currentHost)
 }
 

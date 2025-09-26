@@ -1,13 +1,13 @@
 package template
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io/ioutil"
 	"regexp"
 	"strings"
 	"text/template"
-	"bytes"
 )
 
 // Engine provides template rendering capabilities similar to Jinja2
@@ -19,37 +19,37 @@ type Engine struct {
 func NewEngine() *Engine {
 	engine := &Engine{
 		funcMap: template.FuncMap{
-			"default":    defaultFunc,
-			"upper":      strings.ToUpper,
-			"lower":      strings.ToLower,
-			"title":      strings.Title,
-			"trim":       strings.TrimSpace,
-			"replace":    strings.ReplaceAll,
-			"split":      strings.Split,
-			"join":       strings.Join,
-			"contains":   strings.Contains,
-			"hasPrefix":  strings.HasPrefix,
-			"hasSuffix":  strings.HasSuffix,
-			"len":        lenFunc,
-			"add":        addFunc,
-			"sub":        subFunc,
-			"mul":        mulFunc,
-			"div":        divFunc,
-			"mod":        modFunc,
-			"eq":         eqFunc,
-			"ne":         neFunc,
-			"lt":         ltFunc,
-			"le":         leFunc,
-			"gt":         gtFunc,
-			"ge":         geFunc,
-			"and":        andFunc,
-			"or":         orFunc,
-			"not":        notFunc,
-			"list":       listFunc,
-			"dict":       dictFunc,
-			"range":      rangeFunc,
-			"toJson":     toJsonFunc,
-			"fromJson":   fromJsonFunc,
+			"default":   defaultFunc,
+			"upper":     strings.ToUpper,
+			"lower":     strings.ToLower,
+			"title":     strings.Title,
+			"trim":      strings.TrimSpace,
+			"replace":   strings.ReplaceAll,
+			"split":     strings.Split,
+			"join":      strings.Join,
+			"contains":  strings.Contains,
+			"hasPrefix": strings.HasPrefix,
+			"hasSuffix": strings.HasSuffix,
+			"len":       lenFunc,
+			"add":       addFunc,
+			"sub":       subFunc,
+			"mul":       mulFunc,
+			"div":       divFunc,
+			"mod":       modFunc,
+			"eq":        eqFunc,
+			"ne":        neFunc,
+			"lt":        ltFunc,
+			"le":        leFunc,
+			"gt":        gtFunc,
+			"ge":        geFunc,
+			"and":       andFunc,
+			"or":        orFunc,
+			"not":       notFunc,
+			"list":      listFunc,
+			"dict":      dictFunc,
+			"range":     rangeFunc,
+			"toJson":    toJsonFunc,
+			"fromJson":  fromJsonFunc,
 		},
 	}
 

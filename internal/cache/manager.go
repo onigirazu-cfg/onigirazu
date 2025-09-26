@@ -19,10 +19,10 @@ type Manager struct {
 	cleanupDone chan struct{}
 
 	// Performance metrics
-	hits        int64
-	misses      int64
-	evictions   int64
-	maxSize     int
+	hits      int64
+	misses    int64
+	evictions int64
+	maxSize   int
 
 	// LRU tracking
 	accessOrder []string

@@ -77,7 +77,7 @@ func TestFileModuleCreateFile(t *testing.T) {
 	testFile := filepath.Join(tempDir, "test.txt")
 
 	host := types.Host{
-		Name: "localhost",
+		Name:    "localhost",
 		Address: "127.0.0.1",
 	}
 
@@ -116,7 +116,7 @@ func TestFileModuleCreateDirectory(t *testing.T) {
 	testDir := filepath.Join(tempDir, "testdir")
 
 	host := types.Host{
-		Name: "localhost",
+		Name:    "localhost",
 		Address: "127.0.0.1",
 	}
 
@@ -162,7 +162,7 @@ func TestFileModuleRemoveFile(t *testing.T) {
 	file.Close()
 
 	host := types.Host{
-		Name: "localhost",
+		Name:    "localhost",
 		Address: "127.0.0.1",
 	}
 
@@ -201,7 +201,7 @@ func TestFileModuleTouchFile(t *testing.T) {
 	testFile := filepath.Join(tempDir, "test.txt")
 
 	host := types.Host{
-		Name: "localhost",
+		Name:    "localhost",
 		Address: "127.0.0.1",
 	}
 
@@ -253,7 +253,7 @@ func TestFileModuleIdempotency(t *testing.T) {
 	testFile := filepath.Join(tempDir, "test.txt")
 
 	host := types.Host{
-		Name: "localhost",
+		Name:    "localhost",
 		Address: "127.0.0.1",
 	}
 

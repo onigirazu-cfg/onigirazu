@@ -2,13 +2,13 @@ package security
 
 import (
 	"crypto/md5"
-	"crypto/sha256"
 	"fmt"
 	"net"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
@@ -40,28 +40,28 @@ type SecurityConfig struct {
 
 // ValidationRule represents a security validation rule
 type ValidationRule struct {
-	Name        string                 `json:"name"`
-	Type        RuleType               `json:"type"`
-	Pattern     string                 `json:"pattern,omitempty"`
-	Validator   func(interface{}) bool `json:"-"`
-	Message     string                 `json:"message"`
-	Severity    Severity               `json:"severity"`
-	Enabled     bool                   `json:"enabled"`
-	Metadata    map[string]interface{} `json:"metadata,omitempty"`
+	Name      string                 `json:"name"`
+	Type      RuleType               `json:"type"`
+	Pattern   string                 `json:"pattern,omitempty"`
+	Validator func(interface{}) bool `json:"-"`
+	Message   string                 `json:"message"`
+	Severity  Severity               `json:"severity"`
+	Enabled   bool                   `json:"enabled"`
+	Metadata  map[string]interface{} `json:"metadata,omitempty"`
 }
 
 // RuleType represents the type of validation rule
 type RuleType string
 
 const (
-	RuleTypeHost      RuleType = "host"
-	RuleTypeModule    RuleType = "module"
-	RuleTypeCommand   RuleType = "command"
-	RuleTypeFile      RuleType = "file"
-	RuleTypePath      RuleType = "path"
-	RuleTypeNetwork   RuleType = "network"
-	RuleTypeContent   RuleType = "content"
-	RuleTypeCustom    RuleType = "custom"
+	RuleTypeHost    RuleType = "host"
+	RuleTypeModule  RuleType = "module"
+	RuleTypeCommand RuleType = "command"
+	RuleTypeFile    RuleType = "file"
+	RuleTypePath    RuleType = "path"
+	RuleTypeNetwork RuleType = "network"
+	RuleTypeContent RuleType = "content"
+	RuleTypeCustom  RuleType = "custom"
 )
 
 // Severity represents the severity level
@@ -76,36 +76,36 @@ const (
 
 // ValidationResult represents the result of security validation
 type ValidationResult struct {
-	Valid       bool                   `json:"valid"`
-	Violations  []SecurityViolation    `json:"violations"`
-	Warnings    []SecurityWarning      `json:"warnings"`
-	Score       int                    `json:"score"`
-	MaxScore    int                    `json:"max_score"`
-	Timestamp   time.Time              `json:"timestamp"`
-	Duration    time.Duration          `json:"duration"`
-	Metadata    map[string]interface{} `json:"metadata,omitempty"`
+	Valid      bool                   `json:"valid"`
+	Violations []SecurityViolation    `json:"violations"`
+	Warnings   []SecurityWarning      `json:"warnings"`
+	Score      int                    `json:"score"`
+	MaxScore   int                    `json:"max_score"`
+	Timestamp  time.Time              `json:"timestamp"`
+	Duration   time.Duration          `json:"duration"`
+	Metadata   map[string]interface{} `json:"metadata,omitempty"`
 }
 
 // SecurityViolation represents a security violation
 type SecurityViolation struct {
-	Rule        string                 `json:"rule"`
-	Type        RuleType               `json:"type"`
-	Severity    Severity               `json:"severity"`
-	Message     string                 `json:"message"`
-	Value       interface{}            `json:"value"`
-	Suggestion  string                 `json:"suggestion,omitempty"`
-	Timestamp   time.Time              `json:"timestamp"`
-	Metadata    map[string]interface{} `json:"metadata,omitempty"`
+	Rule       string                 `json:"rule"`
+	Type       RuleType               `json:"type"`
+	Severity   Severity               `json:"severity"`
+	Message    string                 `json:"message"`
+	Value      interface{}            `json:"value"`
+	Suggestion string                 `json:"suggestion,omitempty"`
+	Timestamp  time.Time              `json:"timestamp"`
+	Metadata   map[string]interface{} `json:"metadata,omitempty"`
 }
 
 // SecurityWarning represents a security warning
 type SecurityWarning struct {
-	Rule        string                 `json:"rule"`
-	Message     string                 `json:"message"`
-	Value       interface{}            `json:"value"`
-	Suggestion  string                 `json:"suggestion,omitempty"`
-	Timestamp   time.Time              `json:"timestamp"`
-	Metadata    map[string]interface{} `json:"metadata,omitempty"`
+	Rule       string                 `json:"rule"`
+	Message    string                 `json:"message"`
+	Value      interface{}            `json:"value"`
+	Suggestion string                 `json:"suggestion,omitempty"`
+	Timestamp  time.Time              `json:"timestamp"`
+	Metadata   map[string]interface{} `json:"metadata,omitempty"`
 }
 
 // NewSecurityValidator creates a new security validator
@@ -125,11 +125,11 @@ func NewSecurityValidator(config SecurityConfig) *SecurityValidator {
 func (sv *SecurityValidator) ValidateHost(host types.Host) ValidationResult {
 	startTime := time.Now()
 	result := ValidationResult{
-		Valid:     true,
+		Valid:      true,
 		Violations: make([]SecurityViolation, 0),
-		Warnings:  make([]SecurityWarning, 0),
-		Timestamp: startTime,
-		Metadata:  make(map[string]interface{}),
+		Warnings:   make([]SecurityWarning, 0),
+		Timestamp:  startTime,
+		Metadata:   make(map[string]interface{}),
 	}
 
 	// Validate host address
@@ -179,11 +179,11 @@ func (sv *SecurityValidator) ValidateHost(host types.Host) ValidationResult {
 func (sv *SecurityValidator) ValidateTask(task types.Task) ValidationResult {
 	startTime := time.Now()
 	result := ValidationResult{
-		Valid:     true,
+		Valid:      true,
 		Violations: make([]SecurityViolation, 0),
-		Warnings:  make([]SecurityWarning, 0),
-		Timestamp: startTime,
-		Metadata:  make(map[string]interface{}),
+		Warnings:   make([]SecurityWarning, 0),
+		Timestamp:  startTime,
+		Metadata:   make(map[string]interface{}),
 	}
 
 	// Validate module
@@ -223,11 +223,11 @@ func (sv *SecurityValidator) ValidateTask(task types.Task) ValidationResult {
 func (sv *SecurityValidator) ValidatePlaybook(playbook types.Playbook) ValidationResult {
 	startTime := time.Now()
 	result := ValidationResult{
-		Valid:     true,
+		Valid:      true,
 		Violations: make([]SecurityViolation, 0),
-		Warnings:  make([]SecurityWarning, 0),
-		Timestamp: startTime,
-		Metadata:  make(map[string]interface{}),
+		Warnings:   make([]SecurityWarning, 0),
+		Timestamp:  startTime,
+		Metadata:   make(map[string]interface{}),
 	}
 
 	// Validate each play
@@ -258,11 +258,11 @@ func (sv *SecurityValidator) ValidatePlaybook(playbook types.Playbook) Validatio
 func (sv *SecurityValidator) ValidateFile(path string, operation string) ValidationResult {
 	startTime := time.Now()
 	result := ValidationResult{
-		Valid:     true,
+		Valid:      true,
 		Violations: make([]SecurityViolation, 0),
-		Warnings:  make([]SecurityWarning, 0),
-		Timestamp: startTime,
-		Metadata:  make(map[string]interface{}),
+		Warnings:   make([]SecurityWarning, 0),
+		Timestamp:  startTime,
+		Metadata:   make(map[string]interface{}),
 	}
 
 	// Validate file path
@@ -540,11 +540,11 @@ func (sv *SecurityValidator) checkDangerousPatterns(task types.Task, result *Val
 
 func (sv *SecurityValidator) validatePlay(play types.Play) ValidationResult {
 	result := ValidationResult{
-		Valid:     true,
+		Valid:      true,
 		Violations: make([]SecurityViolation, 0),
-		Warnings:  make([]SecurityWarning, 0),
-		Timestamp: time.Now(),
-		Metadata:  make(map[string]interface{}),
+		Warnings:   make([]SecurityWarning, 0),
+		Timestamp:  time.Now(),
+		Metadata:   make(map[string]interface{}),
 	}
 
 	// Validate each task in the play
@@ -641,14 +641,14 @@ type SecurityAuditor struct {
 
 // AuditEntry represents a security audit entry
 type AuditEntry struct {
-	ID          string                 `json:"id"`
-	Timestamp   time.Time              `json:"timestamp"`
-	Type        string                 `json:"type"`
-	Action      string                 `json:"action"`
-	Resource    string                 `json:"resource"`
-	User        string                 `json:"user"`
-	Result      ValidationResult       `json:"result"`
-	Metadata    map[string]interface{} `json:"metadata"`
+	ID        string                 `json:"id"`
+	Timestamp time.Time              `json:"timestamp"`
+	Type      string                 `json:"type"`
+	Action    string                 `json:"action"`
+	Resource  string                 `json:"resource"`
+	User      string                 `json:"user"`
+	Result    ValidationResult       `json:"result"`
+	Metadata  map[string]interface{} `json:"metadata"`
 }
 
 // NewSecurityAuditor creates a new security auditor
@@ -724,6 +724,3 @@ func generateAuditID() string {
 	hash := md5.Sum([]byte(fmt.Sprintf("%d", time.Now().UnixNano())))
 	return fmt.Sprintf("%x", hash)[:16]
 }
-
-// Import required packages
-import "sync"

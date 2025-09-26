@@ -9,20 +9,20 @@ import (
 	"sync"
 	"time"
 
-	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 	"github.com/onigirazu-cfg/onigirazu/internal/interfaces"
+	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
 // Manager manages inventory operations
 type Manager struct {
-	inventory      *types.Inventory
-	parser         interfaces.PlaybookParser
-	logger         interfaces.Logger
-	cache          interfaces.CacheManager
-	mutex          sync.RWMutex
-	hostFilters    []HostFilter
-	groupFilters   []GroupFilter
-	lastUpdated    time.Time
+	inventory    *types.Inventory
+	parser       interfaces.PlaybookParser
+	logger       interfaces.Logger
+	cache        interfaces.CacheManager
+	mutex        sync.RWMutex
+	hostFilters  []HostFilter
+	groupFilters []GroupFilter
+	lastUpdated  time.Time
 }
 
 // HostFilter defines a function type for filtering hosts
@@ -577,9 +577,9 @@ func (m *Manager) isValidHostname(hostname string) bool {
 	// Check for valid characters
 	for _, char := range hostname {
 		if !((char >= 'a' && char <= 'z') ||
-			 (char >= 'A' && char <= 'Z') ||
-			 (char >= '0' && char <= '9') ||
-			 char == '-' || char == '.') {
+			(char >= 'A' && char <= 'Z') ||
+			(char >= '0' && char <= '9') ||
+			char == '-' || char == '.') {
 			return false
 		}
 	}

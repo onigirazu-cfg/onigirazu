@@ -5,22 +5,22 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/onigirazu-cfg/onigirazu/internal/cache"
 	"github.com/onigirazu-cfg/onigirazu/internal/inventory"
 	"github.com/onigirazu-cfg/onigirazu/internal/logger"
 	"github.com/onigirazu-cfg/onigirazu/internal/modules"
 	"github.com/onigirazu-cfg/onigirazu/internal/parser"
 	"github.com/onigirazu-cfg/onigirazu/internal/state"
-	"github.com/onigirazu-cfg/onigirazu/internal/cache"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
 // CoreEngine represents the core execution engine for Onigirazu
 type CoreEngine struct {
-	logger   *logger.Logger
-	parser   *parser.Parser
+	logger    *logger.Logger
+	parser    *parser.Parser
 	inventory *inventory.Manager
-	modules  *modules.Registry
-	state    *state.Manager
+	modules   *modules.Registry
+	state     *state.Manager
 }
 
 // NewCoreEngine creates a new instance of the core engine

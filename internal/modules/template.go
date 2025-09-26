@@ -2,20 +2,15 @@ package modules
 
 import (
 	"context"
-	"crypto/md5"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
-	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 	"github.com/onigirazu-cfg/onigirazu/internal/template"
+	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
 // TemplateModule handles template file processing
@@ -26,9 +21,9 @@ type TemplateModule struct {
 
 // TemplateOptions holds template processing options
 type TemplateOptions struct {
-	TrimBlocks      bool   `json:"trim_blocks"`
-	LStripBlocks    bool   `json:"lstrip_blocks"`
-	KeepTrailingNewline bool `json:"keep_trailing_newline"`
+	TrimBlocks          bool   `json:"trim_blocks"`
+	LStripBlocks        bool   `json:"lstrip_blocks"`
+	KeepTrailingNewline bool   `json:"keep_trailing_newline"`
 	BlockStartString    string `json:"block_start_string"`
 	BlockEndString      string `json:"block_end_string"`
 	VariableStartString string `json:"variable_start_string"`

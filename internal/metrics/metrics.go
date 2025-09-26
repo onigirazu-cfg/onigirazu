@@ -18,13 +18,13 @@ type Metrics struct {
 	mu sync.RWMutex
 
 	// Execution metrics
-	PlaybooksExecuted int64         `json:"playbooks_executed"`
-	PlaysExecuted     int64         `json:"plays_executed"`
-	TasksExecuted     int64         `json:"tasks_executed"`
-	TasksSucceeded    int64         `json:"tasks_succeeded"`
-	TasksFailed       int64         `json:"tasks_failed"`
-	TasksSkipped      int64         `json:"tasks_skipped"`
-	TasksChanged      int64         `json:"tasks_changed"`
+	PlaybooksExecuted int64 `json:"playbooks_executed"`
+	PlaysExecuted     int64 `json:"plays_executed"`
+	TasksExecuted     int64 `json:"tasks_executed"`
+	TasksSucceeded    int64 `json:"tasks_succeeded"`
+	TasksFailed       int64 `json:"tasks_failed"`
+	TasksSkipped      int64 `json:"tasks_skipped"`
+	TasksChanged      int64 `json:"tasks_changed"`
 
 	// Timing metrics
 	TotalExecutionTime time.Duration `json:"total_execution_time"`
@@ -49,13 +49,13 @@ type Metrics struct {
 	HostExecutionTime map[string]int64 `json:"host_execution_time_ms"`
 
 	// Resource usage
-	MemoryUsage    int64 `json:"memory_usage_bytes"`
-	CPUUsage       float64 `json:"cpu_usage_percent"`
-	NetworkBytes   int64 `json:"network_bytes"`
-	DiskIOBytes    int64 `json:"disk_io_bytes"`
+	MemoryUsage  int64   `json:"memory_usage_bytes"`
+	CPUUsage     float64 `json:"cpu_usage_percent"`
+	NetworkBytes int64   `json:"network_bytes"`
+	DiskIOBytes  int64   `json:"disk_io_bytes"`
 
 	// Concurrent execution
-	MaxConcurrentTasks int64 `json:"max_concurrent_tasks"`
+	MaxConcurrentTasks     int64 `json:"max_concurrent_tasks"`
 	CurrentConcurrentTasks int64 `json:"current_concurrent_tasks"`
 
 	// Start time
@@ -68,27 +68,27 @@ type Metrics struct {
 
 // PrometheusMetrics holds Prometheus metric collectors
 type PrometheusMetrics struct {
-	TasksTotal       *prometheus.CounterVec
-	TaskDuration     *prometheus.HistogramVec
-	PlaybooksTotal   prometheus.Counter
-	PlaysTotal       prometheus.Counter
-	CacheHitRate     prometheus.Gauge
-	HostsConnected   prometheus.Gauge
-	ConcurrentTasks  prometheus.Gauge
-	ErrorsTotal      *prometheus.CounterVec
-	ModuleUsage      *prometheus.CounterVec
+	TasksTotal      *prometheus.CounterVec
+	TaskDuration    *prometheus.HistogramVec
+	PlaybooksTotal  prometheus.Counter
+	PlaysTotal      prometheus.Counter
+	CacheHitRate    prometheus.Gauge
+	HostsConnected  prometheus.Gauge
+	ConcurrentTasks prometheus.Gauge
+	ErrorsTotal     *prometheus.CounterVec
+	ModuleUsage     *prometheus.CounterVec
 }
 
 // MetricsSummary provides a comprehensive summary of metrics
 type MetricsSummary struct {
-	Overview        *OverviewMetrics        `json:"overview"`
-	Performance     *PerformanceMetrics     `json:"performance"`
-	Modules         *ModuleMetrics          `json:"modules"`
-	Errors          *ErrorMetrics           `json:"errors"`
-	Hosts           *HostMetrics            `json:"hosts"`
-	Cache           *CacheMetrics           `json:"cache"`
-	ResourceUsage   *ResourceUsageMetrics   `json:"resource_usage"`
-	Timestamp       time.Time               `json:"timestamp"`
+	Overview      *OverviewMetrics      `json:"overview"`
+	Performance   *PerformanceMetrics   `json:"performance"`
+	Modules       *ModuleMetrics        `json:"modules"`
+	Errors        *ErrorMetrics         `json:"errors"`
+	Hosts         *HostMetrics          `json:"hosts"`
+	Cache         *CacheMetrics         `json:"cache"`
+	ResourceUsage *ResourceUsageMetrics `json:"resource_usage"`
+	Timestamp     time.Time             `json:"timestamp"`
 }
 
 type OverviewMetrics struct {
@@ -113,9 +113,9 @@ type PerformanceMetrics struct {
 }
 
 type ModuleMetrics struct {
-	Usage         map[string]int64 `json:"usage"`
-	TopModules    []ModuleUsage    `json:"top_modules"`
-	ErrorRates    map[string]float64 `json:"error_rates"`
+	Usage      map[string]int64   `json:"usage"`
+	TopModules []ModuleUsage      `json:"top_modules"`
+	ErrorRates map[string]float64 `json:"error_rates"`
 }
 
 type ModuleUsage struct {
@@ -130,10 +130,10 @@ type ErrorMetrics struct {
 }
 
 type HostMetrics struct {
-	Connected       int64            `json:"connected"`
-	Unreachable     int64            `json:"unreachable"`
-	ExecutionTimes  map[string]int64 `json:"execution_times_ms"`
-	SlowestHosts    []HostPerformance `json:"slowest_hosts"`
+	Connected      int64             `json:"connected"`
+	Unreachable    int64             `json:"unreachable"`
+	ExecutionTimes map[string]int64  `json:"execution_times_ms"`
+	SlowestHosts   []HostPerformance `json:"slowest_hosts"`
 }
 
 type HostPerformance struct {
@@ -142,10 +142,10 @@ type HostPerformance struct {
 }
 
 type CacheMetrics struct {
-	Hits     int64   `json:"hits"`
-	Misses   int64   `json:"misses"`
-	HitRate  float64 `json:"hit_rate"`
-	Total    int64   `json:"total"`
+	Hits    int64   `json:"hits"`
+	Misses  int64   `json:"misses"`
+	HitRate float64 `json:"hit_rate"`
+	Total   int64   `json:"total"`
 }
 
 type ResourceUsageMetrics struct {
@@ -739,7 +739,9 @@ func (m *Metrics) GetFormattedSummary() string {
 	if len(summary.Modules.TopModules) > 0 {
 		sb.WriteString("🔧 Top Modules:\n")
 		for i, module := range summary.Modules.TopModules {
-			if i >= 5 { break }
+			if i >= 5 {
+				break
+			}
 			errorRate := summary.Modules.ErrorRates[module.Name]
 			sb.WriteString(fmt.Sprintf("  %s: %d uses (%.1f%% errors)\n",
 				module.Name, module.Count, errorRate))

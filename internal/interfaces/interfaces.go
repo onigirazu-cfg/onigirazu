@@ -144,15 +144,15 @@ type ExecutionEngine interface {
 
 // ExecutionOptions holds options for execution
 type ExecutionOptions struct {
-	CheckMode    bool
-	DryRun       bool
-	Parallel     bool
-	MaxWorkers   int
-	Tags         []string
-	SkipTags     []string
-	StartAtTask  string
-	StopAtTask   string
-	Variables    map[string]interface{}
+	CheckMode   bool
+	DryRun      bool
+	Parallel    bool
+	MaxWorkers  int
+	Tags        []string
+	SkipTags    []string
+	StartAtTask string
+	StopAtTask  string
+	Variables   map[string]interface{}
 }
 
 // ProgressReporter defines the interface for progress reporting

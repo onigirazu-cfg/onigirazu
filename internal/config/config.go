@@ -18,8 +18,8 @@ type Config struct {
 	RetryDelay     time.Duration `yaml:"retry_delay" json:"retry_delay"`
 
 	// File paths
-	StateFile     string `yaml:"state_file" json:"state_file"`
-	ConfigFile    string `yaml:"config_file" json:"config_file"`
+	StateFile  string `yaml:"state_file" json:"state_file"`
+	ConfigFile string `yaml:"config_file" json:"config_file"`
 
 	// Logging
 	LogLevel  string `yaml:"log_level" json:"log_level"`
@@ -43,10 +43,10 @@ type Config struct {
 	ShowDiff  bool `yaml:"show_diff" json:"show_diff"`
 
 	// UI/UX
-	ColorOutput    bool   `yaml:"color_output" json:"color_output"`
-	ProgressBar    bool   `yaml:"progress_bar" json:"progress_bar"`
-	InteractiveMode bool  `yaml:"interactive_mode" json:"interactive_mode"`
-	OutputFormat   string `yaml:"output_format" json:"output_format"` // "text", "json", "yaml"
+	ColorOutput     bool   `yaml:"color_output" json:"color_output"`
+	ProgressBar     bool   `yaml:"progress_bar" json:"progress_bar"`
+	InteractiveMode bool   `yaml:"interactive_mode" json:"interactive_mode"`
+	OutputFormat    string `yaml:"output_format" json:"output_format"` // "text", "json", "yaml"
 
 	// Monitoring
 	EnableMetrics   bool   `yaml:"enable_metrics" json:"enable_metrics"`
@@ -55,10 +55,10 @@ type Config struct {
 	EnableProfiling bool   `yaml:"enable_profiling" json:"enable_profiling"`
 
 	// SSH/Connection
-	SSHTimeout       time.Duration `yaml:"ssh_timeout" json:"ssh_timeout"`
-	SSHKeepAlive     time.Duration `yaml:"ssh_keepalive" json:"ssh_keepalive"`
-	SSHMaxSessions   int           `yaml:"ssh_max_sessions" json:"ssh_max_sessions"`
-	ConnectionReuse  bool          `yaml:"connection_reuse" json:"connection_reuse"`
+	SSHTimeout      time.Duration `yaml:"ssh_timeout" json:"ssh_timeout"`
+	SSHKeepAlive    time.Duration `yaml:"ssh_keepalive" json:"ssh_keepalive"`
+	SSHMaxSessions  int           `yaml:"ssh_max_sessions" json:"ssh_max_sessions"`
+	ConnectionReuse bool          `yaml:"connection_reuse" json:"connection_reuse"`
 
 	// Vault integration
 	VaultEnabled bool   `yaml:"vault_enabled" json:"vault_enabled"`

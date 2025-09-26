@@ -8,8 +8,9 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v2"
-	"github.com/onigirazu-cfg/onigirazu/pkg/types"
+
 	"github.com/onigirazu-cfg/onigirazu/internal/interfaces"
+	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
 // EnhancedParser provides advanced playbook parsing capabilities

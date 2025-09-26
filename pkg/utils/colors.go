@@ -9,9 +9,9 @@ import (
 
 // ANSI color codes
 const (
-	Reset  = "\033[0m"
-	Bold   = "\033[1m"
-	Dim    = "\033[2m"
+	Reset = "\033[0m"
+	Bold  = "\033[1m"
+	Dim   = "\033[2m"
 
 	// Foreground colors
 	Black   = "\033[30m"
@@ -49,22 +49,22 @@ type ColorFunc func(string) string
 
 // ColorScheme holds color functions for different types of output
 type ColorScheme struct {
-	Success     ColorFunc
-	Error       ColorFunc
-	Warning     ColorFunc
-	Info        ColorFunc
-	Debug       ColorFunc
-	Changed     ColorFunc
-	Skipped     ColorFunc
-	Failed      ColorFunc
-	Header      ColorFunc
-	Highlight   ColorFunc
-	Dim         ColorFunc
-	Bold        ColorFunc
-	TaskName    ColorFunc
-	HostName    ColorFunc
-	ModuleName  ColorFunc
-	PlayName    ColorFunc
+	Success    ColorFunc
+	Error      ColorFunc
+	Warning    ColorFunc
+	Info       ColorFunc
+	Debug      ColorFunc
+	Changed    ColorFunc
+	Skipped    ColorFunc
+	Failed     ColorFunc
+	Header     ColorFunc
+	Highlight  ColorFunc
+	Dim        ColorFunc
+	Bold       ColorFunc
+	TaskName   ColorFunc
+	HostName   ColorFunc
+	ModuleName ColorFunc
+	PlayName   ColorFunc
 }
 
 var (

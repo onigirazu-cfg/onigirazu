@@ -7,33 +7,33 @@ import (
 	"sync"
 	"time"
 
-	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 	"github.com/onigirazu-cfg/onigirazu/internal/interfaces"
 	"github.com/onigirazu-cfg/onigirazu/internal/metrics"
 	"github.com/onigirazu-cfg/onigirazu/internal/security"
+	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
 // ExecutionEngine is the main engine for executing playbooks
 type ExecutionEngine struct {
-	config          interfaces.Config
-	logger          interfaces.Logger
-	stateManager    interfaces.StateManager
-	inventoryMgr    interfaces.InventoryManager
-	moduleRegistry  interfaces.ModuleRegistry
-	templateEngine  interfaces.TemplateEngine
-	progressTracker interfaces.ProgressTracker
+	config            interfaces.Config
+	logger            interfaces.Logger
+	stateManager      interfaces.StateManager
+	inventoryMgr      interfaces.InventoryManager
+	moduleRegistry    interfaces.ModuleRegistry
+	templateEngine    interfaces.TemplateEngine
+	progressTracker   interfaces.ProgressTracker
 	executionPool     interfaces.ExecutionPool
 	cacheManager      interfaces.CacheManager
 	metricsManager    *metrics.Metrics
 	securityValidator *security.SecurityValidator
 
 	// Execution context
-	variables       map[string]interface{}
-	facts          map[string]map[string]interface{} // host -> facts
-	mutex          sync.RWMutex
+	variables map[string]interface{}
+	facts     map[string]map[string]interface{} // host -> facts
+	mutex     sync.RWMutex
 
 	// Statistics
-	stats          *ExecutionStats
+	stats *ExecutionStats
 }
 
 // ExecutionStats holds execution statistics
@@ -74,20 +74,20 @@ func NewExecutionEngine(
 	cacheManager interfaces.CacheManager,
 ) *ExecutionEngine {
 	return &ExecutionEngine{
-		config:          config,
-		logger:          logger,
-		stateManager:    stateManager,
-		inventoryMgr:    inventoryMgr,
-		moduleRegistry:  moduleRegistry,
-		templateEngine:  templateEngine,
-		progressTracker: progressTracker,
+		config:            config,
+		logger:            logger,
+		stateManager:      stateManager,
+		inventoryMgr:      inventoryMgr,
+		moduleRegistry:    moduleRegistry,
+		templateEngine:    templateEngine,
+		progressTracker:   progressTracker,
 		executionPool:     executionPool,
 		cacheManager:      cacheManager,
 		metricsManager:    metrics.NewMetrics(),
 		securityValidator: security.NewSecurityValidator(),
-		variables:       make(map[string]interface{}),
-		facts:          make(map[string]map[string]interface{}),
-		stats:          &ExecutionStats{
+		variables:         make(map[string]interface{}),
+		facts:             make(map[string]map[string]interface{}),
+		stats: &ExecutionStats{
 			HostStats: make(map[string]*HostStats),
 		},
 	}
@@ -391,13 +391,13 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 		if e.config.GetDryRun() {
 			// In dry-run mode, simulate the task execution
 			result = types.TaskResult{
-				TaskName:  task.Name,
-				Host:      host.Name,
-				Module:    task.Module,
-				Success:   true,
-				Changed:   false, // Assume no changes in dry-run
-				Skipped:   false,
-				Failed:    false,
+				TaskName: task.Name,
+				Host:     host.Name,
+				Module:   task.Module,
+				Success:  true,
+				Changed:  false, // Assume no changes in dry-run
+				Skipped:  false,
+				Failed:   false,
 				Output: map[string]interface{}{
 					"message": "Task would be executed (dry-run mode)",
 					"args":    renderedArgs,
@@ -944,11 +944,11 @@ func (e *ExecutionEngine) GetExecutionSummary() map[string]interface{} {
 
 	return map[string]interface{}{
 		"execution_stats": stats,
-		"metrics":        metrics,
+		"metrics":         metrics,
 		"performance": map[string]interface{}{
 			"total_execution_time": metrics.Performance.TotalExecutionTime,
-			"average_task_time":   metrics.Performance.AverageTaskTime,
-			"concurrent_tasks":    metrics.Performance.CurrentConcurrentTasks,
+			"average_task_time":    metrics.Performance.AverageTaskTime,
+			"concurrent_tasks":     metrics.Performance.CurrentConcurrentTasks,
 		},
 		"errors": map[string]interface{}{
 			"total_errors":     metrics.Errors.TotalErrors,
@@ -956,8 +956,8 @@ func (e *ExecutionEngine) GetExecutionSummary() map[string]interface{} {
 			"errors_by_type":   metrics.Errors.ErrorsByType,
 		},
 		"hosts": map[string]interface{}{
-			"connected":    metrics.Hosts.Connected,
-			"unreachable":  metrics.Hosts.Unreachable,
+			"connected":   metrics.Hosts.Connected,
+			"unreachable": metrics.Hosts.Unreachable,
 		},
 		"cache": map[string]interface{}{
 			"hits":     metrics.Cache.Hits,

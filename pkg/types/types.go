@@ -7,19 +7,19 @@ import (
 
 // Host represents a target host
 type Host struct {
-	Name     string            `yaml:"name"`
-	Address  string            `yaml:"address"`
-	Port     int               `yaml:"port,omitempty"`
-	User     string            `yaml:"user,omitempty"`
-	Password string            `yaml:"password,omitempty"`
-	KeyFile  string            `yaml:"key_file,omitempty"`
+	Name     string                 `yaml:"name"`
+	Address  string                 `yaml:"address"`
+	Port     int                    `yaml:"port,omitempty"`
+	User     string                 `yaml:"user,omitempty"`
+	Password string                 `yaml:"password,omitempty"`
+	KeyFile  string                 `yaml:"key_file,omitempty"`
 	Vars     map[string]interface{} `yaml:"vars,omitempty"`
 }
 
 // Inventory represents a host inventory
 type Inventory struct {
-	Hosts  []Host                `yaml:"hosts"`
-	Groups map[string]*Group     `yaml:"groups,omitempty"`
+	Hosts  []Host            `yaml:"hosts"`
+	Groups map[string]*Group `yaml:"groups,omitempty"`
 }
 
 // Task represents a single task
@@ -46,23 +46,23 @@ type Task struct {
 
 // Play represents a set of tasks to execute
 type Play struct {
-	Name         string                 `yaml:"name"`
-	Hosts        string                 `yaml:"hosts"`
-	Vars         map[string]interface{} `yaml:"vars,omitempty"`
-	Tasks        []Task                 `yaml:"tasks"`
-	PreTasks     []Task                 `yaml:"pre_tasks,omitempty"`
-	PostTasks    []Task                 `yaml:"post_tasks,omitempty"`
-	Handlers     []Task                 `yaml:"handlers,omitempty"`
-	Become       bool                   `yaml:"become,omitempty"`
-	BecomeUser   string                 `yaml:"become_user,omitempty"`
-	BecomeMethod string                 `yaml:"become_method,omitempty"`
-	Tags         []string               `yaml:"tags,omitempty"`
-	When         string                 `yaml:"when,omitempty"`
-	Serial       interface{}            `yaml:"serial,omitempty"`
-	MaxFailPercentage int               `yaml:"max_fail_percentage,omitempty"`
-	AnyErrorsFatal bool                 `yaml:"any_errors_fatal,omitempty"`
-	IgnoreErrors   bool                 `yaml:"ignore_errors,omitempty"`
-	GatherFacts    bool                 `yaml:"gather_facts,omitempty"`
+	Name              string                 `yaml:"name"`
+	Hosts             string                 `yaml:"hosts"`
+	Vars              map[string]interface{} `yaml:"vars,omitempty"`
+	Tasks             []Task                 `yaml:"tasks"`
+	PreTasks          []Task                 `yaml:"pre_tasks,omitempty"`
+	PostTasks         []Task                 `yaml:"post_tasks,omitempty"`
+	Handlers          []Task                 `yaml:"handlers,omitempty"`
+	Become            bool                   `yaml:"become,omitempty"`
+	BecomeUser        string                 `yaml:"become_user,omitempty"`
+	BecomeMethod      string                 `yaml:"become_method,omitempty"`
+	Tags              []string               `yaml:"tags,omitempty"`
+	When              string                 `yaml:"when,omitempty"`
+	Serial            interface{}            `yaml:"serial,omitempty"`
+	MaxFailPercentage int                    `yaml:"max_fail_percentage,omitempty"`
+	AnyErrorsFatal    bool                   `yaml:"any_errors_fatal,omitempty"`
+	IgnoreErrors      bool                   `yaml:"ignore_errors,omitempty"`
+	GatherFacts       bool                   `yaml:"gather_facts,omitempty"`
 }
 
 // Playbook represents a complete playbook
@@ -75,17 +75,17 @@ type Playbook struct {
 
 // TaskResult represents the result of task execution
 type TaskResult struct {
-	TaskName   string                 `json:"task_name"`
-	Host       string                 `json:"host"`
-	Module     string                 `json:"module"`
-	Success    bool                   `json:"success"`
-	Failed     bool                   `json:"failed"`
-	Changed    bool                   `json:"changed"`
-	Skipped    bool                   `json:"skipped"`
-	Output     map[string]interface{} `json:"output"`
-	Error      string                 `json:"error,omitempty"`
-	Duration   time.Duration          `json:"duration"`
-	Timestamp  time.Time              `json:"timestamp"`
+	TaskName  string                 `json:"task_name"`
+	Host      string                 `json:"host"`
+	Module    string                 `json:"module"`
+	Success   bool                   `json:"success"`
+	Failed    bool                   `json:"failed"`
+	Changed   bool                   `json:"changed"`
+	Skipped   bool                   `json:"skipped"`
+	Output    map[string]interface{} `json:"output"`
+	Error     string                 `json:"error,omitempty"`
+	Duration  time.Duration          `json:"duration"`
+	Timestamp time.Time              `json:"timestamp"`
 }
 
 // PlayResult represents the result of play execution
@@ -111,11 +111,11 @@ type HostResult struct {
 
 // State represents saved state
 type State struct {
-	LastRun     time.Time              `json:"last_run"`
-	Playbook    string                 `json:"playbook"`
-	Results     []PlayResult           `json:"results"`
-	Variables   map[string]interface{} `json:"variables"`
-	Checksums   map[string]string      `json:"checksums"`
+	LastRun   time.Time              `json:"last_run"`
+	Playbook  string                 `json:"playbook"`
+	Results   []PlayResult           `json:"results"`
+	Variables map[string]interface{} `json:"variables"`
+	Checksums map[string]string      `json:"checksums"`
 }
 
 // Module represents a module interface
@@ -128,15 +128,15 @@ type Module interface {
 
 // TaskState represents the state of a single task
 type TaskState struct {
-	TaskID      string                 `json:"task_id"`
-	TaskName    string                 `json:"task_name"`
-	Host        string                 `json:"host"`
-	Module      string                 `json:"module"`
-	Args        map[string]interface{} `json:"args"`
-	Result      TaskResult             `json:"result"`
-	LastRun     time.Time              `json:"last_run"`
-	Checksum    string                 `json:"checksum"`
-	Variables   map[string]interface{} `json:"variables"`
+	TaskID    string                 `json:"task_id"`
+	TaskName  string                 `json:"task_name"`
+	Host      string                 `json:"host"`
+	Module    string                 `json:"module"`
+	Args      map[string]interface{} `json:"args"`
+	Result    TaskResult             `json:"result"`
+	LastRun   time.Time              `json:"last_run"`
+	Checksum  string                 `json:"checksum"`
+	Variables map[string]interface{} `json:"variables"`
 }
 
 // ExecutionContext holds context for task execution
@@ -188,10 +188,10 @@ type TemplateResult struct {
 
 // CacheEntry represents a cache entry
 type CacheEntry struct {
-	Key       string      `json:"key"`
-	Value     interface{} `json:"value"`
-	CreatedAt time.Time   `json:"created_at"`
-	ExpiresAt time.Time   `json:"expires_at"`
+	Key       string        `json:"key"`
+	Value     interface{}   `json:"value"`
+	CreatedAt time.Time     `json:"created_at"`
+	ExpiresAt time.Time     `json:"expires_at"`
 	TTL       time.Duration `json:"ttl"`
 }
 
@@ -239,9 +239,9 @@ type Loop struct {
 
 // Group represents a host group
 type Group struct {
-	Name      string                    `yaml:"name" json:"name"`
-	Hosts     map[string]*Host          `yaml:"hosts,omitempty" json:"hosts,omitempty"`
-	Children  []string                  `yaml:"children,omitempty" json:"children,omitempty"`
-	Variables map[string]interface{}    `yaml:"vars,omitempty" json:"vars,omitempty"`
-	Vars      map[string]interface{}    `yaml:"-" json:"-"` // Alias for Variables
+	Name      string                 `yaml:"name" json:"name"`
+	Hosts     map[string]*Host       `yaml:"hosts,omitempty" json:"hosts,omitempty"`
+	Children  []string               `yaml:"children,omitempty" json:"children,omitempty"`
+	Variables map[string]interface{} `yaml:"vars,omitempty" json:"vars,omitempty"`
+	Vars      map[string]interface{} `yaml:"-" json:"-"` // Alias for Variables
 }

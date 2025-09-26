@@ -49,7 +49,7 @@ func (m *EnhancedManager) LoadState(ctx context.Context) (*types.State, error) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
-	// Check if context is cancelled
+	// Check if context is canceled
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -92,7 +92,7 @@ func (m *EnhancedManager) SaveState(ctx context.Context, state *types.State) err
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
-	// Check if context is cancelled
+	// Check if context is canceled
 	select {
 	case <-ctx.Done():
 		return ctx.Err()

@@ -11,8 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 	"gopkg.in/yaml.v2"
+
+	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
 // ConfigModule implements configuration file management
@@ -34,12 +35,12 @@ func NewConfigModule() *ConfigModule {
 type ConfigAction string
 
 const (
-	ConfigActionSet    ConfigAction = "set"
-	ConfigActionGet    ConfigAction = "get"
-	ConfigActionDelete ConfigAction = "delete"
-	ConfigActionMerge  ConfigAction = "merge"
-	ConfigActionBackup ConfigAction = "backup"
-	ConfigActionRestore ConfigAction = "restore"
+	ConfigActionSet      ConfigAction = "set"
+	ConfigActionGet      ConfigAction = "get"
+	ConfigActionDelete   ConfigAction = "delete"
+	ConfigActionMerge    ConfigAction = "merge"
+	ConfigActionBackup   ConfigAction = "backup"
+	ConfigActionRestore  ConfigAction = "restore"
 	ConfigActionValidate ConfigAction = "validate"
 )
 

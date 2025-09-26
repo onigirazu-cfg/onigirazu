@@ -10,7 +10,7 @@ import (
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
-type Parser struct{
+type Parser struct {
 	variables map[string]interface{}
 }
 

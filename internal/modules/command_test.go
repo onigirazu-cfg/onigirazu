@@ -56,7 +56,7 @@ func TestCommandModuleExecuteSimple(t *testing.T) {
 	module := NewCommandModule()
 
 	host := types.Host{
-		Name: "localhost",
+		Name:    "localhost",
 		Address: "127.0.0.1",
 	}
 
@@ -107,7 +107,7 @@ func TestCommandModuleExecuteWithShell(t *testing.T) {
 	module := NewCommandModule()
 
 	host := types.Host{
-		Name: "localhost",
+		Name:    "localhost",
 		Address: "127.0.0.1",
 	}
 
@@ -138,7 +138,7 @@ func TestCommandModuleExecuteFailure(t *testing.T) {
 	module := NewCommandModule()
 
 	host := types.Host{
-		Name: "localhost",
+		Name:    "localhost",
 		Address: "127.0.0.1",
 	}
 
@@ -193,7 +193,7 @@ func TestShellModuleExecute(t *testing.T) {
 	module := NewShellModule()
 
 	host := types.Host{
-		Name: "localhost",
+		Name:    "localhost",
 		Address: "127.0.0.1",
 	}
 
