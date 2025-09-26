@@ -470,6 +470,52 @@ func (m *MyModule) Execute(host types.Host, args map[string]interface{}) (types.
 registry.Register(NewMyModule())
 ```
 
+## 📚 Documentation
+
+Onigirazu provides comprehensive documentation to help you get started and master the tool.
+
+### API Documentation
+
+- **[HTML Documentation](docs/api/index.html)** - Beautiful, interactive API documentation
+- **[API Overview](docs/api/README.md)** - Documentation structure and guidelines
+- **[Package Documentation](docs/api/)** - Detailed package-level documentation
+
+### Quick Documentation Commands
+
+```bash
+# Generate API documentation
+make docs-generate
+
+# Open HTML documentation in browser
+make docs-open
+
+# Start interactive documentation server
+make docs-serve
+
+# View documentation info
+make docs
+```
+
+### Available Documentation
+
+| Package | Description |
+|---------|-------------|
+| `pkg/types` | Core types and interfaces |
+| `pkg/utils` | Utility functions and helpers |
+| `internal/config` | Configuration management |
+| `internal/core` | Core execution engine |
+| `internal/modules` | Built-in modules (command, file, template, etc.) |
+| `internal/parser` | YAML parsing and validation |
+| `internal/workflow` | Workflow orchestration |
+
+### Documentation Features
+
+- 🎨 **Beautiful HTML** - Modern, responsive design
+- 🔍 **Searchable** - Easy navigation and package index
+- 📱 **Mobile-friendly** - Works on all devices
+- 🚀 **Auto-generated** - Always up-to-date with code
+- 🌐 **Interactive server** - Browse with `pkgsite`
+
 ## Contributing
 
 1. Fork the repository
@@ -491,9 +537,10 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Support
 
-- **Issues**: [GitHub Issues](https://github.com/onigirazu-cfg/onigirazu/issues)
-- **Documentation**: [Wiki](https://github.com/onigirazu-cfg/onigirazu/wiki)
-- **Discussions**: [GitHub Discussions](https://github.com/onigirazu-cfg/onigirazu/discussions)
+- **📖 Documentation**: [API Documentation](docs/api/index.html) | [Documentation Guide](docs/README.md)
+- **🐛 Issues**: [GitHub Issues](https://github.com/onigirazu-cfg/onigirazu/issues)
+- **💬 Discussions**: [GitHub Discussions](https://github.com/onigirazu-cfg/onigirazu/discussions)
+- **📋 Contributing**: [Contributing Guide](CONTRIBUTING.md)
 
 ---
 
