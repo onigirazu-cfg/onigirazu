@@ -206,7 +206,7 @@ For full CI/CD functionality, configure these GitHub secrets:
 
 | Secret | Purpose |
 |--------|---------|
-| `GITHUB_TOKEN` | GitHub API access (auto-provided) |
+| `GH_TOKEN` | GitHub API access (auto-provided) |
 | `CODECOV_TOKEN` | Code coverage reporting |
 | `DOCKERHUB_USERNAME` | Docker Hub publishing |
 | `DOCKERHUB_TOKEN` | Docker Hub authentication |

@@ -146,7 +146,7 @@ check_secrets() {
     print_status "Checking required GitHub secrets..."
 
     REQUIRED_SECRETS=(
-        "GITHUB_TOKEN"
+        "GH_TOKEN"
         "CODECOV_TOKEN"
         "DOCKERHUB_USERNAME"
         "DOCKERHUB_TOKEN"
