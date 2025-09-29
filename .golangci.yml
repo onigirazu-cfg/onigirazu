@@ -54,7 +54,6 @@ linters-settings:
   misspell:
     locale: US
   nolintlint:
-    allow-leading-space: true
     allow-unused: false
     require-explanation: false
     require-specific: false
