@@ -53,10 +53,6 @@ linters-settings:
     line-length: 140
   misspell:
     locale: US
-  nolintlint:
-    allow-unused: false
-    require-explanation: false
-    require-specific: false
 
 linters:
   enable:
