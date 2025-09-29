@@ -20,6 +20,7 @@ import (
 	"github.com/onigirazu-cfg/onigirazu/internal/progress"
 	"github.com/onigirazu-cfg/onigirazu/internal/state"
 	"github.com/onigirazu-cfg/onigirazu/internal/template"
+	"github.com/onigirazu-cfg/onigirazu/internal/version"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 	"github.com/onigirazu-cfg/onigirazu/pkg/utils"
 )
@@ -42,12 +43,12 @@ func main() {
 		noColor       = flag.Bool("no-color", false, "Disable colored output")
 		interactive   = flag.Bool("interactive", false, "Interactive mode")
 		listModules   = flag.Bool("list-modules", false, "List available modules and exit")
-		version       = flag.Bool("version", false, "Show version and exit")
+		showVersion   = flag.Bool("version", false, "Show version and exit")
 	)
 	flag.Parse()
 
 	// Handle version flag
-	if *version {
+	if *showVersion {
 		fmt.Println(version.GetFullVersion())
 		fmt.Println("Configuration Management Tool inspired by Ansible")
 		os.Exit(0)

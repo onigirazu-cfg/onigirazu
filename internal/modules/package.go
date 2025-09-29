@@ -103,7 +103,7 @@ func (m *PackageModule) Execute(ctx context.Context, host types.Host, args map[s
 	result := types.TaskResult{
 		TaskName:  "package",
 		Host:      host.Name,
-		Module:    m.name,
+		Module:    m.GetName(),
 		Success:   true,
 		Changed:   false,
 		Output:    make(map[string]interface{}),

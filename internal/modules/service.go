@@ -67,9 +67,9 @@ func NewServiceModule() *ServiceModule {
 	// Detect service management system
 	switch runtime.GOOS {
 	case "linux":
-		if m.hasSystemd() {
+		if hasSystemd() {
 			manager = &SystemdManager{}
-		} else if m.hasSysVInit() {
+		} else if hasSysVInit() {
 			manager = &SysVInitManager{}
 		} else {
 			manager = &GenericManager{}
@@ -97,7 +97,7 @@ func (m *ServiceModule) Execute(ctx context.Context, host types.Host, args map[s
 	result := types.TaskResult{
 		TaskName:  "service",
 		Host:      host.Name,
-		Module:    m.name,
+		Module:    m.GetName(),
 		Success:   true,
 		Changed:   false,
 		Output:    make(map[string]interface{}),
@@ -526,12 +526,12 @@ func (g *GenericManager) GetStatus(name string) (ServiceStatus, error) {
 }
 
 // Helper functions for service detection
-func (m *ServiceModule) hasSystemd() bool {
+func hasSystemd() bool {
 	_, err := os.Stat("/run/systemd/system")
 	return err == nil
 }
 
-func (m *ServiceModule) hasSysVInit() bool {
+func hasSysVInit() bool {
 	_, err := os.Stat("/etc/init.d")
 	return err == nil
 }

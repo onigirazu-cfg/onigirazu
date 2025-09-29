@@ -9,17 +9,19 @@ import (
 )
 
 func TestNewSecurityValidator(t *testing.T) {
-	validator := NewSecurityValidator()
+	config := DefaultSecurityConfig()
+	validator := NewSecurityValidator(config)
 
 	assert.NotNil(t, validator)
-	assert.NotEmpty(t, validator.dangerousPatterns)
-	assert.NotEmpty(t, validator.blockedPaths)
-	assert.NotEmpty(t, validator.allowedExtensions)
-	assert.Greater(t, validator.maxFileSize, int64(0))
+	assert.NotEmpty(t, config.BlockedCommands)
+	assert.NotEmpty(t, config.BlockedDirectories)
+	assert.NotEmpty(t, config.AllowedFileTypes)
+	assert.Greater(t, config.MaxFileSize, int64(0))
 }
 
 func TestSecurityValidator_ValidateCommandTask(t *testing.T) {
-	validator := NewSecurityValidator()
+	config := DefaultSecurityConfig()
+	validator := NewSecurityValidator(config)
 
 	tests := []struct {
 		name    string
@@ -107,18 +109,19 @@ func TestSecurityValidator_ValidateCommandTask(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := validator.ValidateTask(tt.task)
+			result := validator.ValidateTask(*tt.task)
 			if tt.wantErr {
-				assert.Error(t, err)
+				assert.False(t, result.Valid)
 			} else {
-				assert.NoError(t, err)
+				assert.True(t, result.Valid)
 			}
 		})
 	}
 }
 
 func TestSecurityValidator_ValidateFileTask(t *testing.T) {
-	validator := NewSecurityValidator()
+	config := DefaultSecurityConfig()
+	validator := NewSecurityValidator(config)
 
 	tests := []struct {
 		name    string
@@ -185,18 +188,19 @@ func TestSecurityValidator_ValidateFileTask(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := validator.ValidateTask(tt.task)
+			result := validator.ValidateTask(*tt.task)
 			if tt.wantErr {
-				assert.Error(t, err)
+				assert.False(t, result.Valid)
 			} else {
-				assert.NoError(t, err)
+				assert.True(t, result.Valid)
 			}
 		})
 	}
 }
 
 func TestSecurityValidator_ValidateUserTask(t *testing.T) {
-	validator := NewSecurityValidator()
+	config := DefaultSecurityConfig()
+	validator := NewSecurityValidator(config)
 
 	tests := []struct {
 		name    string
@@ -255,18 +259,19 @@ func TestSecurityValidator_ValidateUserTask(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := validator.ValidateTask(tt.task)
+			result := validator.ValidateTask(*tt.task)
 			if tt.wantErr {
-				assert.Error(t, err)
+				assert.False(t, result.Valid)
 			} else {
-				assert.NoError(t, err)
+				assert.True(t, result.Valid)
 			}
 		})
 	}
 }
 
 func TestSecurityValidator_ValidateGroupTask(t *testing.T) {
-	validator := NewSecurityValidator()
+	config := DefaultSecurityConfig()
+	validator := NewSecurityValidator(config)
 
 	tests := []struct {
 		name    string
@@ -323,18 +328,19 @@ func TestSecurityValidator_ValidateGroupTask(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := validator.ValidateTask(tt.task)
+			result := validator.ValidateTask(*tt.task)
 			if tt.wantErr {
-				assert.Error(t, err)
+				assert.False(t, result.Valid)
 			} else {
-				assert.NoError(t, err)
+				assert.True(t, result.Valid)
 			}
 		})
 	}
 }
 
 func TestSecurityValidator_ValidateVariables(t *testing.T) {
-	validator := NewSecurityValidator()
+	config := DefaultSecurityConfig()
+	validator := NewSecurityValidator(config)
 
 	tests := []struct {
 		name      string
@@ -386,7 +392,8 @@ func TestSecurityValidator_ValidateVariables(t *testing.T) {
 }
 
 func TestSecurityValidator_ValidatePlaybook(t *testing.T) {
-	validator := NewSecurityValidator()
+	config := DefaultSecurityConfig()
+	validator := NewSecurityValidator(config)
 
 	playbook := &types.Playbook{
 		Name: "Test Playbook",
@@ -420,13 +427,14 @@ func TestSecurityValidator_ValidatePlaybook(t *testing.T) {
 		},
 	}
 
-	err := validator.ValidatePlaybook(playbook)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "potentially dangerous command")
+	result := validator.ValidatePlaybook(*playbook)
+	assert.False(t, result.Valid)
+	assert.NotEmpty(t, result.Violations)
 }
 
 func TestSecurityValidator_AddDangerousPattern(t *testing.T) {
-	validator := NewSecurityValidator()
+	config := DefaultSecurityConfig()
+	validator := NewSecurityValidator(config)
 
 	// Add valid pattern
 	err := validator.AddDangerousPattern(`test.*pattern`)
@@ -438,22 +446,24 @@ func TestSecurityValidator_AddDangerousPattern(t *testing.T) {
 }
 
 func TestSecurityValidator_SetMaxFileSize(t *testing.T) {
-	validator := NewSecurityValidator()
+	config := DefaultSecurityConfig()
+	validator := NewSecurityValidator(config)
 
-	originalSize := validator.maxFileSize
+	originalSize := validator.config.MaxFileSize
 	newSize := int64(50 * 1024 * 1024) // 50MB
 
 	validator.SetMaxFileSize(newSize)
-	assert.Equal(t, newSize, validator.maxFileSize)
-	assert.NotEqual(t, originalSize, validator.maxFileSize)
+	assert.Equal(t, newSize, validator.config.MaxFileSize)
+	assert.NotEqual(t, originalSize, validator.config.MaxFileSize)
 }
 
 func TestSecurityValidator_AddBlockedPath(t *testing.T) {
-	validator := NewSecurityValidator()
+	config := DefaultSecurityConfig()
+	validator := NewSecurityValidator(config)
 
-	originalCount := len(validator.blockedPaths)
+	originalCount := len(validator.config.BlockedDirectories)
 	validator.AddBlockedPath("/custom/blocked/path")
 
-	assert.Equal(t, originalCount+1, len(validator.blockedPaths))
-	assert.Contains(t, validator.blockedPaths, "/custom/blocked/path")
+	assert.Equal(t, originalCount+1, len(validator.config.BlockedDirectories))
+	assert.Contains(t, validator.config.BlockedDirectories, "/custom/blocked/path")
 }

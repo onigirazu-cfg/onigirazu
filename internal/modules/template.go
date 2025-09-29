@@ -54,7 +54,7 @@ func (m *TemplateModule) Execute(ctx context.Context, host types.Host, args map[
 	result := types.TaskResult{
 		TaskName:  "template",
 		Host:      host.Name,
-		Module:    m.name,
+		Module:    m.GetName(),
 		Success:   false,
 		Changed:   false,
 		Output:    make(map[string]interface{}),
@@ -82,11 +82,11 @@ func (m *TemplateModule) Execute(ctx context.Context, host types.Host, args map[
 	owner := getStringArg(args, "owner", "")
 	group := getStringArg(args, "group", "")
 	variables := getMapArg(args, "vars", make(map[string]interface{}))
-	force := getBoolArg(args, "force", false)
-	validate := getStringArg(args, "validate", "")
+	_ = getBoolArg(args, "force", false)      // force - not used in this implementation
+	_ = getStringArg(args, "validate", "")    // validate - not used in this implementation
 
 	// Template options
-	options := m.parseTemplateOptions(args)
+	_ = m.parseTemplateOptions(args) // options - not used in this implementation
 
 	// Merge host variables
 	allVars := make(map[string]interface{})
@@ -309,32 +309,32 @@ func (m *TemplateModule) parseTemplateOptions(args map[string]interface{}) map[s
 	options := make(map[string]interface{})
 
 	// Template processing options
-	if trimBlocks, exists := args["trim_blocks"]; exists {
+	if _, exists := args["trim_blocks"]; exists {
 		options["trim_blocks"] = getBoolArg(args, "trim_blocks", false)
 	}
 
-	if stripBlocks, exists := args["lstrip_blocks"]; exists {
+	if _, exists := args["lstrip_blocks"]; exists {
 		options["lstrip_blocks"] = getBoolArg(args, "lstrip_blocks", false)
 	}
 
-	if keepTrailingNewline, exists := args["keep_trailing_newline"]; exists {
+	if _, exists := args["keep_trailing_newline"]; exists {
 		options["keep_trailing_newline"] = getBoolArg(args, "keep_trailing_newline", true)
 	}
 
 	// Custom delimiters
-	if blockStart, exists := args["block_start_string"]; exists {
+	if _, exists := args["block_start_string"]; exists {
 		options["block_start_string"] = getStringArg(args, "block_start_string", "{%")
 	}
 
-	if blockEnd, exists := args["block_end_string"]; exists {
+	if _, exists := args["block_end_string"]; exists {
 		options["block_end_string"] = getStringArg(args, "block_end_string", "%}")
 	}
 
-	if varStart, exists := args["variable_start_string"]; exists {
+	if _, exists := args["variable_start_string"]; exists {
 		options["variable_start_string"] = getStringArg(args, "variable_start_string", "{{")
 	}
 
-	if varEnd, exists := args["variable_end_string"]; exists {
+	if _, exists := args["variable_end_string"]; exists {
 		options["variable_end_string"] = getStringArg(args, "variable_end_string", "}}")
 	}
 

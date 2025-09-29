@@ -84,7 +84,7 @@ func NewExecutionEngine(
 		executionPool:     executionPool,
 		cacheManager:      cacheManager,
 		metricsManager:    metrics.NewMetrics(),
-		securityValidator: security.NewSecurityValidator(),
+		securityValidator: security.NewSecurityValidator(security.DefaultSecurityConfig()),
 		variables:         make(map[string]interface{}),
 		facts:             make(map[string]map[string]interface{}),
 		stats: &ExecutionStats{
@@ -356,14 +356,15 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 	}
 
 	// Perform security validation
-	taskForValidation := &types.Task{
+	taskForValidation := types.Task{
 		Name:   task.Name,
 		Module: task.Module,
 		Args:   renderedArgs,
 	}
-	if err := e.securityValidator.ValidateTask(taskForValidation); err != nil {
+	validationResult := e.securityValidator.ValidateTask(taskForValidation)
+	if !validationResult.Valid {
 		e.metricsManager.IncrementErrorByType("security_validation")
-		return fmt.Errorf("security validation failed: %w", err)
+		return fmt.Errorf("security validation failed: %s", validationResult.Error())
 	}
 
 	// Create execution context (for future use)
@@ -857,7 +858,7 @@ func (e *ExecutionEngine) executeTaskOnHostInternal(ctx context.Context, task *t
 	startTime := time.Now()
 
 	// Get module
-	module, err := e.moduleRegistry.GetModule(task.Module)
+	module, err := e.moduleRegistry.Get(task.Module)
 	if err != nil {
 		return types.TaskResult{
 			TaskName:  task.Name,
@@ -884,16 +885,17 @@ func (e *ExecutionEngine) executeTaskOnHostInternal(ctx context.Context, task *t
 	}
 
 	// Security validation
-	if err := e.securityValidator.ValidateTask(task, *host); err != nil {
+	validationResult := e.securityValidator.ValidateTask(*task)
+	if !validationResult.Valid {
 		return types.TaskResult{
 			TaskName:  task.Name,
 			Host:      host.Name,
 			Module:    task.Module,
 			Failed:    true,
-			Error:     fmt.Sprintf("security validation failed: %v", err),
+			Error:     fmt.Sprintf("security validation failed: %s", validationResult.Error()),
 			Duration:  time.Since(startTime),
 			Timestamp: time.Now(),
-		}, err
+		}, fmt.Errorf("security validation failed: %s", validationResult.Error())
 	}
 
 	// Execute module
@@ -951,9 +953,9 @@ func (e *ExecutionEngine) GetExecutionSummary() map[string]interface{} {
 			"concurrent_tasks":     metrics.Performance.CurrentConcurrentTasks,
 		},
 		"errors": map[string]interface{}{
-			"total_errors":     metrics.Errors.TotalErrors,
-			"errors_by_module": metrics.Errors.ErrorsByModule,
-			"errors_by_type":   metrics.Errors.ErrorsByType,
+			"total_errors":     metrics.Errors.Total,
+			"errors_by_module": metrics.Errors.ByModule,
+			"errors_by_type":   metrics.Errors.ByType,
 		},
 		"hosts": map[string]interface{}{
 			"connected":   metrics.Hosts.Connected,

@@ -86,6 +86,17 @@ type ValidationResult struct {
 	Metadata   map[string]interface{} `json:"metadata,omitempty"`
 }
 
+// Error implements the error interface for ValidationResult
+func (vr ValidationResult) Error() string {
+	if vr.Valid {
+		return ""
+	}
+	if len(vr.Violations) > 0 {
+		return vr.Violations[0].Message
+	}
+	return "validation failed"
+}
+
 // SecurityViolation represents a security violation
 type SecurityViolation struct {
 	Rule       string                 `json:"rule"`
@@ -106,6 +117,26 @@ type SecurityWarning struct {
 	Suggestion string                 `json:"suggestion,omitempty"`
 	Timestamp  time.Time              `json:"timestamp"`
 	Metadata   map[string]interface{} `json:"metadata,omitempty"`
+}
+
+// DefaultSecurityConfig returns a default security configuration
+func DefaultSecurityConfig() SecurityConfig {
+	return SecurityConfig{
+		AllowedHosts:        []string{"*"}, // Allow all hosts by default
+		AllowedPorts:        []int{22, 80, 443, 8080, 9090},
+		AllowedModules:      []string{"command", "shell", "file", "copy", "template", "service", "package", "user", "group", "git"},
+		BlockedCommands:     []string{"rm -rf /", "dd if=", "mkfs", "fdisk", "format"},
+		MaxFileSize:         100 * 1024 * 1024, // 100MB
+		AllowedFileTypes:    []string{".txt", ".conf", ".cfg", ".ini", ".yaml", ".yml", ".json", ".xml"},
+		RequireEncryption:   false,
+		MaxRetries:          3,
+		MaxTimeout:          time.Minute * 30,
+		AllowedDirectories:  []string{"/tmp", "/var/tmp", "/home", "/opt"},
+		BlockedDirectories:  []string{"/etc/passwd", "/etc/shadow", "/boot", "/sys", "/proc"},
+		RequiredPermissions: map[string]string{},
+		AuditEnabled:        true,
+		LogLevel:            "info",
+	}
 }
 
 // NewSecurityValidator creates a new security validator
@@ -286,6 +317,43 @@ func (sv *SecurityValidator) ValidateFile(path string, operation string) Validat
 		result.addViolation("file_type_not_allowed", RuleTypeFile, SeverityMedium,
 			fmt.Sprintf("File type for %s is not allowed", path),
 			filepath.Ext(path), "Use an allowed file type")
+	}
+
+	result.Duration = time.Since(startTime)
+	result.calculateScore()
+
+	return result
+}
+
+// ValidateVariables validates variable names and values for security issues
+func (sv *SecurityValidator) ValidateVariables(variables map[string]interface{}) ValidationResult {
+	startTime := time.Now()
+	result := ValidationResult{
+		Valid:      true,
+		Violations: make([]SecurityViolation, 0),
+		Warnings:   make([]SecurityWarning, 0),
+		Timestamp:  startTime,
+		Metadata:   make(map[string]interface{}),
+	}
+
+	for name, value := range variables {
+		// Check for dangerous variable names
+		if strings.Contains(name, "/") || strings.Contains(name, "\\") {
+			result.addViolation("dangerous_variable_name", RuleTypeContent, SeverityMedium,
+				fmt.Sprintf("Variable name '%s' contains path separators", name),
+				name, "Use variable names without path separators")
+		}
+
+		// Check for dangerous variable content
+		if valueStr, ok := value.(string); ok {
+			for _, blocked := range sv.config.BlockedCommands {
+				if strings.Contains(valueStr, blocked) {
+					result.addViolation("dangerous_variable_content", RuleTypeContent, SeverityHigh,
+						fmt.Sprintf("Variable '%s' contains potentially dangerous command: %s", name, blocked),
+						valueStr, "Remove dangerous commands from variable values")
+				}
+			}
+		}
 	}
 
 	result.Duration = time.Since(startTime)
@@ -723,4 +791,26 @@ func (sa *SecurityAuditor) GetAuditLog() []AuditEntry {
 func generateAuditID() string {
 	hash := md5.Sum([]byte(fmt.Sprintf("%d", time.Now().UnixNano())))
 	return fmt.Sprintf("%x", hash)[:16]
+}
+
+// SetMaxFileSize sets the maximum file size
+func (sv *SecurityValidator) SetMaxFileSize(size int64) {
+	sv.config.MaxFileSize = size
+}
+
+// AddBlockedPath adds a path to the blocked directories list
+func (sv *SecurityValidator) AddBlockedPath(path string) {
+	sv.config.BlockedDirectories = append(sv.config.BlockedDirectories, path)
+}
+
+// AddDangerousPattern adds a dangerous command pattern
+func (sv *SecurityValidator) AddDangerousPattern(pattern string) error {
+	// Validate the regex pattern
+	_, err := regexp.Compile(pattern)
+	if err != nil {
+		return fmt.Errorf("invalid regex pattern: %v", err)
+	}
+
+	sv.config.BlockedCommands = append(sv.config.BlockedCommands, pattern)
+	return nil
 }

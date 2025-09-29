@@ -289,6 +289,60 @@ func (l *EnhancedLogger) logJSON(level LogLevel, message string) {
 	l.logger.Println(string(jsonData))
 }
 
+// writeEntry writes a log entry in the appropriate format
+func (l *EnhancedLogger) writeEntry(entry LogEntry) {
+	switch l.format {
+	case FormatJSON:
+		l.writeEntryJSON(entry)
+	default:
+		l.writeEntryText(entry)
+	}
+}
+
+// writeEntryText writes a log entry in text format
+func (l *EnhancedLogger) writeEntryText(entry LogEntry) {
+	timestamp := entry.Timestamp.Format("2006-01-02 15:04:05")
+	levelName := entry.Level
+
+	var output string
+	if l.useColors {
+		// Find color for level
+		var color string
+		for level, name := range levelNames {
+			if name == levelName {
+				color = levelColors[level]
+				break
+			}
+		}
+		output = fmt.Sprintf("%s [%s%s%s] %s", timestamp, color, levelName, colorReset, entry.Message)
+	} else {
+		output = fmt.Sprintf("%s [%s] %s", timestamp, levelName, entry.Message)
+	}
+
+	// Add fields if any
+	if len(entry.Fields) > 0 {
+		var fieldStrs []string
+		for k, v := range entry.Fields {
+			fieldStrs = append(fieldStrs, fmt.Sprintf("%s=%v", k, v))
+		}
+		output += fmt.Sprintf(" {%s}", strings.Join(fieldStrs, ", "))
+	}
+
+	l.logger.Println(output)
+}
+
+// writeEntryJSON writes a log entry in JSON format
+func (l *EnhancedLogger) writeEntryJSON(entry LogEntry) {
+	jsonData, err := json.Marshal(entry)
+	if err != nil {
+		// Fallback to simple text logging
+		l.logger.Printf("JSON marshal error: %v, message: %s", err, entry.Message)
+		return
+	}
+
+	l.logger.Println(string(jsonData))
+}
+
 // TaskStart logs task start with context
 func (l *EnhancedLogger) TaskStart(host, taskName string) {
 	l.WithFields(map[string]interface{}{

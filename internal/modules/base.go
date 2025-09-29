@@ -22,6 +22,10 @@ func (m *BaseModule) GetName() string {
 	return m.name
 }
 
+func (m *BaseModule) GetDescription() string {
+	return m.description
+}
+
 // Execute performs basic module logic
 func (m *BaseModule) Execute(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
 	startTime := time.Now()
