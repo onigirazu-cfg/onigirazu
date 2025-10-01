@@ -22,6 +22,7 @@ func NewRegistry() *Registry {
 	registry.RegisterModule(NewFileModule())
 	registry.RegisterModule(NewCopyModule())
 	registry.RegisterModule(NewFetchModule())
+	registry.RegisterModule(NewGetURLModule())
 	registry.RegisterModule(NewServiceModule())
 	registry.RegisterModule(NewPackageModule())
 	registry.RegisterModule(NewEnhancedPackageModule()) // Enhanced package module
