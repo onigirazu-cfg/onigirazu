@@ -1,0 +1,72 @@
+---
+plays:
+  - name: Test stat module
+    hosts: localhost
+    gather_facts: false
+    tasks:
+      - name: Check if /etc/hosts exists
+        module: stat
+        args:
+          path: /etc/hosts
+        register: hosts_file
+
+      - name: Debug hosts file stat
+        module: debug
+        args:
+          msg: |
+            File: {{ hosts_file.path }}
+            Exists: {{ hosts_file.exists }}
+            Is regular file: {{ hosts_file.isreg }}
+            Size: {{ hosts_file.size }} bytes
+            Mode: {{ hosts_file.mode }}
+
+      - name: Check if /tmp directory exists
+        module: stat
+        args:
+          path: /tmp
+        register: tmp_dir
+
+      - name: Debug tmp directory stat
+        module: debug
+        args:
+          msg: |
+            Path: {{ tmp_dir.path }}
+            Exists: {{ tmp_dir.exists }}
+            Is directory: {{ tmp_dir.isdir }}
+            Readable: {{ tmp_dir.readable }}
+            Writable: {{ tmp_dir.writable }}
+
+      - name: Check non-existent file
+        module: stat
+        args:
+          path: /this/does/not/exist
+        register: nonexistent
+
+      - name: Debug non-existent file
+        module: debug
+        args:
+          msg: "File exists: {{ nonexistent.exists }}"
+
+      - name: Create a test file
+        module: shell
+        args:
+          cmd: echo "Test content" > /tmp/onigirazu-test.txt
+
+      - name: Stat the created file
+        module: stat
+        args:
+          path: /tmp/onigirazu-test.txt
+        register: test_file
+
+      - name: Debug test file
+        module: debug
+        args:
+          msg: |
+            Created file exists: {{ test_file.exists }}
+            Is regular file: {{ test_file.isreg }}
+            Size: {{ test_file.size }} bytes
+
+      - name: Clean up test file
+        module: shell
+        args:
+          cmd: rm -f /tmp/onigirazu-test.txt

@@ -32,6 +32,7 @@ func NewRegistry() *Registry {
 	registry.RegisterModule(NewGitModule())
 	registry.RegisterModule(NewDebugModule())
 	registry.RegisterModule(NewSetFactModule())
+	registry.RegisterModule(NewStatModule())
 
 	return registry
 }
