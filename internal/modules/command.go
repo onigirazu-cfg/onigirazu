@@ -3,30 +3,35 @@ package modules
 import (
 	"context"
 	"fmt"
-	"os"
-	"os/exec"
 	"strings"
 	"time"
 
+	"github.com/onigirazu-cfg/onigirazu/internal/executor"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
-// CommandModule executes shell commands
-type CommandModule struct {
+// CommandModuleFixed executes shell commands using remote executor
+type CommandModuleFixed struct {
 	*BaseModule
+	executor *executor.CommandExecutor
 }
 
-func NewCommandModule() *CommandModule {
-	return &CommandModule{
+func NewCommandModuleFixed() *CommandModuleFixed {
+	return &CommandModuleFixed{
 		BaseModule: NewBaseModule("command"),
 	}
 }
 
-func (m *CommandModule) GetDescription() string {
+// NewCommandModule creates a new command module (compatibility wrapper)
+func NewCommandModule() *CommandModuleFixed {
+	return NewCommandModuleFixed()
+}
+
+func (m *CommandModuleFixed) GetDescription() string {
 	return "Executes commands on remote hosts"
 }
 
-func (m *CommandModule) Execute(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
+func (m *CommandModuleFixed) Execute(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
 	startTime := time.Now()
 
 	result := types.TaskResult{
@@ -34,6 +39,18 @@ func (m *CommandModule) Execute(ctx context.Context, host types.Host, args map[s
 		Host:      host.Name,
 		Module:    m.name,
 		Timestamp: startTime,
+	}
+
+	// Initialize executor if not already done
+	if m.executor == nil {
+		exec, err := executor.NewCommandExecutor(host)
+		if err != nil {
+			result.Success = false
+			result.Error = fmt.Sprintf("failed to create executor: %v", err)
+			result.Duration = time.Since(startTime)
+			return result, nil
+		}
+		m.executor = exec
 	}
 
 	// Validate arguments
@@ -45,7 +62,12 @@ func (m *CommandModule) Execute(ctx context.Context, host types.Host, args map[s
 	}
 
 	command := args["command"].(string)
-	shell := args["shell"].(bool)
+	shell := false
+	if shellVal, exists := args["shell"]; exists {
+		if shellBool, ok := shellVal.(bool); ok {
+			shell = shellBool
+		}
+	}
 
 	if shell {
 		return m.executeShellCommand(command, result, startTime)
@@ -54,14 +76,23 @@ func (m *CommandModule) Execute(ctx context.Context, host types.Host, args map[s
 	}
 }
 
-func (m *CommandModule) Validate(args map[string]interface{}) error {
+func (m *CommandModuleFixed) Validate(args map[string]interface{}) error {
 	if err := m.BaseModule.Validate(args); err != nil {
 		return err
 	}
 
-	command, exists := args["command"]
-	if !exists {
-		return fmt.Errorf("argument 'command' is required")
+	// Support both 'command' and 'cmd' (Ansible compatibility)
+	command, hasCommand := args["command"]
+	cmd, hasCmd := args["cmd"]
+
+	if !hasCommand && !hasCmd {
+		return fmt.Errorf("argument 'command' or 'cmd' is required")
+	}
+
+	// Use cmd if command is not provided
+	if !hasCommand && hasCmd {
+		args["command"] = cmd
+		command = cmd
 	}
 
 	if _, ok := command.(string); !ok {
@@ -83,8 +114,8 @@ func (m *CommandModule) Validate(args map[string]interface{}) error {
 	return nil
 }
 
-func (m *CommandModule) executeCommand(command string, result types.TaskResult, startTime time.Time) (types.TaskResult, error) {
-	// Split command into parts for exec.Command
+func (m *CommandModuleFixed) executeCommand(command string, result types.TaskResult, startTime time.Time) (types.TaskResult, error) {
+	// Split command into parts for execution
 	parts := strings.Fields(command)
 	if len(parts) == 0 {
 		result.Success = false
@@ -94,13 +125,19 @@ func (m *CommandModule) executeCommand(command string, result types.TaskResult, 
 		return result, fmt.Errorf("command is empty")
 	}
 
-	cmd := exec.Command(parts[0], parts[1:]...)
-	output, err := cmd.Output()
+	// Execute using remote executor
+	output, err := m.executor.Execute(parts[0], parts[1:]...)
 
 	if err != nil {
 		result.Success = false
 		result.Failed = true
 		result.Error = fmt.Sprintf("command failed: %v", err)
+		result.Output = map[string]interface{}{
+			"message": "Command execution failed",
+			"error":   err.Error(),
+			"stdout":  output,
+			"command": command,
+		}
 		result.Duration = time.Since(startTime)
 		return result, fmt.Errorf("command failed: %v", err)
 	}
@@ -109,7 +146,7 @@ func (m *CommandModule) executeCommand(command string, result types.TaskResult, 
 	result.Changed = true
 	result.Output = map[string]interface{}{
 		"message": "Command executed successfully",
-		"stdout":  string(output),
+		"stdout":  output,
 		"command": command,
 	}
 	result.Duration = time.Since(startTime)
@@ -117,15 +154,20 @@ func (m *CommandModule) executeCommand(command string, result types.TaskResult, 
 	return result, nil
 }
 
-func (m *CommandModule) executeShellCommand(command string, result types.TaskResult, startTime time.Time) (types.TaskResult, error) {
-	// Execute command through shell
-	cmd := exec.Command("sh", "-c", command)
-	output, err := cmd.Output()
+func (m *CommandModuleFixed) executeShellCommand(command string, result types.TaskResult, startTime time.Time) (types.TaskResult, error) {
+	// Execute command through shell using remote executor
+	output, err := m.executor.Execute("sh", "-c", command)
 
 	if err != nil {
 		result.Success = false
 		result.Failed = true
 		result.Error = fmt.Sprintf("shell command failed: %v", err)
+		result.Output = map[string]interface{}{
+			"message": "Shell command execution failed",
+			"error":   err.Error(),
+			"stdout":  output,
+			"command": command,
+		}
 		result.Duration = time.Since(startTime)
 		return result, fmt.Errorf("shell command failed: %v", err)
 	}
@@ -134,7 +176,7 @@ func (m *CommandModule) executeShellCommand(command string, result types.TaskRes
 	result.Changed = true
 	result.Output = map[string]interface{}{
 		"message": "Shell command executed successfully",
-		"stdout":  string(output),
+		"stdout":  output,
 		"command": command,
 	}
 	result.Duration = time.Since(startTime)
@@ -142,13 +184,14 @@ func (m *CommandModule) executeShellCommand(command string, result types.TaskRes
 	return result, nil
 }
 
-// ShellModule executes shell commands with advanced features
-type ShellModule struct {
+// ShellModuleFixed executes shell commands with advanced features using remote executor
+type ShellModuleFixed struct {
 	BaseModule
+	executor *executor.CommandExecutor
 }
 
-func NewShellModule() *ShellModule {
-	return &ShellModule{
+func NewShellModuleFixed() *ShellModuleFixed {
+	return &ShellModuleFixed{
 		BaseModule: BaseModule{
 			name:        "shell",
 			description: "Executes shell commands with shell interpretation",
@@ -156,14 +199,28 @@ func NewShellModule() *ShellModule {
 	}
 }
 
-func (m *ShellModule) GetDescription() string {
+// NewShellModule creates a new shell module (compatibility wrapper)
+func NewShellModule() *ShellModuleFixed {
+	return NewShellModuleFixed()
+}
+
+func (m *ShellModuleFixed) GetDescription() string {
 	return "Executes shell commands with shell interpretation"
 }
 
-func (m *ShellModule) Validate(args map[string]interface{}) error {
-	command, ok := args["command"]
-	if !ok {
-		return fmt.Errorf("command is required")
+func (m *ShellModuleFixed) Validate(args map[string]interface{}) error {
+	// Support both 'command' and 'cmd' (Ansible compatibility)
+	command, hasCommand := args["command"]
+	cmd, hasCmd := args["cmd"]
+
+	if !hasCommand && !hasCmd {
+		return fmt.Errorf("command or cmd is required")
+	}
+
+	// Use cmd if command is not provided
+	if !hasCommand && hasCmd {
+		args["command"] = cmd
+		command = cmd
 	}
 
 	if _, ok := command.(string); !ok {
@@ -195,7 +252,7 @@ func (m *ShellModule) Validate(args map[string]interface{}) error {
 	return nil
 }
 
-func (m *ShellModule) Execute(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
+func (m *ShellModuleFixed) Execute(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
 	startTime := time.Now()
 	result := types.TaskResult{
 		Success: false,
@@ -203,33 +260,56 @@ func (m *ShellModule) Execute(ctx context.Context, host types.Host, args map[str
 		Output:  make(map[string]interface{}),
 	}
 
-	command, _ := args["command"].(string)
-
-	// Prepare the command
-	cmd := exec.CommandContext(ctx, "/bin/sh", "-c", command)
-
-	// Set working directory if specified
-	if chdir, ok := args["chdir"].(string); ok {
-		cmd.Dir = chdir
+	// Initialize executor if not already done
+	if m.executor == nil {
+		exec, err := executor.NewCommandExecutor(host)
+		if err != nil {
+			result.Error = fmt.Sprintf("failed to create executor: %v", err)
+			result.Duration = time.Since(startTime)
+			return result, fmt.Errorf("failed to create executor: %v", err)
+		}
+		m.executor = exec
 	}
 
-	// Set environment variables if specified
-	if env, ok := args["environment"].(map[string]interface{}); ok {
-		cmd.Env = os.Environ() // Start with current environment
-		for key, value := range env {
-			if strValue, ok := value.(string); ok {
-				cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", key, strValue))
-			}
+	// Support both 'command' and 'cmd' (Ansible compatibility)
+	command, hasCommand := args["command"].(string)
+	if !hasCommand {
+		if cmd, hasCmd := args["cmd"].(string); hasCmd {
+			command = cmd
+			args["command"] = cmd
 		}
 	}
 
-	// Execute the command
-	output, err := cmd.CombinedOutput()
+	// Build the command with environment and working directory
+	fullCommand := command
+
+	// Handle working directory change
+	if chdir, ok := args["chdir"].(string); ok {
+		fullCommand = fmt.Sprintf("cd %s && %s", chdir, command)
+	}
+
+	// Handle environment variables
+	if env, ok := args["environment"].(map[string]interface{}); ok {
+		envVars := make([]string, 0, len(env))
+		for key, value := range env {
+			if strValue, ok := value.(string); ok {
+				envVars = append(envVars, fmt.Sprintf("%s=%s", key, strValue))
+			}
+		}
+		if len(envVars) > 0 {
+			envString := strings.Join(envVars, " ")
+			fullCommand = fmt.Sprintf("env %s %s", envString, fullCommand)
+		}
+	}
+
+	// Execute the command using remote executor
+	output, err := m.executor.Execute("sh", "-c", fullCommand)
+
 	if err != nil {
 		result.Output = map[string]interface{}{
 			"message": "Shell command failed",
 			"error":   err.Error(),
-			"stdout":  string(output),
+			"stdout":  output,
 			"command": command,
 		}
 		result.Duration = time.Since(startTime)
@@ -240,7 +320,7 @@ func (m *ShellModule) Execute(ctx context.Context, host types.Host, args map[str
 	result.Changed = true
 	result.Output = map[string]interface{}{
 		"message": "Shell command executed successfully",
-		"stdout":  string(output),
+		"stdout":  output,
 		"command": command,
 	}
 	result.Duration = time.Since(startTime)
@@ -248,7 +328,7 @@ func (m *ShellModule) Execute(ctx context.Context, host types.Host, args map[str
 	return result, nil
 }
 
-func (m *ShellModule) IsIdempotent() bool {
+func (m *ShellModuleFixed) IsIdempotent() bool {
 	// Shell commands are generally not idempotent
 	return false
 }

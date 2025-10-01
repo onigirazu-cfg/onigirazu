@@ -56,7 +56,7 @@ func (m *CopyModule) Execute(ctx context.Context, host types.Host, args map[stri
 	src, _ := args["src"].(string)
 	dest, _ := args["dest"].(string)
 	backup := getBoolArg(args, "backup", false)
-	force := getBoolArg(args, "force", true)
+	force := getBoolArg(args, "force", false)
 	mode := getStringArg(args, "mode", "")
 	owner := getStringArg(args, "owner", "")
 	group := getStringArg(args, "group", "")

@@ -23,12 +23,15 @@ func NewRegistry() *Registry {
 	registry.RegisterModule(NewCopyModule())
 	registry.RegisterModule(NewServiceModule())
 	registry.RegisterModule(NewPackageModule())
+	registry.RegisterModule(NewEnhancedPackageModule()) // Enhanced package module
 	registry.RegisterModule(NewCommandModule())
 	registry.RegisterModule(NewShellModule())
 	registry.RegisterModule(NewUserModule())
 	registry.RegisterModule(NewGroupModule())
 	registry.RegisterModule(NewTemplateModule())
 	registry.RegisterModule(NewGitModule())
+	registry.RegisterModule(NewDebugModule())
+	registry.RegisterModule(NewSetFactModule())
 
 	return registry
 }
@@ -101,11 +104,15 @@ func (r *Registry) ExecuteTask(ctx context.Context, task *types.Task, host types
 
 	// Prepare arguments for module
 	args := make(map[string]interface{})
-	args["name"] = task.Name
 
-	// Copy arguments from task
+	// Copy arguments from task first
 	for key, value := range task.Args {
 		args[key] = value
+	}
+
+	// Add task name only if not already specified in args
+	if _, exists := args["name"]; !exists {
+		args["name"] = task.Name
 	}
 
 	// Add variables to args

@@ -1,0 +1,78 @@
+---
+# User and Group Management Examples
+# Demonstrates user and group operations
+
+plays:
+  - name: "User and Group Management Demo"
+    hosts: all
+    tasks:
+      # Create group
+      - name: "Create application group"
+        module:
+          type: "group"
+          name: "appgroup"
+          state: "present"
+          gid: 3000
+
+      # Create user
+      - name: "Create application user"
+        module:
+          type: "user"
+          name: "appuser"
+          state: "present"
+          uid: 3000
+          group: "appgroup"
+          home: "/home/appuser"
+          shell: "/bin/bash"
+          comment: "Application User"
+          create_home: true
+
+      # Add user to additional groups
+      - name: "Add user to additional groups"
+        module:
+          type: "user"
+          name: "appuser"
+          groups: ["sudo", "docker"]
+          append: true
+        when: "ansible_os_family != 'Darwin'"
+
+      # Create system user
+      - name: "Create system user"
+        module:
+          type: "user"
+          name: "sysuser"
+          state: "present"
+          system: true
+          shell: "/bin/false"
+          home: "/var/lib/sysuser"
+          comment: "System User"
+
+      # Modify user
+      - name: "Change user shell"
+        module:
+          type: "user"
+          name: "appuser"
+          shell: "/bin/zsh"
+
+      # Set user password (in production, use vault)
+      - name: "Set user password"
+        module:
+          type: "user"
+          name: "appuser"
+          password: "$6$rounds=656000$salt$hashed_password"
+        when: false  # Disabled for demo
+
+      # Remove user
+      - name: "Remove temporary user"
+        module:
+          type: "user"
+          name: "tempuser"
+          state: "absent"
+          remove: true
+
+      # Remove group
+      - name: "Remove temporary group"
+        module:
+          type: "group"
+          name: "tempgroup"
+          state: "absent"

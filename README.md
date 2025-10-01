@@ -6,13 +6,14 @@ Onigirazu is a modern, high-performance configuration management tool written in
 
 ### Core Features
 
-- **YAML-based Playbooks**: Human-readable configuration files
+- **YAML-based Playbooks**: Human-readable configuration files with improved syntax
 - **Agentless Architecture**: No need to install agents on target hosts
 - **SSH-based Communication**: Secure remote execution
 - **Parallel Execution**: Concurrent task execution with configurable limits
 - **Idempotent Operations**: Safe to run multiple times
 - **State Management**: Track changes and maintain system state
 - **Template Engine**: Jinja2-like templating for dynamic configurations
+- **Flexible Syntax**: Multiple syntax options including nested module syntax for better organization
 
 ### Advanced Features
 
@@ -133,16 +134,16 @@ plays:
 
     tasks:
       - name: "Install Nginx"
-        module: "package"
-        args:
-          name: "nginx"
-          state: "present"
+        module:
+          type: "package"
+          name: nginx
+          state: present
 
       - name: "Start Nginx service"
-        module: "service"
-        args:
-          name: "nginx"
-          state: "started"
+        module:
+          type: "service"
+          name: nginx
+          state: started
           enabled: true
 ```
 
@@ -151,6 +152,39 @@ plays:
 ```bash
 onigirazu -playbook playbook.yaml -inventory inventory.yaml
 ```
+
+## ✨ Improved YAML Syntax
+
+Onigirazu features a streamlined YAML syntax that eliminates verbose `args:` blocks and supports unquoted strings:
+
+### Before (Old Syntax)
+
+```yaml
+- name: "List files in current directory"
+  module: "command"
+  args:
+    command: "ls -la"
+    shell: true
+```
+
+### After (New Syntax)
+
+```yaml
+- name: "List files in current directory"
+  module: "command"
+  command: ls -la
+  shell: true
+```
+
+### Key Benefits
+
+- **Less typing**: No need for `args:` wrapper
+- **Cleaner look**: Direct module arguments at task level
+- **Unquoted strings**: Simple values don't need quotes
+- **Backward compatible**: Old syntax still works
+- **Mixed syntax**: Use both approaches in same playbook
+
+📖 **For complete syntax guide and examples, see [docs/IMPROVED_SYNTAX.md](docs/IMPROVED_SYNTAX.md)**
 
 ## Configuration
 
@@ -226,12 +260,11 @@ Onigirazu includes several built-in modules:
 ```yaml
 - name: "Create directory"
   module: "file"
-  args:
-    path: "/opt/myapp"
-    state: "directory"
-    owner: "myuser"
-    group: "mygroup"
-    mode: "0755"
+  path: /opt/myapp
+  state: directory
+  owner: myuser
+  group: mygroup
+  mode: "0755"
 ```
 
 #### Package Module
@@ -239,9 +272,8 @@ Onigirazu includes several built-in modules:
 ```yaml
 - name: "Install packages"
   module: "package"
-  args:
-    name: "nginx"
-    state: "present"
+  name: nginx
+  state: present
 ```
 
 #### Service Module
@@ -249,10 +281,9 @@ Onigirazu includes several built-in modules:
 ```yaml
 - name: "Start service"
   module: "service"
-  args:
-    name: "nginx"
-    state: "started"
-    enabled: true
+  name: nginx
+  state: started
+  enabled: true
 ```
 
 #### Template Module
@@ -260,13 +291,12 @@ Onigirazu includes several built-in modules:
 ```yaml
 - name: "Generate configuration"
   module: "template"
-  args:
-    src: "templates/nginx.conf.j2"
-    dest: "/etc/nginx/nginx.conf"
-    owner: "root"
-    group: "root"
-    mode: "0644"
-    backup: true
+  src: templates/nginx.conf.j2
+  dest: /etc/nginx/nginx.conf
+  owner: root
+  group: root
+  mode: "0644"
+  backup: true
 ```
 
 #### Git Module
@@ -274,11 +304,10 @@ Onigirazu includes several built-in modules:
 ```yaml
 - name: "Clone repository"
   module: "git"
-  args:
-    repo: "https://github.com/example/myapp.git"
-    dest: "/opt/myapp"
-    version: "main"
-    force: true
+  repo: https://github.com/example/myapp.git
+  dest: /opt/myapp
+  version: main
+  force: true
 ```
 
 ## Advanced Features
@@ -290,14 +319,13 @@ Execute tasks multiple times with different values:
 ```yaml
 - name: "Install multiple packages"
   module: "package"
-  args:
-    name: "{{ item }}"
-    state: "present"
+  name: "{{ item }}"
+  state: present
   loop:
     items:
-      - "curl"
-      - "wget"
-      - "git"
+      - curl
+      - wget
+      - git
 ```
 
 ### Conditionals
@@ -307,9 +335,8 @@ Skip tasks based on conditions:
 ```yaml
 - name: "Install Docker"
   module: "package"
-  args:
-    name: "docker.io"
-    state: "present"
+  name: docker.io
+  state: present
   when: "{{ ansible_facts.os_family == 'Debian' }}"
 ```
 
@@ -325,9 +352,8 @@ vars:
 tasks:
   - name: "Create app directory"
     module: "file"
-    args:
-      path: "/opt/{{ app_name }}"
-      state: "directory"
+    path: "/opt/{{ app_name }}"
+    state: directory
 ```
 
 ### Templates
@@ -338,9 +364,8 @@ Use Jinja2-like templates for configuration files:
 # In playbook
 - name: "Generate config"
   module: "template"
-  args:
-    src: "app.conf.j2"
-    dest: "/etc/myapp/app.conf"
+  src: app.conf.j2
+  dest: /etc/myapp/app.conf
 ```
 
 ```jinja2
@@ -362,14 +387,12 @@ Control error handling behavior:
 ```yaml
 - name: "Optional task"
   module: "command"
-  args:
-    cmd: "some-command"
+  cmd: some-command
   ignore_errors: true
 
 - name: "Task with retries"
   module: "command"
-  args:
-    cmd: "flaky-command"
+  cmd: flaky-command
   retries: 3
   retry_delay: 5
 ```

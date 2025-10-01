@@ -1,0 +1,64 @@
+---
+# Quick Test Example
+# Simple playbook for testing Onigirazu functionality
+
+plays:
+  - name: "Quick Test"
+    hosts: localhost
+    tasks:
+      # Test package module
+      - name: "Install tree package"
+        module:
+          type: "package"
+          name: "tree"
+          state: "present"
+
+      # Test file module
+      - name: "Create test directory"
+        module:
+          type: "file"
+          path: "/tmp/onigirazu-test"
+          state: "directory"
+          mode: "0755"
+
+      # Test command module
+      - name: "Check system information"
+        module:
+          type: "command"
+          cmd: "uname"
+          args: ["-a"]
+        register: system_info
+
+      # Test file creation
+      - name: "Create test file"
+        module:
+          type: "file"
+          path: "/tmp/onigirazu-test/test.txt"
+          state: "present"
+          content: |
+            Onigirazu Test File
+            Created at: {{ ansible_date_time.iso8601 }}
+            System: {{ system_info.stdout }}
+          mode: "0644"
+
+      # Test copy module
+      - name: "Copy test file"
+        module:
+          type: "copy"
+          src: "/tmp/onigirazu-test/test.txt"
+          dest: "/tmp/onigirazu-test/test-copy.txt"
+          mode: "0644"
+
+      # Test shell module
+      - name: "List test directory"
+        module:
+          type: "shell"
+          cmd: "ls -la /tmp/onigirazu-test/"
+        register: dir_listing
+
+      # Cleanup
+      - name: "Remove test directory"
+        module:
+          type: "file"
+          path: "/tmp/onigirazu-test"
+          state: "absent"

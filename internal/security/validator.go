@@ -124,7 +124,7 @@ func DefaultSecurityConfig() SecurityConfig {
 	return SecurityConfig{
 		AllowedHosts:        []string{"*"}, // Allow all hosts by default
 		AllowedPorts:        []int{22, 80, 443, 8080, 9090},
-		AllowedModules:      []string{"command", "shell", "file", "copy", "template", "service", "package", "user", "group", "git"},
+		AllowedModules:      []string{"command", "shell", "file", "copy", "template", "service", "package", "user", "group", "git", "debug", "set_fact"},
 		BlockedCommands:     []string{"rm -rf /", "dd if=", "mkfs", "fdisk", "format"},
 		MaxFileSize:         100 * 1024 * 1024, // 100MB
 		AllowedFileTypes:    []string{".txt", ".conf", ".cfg", ".ini", ".yaml", ".yml", ".json", ".xml"},

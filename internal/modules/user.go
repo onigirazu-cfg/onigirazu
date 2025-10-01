@@ -3,28 +3,34 @@ package modules
 import (
 	"context"
 	"fmt"
-	"os/exec"
 	"time"
 
+	"github.com/onigirazu-cfg/onigirazu/internal/executor"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
-// UserModule manages system users
-type UserModule struct {
+// UserModuleFixed manages system users using remote executor
+type UserModuleFixed struct {
 	*BaseModule
+	executor *executor.CommandExecutor
 }
 
-func NewUserModule() *UserModule {
-	return &UserModule{
+func NewUserModuleFixed() *UserModuleFixed {
+	return &UserModuleFixed{
 		BaseModule: NewBaseModule("user"),
 	}
 }
 
-func (m *UserModule) GetDescription() string {
+// NewUserModule creates a new user module (compatibility wrapper)
+func NewUserModule() *UserModuleFixed {
+	return NewUserModuleFixed()
+}
+
+func (m *UserModuleFixed) GetDescription() string {
 	return "Manages system users"
 }
 
-func (m *UserModule) Execute(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
+func (m *UserModuleFixed) Execute(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
 	startTime := time.Now()
 
 	result := types.TaskResult{
@@ -32,6 +38,18 @@ func (m *UserModule) Execute(ctx context.Context, host types.Host, args map[stri
 		Host:      host.Name,
 		Module:    m.name,
 		Timestamp: startTime,
+	}
+
+	// Initialize executor if not already done
+	if m.executor == nil {
+		exec, err := executor.NewCommandExecutor(host)
+		if err != nil {
+			result.Success = false
+			result.Error = fmt.Sprintf("failed to create executor: %v", err)
+			result.Duration = time.Since(startTime)
+			return result, nil
+		}
+		m.executor = exec
 	}
 
 	// Validate arguments
@@ -52,15 +70,24 @@ func (m *UserModule) Execute(ctx context.Context, host types.Host, args map[stri
 		return m.ensureUserAbsent(username, result, startTime)
 	default:
 		result.Success = false
-		result.Error = fmt.Sprintf("unsupported state: %s", state)
+		result.Error = fmt.Sprintf("invalid state: %s", state)
 		result.Duration = time.Since(startTime)
 		return result, nil
 	}
 }
 
-func (m *UserModule) Validate(args map[string]interface{}) error {
+func (m *UserModuleFixed) Validate(args map[string]interface{}) error {
 	if err := m.BaseModule.Validate(args); err != nil {
 		return err
+	}
+
+	name, exists := args["name"]
+	if !exists {
+		return fmt.Errorf("argument 'name' is required")
+	}
+
+	if _, ok := name.(string); !ok {
+		return fmt.Errorf("argument 'name' must be a string")
 	}
 
 	state, exists := args["state"]
@@ -68,23 +95,63 @@ func (m *UserModule) Validate(args map[string]interface{}) error {
 		return fmt.Errorf("argument 'state' is required")
 	}
 
-	if _, ok := state.(string); !ok {
+	if stateStr, ok := state.(string); !ok {
 		return fmt.Errorf("argument 'state' must be a string")
+	} else if stateStr != "present" && stateStr != "absent" {
+		return fmt.Errorf("argument 'state' must be 'present' or 'absent'")
 	}
 
-	validStates := []string{"present", "absent"}
-	stateStr := state.(string)
-	for _, validState := range validStates {
-		if stateStr == validState {
-			return nil
+	// Validate optional arguments
+	if shell, exists := args["shell"]; exists {
+		if _, ok := shell.(string); !ok {
+			return fmt.Errorf("argument 'shell' must be a string")
 		}
 	}
 
-	return fmt.Errorf("unsupported state: %s", stateStr)
+	if home, exists := args["home"]; exists {
+		if _, ok := home.(string); !ok {
+			return fmt.Errorf("argument 'home' must be a string")
+		}
+	}
+
+	if group, exists := args["group"]; exists {
+		if _, ok := group.(string); !ok {
+			return fmt.Errorf("argument 'group' must be a string")
+		}
+	}
+
+	if groups, exists := args["groups"]; exists {
+		if _, ok := groups.(string); !ok {
+			return fmt.Errorf("argument 'groups' must be a string")
+		}
+	}
+
+	if uid, exists := args["uid"]; exists {
+		switch uid.(type) {
+		case int, int64, float64:
+			// Valid numeric types
+		case string:
+			// Allow string representation of numbers
+		default:
+			return fmt.Errorf("argument 'uid' must be a number or string")
+		}
+	}
+
+	if gid, exists := args["gid"]; exists {
+		switch gid.(type) {
+		case int, int64, float64:
+			// Valid numeric types
+		case string:
+			// Allow string representation of numbers
+		default:
+			return fmt.Errorf("argument 'gid' must be a number or string")
+		}
+	}
+
+	return nil
 }
 
-func (m *UserModule) ensureUserPresent(username string, args map[string]interface{}, result types.TaskResult, startTime time.Time) (types.TaskResult, error) {
-	// Check if user exists
+func (m *UserModuleFixed) ensureUserPresent(username string, args map[string]interface{}, result types.TaskResult, startTime time.Time) (types.TaskResult, error) {
 	if m.userExists(username) {
 		result.Success = true
 		result.Changed = false
@@ -92,11 +159,17 @@ func (m *UserModule) ensureUserPresent(username string, args map[string]interfac
 			"message": fmt.Sprintf("User %s already exists", username),
 		}
 	} else {
-		// Create user
-		cmd := m.buildUserAddCommand(username, args)
-		if err := cmd.Run(); err != nil {
+		// Create user using remote executor
+		cmdArgs := m.buildUserAddCommand(username, args)
+		output, err := m.executor.Execute(cmdArgs[0], cmdArgs[1:]...)
+		if err != nil {
 			result.Success = false
 			result.Error = fmt.Sprintf("error creating user: %v", err)
+			result.Output = map[string]interface{}{
+				"message": "User creation failed",
+				"error":   err.Error(),
+				"stdout":  output,
+			}
 			result.Duration = time.Since(startTime)
 			return result, nil
 		}
@@ -105,6 +178,7 @@ func (m *UserModule) ensureUserPresent(username string, args map[string]interfac
 		result.Changed = true
 		result.Output = map[string]interface{}{
 			"message": fmt.Sprintf("User %s created", username),
+			"stdout":  output,
 		}
 	}
 
@@ -112,7 +186,7 @@ func (m *UserModule) ensureUserPresent(username string, args map[string]interfac
 	return result, nil
 }
 
-func (m *UserModule) ensureUserAbsent(username string, result types.TaskResult, startTime time.Time) (types.TaskResult, error) {
+func (m *UserModuleFixed) ensureUserAbsent(username string, result types.TaskResult, startTime time.Time) (types.TaskResult, error) {
 	if !m.userExists(username) {
 		result.Success = true
 		result.Changed = false
@@ -120,11 +194,16 @@ func (m *UserModule) ensureUserAbsent(username string, result types.TaskResult, 
 			"message": fmt.Sprintf("User %s does not exist", username),
 		}
 	} else {
-		// Remove user
-		cmd := exec.Command("userdel", "-r", username)
-		if err := cmd.Run(); err != nil {
+		// Remove user using remote executor
+		output, err := m.executor.Execute("userdel", "-r", username)
+		if err != nil {
 			result.Success = false
 			result.Error = fmt.Sprintf("error removing user: %v", err)
+			result.Output = map[string]interface{}{
+				"message": "User removal failed",
+				"error":   err.Error(),
+				"stdout":  output,
+			}
 			result.Duration = time.Since(startTime)
 			return result, nil
 		}
@@ -133,6 +212,7 @@ func (m *UserModule) ensureUserAbsent(username string, result types.TaskResult, 
 		result.Changed = true
 		result.Output = map[string]interface{}{
 			"message": fmt.Sprintf("User %s removed", username),
+			"stdout":  output,
 		}
 	}
 
@@ -140,12 +220,12 @@ func (m *UserModule) ensureUserAbsent(username string, result types.TaskResult, 
 	return result, nil
 }
 
-func (m *UserModule) userExists(username string) bool {
-	cmd := exec.Command("id", username)
-	return cmd.Run() == nil
+func (m *UserModuleFixed) userExists(username string) bool {
+	_, err := m.executor.Execute("id", username)
+	return err == nil
 }
 
-func (m *UserModule) buildUserAddCommand(username string, args map[string]interface{}) *exec.Cmd {
+func (m *UserModuleFixed) buildUserAddCommand(username string, args map[string]interface{}) []string {
 	cmdArgs := []string{"useradd"}
 
 	// Add home directory if specified
@@ -162,27 +242,65 @@ func (m *UserModule) buildUserAddCommand(username string, args map[string]interf
 		}
 	}
 
-	// Add groups if specified
+	// Add primary group if specified
+	if group, exists := args["group"]; exists {
+		if groupStr, ok := group.(string); ok && groupStr != "" {
+			cmdArgs = append(cmdArgs, "-g", groupStr)
+		}
+	}
+
+	// Add supplementary groups if specified
 	if groups, exists := args["groups"]; exists {
 		if groupsStr, ok := groups.(string); ok && groupsStr != "" {
 			cmdArgs = append(cmdArgs, "-G", groupsStr)
 		}
 	}
 
-	// Add system user flag if specified
-	if system, exists := args["system"]; exists {
-		if systemBool, ok := system.(bool); ok && systemBool {
-			cmdArgs = append(cmdArgs, "-r")
+	// Add UID if specified
+	if uid, exists := args["uid"]; exists {
+		var uidStr string
+		switch v := uid.(type) {
+		case int:
+			uidStr = fmt.Sprintf("%d", v)
+		case int64:
+			uidStr = fmt.Sprintf("%d", v)
+		case float64:
+			uidStr = fmt.Sprintf("%.0f", v)
+		case string:
+			uidStr = v
+		}
+		if uidStr != "" {
+			cmdArgs = append(cmdArgs, "-u", uidStr)
 		}
 	}
 
-	// Add comment if specified
-	if comment, exists := args["comment"]; exists {
-		if commentStr, ok := comment.(string); ok && commentStr != "" {
-			cmdArgs = append(cmdArgs, "-c", commentStr)
+	// Add GID if specified
+	if gid, exists := args["gid"]; exists {
+		var gidStr string
+		switch v := gid.(type) {
+		case int:
+			gidStr = fmt.Sprintf("%d", v)
+		case int64:
+			gidStr = fmt.Sprintf("%d", v)
+		case float64:
+			gidStr = fmt.Sprintf("%.0f", v)
+		case string:
+			gidStr = v
+		}
+		if gidStr != "" {
+			cmdArgs = append(cmdArgs, "-g", gidStr)
 		}
 	}
 
+	// Create home directory by default
+	cmdArgs = append(cmdArgs, "-m")
+
+	// Add username as the last argument
 	cmdArgs = append(cmdArgs, username)
-	return exec.Command(cmdArgs[0], cmdArgs[1:]...)
+
+	return cmdArgs
+}
+
+func (m *UserModuleFixed) IsIdempotent() bool {
+	return true
 }

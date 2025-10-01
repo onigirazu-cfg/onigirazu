@@ -383,7 +383,7 @@ func (m *ConfigModule) saveConfig(path string, format ConfigFormat, config map[s
 		return err
 	}
 
-	return ioutil.WriteFile(path, data, 0644)
+	return os.WriteFile(path, data, 0644)
 }
 
 // createBackup creates a backup of the file
@@ -395,12 +395,12 @@ func (m *ConfigModule) createBackup(path string) (string, error) {
 	timestamp := time.Now().Format("20060102_150405")
 	backupPath := fmt.Sprintf("%s.backup.%s", path, timestamp)
 
-	data, err := ioutil.ReadFile(path)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return "", err
 	}
 
-	err = ioutil.WriteFile(backupPath, data, 0644)
+	err = os.WriteFile(backupPath, data, 0644)
 	return backupPath, err
 }
 
@@ -551,5 +551,5 @@ func (m *ConfigModule) failResult(result types.TaskResult, message string) (type
 	result.Failed = true
 	result.Error = message
 	result.Duration = time.Since(result.Timestamp)
-	return result, fmt.Errorf(message)
+	return result, fmt.Errorf("%s", message)
 }

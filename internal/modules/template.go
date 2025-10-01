@@ -170,7 +170,7 @@ func (m *TemplateModule) Execute(ctx context.Context, host types.Host, args map[
 	}
 
 	// Write rendered content to destination
-	if err := ioutil.WriteFile(dest, []byte(renderedContent), 0644); err != nil {
+	if err := os.WriteFile(dest, []byte(renderedContent), 0644); err != nil {
 		result.Error = fmt.Sprintf("failed to write template to destination: %v", err)
 		result.Duration = time.Since(startTime)
 		return result, fmt.Errorf("%s", result.Error)

@@ -1,0 +1,11 @@
+---
+# Test tree package installation
+plays:
+  - name: "Test Tree Package Installation"
+    hosts: all
+    tasks:
+      - name: "Install tree package"
+        module:
+          type: "package"
+          name: "tree"
+          state: "present"

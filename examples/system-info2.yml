@@ -1,0 +1,31 @@
+---
+# System Information Check - Alternative approach
+
+plays:
+  - name: "System Information"
+    hosts: all
+    tasks:
+      - name: "Check uname"
+        module:
+          type: "command"
+          command: "uname -a"
+
+      - name: "Check if this is CentOS/RHEL"
+        module:
+          type: "command"
+          command: "cat /etc/redhat-release"
+
+      - name: "List /etc files"
+        module:
+          type: "command"
+          command: "ls /etc/*release* /etc/*version*"
+
+      - name: "Test tree command directly"
+        module:
+          type: "command"
+          command: "tree /tmp"
+
+      - name: "Test nano command directly"
+        module:
+          type: "command"
+          command: "echo 'test' | nano --version"

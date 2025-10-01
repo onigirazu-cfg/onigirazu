@@ -1,84 +1,68 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
+## [Unreleased]
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+### ✨ Added
 
-## [1.0.1] - 2024-09-26
+- **Debug Module**: New `debug` module for printing messages and variable values during playbook execution
+  - Support for simple text messages
+  - Support for multi-line messages
+  - Variable interpolation in messages
+  - Automatic output formatting
+- **Streamlined YAML Syntax**: Eliminated verbose `args:` blocks from task definitions
+- **Unquoted String Support**: Simple string values can now be written without quotes
+- **Custom YAML Unmarshaler**: Intelligent parsing that distinguishes between task control fields and module arguments
+- **Mixed Syntax Support**: Ability to use both old and new syntax in the same playbook
+- **Reserved Fields Management**: Comprehensive list of 19 reserved task control fields
 
-### Added
+### 🔧 Changed
 
-- Dynamic version support in compiled binaries
-- Build information display with commit hash and build date
-- Cross-platform binary releases via GoReleaser
-- Pre-built binaries for Linux (amd64, arm64, arm v6/v7)
-- Pre-built binaries for macOS (amd64, arm64 - Apple Silicon)
-- Pre-built binaries for Windows (amd64)
-- Pre-built binaries for FreeBSD (amd64)
-- Linux distribution packages (DEB, RPM, APK, ArchLinux)
-- Docker images for containerized deployments
-- Homebrew formula for easy installation on macOS/Linux
+- Task YAML parsing now supports direct module arguments at task level
+- Updated all documentation examples to use new compact syntax
+- Enhanced README with syntax comparison and migration guide
 
-### Changed
+### 📖 Documentation
 
-- Version information now injected at build time via ldflags
-- Improved `--version` flag output with detailed build information
-- Updated GoReleaser configuration for better release automation
+- Added comprehensive syntax guide in `docs/IMPROVED_SYNTAX.md`
+- Created example playbooks demonstrating new syntax capabilities
+- Updated README with before/after syntax examples
 
-### Fixed
+### 🧪 Testing
 
-- Fixed .gitignore to properly exclude binary while allowing source code
-- Corrected version injection in GoReleaser configuration
+- Added comprehensive test suite for new YAML parsing logic
+- Verified backward compatibility with existing playbooks
+- Tested complex data types and edge cases
 
-## [1.0.0] - 2024-09-26
+### 🔄 Backward Compatibility
 
-### Added
+- **100% backward compatible**: All existing playbooks continue to work unchanged
+- Old `args:` syntax remains fully supported
+- Gradual migration path available
 
-- Initial public release of go_teransible (Onigirazu)
-- Core configuration management engine
-- YAML-based playbook system
-- Agentless SSH-based architecture
-- Parallel execution with configurable limits
-- Idempotent operations
-- State management system
-- Template engine with Jinja2-like syntax
-- Enhanced logging with structured output
-- Progress tracking with visual indicators
-- Intelligent caching system
-- Retry logic with exponential backoff
-- Conditional execution support
-- Loop support for iterating over data
-- Extensible module system
-- Built-in modules:
-  - Command execution
-  - File operations
-  - Copy operations
-  - Template rendering
-  - Package management
-  - Service management
-  - User and group management
-  - Git operations
-- Inventory management system
-- Variable interpolation
-- Comprehensive error handling
-- Security validation
-- Metrics and monitoring
-- Workflow orchestration
-- Event bus system
-- Comprehensive CI/CD infrastructure
-- Automated testing and quality checks
-- Security scanning
-- Documentation and contribution guidelines
-- Docker support
-- Multi-platform binary releases
+### Example Transformation
 
-### Security
+**Before:**
 
-- Input validation and sanitization
-- Secure SSH communication
-- Path traversal protection
-- Command injection prevention
-- File permission validation
+```yaml
+- name: "Install package"
+  module: "package"
+  args:
+    name: "nginx"
+    state: "present"
+```
 
-[1.0.0]: https://github.com/onigirazu-cfg/onigirazu/releases/tag/v1.0.0
+**After:**
+
+```yaml
+- name: "Install package"
+  module: "package"
+  name: nginx
+  state: present
+```
+
+### Benefits
+
+- **Reduced verbosity**: Less typing required for task definitions
+- **Improved readability**: Cleaner, more intuitive YAML structure
+- **Better maintainability**: Easier to write and modify playbooks
+- **Standards compliance**: Follows YAML best practices for unquoted strings

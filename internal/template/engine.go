@@ -1,13 +1,14 @@
 package template
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"regexp"
 	"strings"
 	"text/template"
+
+	"github.com/onigirazu-cfg/onigirazu/internal/bufferpool"
 )
 
 // Engine provides template rendering capabilities similar to Jinja2
@@ -70,9 +71,11 @@ func (e *Engine) Render(ctx context.Context, templateStr string, variables map[s
 		return "", fmt.Errorf("failed to parse template: %w", err)
 	}
 
-	// Execute template
-	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, variables); err != nil {
+	// Execute template using pooled buffer
+	buf := bufferpool.GetBytesBuffer()
+	defer bufferpool.PutBytesBuffer(buf)
+
+	if err := tmpl.Execute(buf, variables); err != nil {
 		return "", fmt.Errorf("failed to execute template: %w", err)
 	}
 
@@ -81,7 +84,7 @@ func (e *Engine) Render(ctx context.Context, templateStr string, variables map[s
 
 // RenderFile renders a template file with variables
 func (e *Engine) RenderFile(ctx context.Context, filePath string, variables map[string]interface{}) (string, error) {
-	content, err := ioutil.ReadFile(filePath)
+	content, err := os.ReadFile(filePath)
 	if err != nil {
 		return "", fmt.Errorf("failed to read template file %s: %w", filePath, err)
 	}

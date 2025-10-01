@@ -1,0 +1,10 @@
+---
+plays:
+  - name: "Debug Package Test"
+    hosts: all
+    tasks:
+      - name: "Install tree package"
+        module:
+          type: "package"
+          name: "tree"
+          state: "present"

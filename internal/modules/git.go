@@ -3,23 +3,23 @@ package modules
 import (
 	"context"
 	"fmt"
-	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/onigirazu-cfg/onigirazu/internal/executor"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
-// GitModule handles Git repository operations
-type GitModule struct {
+// GitModuleFixed handles Git repository operations using remote executor
+type GitModuleFixed struct {
 	*BaseModule
+	executor *executor.CommandExecutor
 }
 
-// NewGitModule creates a new git module
-func NewGitModule() *GitModule {
-	return &GitModule{
+// NewGitModuleFixed creates a new git module
+func NewGitModuleFixed() *GitModuleFixed {
+	return &GitModuleFixed{
 		BaseModule: &BaseModule{
 			name:        "git",
 			description: "Manage Git repositories",
@@ -27,12 +27,17 @@ func NewGitModule() *GitModule {
 	}
 }
 
-func (m *GitModule) GetDescription() string {
+// NewGitModule creates a new git module (compatibility wrapper)
+func NewGitModule() *GitModuleFixed {
+	return NewGitModuleFixed()
+}
+
+func (m *GitModuleFixed) GetDescription() string {
 	return "Manages Git repositories"
 }
 
 // Execute performs git operations
-func (m *GitModule) Execute(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
+func (m *GitModuleFixed) Execute(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
 	startTime := time.Now()
 
 	result := types.TaskResult{
@@ -45,350 +50,297 @@ func (m *GitModule) Execute(ctx context.Context, host types.Host, args map[strin
 		Timestamp: startTime,
 	}
 
+	// Initialize executor if not already done
+	if m.executor == nil {
+		exec, err := executor.NewCommandExecutor(host)
+		if err != nil {
+			result.Error = fmt.Sprintf("failed to create executor: %v", err)
+			result.Duration = time.Since(startTime)
+			return result, nil
+		}
+		m.executor = exec
+	}
+
 	// Get required parameters
 	repo, ok := args["repo"].(string)
 	if !ok || repo == "" {
-		result.Error = "repo parameter is required and must be a string"
+		result.Error = "repo parameter is required"
 		result.Duration = time.Since(startTime)
-		return result, fmt.Errorf("%s", result.Error)
+		return result, nil
 	}
 
 	dest, ok := args["dest"].(string)
 	if !ok || dest == "" {
-		result.Error = "dest parameter is required and must be a string"
+		result.Error = "dest parameter is required"
 		result.Duration = time.Since(startTime)
-		return result, fmt.Errorf("%s", result.Error)
+		return result, nil
 	}
 
 	// Get optional parameters
-	version := getStringArg(args, "version", "HEAD")
-	force := getBoolArg(args, "force", false)
-	update := getBoolArg(args, "update", true)
-	depth := getIntArg(args, "depth", 0)
-	recursive := getBoolArg(args, "recursive", true)
+	version := "HEAD"
+	if v, ok := args["version"].(string); ok && v != "" {
+		version = v
+	}
 
-	// Check if git is available
-	if _, err := exec.LookPath("git"); err != nil {
-		result.Error = "git command not found in PATH"
-		result.Duration = time.Since(startTime)
-		return result, fmt.Errorf("%s", result.Error)
+	force := false
+	if f, ok := args["force"].(bool); ok {
+		force = f
+	}
+
+	update := true
+	if u, ok := args["update"].(bool); ok {
+		update = u
 	}
 
 	// Check if destination exists and is a git repository
 	isGitRepo := m.isGitRepository(dest)
-	repoExists := m.directoryExists(dest)
+	destExists := m.pathExists(dest)
 
-	var changed bool
-	var err error
+	if destExists && !isGitRepo && !force {
+		result.Error = fmt.Sprintf("destination %s exists but is not a git repository. Use force=true to overwrite", dest)
+		result.Duration = time.Since(startTime)
+		return result, nil
+	}
 
-	if !repoExists {
+	if !destExists || (destExists && !isGitRepo && force) {
 		// Clone repository
-		changed, err = m.cloneRepository(ctx, repo, dest, version, depth, recursive)
-		if err != nil {
-			result.Error = fmt.Sprintf("failed to clone repository: %v", err)
-			result.Duration = time.Since(startTime)
-			return result, fmt.Errorf("%s", result.Error)
-		}
-		result.Output["operation"] = "clone"
-	} else if !isGitRepo {
-		if force {
-			// Remove existing directory and clone
-			if err := os.RemoveAll(dest); err != nil {
-				result.Error = fmt.Sprintf("failed to remove existing directory: %v", err)
-				result.Duration = time.Since(startTime)
-				return result, fmt.Errorf("%s", result.Error)
-			}
-			changed, err = m.cloneRepository(ctx, repo, dest, version, depth, recursive)
-			if err != nil {
-				result.Error = fmt.Sprintf("failed to clone repository: %v", err)
-				result.Duration = time.Since(startTime)
-				return result, fmt.Errorf("%s", result.Error)
-			}
-			result.Output["operation"] = "force_clone"
-			changed = true
-		} else {
-			result.Error = "destination exists but is not a git repository (use force=true to overwrite)"
-			result.Duration = time.Since(startTime)
-			return result, fmt.Errorf("%s", result.Error)
-		}
+		return m.cloneRepository(repo, dest, version, result, startTime)
+	} else if isGitRepo && update {
+		// Update existing repository
+		return m.updateRepository(dest, version, result, startTime)
 	} else {
-		// Repository exists, update if requested
-		if update {
-			changed, err = m.updateRepository(ctx, dest, version, force)
-			if err != nil {
-				result.Error = fmt.Sprintf("failed to update repository: %v", err)
-				result.Duration = time.Since(startTime)
-				return result, fmt.Errorf("%s", result.Error)
-			}
-			result.Output["operation"] = "update"
-		} else {
-			result.Output["operation"] = "none"
-		}
+		// Repository exists and update is false
+		result.Success = true
+		result.Changed = false
+		result.Output["message"] = "Repository already exists and update is disabled"
+		result.Duration = time.Since(startTime)
+		return result, nil
 	}
-
-	// Get current commit info
-	commitInfo, err := m.getCurrentCommit(dest)
-	if err != nil {
-		result.Output["commit_warning"] = fmt.Sprintf("failed to get commit info: %v", err)
-	} else {
-		result.Output["commit"] = commitInfo
-	}
-
-	// Get repository status
-	status, err := m.getRepositoryStatus(dest)
-	if err != nil {
-		result.Output["status_warning"] = fmt.Sprintf("failed to get repository status: %v", err)
-	} else {
-		result.Output["status"] = status
-	}
-
-	result.Success = true
-	result.Changed = changed
-	result.Output["repo"] = repo
-	result.Output["dest"] = dest
-	result.Output["version"] = version
-	result.Duration = time.Since(startTime)
-
-	return result, nil
 }
 
-// Validate validates git module arguments
-func (m *GitModule) Validate(args map[string]interface{}) error {
-	// Check required arguments
-	if _, ok := args["repo"]; !ok {
-		return fmt.Errorf("repo parameter is required")
+func (m *GitModuleFixed) Validate(args map[string]interface{}) error {
+	if err := m.BaseModule.Validate(args); err != nil {
+		return err
 	}
 
-	if _, ok := args["dest"]; !ok {
-		return fmt.Errorf("dest parameter is required")
+	repo, exists := args["repo"]
+	if !exists {
+		return fmt.Errorf("argument 'repo' is required")
+	}
+	if _, ok := repo.(string); !ok {
+		return fmt.Errorf("argument 'repo' must be a string")
 	}
 
-	// Validate repo is a string
-	if repo, ok := args["repo"].(string); !ok || repo == "" {
-		return fmt.Errorf("repo must be a non-empty string")
+	dest, exists := args["dest"]
+	if !exists {
+		return fmt.Errorf("argument 'dest' is required")
 	}
-
-	// Validate dest is a string
-	if dest, ok := args["dest"].(string); !ok || dest == "" {
-		return fmt.Errorf("dest must be a non-empty string")
+	if _, ok := dest.(string); !ok {
+		return fmt.Errorf("argument 'dest' must be a string")
 	}
 
 	// Validate optional parameters
 	if version, exists := args["version"]; exists {
 		if _, ok := version.(string); !ok {
-			return fmt.Errorf("version must be a string")
+			return fmt.Errorf("argument 'version' must be a string")
 		}
 	}
 
 	if force, exists := args["force"]; exists {
 		if _, ok := force.(bool); !ok {
-			return fmt.Errorf("force must be a boolean")
+			return fmt.Errorf("argument 'force' must be a boolean")
 		}
 	}
 
 	if update, exists := args["update"]; exists {
 		if _, ok := update.(bool); !ok {
-			return fmt.Errorf("update must be a boolean")
-		}
-	}
-
-	if depth, exists := args["depth"]; exists {
-		if _, ok := depth.(int); !ok {
-			return fmt.Errorf("depth must be an integer")
-		}
-	}
-
-	if recursive, exists := args["recursive"]; exists {
-		if _, ok := recursive.(bool); !ok {
-			return fmt.Errorf("recursive must be a boolean")
+			return fmt.Errorf("argument 'update' must be a boolean")
 		}
 	}
 
 	return nil
 }
 
-// isGitRepository checks if a directory is a git repository
-func (m *GitModule) isGitRepository(path string) bool {
-	gitDir := filepath.Join(path, ".git")
-	info, err := os.Stat(gitDir)
+func (m *GitModuleFixed) cloneRepository(repo, dest, version string, result types.TaskResult, startTime time.Time) (types.TaskResult, error) {
+	// Create parent directory if it doesn't exist
+	parentDir := filepath.Dir(dest)
+	_, err := m.executor.Execute("mkdir", "-p", parentDir)
 	if err != nil {
-		return false
+		result.Error = fmt.Sprintf("failed to create parent directory: %v", err)
+		result.Duration = time.Since(startTime)
+		return result, nil
 	}
-	return info.IsDir()
-}
 
-// directoryExists checks if a directory exists
-func (m *GitModule) directoryExists(path string) bool {
-	info, err := os.Stat(path)
+	// Clone the repository
+	output, err := m.executor.Execute("git", "clone", repo, dest)
 	if err != nil {
-		return false
-	}
-	return info.IsDir()
-}
-
-// cloneRepository clones a git repository
-func (m *GitModule) cloneRepository(ctx context.Context, repo, dest, version string, depth int, recursive bool) (bool, error) {
-	args := []string{"clone"}
-
-	if depth > 0 {
-		args = append(args, "--depth", fmt.Sprintf("%d", depth))
+		result.Error = fmt.Sprintf("failed to clone repository: %v", err)
+		result.Output["stdout"] = output
+		result.Duration = time.Since(startTime)
+		return result, nil
 	}
 
-	if !recursive {
-		args = append(args, "--no-recurse-submodules")
-	}
-
+	// Checkout specific version if not HEAD
 	if version != "HEAD" {
-		args = append(args, "--branch", version)
+		err = m.checkoutVersion(dest, version)
+		if err != nil {
+			result.Error = fmt.Sprintf("failed to checkout version %s: %v", version, err)
+			result.Duration = time.Since(startTime)
+			return result, nil
+		}
 	}
 
-	args = append(args, repo, dest)
-
-	cmd := exec.CommandContext(ctx, "git", args...)
-	output, err := cmd.CombinedOutput()
+	// Get repository information
+	repoInfo, err := m.getRepositoryInfo(dest)
 	if err != nil {
-		return false, fmt.Errorf("git clone failed: %v, output: %s", err, string(output))
+		result.Error = fmt.Sprintf("failed to get repository info: %v", err)
+		result.Duration = time.Since(startTime)
+		return result, nil
 	}
 
-	return true, nil
+	result.Success = true
+	result.Changed = true
+	result.Output["message"] = "Repository cloned successfully"
+	result.Output["repo"] = repo
+	result.Output["dest"] = dest
+	result.Output["version"] = version
+	result.Output["info"] = repoInfo
+	result.Duration = time.Since(startTime)
+
+	return result, nil
 }
 
-// updateRepository updates an existing git repository
-func (m *GitModule) updateRepository(ctx context.Context, dest, version string, force bool) (bool, error) {
-	// Change to repository directory
-	originalDir, err := os.Getwd()
+func (m *GitModuleFixed) updateRepository(dest, version string, result types.TaskResult, startTime time.Time) (types.TaskResult, error) {
+	// Get current commit before update
+	currentCommit, err := m.getCurrentCommit(dest)
 	if err != nil {
-		return false, err
-	}
-	defer os.Chdir(originalDir)
-
-	if err := os.Chdir(dest); err != nil {
-		return false, fmt.Errorf("failed to change to repository directory: %v", err)
-	}
-
-	// Get current commit
-	currentCommit, err := m.getCurrentCommitHash()
-	if err != nil {
-		return false, fmt.Errorf("failed to get current commit: %v", err)
+		result.Error = fmt.Sprintf("failed to get current commit: %v", err)
+		result.Duration = time.Since(startTime)
+		return result, nil
 	}
 
 	// Fetch latest changes
-	cmd := exec.CommandContext(ctx, "git", "fetch", "origin")
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return false, fmt.Errorf("git fetch failed: %v, output: %s", err, string(output))
+	_, err = m.executeInDirectory(dest, "git", "fetch", "origin")
+	if err != nil {
+		result.Error = fmt.Sprintf("failed to fetch changes: %v", err)
+		result.Duration = time.Since(startTime)
+		return result, nil
 	}
 
-	// Checkout specified version
+	// Checkout the specified version
+	err = m.checkoutVersion(dest, version)
+	if err != nil {
+		result.Error = fmt.Sprintf("failed to checkout version %s: %v", version, err)
+		result.Duration = time.Since(startTime)
+		return result, nil
+	}
+
+	// Get new commit after update
+	newCommit, err := m.getCurrentCommit(dest)
+	if err != nil {
+		result.Error = fmt.Sprintf("failed to get new commit: %v", err)
+		result.Duration = time.Since(startTime)
+		return result, nil
+	}
+
+	changed := currentCommit != newCommit
+
+	// Get repository information
+	repoInfo, err := m.getRepositoryInfo(dest)
+	if err != nil {
+		result.Error = fmt.Sprintf("failed to get repository info: %v", err)
+		result.Duration = time.Since(startTime)
+		return result, nil
+	}
+
+	result.Success = true
+	result.Changed = changed
+	if changed {
+		result.Output["message"] = "Repository updated successfully"
+	} else {
+		result.Output["message"] = "Repository is already up to date"
+	}
+	result.Output["dest"] = dest
+	result.Output["version"] = version
+	result.Output["before"] = currentCommit
+	result.Output["after"] = newCommit
+	result.Output["info"] = repoInfo
+	result.Duration = time.Since(startTime)
+
+	return result, nil
+}
+
+func (m *GitModuleFixed) checkoutVersion(dest, version string) error {
 	checkoutArgs := []string{"checkout"}
-	if force {
-		checkoutArgs = append(checkoutArgs, "--force")
-	}
-	checkoutArgs = append(checkoutArgs, version)
 
-	cmd = exec.CommandContext(ctx, "git", checkoutArgs...)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return false, fmt.Errorf("git checkout failed: %v, output: %s", err, string(output))
+	// Handle different version formats
+	if strings.HasPrefix(version, "origin/") {
+		checkoutArgs = append(checkoutArgs, "-B", strings.TrimPrefix(version, "origin/"), version)
+	} else {
+		checkoutArgs = append(checkoutArgs, version)
 	}
 
-	// Get new commit
-	newCommit, err := m.getCurrentCommitHash()
-	if err != nil {
-		return false, fmt.Errorf("failed to get new commit: %v", err)
-	}
-
-	return currentCommit != newCommit, nil
+	_, err := m.executeInDirectory(dest, "git", checkoutArgs...)
+	return err
 }
 
-// getCurrentCommit gets current commit information
-func (m *GitModule) getCurrentCommit(repoPath string) (map[string]interface{}, error) {
-	originalDir, err := os.Getwd()
-	if err != nil {
-		return nil, err
-	}
-	defer os.Chdir(originalDir)
-
-	if err := os.Chdir(repoPath); err != nil {
-		return nil, err
-	}
-
-	// Get commit hash
-	cmd := exec.Command("git", "rev-parse", "HEAD")
-	hashOutput, err := cmd.Output()
-	if err != nil {
-		return nil, err
-	}
-
-	// Get commit message
-	cmd = exec.Command("git", "log", "-1", "--pretty=format:%s")
-	msgOutput, err := cmd.Output()
-	if err != nil {
-		return nil, err
-	}
-
-	// Get commit author
-	cmd = exec.Command("git", "log", "-1", "--pretty=format:%an")
-	authorOutput, err := cmd.Output()
-	if err != nil {
-		return nil, err
-	}
-
-	// Get commit date
-	cmd = exec.Command("git", "log", "-1", "--pretty=format:%ci")
-	dateOutput, err := cmd.Output()
-	if err != nil {
-		return nil, err
-	}
-
-	return map[string]interface{}{
-		"hash":    strings.TrimSpace(string(hashOutput)),
-		"message": strings.TrimSpace(string(msgOutput)),
-		"author":  strings.TrimSpace(string(authorOutput)),
-		"date":    strings.TrimSpace(string(dateOutput)),
-	}, nil
-}
-
-// getCurrentCommitHash gets just the current commit hash
-func (m *GitModule) getCurrentCommitHash() (string, error) {
-	cmd := exec.Command("git", "rev-parse", "HEAD")
-	output, err := cmd.Output()
+func (m *GitModuleFixed) getCurrentCommit(dest string) (string, error) {
+	output, err := m.executeInDirectory(dest, "git", "rev-parse", "HEAD")
 	if err != nil {
 		return "", err
 	}
-	return strings.TrimSpace(string(output)), nil
+	return strings.TrimSpace(output), nil
 }
 
-// getRepositoryStatus gets repository status information
-func (m *GitModule) getRepositoryStatus(repoPath string) (map[string]interface{}, error) {
-	originalDir, err := os.Getwd()
-	if err != nil {
-		return nil, err
-	}
-	defer os.Chdir(originalDir)
+func (m *GitModuleFixed) getRepositoryInfo(dest string) (map[string]interface{}, error) {
+	info := make(map[string]interface{})
 
-	if err := os.Chdir(repoPath); err != nil {
-		return nil, err
+	// Get current commit
+	commit, err := m.executeInDirectory(dest, "git", "rev-parse", "HEAD")
+	if err == nil {
+		info["commit"] = strings.TrimSpace(commit)
 	}
 
-	// Get current branch
-	cmd := exec.Command("git", "branch", "--show-current")
-	branchOutput, err := cmd.Output()
-	if err != nil {
-		return nil, err
+	// Get commit message
+	message, err := m.executeInDirectory(dest, "git", "log", "-1", "--pretty=format:%s")
+	if err == nil {
+		info["message"] = strings.TrimSpace(message)
 	}
 
-	// Get status
-	cmd = exec.Command("git", "status", "--porcelain")
-	statusOutput, err := cmd.Output()
-	if err != nil {
-		return nil, err
+	// Get author
+	author, err := m.executeInDirectory(dest, "git", "log", "-1", "--pretty=format:%an")
+	if err == nil {
+		info["author"] = strings.TrimSpace(author)
 	}
 
-	// Check if there are uncommitted changes
-	hasChanges := len(strings.TrimSpace(string(statusOutput))) > 0
+	// Get commit date
+	date, err := m.executeInDirectory(dest, "git", "log", "-1", "--pretty=format:%ci")
+	if err == nil {
+		info["date"] = strings.TrimSpace(date)
+	}
 
-	return map[string]interface{}{
-		"branch":      strings.TrimSpace(string(branchOutput)),
-		"clean":       !hasChanges,
-		"has_changes": hasChanges,
-	}, nil
+	return info, nil
+}
+
+func (m *GitModuleFixed) isGitRepository(path string) bool {
+	_, err := m.executeInDirectory(path, "git", "rev-parse", "--git-dir")
+	return err == nil
+}
+
+func (m *GitModuleFixed) pathExists(path string) bool {
+	_, err := m.executor.Execute("test", "-e", path)
+	return err == nil
+}
+
+func (m *GitModuleFixed) executeInDirectory(dir string, command string, args ...string) (string, error) {
+	// Change to directory and execute command
+	fullCommand := fmt.Sprintf("cd %s && %s", dir, command)
+	for _, arg := range args {
+		fullCommand += " " + arg
+	}
+	return m.executor.Execute("sh", "-c", fullCommand)
+}
+
+func (m *GitModuleFixed) IsIdempotent() bool {
+	return true
 }

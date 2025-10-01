@@ -1,0 +1,9 @@
+---
+plays:
+  - name: "Minimal Test"
+    hosts: all
+    tasks:
+      - name: "Test command"
+        module:
+          type: command
+          command: "echo 'Hello World'"

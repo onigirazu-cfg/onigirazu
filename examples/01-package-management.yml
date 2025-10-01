@@ -1,0 +1,67 @@
+---
+# Package Management Examples
+# Demonstrates package installation, removal, and management
+
+plays:
+  - name: "Package Management Demo"
+    hosts: all
+    tasks:
+      # Basic package installation
+      - name: "Install essential development tools"
+        module:
+          type: "package"
+          name: "git"
+          state: "present"
+
+      - name: "Install curl package"
+        module:
+          type: "package"
+          name: "curl"
+          state: "present"
+
+      - name: "Install wget package"
+        module:
+          type: "package"
+          name: "wget"
+          state: "present"
+
+      - name: "Install tree package"
+        module:
+          type: "package"
+          name: "tree"
+          state: "present"
+
+      # Package removal
+      - name: "Remove unnecessary package"
+        module:
+          type: "package"
+          name: "nano"
+          state: "absent"
+
+      # Package installation with jq
+      - name: "Install jq package"
+        module:
+          type: "package"
+          name: "jq"
+          state: "present"
+
+      # Package update (using present state as latest might not be supported)
+      - name: "Ensure git is installed"
+        module:
+          type: "package"
+          name: "git"
+          state: "present"
+
+      # Linux-specific package installation
+      - name: "Install htop package (Linux utility)"
+        module:
+          type: "package"
+          name: "htop"
+          state: "present"
+
+      # Additional useful packages
+      - name: "Install vim package"
+        module:
+          type: "package"
+          name: "vim"
+          state: "present"

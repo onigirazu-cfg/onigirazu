@@ -26,7 +26,7 @@ type Inventory struct {
 type Task struct {
 	Name         string                 `yaml:"name"`
 	Module       string                 `yaml:"module"`
-	Args         map[string]interface{} `yaml:"args"`
+	Args         map[string]interface{} `yaml:"args,omitempty"`
 	When         string                 `yaml:"when,omitempty"`
 	Loop         *Loop                  `yaml:"loop,omitempty"`
 	Register     string                 `yaml:"register,omitempty"`
@@ -42,6 +42,290 @@ type Task struct {
 	Include      string                 `yaml:"include,omitempty"`
 	Serial       bool                   `yaml:"serial,omitempty"`
 	RetryDelay   time.Duration          `yaml:"retry_delay,omitempty"`
+}
+
+// UnmarshalYAML implements custom YAML unmarshaling for Task
+// Supports both old syntax (with args:) and new syntax (inline args)
+func (t *Task) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	// First try to unmarshal as a map to get all fields
+	var taskMap map[string]interface{}
+	if err := unmarshal(&taskMap); err != nil {
+		return err
+	}
+
+	// Define reserved field names that are not module arguments
+	reservedFields := map[string]bool{
+		"name":          true,
+		"module":        true,
+		"args":          true,
+		"when":          true,
+		"loop":          true,
+		"register":      true,
+		"ignore_errors": true,
+		"tags":          true,
+		"notify":        true,
+		"timeout":       true,
+		"retries":       true,
+		"delay":         true,
+		"until":        true,
+		"changed_when":  true,
+		"failed_when":   true,
+		"include":       true,
+		"serial":        true,
+		"retry_delay":   true,
+	}
+
+	// Extract basic fields
+	if name, ok := taskMap["name"].(string); ok {
+		t.Name = name
+	}
+	// Extract module field first (will be overridden later if it's a map)
+	if module, ok := taskMap["module"].(string); ok {
+		t.Module = module
+	}
+	if when, ok := taskMap["when"].(string); ok {
+		t.When = when
+	}
+	if register, ok := taskMap["register"].(string); ok {
+		t.Register = register
+	}
+	if ignoreErrors, ok := taskMap["ignore_errors"].(bool); ok {
+		t.IgnoreErrors = ignoreErrors
+	}
+	if include, ok := taskMap["include"].(string); ok {
+		t.Include = include
+	}
+	if serial, ok := taskMap["serial"].(bool); ok {
+		t.Serial = serial
+	}
+	if retries, ok := taskMap["retries"].(int); ok {
+		t.Retries = retries
+	}
+
+	// Handle tags
+	if tags, ok := taskMap["tags"]; ok {
+		if tagSlice, ok := tags.([]interface{}); ok {
+			t.Tags = make([]string, len(tagSlice))
+			for i, tag := range tagSlice {
+				if tagStr, ok := tag.(string); ok {
+					t.Tags[i] = tagStr
+				}
+			}
+		}
+	}
+
+	// Handle notify
+	if notify, ok := taskMap["notify"]; ok {
+		if notifySlice, ok := notify.([]interface{}); ok {
+			t.Notify = make([]string, len(notifySlice))
+			for i, n := range notifySlice {
+				if nStr, ok := n.(string); ok {
+					t.Notify[i] = nStr
+				}
+			}
+		}
+	}
+
+	// Handle duration fields
+	if timeout, ok := taskMap["timeout"]; ok {
+		if timeoutStr, ok := timeout.(string); ok {
+			if d, err := time.ParseDuration(timeoutStr); err == nil {
+				t.Timeout = d
+			}
+		}
+	}
+	if delay, ok := taskMap["delay"]; ok {
+		if delayStr, ok := delay.(string); ok {
+			if d, err := time.ParseDuration(delayStr); err == nil {
+				t.Delay = d
+			}
+		}
+	}
+	if retryDelay, ok := taskMap["retry_delay"]; ok {
+		if retryDelayStr, ok := retryDelay.(string); ok {
+			if d, err := time.ParseDuration(retryDelayStr); err == nil {
+				t.RetryDelay = d
+			}
+		}
+	}
+
+	// Handle string fields
+	if until, ok := taskMap["until"].(string); ok {
+		t.Until = until
+	}
+	if changedWhen, ok := taskMap["changed_when"].(string); ok {
+		t.ChangedWhen = changedWhen
+	}
+	if failedWhen, ok := taskMap["failed_when"].(string); ok {
+		t.FailedWhen = failedWhen
+	}
+
+	// Handle loop
+	if loop, ok := taskMap["loop"]; ok {
+		if loopMap, ok := loop.(map[string]interface{}); ok {
+			t.Loop = &Loop{}
+			if items, ok := loopMap["items"]; ok {
+				if itemSlice, ok := items.([]interface{}); ok {
+					t.Loop.Items = itemSlice
+				}
+			}
+			if variable, ok := loopMap["variable"].(string); ok {
+				t.Loop.Variable = variable
+			}
+		}
+	}
+
+	// Initialize Args map
+	t.Args = make(map[string]interface{})
+
+	// Check if there's an explicit "args" field (old syntax)
+	if args, ok := taskMap["args"]; ok {
+		if argsMap, ok := args.(map[string]interface{}); ok {
+			t.Args = argsMap
+		} else if argsMapInterface, ok := args.(map[interface{}]interface{}); ok {
+			// Convert map[interface{}]interface{} to map[string]interface{}
+			t.Args = make(map[string]interface{})
+			for k, v := range argsMapInterface {
+				if keyStr, ok := k.(string); ok {
+					t.Args[keyStr] = v
+				}
+			}
+		}
+	} else {
+		// Check for nested syntax: parameters under module field
+		if module, ok := taskMap["module"]; ok {
+			if moduleMap, ok := module.(map[string]interface{}); ok {
+				// Nested syntax: module is a map containing module name and parameters
+				for key, value := range moduleMap {
+					if key == "type" {
+						// Module name specified as "type" field
+						if moduleStr, ok := value.(string); ok {
+							t.Module = moduleStr
+						}
+					} else {
+						// All other fields are module arguments
+						t.Args[key] = value
+					}
+				}
+			} else if moduleMapInterface, ok := module.(map[interface{}]interface{}); ok {
+				// Nested syntax with interface{} keys (YAML default)
+				for k, v := range moduleMapInterface {
+					if keyStr, ok := k.(string); ok {
+						if keyStr == "type" {
+							// Module name specified as "type" field
+							if moduleStr, ok := v.(string); ok {
+								t.Module = moduleStr
+							}
+						} else {
+							// All other fields are module arguments
+							t.Args[keyStr] = v
+						}
+					}
+				}
+			} else if moduleStr, ok := module.(string); ok {
+				// Standard syntax: module is just a string
+				t.Module = moduleStr
+				// Collect all non-reserved fields as module arguments
+				for key, value := range taskMap {
+					if !reservedFields[key] {
+						t.Args[key] = value
+					}
+				}
+			}
+		} else {
+			// Fallback: collect all non-reserved fields as module arguments
+			for key, value := range taskMap {
+				if !reservedFields[key] {
+					t.Args[key] = value
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+// FormattedTask represents a task with proper YAML formatting structure
+type FormattedTask struct {
+	Name   string      `yaml:"name,omitempty"`
+	Module string      `yaml:"module,omitempty"`
+	Args   interface{} `yaml:",inline"`
+
+	// Task-level fields
+	When         string        `yaml:"when,omitempty"`
+	Loop         *Loop         `yaml:"loop,omitempty"`
+	Register     string        `yaml:"register,omitempty"`
+	IgnoreErrors bool          `yaml:"ignore_errors,omitempty"`
+	Tags         []string      `yaml:"tags,omitempty"`
+	Notify       []string      `yaml:"notify,omitempty"`
+	Timeout      string        `yaml:"timeout,omitempty"`
+	Retries      int           `yaml:"retries,omitempty"`
+	Delay        string        `yaml:"delay,omitempty"`
+	Until        string        `yaml:"until,omitempty"`
+	ChangedWhen  string        `yaml:"changed_when,omitempty"`
+	FailedWhen   string        `yaml:"failed_when,omitempty"`
+	Include      string        `yaml:"include,omitempty"`
+	Serial       bool          `yaml:"serial,omitempty"`
+	RetryDelay   string        `yaml:"retry_delay,omitempty"`
+}
+
+// MarshalYAML implements custom YAML marshaling for Task
+// Formats the task with proper indentation for module parameters
+func (t *Task) MarshalYAML() (interface{}, error) {
+	formatted := FormattedTask{
+		Name:   t.Name,
+		Module: t.Module,
+		Args:   t.Args,
+	}
+
+	// Convert task-level fields
+	if t.When != "" {
+		formatted.When = t.When
+	}
+	if t.Loop != nil {
+		formatted.Loop = t.Loop
+	}
+	if t.Register != "" {
+		formatted.Register = t.Register
+	}
+	if t.IgnoreErrors {
+		formatted.IgnoreErrors = t.IgnoreErrors
+	}
+	if len(t.Tags) > 0 {
+		formatted.Tags = t.Tags
+	}
+	if len(t.Notify) > 0 {
+		formatted.Notify = t.Notify
+	}
+	if t.Timeout > 0 {
+		formatted.Timeout = t.Timeout.String()
+	}
+	if t.Retries > 0 {
+		formatted.Retries = t.Retries
+	}
+	if t.Delay > 0 {
+		formatted.Delay = t.Delay.String()
+	}
+	if t.Until != "" {
+		formatted.Until = t.Until
+	}
+	if t.ChangedWhen != "" {
+		formatted.ChangedWhen = t.ChangedWhen
+	}
+	if t.FailedWhen != "" {
+		formatted.FailedWhen = t.FailedWhen
+	}
+	if t.Include != "" {
+		formatted.Include = t.Include
+	}
+	if t.Serial {
+		formatted.Serial = t.Serial
+	}
+	if t.RetryDelay > 0 {
+		formatted.RetryDelay = t.RetryDelay.String()
+	}
+
+	return formatted, nil
 }
 
 // Play represents a set of tasks to execute

@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/onigirazu-cfg/onigirazu/internal/facts"
 	"github.com/onigirazu-cfg/onigirazu/internal/interfaces"
 	"github.com/onigirazu-cfg/onigirazu/internal/metrics"
 	"github.com/onigirazu-cfg/onigirazu/internal/security"
@@ -26,6 +27,7 @@ type ExecutionEngine struct {
 	cacheManager      interfaces.CacheManager
 	metricsManager    *metrics.Metrics
 	securityValidator *security.SecurityValidator
+	factsGatherer     *facts.Gatherer
 
 	// Execution context
 	variables map[string]interface{}
@@ -85,6 +87,7 @@ func NewExecutionEngine(
 		cacheManager:      cacheManager,
 		metricsManager:    metrics.NewMetrics(),
 		securityValidator: security.NewSecurityValidator(security.DefaultSecurityConfig()),
+		factsGatherer:     facts.NewGatherer(),
 		variables:         make(map[string]interface{}),
 		facts:             make(map[string]map[string]interface{}),
 		stats: &ExecutionStats{
@@ -341,13 +344,26 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 
 	e.logger.TaskStart(task.Name, host.Name)
 
-	// Merge variables (host vars take precedence)
-	taskVars := e.mergeVariables(variables, host.Vars)
+	// Merge variables in order of precedence (later overrides earlier):
+	// 1. Play variables
+	// 2. Global variables (from set_fact and register)
+	// 3. Host vars (highest precedence)
+	e.mutex.RLock()
+	globalVars := make(map[string]interface{})
+	for k, v := range e.variables {
+		globalVars[k] = v
+	}
+	e.mutex.RUnlock()
+
+	taskVars := e.mergeVariables(variables, globalVars, host.Vars)
 
 	// Add host facts
 	if hostFacts, exists := e.facts[host.Name]; exists {
 		taskVars = e.mergeVariables(taskVars, map[string]interface{}{"ansible_facts": hostFacts})
 	}
+
+	// Debug: log available variables
+	e.logger.Debug("Task '%s' variables: %v", task.Name, taskVars)
 
 	// Render task arguments with templates
 	renderedArgs, err := e.templateEngine.RenderTaskArgs(ctx, task.Args, taskVars)
@@ -495,8 +511,62 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 	// Log result
 	e.logger.TaskEnd(task.Name, host.Name, result.Changed, !result.Failed)
 
+	// Print debug output if this is a debug module
+	if task.Module == "debug" && !result.Failed {
+		if msg, ok := result.Output["msg"].(string); ok {
+			fmt.Printf("    %s\n", msg)
+		}
+	}
+
 	// Update progress
 	e.progressTracker.UpdateTask(host.Name, task.Name, !result.Failed)
+
+	// Handle register: store task result in variables
+	if task.Register != "" && !result.Failed {
+		e.mutex.Lock()
+		// Store the result in a format compatible with Ansible
+		registeredVar := map[string]interface{}{
+			"changed": result.Changed,
+			"failed":  result.Failed,
+			"skipped": result.Skipped,
+		}
+
+		// Add stdout/stderr if available (for command/shell modules)
+		if stdout, ok := result.Output["stdout"]; ok {
+			registeredVar["stdout"] = stdout
+		}
+		if stderr, ok := result.Output["stderr"]; ok {
+			registeredVar["stderr"] = stderr
+		}
+		if rc, ok := result.Output["rc"]; ok {
+			registeredVar["rc"] = rc
+		}
+
+		// Add all output fields
+		for key, value := range result.Output {
+			if key != "stdout" && key != "stderr" && key != "rc" {
+				registeredVar[key] = value
+			}
+		}
+
+		// Store in global variables
+		e.variables[task.Register] = registeredVar
+		e.mutex.Unlock()
+
+		e.logger.Debug("Registered variable '%s' with result from task '%s': %+v", task.Register, task.Name, registeredVar)
+	}
+
+	// Handle set_fact: merge facts into global variables
+	if task.Module == "set_fact" && !result.Failed {
+		e.mutex.Lock()
+		if ansibleFacts, ok := result.Output["ansible_facts"].(map[string]interface{}); ok {
+			for key, value := range ansibleFacts {
+				e.variables[key] = value
+				e.logger.Debug("Set fact '%s' = %v", key, value)
+			}
+		}
+		e.mutex.Unlock()
+	}
 
 	if result.Failed && !task.IgnoreErrors {
 		return fmt.Errorf("task failed: %s", result.Error)
@@ -571,15 +641,51 @@ func (e *ExecutionEngine) getPlayHosts(play *types.Play) ([]types.Host, error) {
 func (e *ExecutionEngine) gatherFacts(ctx context.Context, hosts []types.Host) error {
 	e.logger.Debug("Gathering facts from %d hosts", len(hosts))
 
-	// This would typically execute a setup module to gather system facts
-	// For now, we'll add basic host information
+	// Gather facts from each host
 	for _, host := range hosts {
+		// Gather system facts using the facts gatherer (with caching)
+		systemFacts, err := e.factsGatherer.GatherFacts(ctx, host)
+		if err != nil {
+			e.logger.Warn("Failed to gather facts from %s: %v", host.Name, err)
+			// Continue with basic facts on error
+			e.facts[host.Name] = map[string]interface{}{
+				"ansible_hostname": host.Name,
+				"ansible_host":     host.Address,
+				"ansible_port":     host.Port,
+				"ansible_user":     host.User,
+			}
+			continue
+		}
+
+		// Store facts in Ansible-compatible format
 		e.facts[host.Name] = map[string]interface{}{
+			// Basic host info
 			"ansible_hostname": host.Name,
 			"ansible_host":     host.Address,
 			"ansible_port":     host.Port,
 			"ansible_user":     host.User,
+
+			// System facts
+			"ansible_os_family":            systemFacts.OSFamily,
+			"ansible_distribution":         systemFacts.Distribution,
+			"ansible_distribution_version": systemFacts.OSVersion,
+			"ansible_architecture":         systemFacts.Architecture,
+			"ansible_kernel":               systemFacts.Kernel,
+			"ansible_kernel_version":       systemFacts.KernelVersion,
+			"ansible_fqdn":                 systemFacts.FQDN,
+			"ansible_processor_cores":      systemFacts.CPUCores,
+			"ansible_memtotal_mb":          systemFacts.MemoryTotal,
+			"ansible_default_ipv4": map[string]interface{}{
+				"address": systemFacts.DefaultIPv4,
+			},
 		}
+	}
+
+	// Log cache statistics
+	stats := e.factsGatherer.GetCacheStats()
+	if stats.Hits > 0 || stats.Misses > 0 {
+		e.logger.Debug("Facts cache stats: %d hits, %d misses (%.1f%% hit rate)",
+			stats.Hits, stats.Misses, stats.HitRate)
 	}
 
 	return nil
@@ -934,6 +1040,53 @@ func (e *ExecutionEngine) executeTaskOnHostInternal(ctx context.Context, task *t
 				result.Error = "Task failed due to failed_when condition"
 			}
 		}
+	}
+
+	// Handle register: store task result in variables
+	if task.Register != "" && !result.Failed {
+		e.mutex.Lock()
+		// Store the result in a format compatible with Ansible
+		registeredVar := map[string]interface{}{
+			"changed": result.Changed,
+			"failed":  result.Failed,
+			"skipped": result.Skipped,
+		}
+
+		// Add stdout/stderr if available (for command/shell modules)
+		if stdout, ok := result.Output["stdout"]; ok {
+			registeredVar["stdout"] = stdout
+		}
+		if stderr, ok := result.Output["stderr"]; ok {
+			registeredVar["stderr"] = stderr
+		}
+		if rc, ok := result.Output["rc"]; ok {
+			registeredVar["rc"] = rc
+		}
+
+		// Add all output fields
+		for key, value := range result.Output {
+			if key != "stdout" && key != "stderr" && key != "rc" {
+				registeredVar[key] = value
+			}
+		}
+
+		// Store in global variables
+		e.variables[task.Register] = registeredVar
+		e.mutex.Unlock()
+
+		e.logger.Debug("Registered variable '%s' with result from task '%s': %+v", task.Register, task.Name, registeredVar)
+	}
+
+	// Handle set_fact: merge facts into global variables
+	if task.Module == "set_fact" && !result.Failed {
+		e.mutex.Lock()
+		if ansibleFacts, ok := result.Output["ansible_facts"].(map[string]interface{}); ok {
+			for key, value := range ansibleFacts {
+				e.variables[key] = value
+				e.logger.Debug("Set fact '%s' = %v", key, value)
+			}
+		}
+		e.mutex.Unlock()
 	}
 
 	return result, nil

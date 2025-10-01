@@ -4,22 +4,37 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"runtime"
 	"strings"
 	"time"
 
+	"github.com/onigirazu-cfg/onigirazu/internal/executor"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
-// ServiceModule implements service management
-type ServiceModule struct {
-	BaseModule
-	serviceManager ServiceManager
+// ServiceStatus represents the status of a service
+type ServiceStatus struct {
+	Name        string `json:"name"`
+	Active      bool   `json:"active"`
+	Enabled     bool   `json:"enabled"`
+	Status      string `json:"status"`
+	SubState    string `json:"sub_state,omitempty"`
+	LoadState   string `json:"load_state,omitempty"`
+	Running     bool   `json:"running"`
+	ActiveState string `json:"active_state,omitempty"`
+	PID         string `json:"pid,omitempty"`
+	Description string `json:"description,omitempty"`
 }
 
-// ServiceManager interface for different service management systems
-type ServiceManager interface {
+// ServiceModule implements service management
+type ServiceModuleFixed struct {
+	BaseModule
+	serviceManager ServiceManagerFixed
+	executor       *executor.CommandExecutor
+}
+
+// ServiceManagerFixed interface for different service management systems
+type ServiceManagerFixed interface {
 	Start(name string) error
 	Stop(name string) error
 	Restart(name string) error
@@ -29,60 +44,32 @@ type ServiceManager interface {
 	IsRunning(name string) (bool, error)
 	IsEnabled(name string) (bool, error)
 	GetStatus(name string) (ServiceStatus, error)
+	SetExecutor(executor *executor.CommandExecutor)
 }
 
-// ServiceStatus represents service status information
-type ServiceStatus struct {
-	Name        string    `json:"name"`
-	Running     bool      `json:"running"`
-	Enabled     bool      `json:"enabled"`
-	PID         int       `json:"pid,omitempty"`
-	Uptime      string    `json:"uptime,omitempty"`
-	Memory      string    `json:"memory,omitempty"`
-	CPU         string    `json:"cpu,omitempty"`
-	Description string    `json:"description,omitempty"`
-	LoadState   string    `json:"load_state,omitempty"`
-	ActiveState string    `json:"active_state,omitempty"`
-	SubState    string    `json:"sub_state,omitempty"`
-	LastStarted time.Time `json:"last_started,omitempty"`
-}
-
-// ServiceAction represents the action to perform
-type ServiceAction string
-
-const (
-	ServiceActionStart   ServiceAction = "start"
-	ServiceActionStop    ServiceAction = "stop"
-	ServiceActionRestart ServiceAction = "restart"
-	ServiceActionReload  ServiceAction = "reload"
-	ServiceActionEnable  ServiceAction = "enable"
-	ServiceActionDisable ServiceAction = "disable"
-	ServiceActionStatus  ServiceAction = "status"
-)
-
-// NewServiceModule creates a new service module
-func NewServiceModule() *ServiceModule {
-	var manager ServiceManager
+// NewServiceModuleFixed creates a new service module
+func NewServiceModuleFixed() *ServiceModuleFixed {
+	var manager ServiceManagerFixed
 
 	// Detect service management system
 	switch runtime.GOOS {
 	case "linux":
 		if hasSystemd() {
-			manager = &SystemdManager{}
+			manager = &SystemdManagerFixed{}
 		} else if hasSysVInit() {
-			manager = &SysVInitManager{}
+			manager = &SysVInitManagerFixed{}
 		} else {
-			manager = &GenericManager{}
+			manager = &GenericManagerFixed{}
 		}
 	case "darwin":
-		manager = &LaunchdManager{}
+		manager = &LaunchdManagerFixed{}
 	case "windows":
-		manager = &WindowsServiceManager{}
+		manager = &WindowsServiceManagerFixed{}
 	default:
-		manager = &GenericManager{}
+		manager = &GenericManagerFixed{}
 	}
 
-	return &ServiceModule{
+	return &ServiceModuleFixed{
 		BaseModule: BaseModule{
 			name:        "service",
 			description: "Manage system services",
@@ -91,8 +78,13 @@ func NewServiceModule() *ServiceModule {
 	}
 }
 
+// NewServiceModule creates a new service module (compatibility wrapper)
+func NewServiceModule() *ServiceModuleFixed {
+	return NewServiceModuleFixed()
+}
+
 // Execute manages system services
-func (m *ServiceModule) Execute(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
+func (m *ServiceModuleFixed) Execute(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
 	startTime := time.Now()
 	result := types.TaskResult{
 		TaskName:  "service",
@@ -102,6 +94,16 @@ func (m *ServiceModule) Execute(ctx context.Context, host types.Host, args map[s
 		Changed:   false,
 		Output:    make(map[string]interface{}),
 		Timestamp: startTime,
+	}
+
+	// Initialize executor if not already done
+	if m.executor == nil {
+		exec, err := executor.NewCommandExecutor(host)
+		if err != nil {
+			return m.failResult(result, fmt.Sprintf("failed to create executor: %v", err))
+		}
+		m.executor = exec
+		m.serviceManager.SetExecutor(exec)
 	}
 
 	// Get required parameters
@@ -186,7 +188,7 @@ func (m *ServiceModule) Execute(ctx context.Context, host types.Host, args map[s
 }
 
 // Validate validates service module arguments
-func (m *ServiceModule) Validate(args map[string]interface{}) error {
+func (m *ServiceModuleFixed) Validate(args map[string]interface{}) error {
 	if _, exists := args["name"]; !exists {
 		return fmt.Errorf("name parameter is required")
 	}
@@ -210,52 +212,58 @@ func (m *ServiceModule) Validate(args map[string]interface{}) error {
 	return nil
 }
 
-// SystemdManager implements service management for systemd
-type SystemdManager struct{}
+// SystemdManagerFixed implements service management for systemd
+type SystemdManagerFixed struct {
+	executor *executor.CommandExecutor
+}
 
-func (s *SystemdManager) Start(name string) error {
+func (s *SystemdManagerFixed) Start(name string) error {
 	return s.runSystemctl("start", name)
 }
 
-func (s *SystemdManager) Stop(name string) error {
+func (s *SystemdManagerFixed) Stop(name string) error {
 	return s.runSystemctl("stop", name)
 }
 
-func (s *SystemdManager) Restart(name string) error {
+func (s *SystemdManagerFixed) Restart(name string) error {
 	return s.runSystemctl("restart", name)
 }
 
-func (s *SystemdManager) Reload(name string) error {
+func (s *SystemdManagerFixed) Reload(name string) error {
 	return s.runSystemctl("reload", name)
 }
 
-func (s *SystemdManager) Enable(name string) error {
+func (s *SystemdManagerFixed) Enable(name string) error {
 	return s.runSystemctl("enable", name)
 }
 
-func (s *SystemdManager) Disable(name string) error {
+func (s *SystemdManagerFixed) Disable(name string) error {
 	return s.runSystemctl("disable", name)
 }
 
-func (s *SystemdManager) IsRunning(name string) (bool, error) {
-	cmd := exec.Command("systemctl", "is-active", name)
-	output, err := cmd.Output()
+func (s *SystemdManagerFixed) IsRunning(name string) (bool, error) {
+	if s.executor == nil {
+		return false, fmt.Errorf("executor not initialized")
+	}
+	output, err := s.executor.Execute("systemctl", "is-active", name)
 	if err != nil {
 		return false, nil // Service not running
 	}
-	return strings.TrimSpace(string(output)) == "active", nil
+	return strings.TrimSpace(output) == "active", nil
 }
 
-func (s *SystemdManager) IsEnabled(name string) (bool, error) {
-	cmd := exec.Command("systemctl", "is-enabled", name)
-	output, err := cmd.Output()
+func (s *SystemdManagerFixed) IsEnabled(name string) (bool, error) {
+	if s.executor == nil {
+		return false, fmt.Errorf("executor not initialized")
+	}
+	output, err := s.executor.Execute("systemctl", "is-enabled", name)
 	if err != nil {
 		return false, nil // Service not enabled
 	}
-	return strings.TrimSpace(string(output)) == "enabled", nil
+	return strings.TrimSpace(output) == "enabled", nil
 }
 
-func (s *SystemdManager) GetStatus(name string) (ServiceStatus, error) {
+func (s *SystemdManagerFixed) GetStatus(name string) (ServiceStatus, error) {
 	status := ServiceStatus{Name: name}
 
 	// Check if running
@@ -267,27 +275,28 @@ func (s *SystemdManager) GetStatus(name string) (ServiceStatus, error) {
 	status.Enabled = enabled
 
 	// Get detailed status
-	cmd := exec.Command("systemctl", "show", name, "--property=LoadState,ActiveState,SubState,MainPID,Description")
-	output, err := cmd.Output()
-	if err == nil {
-		lines := strings.Split(string(output), "\n")
-		for _, line := range lines {
-			parts := strings.SplitN(line, "=", 2)
-			if len(parts) == 2 {
-				key, value := parts[0], parts[1]
-				switch key {
-				case "LoadState":
-					status.LoadState = value
-				case "ActiveState":
-					status.ActiveState = value
-				case "SubState":
-					status.SubState = value
-				case "MainPID":
-					if value != "0" {
-						fmt.Sscanf(value, "%d", &status.PID)
+	if s.executor != nil {
+		output, err := s.executor.Execute("systemctl", "show", name, "--property=LoadState,ActiveState,SubState,MainPID,Description")
+		if err == nil {
+			lines := strings.Split(output, "\n")
+			for _, line := range lines {
+				parts := strings.SplitN(line, "=", 2)
+				if len(parts) == 2 {
+					key, value := parts[0], parts[1]
+					switch key {
+					case "LoadState":
+						status.LoadState = value
+					case "ActiveState":
+						status.ActiveState = value
+					case "SubState":
+						status.SubState = value
+					case "MainPID":
+						if value != "0" {
+							fmt.Sscanf(value, "%d", &status.PID)
+						}
+					case "Description":
+						status.Description = value
 					}
-				case "Description":
-					status.Description = value
 				}
 			}
 		}
@@ -296,25 +305,40 @@ func (s *SystemdManager) GetStatus(name string) (ServiceStatus, error) {
 	return status, nil
 }
 
-func (s *SystemdManager) runSystemctl(action, name string) error {
-	cmd := exec.Command("systemctl", action, name)
-	return cmd.Run()
+func (s *SystemdManagerFixed) runSystemctl(action, name string) error {
+	if s.executor == nil {
+		return fmt.Errorf("executor not initialized")
+	}
+	_, err := s.executor.Execute("systemctl", action, name)
+	return err
 }
 
-// LaunchdManager implements service management for macOS launchd
-type LaunchdManager struct{}
-
-func (l *LaunchdManager) Start(name string) error {
-	cmd := exec.Command("launchctl", "start", name)
-	return cmd.Run()
+func (s *SystemdManagerFixed) SetExecutor(executor *executor.CommandExecutor) {
+	s.executor = executor
 }
 
-func (l *LaunchdManager) Stop(name string) error {
-	cmd := exec.Command("launchctl", "stop", name)
-	return cmd.Run()
+// LaunchdManagerFixed implements service management for macOS launchd
+type LaunchdManagerFixed struct {
+	executor *executor.CommandExecutor
 }
 
-func (l *LaunchdManager) Restart(name string) error {
+func (l *LaunchdManagerFixed) Start(name string) error {
+	if l.executor == nil {
+		return fmt.Errorf("executor not initialized")
+	}
+	_, err := l.executor.Execute("launchctl", "start", name)
+	return err
+}
+
+func (l *LaunchdManagerFixed) Stop(name string) error {
+	if l.executor == nil {
+		return fmt.Errorf("executor not initialized")
+	}
+	_, err := l.executor.Execute("launchctl", "stop", name)
+	return err
+}
+
+func (l *LaunchdManagerFixed) Restart(name string) error {
 	if err := l.Stop(name); err != nil {
 		return err
 	}
@@ -322,34 +346,43 @@ func (l *LaunchdManager) Restart(name string) error {
 	return l.Start(name)
 }
 
-func (l *LaunchdManager) Reload(name string) error {
+func (l *LaunchdManagerFixed) Reload(name string) error {
 	return l.Restart(name) // launchd doesn't have reload
 }
 
-func (l *LaunchdManager) Enable(name string) error {
-	cmd := exec.Command("launchctl", "load", "-w", name)
-	return cmd.Run()
+func (l *LaunchdManagerFixed) Enable(name string) error {
+	if l.executor == nil {
+		return fmt.Errorf("executor not initialized")
+	}
+	_, err := l.executor.Execute("launchctl", "load", "-w", name)
+	return err
 }
 
-func (l *LaunchdManager) Disable(name string) error {
-	cmd := exec.Command("launchctl", "unload", "-w", name)
-	return cmd.Run()
+func (l *LaunchdManagerFixed) Disable(name string) error {
+	if l.executor == nil {
+		return fmt.Errorf("executor not initialized")
+	}
+	_, err := l.executor.Execute("launchctl", "unload", "-w", name)
+	return err
 }
 
-func (l *LaunchdManager) IsRunning(name string) (bool, error) {
-	cmd := exec.Command("launchctl", "list", name)
-	err := cmd.Run()
+func (l *LaunchdManagerFixed) IsRunning(name string) (bool, error) {
+	if l.executor == nil {
+		return false, fmt.Errorf("executor not initialized")
+	}
+	_, err := l.executor.Execute("launchctl", "list", name)
 	return err == nil, nil
 }
 
-func (l *LaunchdManager) IsEnabled(name string) (bool, error) {
-	// Check if service file exists and is loaded
-	cmd := exec.Command("launchctl", "list", name)
-	err := cmd.Run()
+func (l *LaunchdManagerFixed) IsEnabled(name string) (bool, error) {
+	if l.executor == nil {
+		return false, fmt.Errorf("executor not initialized")
+	}
+	_, err := l.executor.Execute("launchctl", "list", name)
 	return err == nil, nil
 }
 
-func (l *LaunchdManager) GetStatus(name string) (ServiceStatus, error) {
+func (l *LaunchdManagerFixed) GetStatus(name string) (ServiceStatus, error) {
 	status := ServiceStatus{Name: name}
 
 	running, _ := l.IsRunning(name)
@@ -361,55 +394,83 @@ func (l *LaunchdManager) GetStatus(name string) (ServiceStatus, error) {
 	return status, nil
 }
 
-// SysVInitManager implements service management for SysV init
-type SysVInitManager struct{}
-
-func (s *SysVInitManager) Start(name string) error {
-	cmd := exec.Command("service", name, "start")
-	return cmd.Run()
+func (l *LaunchdManagerFixed) SetExecutor(executor *executor.CommandExecutor) {
+	l.executor = executor
 }
 
-func (s *SysVInitManager) Stop(name string) error {
-	cmd := exec.Command("service", name, "stop")
-	return cmd.Run()
+// SysVInitManagerFixed implements service management for SysV init
+type SysVInitManagerFixed struct {
+	executor *executor.CommandExecutor
 }
 
-func (s *SysVInitManager) Restart(name string) error {
-	cmd := exec.Command("service", name, "restart")
-	return cmd.Run()
+func (s *SysVInitManagerFixed) Start(name string) error {
+	if s.executor == nil {
+		return fmt.Errorf("executor not initialized")
+	}
+	_, err := s.executor.Execute("service", name, "start")
+	return err
 }
 
-func (s *SysVInitManager) Reload(name string) error {
-	cmd := exec.Command("service", name, "reload")
-	return cmd.Run()
+func (s *SysVInitManagerFixed) Stop(name string) error {
+	if s.executor == nil {
+		return fmt.Errorf("executor not initialized")
+	}
+	_, err := s.executor.Execute("service", name, "stop")
+	return err
 }
 
-func (s *SysVInitManager) Enable(name string) error {
-	cmd := exec.Command("chkconfig", name, "on")
-	return cmd.Run()
+func (s *SysVInitManagerFixed) Restart(name string) error {
+	if s.executor == nil {
+		return fmt.Errorf("executor not initialized")
+	}
+	_, err := s.executor.Execute("service", name, "restart")
+	return err
 }
 
-func (s *SysVInitManager) Disable(name string) error {
-	cmd := exec.Command("chkconfig", name, "off")
-	return cmd.Run()
+func (s *SysVInitManagerFixed) Reload(name string) error {
+	if s.executor == nil {
+		return fmt.Errorf("executor not initialized")
+	}
+	_, err := s.executor.Execute("service", name, "reload")
+	return err
 }
 
-func (s *SysVInitManager) IsRunning(name string) (bool, error) {
-	cmd := exec.Command("service", name, "status")
-	err := cmd.Run()
+func (s *SysVInitManagerFixed) Enable(name string) error {
+	if s.executor == nil {
+		return fmt.Errorf("executor not initialized")
+	}
+	_, err := s.executor.Execute("chkconfig", name, "on")
+	return err
+}
+
+func (s *SysVInitManagerFixed) Disable(name string) error {
+	if s.executor == nil {
+		return fmt.Errorf("executor not initialized")
+	}
+	_, err := s.executor.Execute("chkconfig", name, "off")
+	return err
+}
+
+func (s *SysVInitManagerFixed) IsRunning(name string) (bool, error) {
+	if s.executor == nil {
+		return false, fmt.Errorf("executor not initialized")
+	}
+	_, err := s.executor.Execute("service", name, "status")
 	return err == nil, nil
 }
 
-func (s *SysVInitManager) IsEnabled(name string) (bool, error) {
-	cmd := exec.Command("chkconfig", "--list", name)
-	output, err := cmd.Output()
+func (s *SysVInitManagerFixed) IsEnabled(name string) (bool, error) {
+	if s.executor == nil {
+		return false, fmt.Errorf("executor not initialized")
+	}
+	output, err := s.executor.Execute("chkconfig", "--list", name)
 	if err != nil {
 		return false, err
 	}
-	return strings.Contains(string(output), ":on"), nil
+	return strings.Contains(output, ":on"), nil
 }
 
-func (s *SysVInitManager) GetStatus(name string) (ServiceStatus, error) {
+func (s *SysVInitManagerFixed) GetStatus(name string) (ServiceStatus, error) {
 	status := ServiceStatus{Name: name}
 
 	running, _ := s.IsRunning(name)
@@ -421,20 +482,32 @@ func (s *SysVInitManager) GetStatus(name string) (ServiceStatus, error) {
 	return status, nil
 }
 
-// WindowsServiceManager implements service management for Windows
-type WindowsServiceManager struct{}
-
-func (w *WindowsServiceManager) Start(name string) error {
-	cmd := exec.Command("sc", "start", name)
-	return cmd.Run()
+func (s *SysVInitManagerFixed) SetExecutor(executor *executor.CommandExecutor) {
+	s.executor = executor
 }
 
-func (w *WindowsServiceManager) Stop(name string) error {
-	cmd := exec.Command("sc", "stop", name)
-	return cmd.Run()
+// WindowsServiceManagerFixed implements service management for Windows
+type WindowsServiceManagerFixed struct {
+	executor *executor.CommandExecutor
 }
 
-func (w *WindowsServiceManager) Restart(name string) error {
+func (w *WindowsServiceManagerFixed) Start(name string) error {
+	if w.executor == nil {
+		return fmt.Errorf("executor not initialized")
+	}
+	_, err := w.executor.Execute("sc", "start", name)
+	return err
+}
+
+func (w *WindowsServiceManagerFixed) Stop(name string) error {
+	if w.executor == nil {
+		return fmt.Errorf("executor not initialized")
+	}
+	_, err := w.executor.Execute("sc", "stop", name)
+	return err
+}
+
+func (w *WindowsServiceManagerFixed) Restart(name string) error {
 	if err := w.Stop(name); err != nil {
 		return err
 	}
@@ -442,39 +515,49 @@ func (w *WindowsServiceManager) Restart(name string) error {
 	return w.Start(name)
 }
 
-func (w *WindowsServiceManager) Reload(name string) error {
+func (w *WindowsServiceManagerFixed) Reload(name string) error {
 	return w.Restart(name) // Windows doesn't have reload
 }
 
-func (w *WindowsServiceManager) Enable(name string) error {
-	cmd := exec.Command("sc", "config", name, "start=", "auto")
-	return cmd.Run()
+func (w *WindowsServiceManagerFixed) Enable(name string) error {
+	if w.executor == nil {
+		return fmt.Errorf("executor not initialized")
+	}
+	_, err := w.executor.Execute("sc", "config", name, "start=", "auto")
+	return err
 }
 
-func (w *WindowsServiceManager) Disable(name string) error {
-	cmd := exec.Command("sc", "config", name, "start=", "disabled")
-	return cmd.Run()
+func (w *WindowsServiceManagerFixed) Disable(name string) error {
+	if w.executor == nil {
+		return fmt.Errorf("executor not initialized")
+	}
+	_, err := w.executor.Execute("sc", "config", name, "start=", "disabled")
+	return err
 }
 
-func (w *WindowsServiceManager) IsRunning(name string) (bool, error) {
-	cmd := exec.Command("sc", "query", name)
-	output, err := cmd.Output()
+func (w *WindowsServiceManagerFixed) IsRunning(name string) (bool, error) {
+	if w.executor == nil {
+		return false, fmt.Errorf("executor not initialized")
+	}
+	output, err := w.executor.Execute("sc", "query", name)
 	if err != nil {
 		return false, err
 	}
-	return strings.Contains(string(output), "RUNNING"), nil
+	return strings.Contains(output, "RUNNING"), nil
 }
 
-func (w *WindowsServiceManager) IsEnabled(name string) (bool, error) {
-	cmd := exec.Command("sc", "qc", name)
-	output, err := cmd.Output()
+func (w *WindowsServiceManagerFixed) IsEnabled(name string) (bool, error) {
+	if w.executor == nil {
+		return false, fmt.Errorf("executor not initialized")
+	}
+	output, err := w.executor.Execute("sc", "qc", name)
 	if err != nil {
 		return false, err
 	}
-	return strings.Contains(string(output), "AUTO_START"), nil
+	return strings.Contains(output, "AUTO_START"), nil
 }
 
-func (w *WindowsServiceManager) GetStatus(name string) (ServiceStatus, error) {
+func (w *WindowsServiceManagerFixed) GetStatus(name string) (ServiceStatus, error) {
 	status := ServiceStatus{Name: name}
 
 	running, _ := w.IsRunning(name)
@@ -486,61 +569,72 @@ func (w *WindowsServiceManager) GetStatus(name string) (ServiceStatus, error) {
 	return status, nil
 }
 
-// GenericManager implements basic service management
-type GenericManager struct{}
+func (w *WindowsServiceManagerFixed) SetExecutor(executor *executor.CommandExecutor) {
+	w.executor = executor
+}
 
-func (g *GenericManager) Start(name string) error {
+// GenericManagerFixed implements basic service management
+type GenericManagerFixed struct {
+	executor *executor.CommandExecutor
+}
+
+func (g *GenericManagerFixed) Start(name string) error {
 	return fmt.Errorf("service management not supported on this platform")
 }
 
-func (g *GenericManager) Stop(name string) error {
+func (g *GenericManagerFixed) Stop(name string) error {
 	return fmt.Errorf("service management not supported on this platform")
 }
 
-func (g *GenericManager) Restart(name string) error {
+func (g *GenericManagerFixed) Restart(name string) error {
 	return fmt.Errorf("service management not supported on this platform")
 }
 
-func (g *GenericManager) Reload(name string) error {
+func (g *GenericManagerFixed) Reload(name string) error {
 	return fmt.Errorf("service management not supported on this platform")
 }
 
-func (g *GenericManager) Enable(name string) error {
+func (g *GenericManagerFixed) Enable(name string) error {
 	return fmt.Errorf("service management not supported on this platform")
 }
 
-func (g *GenericManager) Disable(name string) error {
+func (g *GenericManagerFixed) Disable(name string) error {
 	return fmt.Errorf("service management not supported on this platform")
 }
 
-func (g *GenericManager) IsRunning(name string) (bool, error) {
+func (g *GenericManagerFixed) IsRunning(name string) (bool, error) {
 	return false, fmt.Errorf("service management not supported on this platform")
 }
 
-func (g *GenericManager) IsEnabled(name string) (bool, error) {
+func (g *GenericManagerFixed) IsEnabled(name string) (bool, error) {
 	return false, fmt.Errorf("service management not supported on this platform")
 }
 
-func (g *GenericManager) GetStatus(name string) (ServiceStatus, error) {
+func (g *GenericManagerFixed) GetStatus(name string) (ServiceStatus, error) {
 	return ServiceStatus{Name: name}, fmt.Errorf("service management not supported on this platform")
 }
 
-// Helper functions for service detection
+func (g *GenericManagerFixed) SetExecutor(executor *executor.CommandExecutor) {
+	g.executor = executor
+}
+
+// failResult creates a failed result
+func (m *ServiceModuleFixed) failResult(result types.TaskResult, message string) (types.TaskResult, error) {
+	result.Success = false
+	result.Failed = true
+	result.Error = message
+	result.Duration = time.Since(result.Timestamp)
+	return result, fmt.Errorf("%s", message)
+}
+
+// hasSystemd checks if systemd is available
 func hasSystemd() bool {
 	_, err := os.Stat("/run/systemd/system")
 	return err == nil
 }
 
+// hasSysVInit checks if SysV init is available
 func hasSysVInit() bool {
 	_, err := os.Stat("/etc/init.d")
 	return err == nil
-}
-
-// failResult creates a failed result
-func (m *ServiceModule) failResult(result types.TaskResult, message string) (types.TaskResult, error) {
-	result.Success = false
-	result.Failed = true
-	result.Error = message
-	result.Duration = time.Since(result.Timestamp)
-	return result, fmt.Errorf(message)
 }

@@ -149,6 +149,13 @@ func (e *CoreEngine) executePlay(play types.Play, host types.Host, checkMode boo
 					changeStatus = " (changed)"
 				}
 				e.logger.Info("Task '%s' on host '%s': SUCCESS%s", task.Name, host.Name, changeStatus)
+
+				// Print debug output if this is a debug module
+				if task.Module == "debug" {
+					if msg, ok := taskResult.Output["msg"]; ok {
+						e.logger.Info("  %v", msg)
+					}
+				}
 			} else {
 				e.logger.Error("Task '%s' on host '%s' failed: %s", task.Name, host.Name, taskResult.Error)
 			}
@@ -176,9 +183,12 @@ func (e *CoreEngine) executeTask(task types.Task, host types.Host, checkMode boo
 		}
 
 		args := make(map[string]interface{})
-		args["name"] = task.Name
 		for key, value := range task.Args {
 			args[key] = value
+		}
+		// Add task name only if not already specified in args
+		if _, exists := args["name"]; !exists {
+			args["name"] = task.Name
 		}
 
 		if err := module.Validate(args); err != nil {

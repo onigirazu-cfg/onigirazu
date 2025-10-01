@@ -1,0 +1,11 @@
+---
+# Test nano package removal
+plays:
+  - name: "Test nano removal"
+    hosts: all
+    tasks:
+      - name: "Remove nano package"
+        module:
+          type: "package"
+          name: "nano"
+          state: "absent"

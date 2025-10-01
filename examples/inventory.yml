@@ -1,53 +1,31 @@
-hosts:
-  - name: localhost
-    address: 127.0.0.1
-    user: root
-    vars:
-      connection: local
-
-  - name: web-server
-    address: 192.168.1.10
-    user: ubuntu
-    key_file: ~/.ssh/id_rsa
-    vars:
-      server_role: web
-
-  - name: db-server
-    address: 192.168.1.11
-    user: ubuntu
-    key_file: ~/.ssh/id_rsa
-    vars:
-      server_role: database
+---
+# Basic inventory configuration
+# Modify this file to match your target hosts
 
 groups:
-  web_servers:
-    name: web_servers
+  localhost:
     hosts:
-      web-server:
-        name: web-server
-        address: 192.168.1.10
-        user: ubuntu
-        key_file: ~/.ssh/id_rsa
+      localhost:
+        ansible_connection: local
+        ansible_host: 127.0.0.1
 
-  db_servers:
-    name: db_servers
+  servers:
     hosts:
-      db-server:
-        name: db-server
-        address: 192.168.1.11
-        user: ubuntu
-        key_file: ~/.ssh/id_rsa
+      localhost:
+        ansible_connection: local
+        ansible_host: 127.0.0.1
 
-  all_servers:
-    name: all_servers
+  development:
     hosts:
-      web-server:
-        name: web-server
-        address: 192.168.1.10
-        user: ubuntu
-        key_file: ~/.ssh/id_rsa
-      db-server:
-        name: db-server
-        address: 192.168.1.11
-        user: ubuntu
-        key_file: ~/.ssh/id_rsa
+      localhost:
+        ansible_connection: local
+        ansible_host: 127.0.0.1
+
+  # production:
+  #   hosts:
+  #     server1:
+  #       ansible_host: 192.168.1.10
+  #       ansible_user: admin
+  #     server2:
+  #       ansible_host: 192.168.1.11
+  #       ansible_user: admin

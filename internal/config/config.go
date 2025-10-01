@@ -64,6 +64,10 @@ type Config struct {
 	VaultEnabled bool   `yaml:"vault_enabled" json:"vault_enabled"`
 	VaultAddress string `yaml:"vault_address" json:"vault_address"`
 	VaultToken   string `yaml:"vault_token" json:"vault_token"`
+
+	// Syntax preferences
+	PreferredModuleSyntax string `yaml:"preferred_module_syntax" json:"preferred_module_syntax"` // "flat", "nested"
+	EnforceModuleSyntax   bool   `yaml:"enforce_module_syntax" json:"enforce_module_syntax"`
 }
 
 // NewConfig creates a new config instance with defaults
@@ -105,9 +109,11 @@ func DefaultConfig() *Config {
 		SSHKeepAlive:       getEnvDuration("ONIGIRAZU_SSH_KEEPALIVE", 60*time.Second),
 		SSHMaxSessions:     getEnvInt("ONIGIRAZU_SSH_MAX_SESSIONS", 10),
 		ConnectionReuse:    getEnvBool("ONIGIRAZU_CONNECTION_REUSE", true),
-		VaultEnabled:       getEnvBool("ONIGIRAZU_VAULT_ENABLED", false),
-		VaultAddress:       getEnvString("ONIGIRAZU_VAULT_ADDRESS", ""),
-		VaultToken:         getEnvString("ONIGIRAZU_VAULT_TOKEN", ""),
+		VaultEnabled:          getEnvBool("ONIGIRAZU_VAULT_ENABLED", false),
+		VaultAddress:          getEnvString("ONIGIRAZU_VAULT_ADDRESS", ""),
+		VaultToken:            getEnvString("ONIGIRAZU_VAULT_TOKEN", ""),
+		PreferredModuleSyntax: getEnvString("ONIGIRAZU_PREFERRED_MODULE_SYNTAX", "nested"),
+		EnforceModuleSyntax:   getEnvBool("ONIGIRAZU_ENFORCE_MODULE_SYNTAX", false),
 	}
 }
 
@@ -331,4 +337,12 @@ func (c *Config) GetVaultAddress() string {
 
 func (c *Config) GetVaultToken() string {
 	return c.VaultToken
+}
+
+func (c *Config) GetPreferredModuleSyntax() string {
+	return c.PreferredModuleSyntax
+}
+
+func (c *Config) IsModuleSyntaxEnforced() bool {
+	return c.EnforceModuleSyntax
 }

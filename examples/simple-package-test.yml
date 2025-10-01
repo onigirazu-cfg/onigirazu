@@ -1,0 +1,40 @@
+---
+# Simple Package Test
+# Test basic package functionality
+
+plays:
+  - name: "Simple Package Test"
+    hosts: all
+    tasks:
+      # Test tree (should be installed)
+      - name: "Test tree command"
+        module:
+          type: "command"
+          command: "tree --version"
+
+      - name: "Test tree on /tmp directory"
+        module:
+          type: "command"
+          command: "tree /tmp -L 1"
+
+      # Test nano (should NOT be available)
+      - name: "Test if nano is available"
+        module:
+          type: "command"
+          command: "which nano || echo 'nano not found - correctly removed'"
+
+      # Test other installed packages
+      - name: "Test jq"
+        module:
+          type: "command"
+          command: "jq --version"
+
+      - name: "Test htop version"
+        module:
+          type: "command"
+          command: "htop --version"
+
+      - name: "Test vim"
+        module:
+          type: "command"
+          command: "vim --version | head -1"

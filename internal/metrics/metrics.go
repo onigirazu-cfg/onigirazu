@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/onigirazu-cfg/onigirazu/internal/bufferpool"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
@@ -706,7 +707,9 @@ func (m *Metrics) RecordTaskResult(module, host, status string, duration time.Du
 func (m *Metrics) GetFormattedSummary() string {
 	summary := m.GetSummary()
 
-	var sb strings.Builder
+	sb := bufferpool.GetStringsBuilder()
+	defer bufferpool.PutStringsBuilder(sb)
+
 	sb.WriteString("=== Onigirazu Metrics Summary ===\n\n")
 
 	// Overview

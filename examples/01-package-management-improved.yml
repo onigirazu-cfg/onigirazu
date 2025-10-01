@@ -1,0 +1,29 @@
+---
+# Package Management Examples (Improved)
+# Demonstrates package installation with lists for better efficiency
+
+plays:
+  - name: "Package Management Demo - Improved"
+    hosts: all
+    tasks:
+      # Install multiple packages in one task
+      - name: "Install essential development tools"
+        module:
+          type: "package"
+          name:
+            - "git"
+            - "curl"
+            - "wget"
+            - "tree"
+            - "jq"
+            - "htop"
+            - "vim"
+          state: "present"
+
+      # Remove unnecessary packages
+      - name: "Remove unnecessary packages"
+        module:
+          type: "package"
+          name:
+            - "nano"
+          state: "absent"

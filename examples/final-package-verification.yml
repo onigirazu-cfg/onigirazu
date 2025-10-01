@@ -1,0 +1,49 @@
+---
+# Final Package Verification
+# Verify the actual state of packages
+
+plays:
+  - name: "Package Verification"
+    hosts: all
+    tasks:
+      # Test installed packages (should work)
+      - name: "Verify tree is working"
+        module:
+          type: "command"
+          command: "tree --version"
+
+      - name: "Verify jq is working"
+        module:
+          type: "command"
+          command: "jq --version"
+
+      - name: "Verify htop is working"
+        module:
+          type: "command"
+          command: "htop --version"
+
+      - name: "Verify vim is working"
+        module:
+          type: "command"
+          command: "vim --version | head -1"
+
+      - name: "Verify git is working"
+        module:
+          type: "command"
+          command: "git --version"
+
+      - name: "Verify curl is working"
+        module:
+          type: "command"
+          command: "curl --version | head -1"
+
+      - name: "Verify wget is working"
+        module:
+          type: "command"
+          command: "wget --version | head -1"
+
+      # Test tree functionality
+      - name: "Demonstrate tree functionality"
+        module:
+          type: "command"
+          command: "tree /usr/bin -L 1 | head -10"

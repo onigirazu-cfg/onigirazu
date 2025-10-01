@@ -1,0 +1,71 @@
+---
+plays:
+  - name: Test set_fact and register functionality
+    hosts: localhost
+    gather_facts: false
+    tasks:
+      # Test 1: Simple set_fact
+      - name: Set a simple fact
+        module: set_fact
+        args:
+          my_variable: "Hello from set_fact!"
+          another_var: 42
+
+      - name: Debug simple fact
+        module: debug
+        args:
+          msg: "my_variable = {{ my_variable }}, another_var = {{ another_var }}"
+
+      # Test 2: Register from shell command
+      - name: Run shell command and register result
+        module: shell
+        args:
+          cmd: echo "Dynamic value from shell"
+        register: shell_result
+
+      - name: Debug registered variable
+        module: debug
+        args:
+          msg: "Shell output: {{ shell_result.stdout }}"
+
+      # Test 3: Set fact based on registered variable
+      - name: Set fact from registered variable
+        module: set_fact
+        args:
+          processed_output: "Processed: {{ shell_result.stdout }}"
+
+      - name: Debug processed fact
+        module: debug
+        args:
+          msg: "{{ processed_output }}"
+
+      # Test 4: Multiple facts at once
+      - name: Set multiple facts
+        module: set_fact
+        args:
+          fact1: "First fact"
+          fact2: "Second fact"
+          fact3: 123
+          fact4: true
+
+      - name: Debug all facts
+        module: debug
+        args:
+          msg: |
+            All facts:
+            - fact1: {{ fact1 }}
+            - fact2: {{ fact2 }}
+            - fact3: {{ fact3 }}
+            - fact4: {{ fact4 }}
+
+      # Test 5: Register with command module
+      - name: Run command and register
+        module: command
+        args:
+          cmd: date +%Y-%m-%d
+        register: date_result
+
+      - name: Debug date result
+        module: debug
+        args:
+          msg: "Today's date: {{ date_result.stdout }}"

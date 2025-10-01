@@ -1,0 +1,37 @@
+---
+# System Information Check
+# Check what type of system and package manager we're dealing with
+
+plays:
+  - name: "System Information"
+    hosts: all
+    tasks:
+      - name: "Check OS release"
+        module:
+          type: "command"
+          command: "cat /etc/os-release"
+
+      - name: "Check if yum is available"
+        module:
+          type: "command"
+          command: "which yum"
+
+      - name: "Check if dnf is available"
+        module:
+          type: "command"
+          command: "which dnf"
+
+      - name: "Check if apt is available"
+        module:
+          type: "command"
+          command: "which apt"
+
+      - name: "Check tree command output"
+        module:
+          type: "command"
+          command: "tree --version"
+
+      - name: "Check nano command output"
+        module:
+          type: "command"
+          command: "nano --version"

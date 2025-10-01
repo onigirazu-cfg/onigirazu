@@ -1,0 +1,10 @@
+---
+plays:
+  - name: "Localhost Test"
+    hosts: localhost
+    tasks:
+      - name: "Test command"
+        module:
+          type: "command"
+          cmd: "echo"
+          args: ["Hello World"]

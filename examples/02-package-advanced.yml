@@ -1,0 +1,60 @@
+---
+# Advanced Package Management Examples
+# Demonstrates various package module features
+
+plays:
+  - name: "Advanced Package Management"
+    hosts: all
+    tasks:
+      # Single package installation
+      - name: "Install single package (git)"
+        module:
+          type: "package"
+          name: "git"
+          state: "present"
+
+      # Multiple packages in one task
+      - name: "Install CLI utilities"
+        module:
+          type: "package"
+          name:
+            - "curl"
+            - "wget"
+            - "tree"
+            - "jq"
+          state: "present"
+
+      # System monitoring tools
+      - name: "Install monitoring tools"
+        module:
+          type: "package"
+          name:
+            - "htop"
+            - "iotop"
+            - "nethogs"
+          state: "present"
+
+      # Text editors
+      - name: "Install text editors"
+        module:
+          type: "package"
+          name:
+            - "vim"
+            - "neovim"
+          state: "present"
+
+      # Remove unnecessary packages
+      - name: "Remove unnecessary editors"
+        module:
+          type: "package"
+          name:
+            - "nano"
+            - "emacs"
+          state: "absent"
+
+      # Ensure package is at latest version
+      - name: "Ensure git is latest"
+        module:
+          type: "package"
+          name: "git"
+          state: "latest"

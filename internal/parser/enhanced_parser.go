@@ -3,11 +3,11 @@ package parser
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"path/filepath"
 	"strings"
 
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 
 	"github.com/onigirazu-cfg/onigirazu/internal/interfaces"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
@@ -34,20 +34,18 @@ func (p *EnhancedParser) ParsePlaybook(ctx context.Context, filePath string) (*t
 	p.logger.Debug("Parsing playbook: %s", filePath)
 
 	// Read file content
-	content, err := ioutil.ReadFile(filePath)
+	content, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read playbook file %s: %w", filePath, err)
 	}
 
-	// Render templates in the content
-	renderedContent, err := p.templateEngine.Render(ctx, string(content), p.variables)
-	if err != nil {
-		return nil, fmt.Errorf("failed to render templates in playbook %s: %w", filePath, err)
-	}
+	// NOTE: We do NOT render templates at parse time!
+	// Template rendering happens during task execution when variables are available.
+	// Rendering here would replace {{ variable }} with <no value> before execution.
 
-	// Parse YAML
+	// Parse YAML directly without template rendering
 	var playbook types.Playbook
-	if err := yaml.Unmarshal([]byte(renderedContent), &playbook); err != nil {
+	if err := yaml.Unmarshal(content, &playbook); err != nil {
 		return nil, fmt.Errorf("failed to parse YAML in playbook %s: %w", filePath, err)
 	}
 
@@ -73,7 +71,7 @@ func (p *EnhancedParser) ParsePlaybook(ctx context.Context, filePath string) (*t
 func (p *EnhancedParser) ParseInventory(ctx context.Context, filePath string) (*types.Inventory, error) {
 	p.logger.Debug("Parsing inventory: %s", filePath)
 
-	content, err := ioutil.ReadFile(filePath)
+	content, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read inventory file %s: %w", filePath, err)
 	}
@@ -303,7 +301,7 @@ func (p *EnhancedParser) processPlayIncludes(ctx context.Context, play *types.Pl
 func (p *EnhancedParser) loadIncludedTasks(ctx context.Context, includePath, baseDir string) ([]types.Task, error) {
 	fullPath := filepath.Join(baseDir, includePath)
 
-	content, err := ioutil.ReadFile(fullPath)
+	content, err := os.ReadFile(fullPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read included file %s: %w", fullPath, err)
 	}
@@ -353,7 +351,7 @@ func (p *EnhancedParser) ValidateFile(filePath string) error {
 	}
 
 	// Check if file exists and is readable
-	content, err := ioutil.ReadFile(filePath)
+	content, err := os.ReadFile(filePath)
 	if err != nil {
 		return fmt.Errorf("cannot read file %s: %w", filePath, err)
 	}
