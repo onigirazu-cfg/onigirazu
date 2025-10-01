@@ -1,0 +1,115 @@
+---
+plays:
+  - name: Test Fetch Module
+    hosts: localhost
+    gather_facts: false
+    tasks:
+      # Setup: Create test files on "remote" host (localhost for testing)
+      - name: Create test directory
+        module: file
+        args:
+          path: /tmp/fetch-test-remote
+          state: directory
+          mode: "0755"
+
+      - name: Create test file 1
+        module: shell
+        args:
+          cmd: echo "This is test file 1 from remote host" > /tmp/fetch-test-remote/test1.txt
+
+      - name: Create test file 2
+        module: shell
+        args:
+          cmd: echo "This is test file 2 from remote host" > /tmp/fetch-test-remote/test2.txt
+
+      - name: Create subdirectory with file
+        module: shell
+        args:
+          cmd: mkdir -p /tmp/fetch-test-remote/subdir && echo "File in subdirectory" > /tmp/fetch-test-remote/subdir/nested.txt
+
+      # Test 1: Fetch file with hierarchical structure (default)
+      - name: Fetch file with hierarchical structure
+        module: fetch
+        args:
+          src: /tmp/fetch-test-remote/test1.txt
+          dest: /tmp/fetch-test-local/
+
+      # Test 2: Fetch file with flat structure
+      - name: Fetch file with flat structure
+        module: fetch
+        args:
+          src: /tmp/fetch-test-remote/test2.txt
+          dest: /tmp/fetch-test-local-flat/
+          flat: true
+
+      # Test 3: Fetch nested file
+      - name: Fetch nested file
+        module: fetch
+        args:
+          src: /tmp/fetch-test-remote/subdir/nested.txt
+          dest: /tmp/fetch-test-local/
+
+      # Test 4: Fetch non-existent file (should fail)
+      - name: Try to fetch non-existent file (should fail)
+        module: fetch
+        args:
+          src: /tmp/fetch-test-remote/nonexistent.txt
+          dest: /tmp/fetch-test-local/
+        ignore_errors: true
+
+      # Test 5: Fetch non-existent file with fail_on_missing=false
+      - name: Fetch non-existent file with fail_on_missing=false
+        module: fetch
+        args:
+          src: /tmp/fetch-test-remote/another-nonexistent.txt
+          dest: /tmp/fetch-test-local/
+          fail_on_missing: false
+
+      # Test 6: Fetch same file again (should detect no change needed)
+      - name: Fetch same file again (idempotent check)
+        module: fetch
+        args:
+          src: /tmp/fetch-test-remote/test1.txt
+          dest: /tmp/fetch-test-local/
+
+      # Verification: Check fetched files
+      - name: Verify hierarchical fetch
+        module: stat
+        args:
+          path: /tmp/fetch-test-local/localhost/tmp/fetch-test-remote/test1.txt
+        register: hierarchical_result
+
+      - name: Display hierarchical result
+        module: debug
+        args:
+          msg: "Hierarchical file exists: {{ hierarchical_result.stat.exists }}"
+
+      - name: Verify flat fetch
+        module: stat
+        args:
+          path: /tmp/fetch-test-local-flat/test2.txt
+        register: flat_result
+
+      - name: Display flat result
+        module: debug
+        args:
+          msg: "Flat file exists: {{ flat_result.stat.exists }}"
+
+      # Cleanup
+      - name: Cleanup remote test directory
+        module: file
+        args:
+          path: /tmp/fetch-test-remote
+          state: absent
+
+      - name: Cleanup local test directory 1
+        module: file
+        args:
+          path: /tmp/fetch-test-local
+          state: absent
+
+      - name: Cleanup local test directory 2
+        module: file
+        args:
+          path: /tmp/fetch-test-local-flat
+          state: absent

@@ -21,6 +21,7 @@ func NewRegistry() *Registry {
 	// Register built-in modules
 	registry.RegisterModule(NewFileModule())
 	registry.RegisterModule(NewCopyModule())
+	registry.RegisterModule(NewFetchModule())
 	registry.RegisterModule(NewServiceModule())
 	registry.RegisterModule(NewPackageModule())
 	registry.RegisterModule(NewEnhancedPackageModule()) // Enhanced package module
