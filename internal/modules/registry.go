@@ -33,6 +33,7 @@ func NewRegistry() *Registry {
 	registry.RegisterModule(NewDebugModule())
 	registry.RegisterModule(NewSetFactModule())
 	registry.RegisterModule(NewStatModule())
+	registry.RegisterModule(NewLineinfileModule())
 
 	return registry
 }
