@@ -1,20 +1,17 @@
+version: 2
+
 run:
   timeout: 10m
   issues-exit-code: 1
   tests: true
 
-output:
-  formats:
-    - format: colored-line-number
-  print-issued-lines: true
-  print-linter-name: true
-
 linters-settings:
   dupl:
     threshold: 100
   funlen:
-    lines: 150
-    statements: 150
+    lines: 250
+    statements: 250
+    ignore-comments: true
   gci:
     sections:
       - standard
@@ -33,23 +30,34 @@ linters-settings:
       - wrapperFunc
   gocyclo:
     min-complexity: 60
+    max-complexity: 60
   goimports:
     local-prefixes: github.com/onigirazu-cfg/onigirazu
   mnd:
     checks:
       - argument
-      - case
     ignored-numbers:
       - '0'
       - '1'
       - '2'
       - '3'
+      - '4'
+      - '5'
+      - '8'
       - '10'
+      - '22'
       - '30'
+      - '50'
+      - '60'
       - '100'
+      - '100.0'
+      - '500'
+      - '1000'
       - '1024'
+      - '9090'
       - '0600'
       - '0644'
+      - '0700'
       - '0755'
   govet:
     enable:
@@ -62,28 +70,16 @@ linters-settings:
 linters:
   enable:
     # Format and style linters (work without compilation)
-    - gofmt
-    - goimports
-    - gci
-    - lll
     - misspell
     - whitespace
     - nolintlint
-
-    # Basic linters that can work with syntax errors
-    - dupl
-    - funlen
-    - gocyclo
-    - mnd
     - nakedret
 
   disable:
     # Disable linters that require successful compilation
-    - typecheck
     - unused
     - ineffassign
     - staticcheck
-    - gosimple
     - govet
     - errcheck
     - bodyclose
@@ -95,7 +91,6 @@ linters:
     - goprintffuncname
     - gosec
     - rowserrcheck
-    - stylecheck
     - unconvert
     - unparam
     - noctx

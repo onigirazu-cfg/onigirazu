@@ -5,9 +5,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+
+	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
 // MockEnhancedPackageManager is a mock implementation for testing

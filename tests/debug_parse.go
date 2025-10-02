@@ -2,8 +2,10 @@ package tests
 
 import (
 	"fmt"
-	"github.com/onigirazu-cfg/onigirazu/pkg/types"
+
 	"gopkg.in/yaml.v3"
+
+	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
 func debug_parseMain() {

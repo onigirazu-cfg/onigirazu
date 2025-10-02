@@ -7,9 +7,10 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/crypto/ssh"
+
 	sshpkg "github.com/onigirazu-cfg/onigirazu/internal/ssh"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
-	"golang.org/x/crypto/ssh"
 )
 
 // CommandExecutor handles command execution on local or remote hosts
@@ -148,7 +149,7 @@ func (e *CommandExecutor) executeSSHWithContext(ctx context.Context, command str
 	case <-ctx.Done():
 		// Пытаемся корректно завершить сессию
 		session.Signal(ssh.SIGTERM)
-		return "", fmt.Errorf("command execution cancelled: %w", ctx.Err())
+		return "", fmt.Errorf("command execution canceled: %w", ctx.Err())
 	}
 }
 

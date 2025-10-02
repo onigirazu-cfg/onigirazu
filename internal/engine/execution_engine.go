@@ -247,7 +247,6 @@ func (e *ExecutionEngine) executePlay(ctx context.Context, play *types.Play) (*t
 // executeTaskList executes a list of tasks
 func (e *ExecutionEngine) executeTaskList(ctx context.Context, tasks []types.Task, hosts []types.Host,
 	variables map[string]interface{}, playResult *types.PlayResult) error {
-
 	for i, task := range tasks {
 		e.logger.Debug("Executing task %d/%d: %s", i+1, len(tasks), task.Name)
 
@@ -275,7 +274,6 @@ func (e *ExecutionEngine) executeTaskList(ctx context.Context, tasks []types.Tas
 // executeTask executes a single task on multiple hosts
 func (e *ExecutionEngine) executeTask(ctx context.Context, task *types.Task, hosts []types.Host,
 	variables map[string]interface{}, playResult *types.PlayResult) error {
-
 	// Handle loops
 	if task.Loop != nil {
 		return e.executeTaskWithLoop(ctx, task, hosts, variables, playResult)
@@ -292,7 +290,6 @@ func (e *ExecutionEngine) executeTask(ctx context.Context, task *types.Task, hos
 // executeTaskSerial executes a task on hosts serially
 func (e *ExecutionEngine) executeTaskSerial(ctx context.Context, task *types.Task, hosts []types.Host,
 	variables map[string]interface{}, playResult *types.PlayResult) error {
-
 	for _, host := range hosts {
 		if err := e.executeTaskOnHost(ctx, task, &host, variables, playResult); err != nil {
 			if !task.IgnoreErrors {
@@ -308,7 +305,6 @@ func (e *ExecutionEngine) executeTaskSerial(ctx context.Context, task *types.Tas
 // executeTaskParallel executes a task on hosts in parallel
 func (e *ExecutionEngine) executeTaskParallel(ctx context.Context, task *types.Task, hosts []types.Host,
 	variables map[string]interface{}, playResult *types.PlayResult) error {
-
 	var wg sync.WaitGroup
 	var mutex sync.Mutex
 	var firstError error
@@ -341,7 +337,6 @@ func (e *ExecutionEngine) executeTaskParallel(ctx context.Context, task *types.T
 // executeTaskOnHost executes a task on a single host
 func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Task, host *types.Host,
 	variables map[string]interface{}, playResult *types.PlayResult) error {
-
 	e.logger.TaskStart(task.Name, host.Name)
 
 	// Merge variables in order of precedence (later overrides earlier):
@@ -578,7 +573,6 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 // executeTaskWithLoop executes a task with loop
 func (e *ExecutionEngine) executeTaskWithLoop(ctx context.Context, task *types.Task, hosts []types.Host,
 	variables map[string]interface{}, playResult *types.PlayResult) error {
-
 	// Get loop items
 	items, err := e.getLoopItems(task.Loop, variables)
 	if err != nil {
@@ -825,7 +819,6 @@ func (e *ExecutionEngine) GetMetrics() *metrics.Metrics {
 // executeTaskListWithRetry executes a list of tasks with enhanced retry logic
 func (e *ExecutionEngine) executeTaskListWithRetry(ctx context.Context, tasks []types.Task, hosts []types.Host,
 	variables map[string]interface{}, playResult *types.PlayResult) error {
-
 	for i, task := range tasks {
 		e.logger.Debug("Executing task %d/%d: %s", i+1, len(tasks), task.Name)
 
@@ -858,7 +851,6 @@ func (e *ExecutionEngine) executeTaskListWithRetry(ctx context.Context, tasks []
 // executeTaskWithRetryLogic executes a single task with retry logic
 func (e *ExecutionEngine) executeTaskWithRetryLogic(ctx context.Context, task *types.Task, hosts []types.Host,
 	variables map[string]interface{}, playResult *types.PlayResult) error {
-
 	maxRetries := task.Retries
 	if maxRetries <= 0 {
 		maxRetries = 1 // At least one attempt
@@ -914,7 +906,6 @@ func (e *ExecutionEngine) executeTaskWithRetryLogic(ctx context.Context, task *t
 // executeTaskWithTimeout executes a task with timeout handling
 func (e *ExecutionEngine) executeTaskWithTimeout(ctx context.Context, task *types.Task, host *types.Host,
 	variables map[string]interface{}) (types.TaskResult, error) {
-
 	// Create context with timeout if specified
 	taskCtx := ctx
 	if task.Timeout > 0 {
@@ -960,7 +951,6 @@ func (e *ExecutionEngine) executeTaskWithTimeout(ctx context.Context, task *type
 // executeTaskOnHostInternal is the internal implementation for task execution
 func (e *ExecutionEngine) executeTaskOnHostInternal(ctx context.Context, task *types.Task, host *types.Host,
 	variables map[string]interface{}) (types.TaskResult, error) {
-
 	startTime := time.Now()
 
 	// Get module

@@ -6,9 +6,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
 func TestNew(t *testing.T) {

@@ -8,9 +8,10 @@ import (
 	"os"
 	"path/filepath"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/onigirazu-cfg/onigirazu/pkg/formatter"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
-	"gopkg.in/yaml.v3"
 )
 
 func main() {

@@ -9,9 +9,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/onigirazu-cfg/onigirazu/internal/bufferpool"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+
+	"github.com/onigirazu-cfg/onigirazu/internal/bufferpool"
 )
 
 // Metrics holds execution metrics

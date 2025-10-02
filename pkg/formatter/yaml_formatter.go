@@ -6,8 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 	"gopkg.in/yaml.v3"
+
+	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
 // YAMLFormatter provides custom YAML formatting with proper indentation

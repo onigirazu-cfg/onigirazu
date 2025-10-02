@@ -110,7 +110,6 @@ func createPackageManager(exec *executor.CommandExecutor, hostname string) Packa
 
 // Execute manages system packages
 func (m *PackageModule) Execute(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
-
 	startTime := time.Now()
 	result := types.TaskResult{
 		TaskName:  "package",
