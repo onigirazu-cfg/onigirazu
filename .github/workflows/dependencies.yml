@@ -24,7 +24,7 @@ env:
 
 jobs:
   update-dependencies:
-    runs-on: [self-hosted, linux]
+    runs-on: ubuntu-latest
 
     steps:
     - name: Checkout
@@ -157,7 +157,7 @@ jobs:
         echo "No pull request created as there are no updates available."
 
   security-audit:
-    runs-on: [self-hosted, linux]
+    runs-on: ubuntu-latest
     needs: update-dependencies
 
     steps:

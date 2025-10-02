@@ -19,7 +19,7 @@ env:
 
 jobs:
   security-scan:
-    runs-on: [self-hosted, linux]
+    runs-on: ubuntu-latest
 
     steps:
     - name: Checkout code
@@ -88,7 +88,7 @@ jobs:
         go list -json -deps ./... | docker run --rm -i sonatypecommunity/nancy:latest sleuth
 
   codeql:
-    runs-on: [self-hosted, linux]
+    runs-on: ubuntu-latest
     permissions:
       actions: read
       contents: read
@@ -124,7 +124,7 @@ jobs:
         category: "/language:${{matrix.language}}"
 
   dependency-review:
-    runs-on: [self-hosted, linux]
+    runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
 
     steps:
