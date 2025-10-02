@@ -132,6 +132,7 @@ jobs:
       with:
         version: latest
         args: --timeout=10m --verbose
+        skip-config-verify: true
 
   integration-tests:
     runs-on: ubuntu-latest

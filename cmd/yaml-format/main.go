@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -35,7 +34,7 @@ func main() {
 	}
 
 	// Read input file
-	data, err := ioutil.ReadFile(*inputFile)
+	data, err := os.ReadFile(*inputFile)
 	if err != nil {
 		log.Fatalf("Failed to read input file: %v", err)
 	}

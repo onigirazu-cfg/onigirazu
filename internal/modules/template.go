@@ -3,7 +3,6 @@ package modules
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -127,7 +126,7 @@ func (m *TemplateModule) Execute(ctx context.Context, host types.Host, args map[
 
 	if _, err := os.Stat(dest); err == nil {
 		// File exists, read current content
-		originalContent, err = ioutil.ReadFile(dest)
+		originalContent, err = os.ReadFile(dest)
 		if err != nil {
 			result.Error = fmt.Sprintf("failed to read existing file: %v", err)
 			result.Duration = time.Since(startTime)
@@ -153,7 +152,7 @@ func (m *TemplateModule) Execute(ctx context.Context, host types.Host, args map[
 	// Create backup if requested and file exists
 	if backup && len(originalContent) > 0 {
 		backupPath := dest + ".backup." + time.Now().Format("20060102-150405")
-		if err := ioutil.WriteFile(backupPath, originalContent, 0644); err != nil {
+		if err := os.WriteFile(backupPath, originalContent, 0644); err != nil {
 			result.Error = fmt.Sprintf("failed to create backup: %v", err)
 			result.Duration = time.Since(startTime)
 			return result, fmt.Errorf("%s", result.Error)

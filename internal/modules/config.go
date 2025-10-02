@@ -274,12 +274,12 @@ func (m *ConfigModule) executeRestore(ctx context.Context, result types.TaskResu
 	}
 
 	// Copy backup to original location
-	data, err := ioutil.ReadFile(backupPath)
+	data, err := os.ReadFile(backupPath)
 	if err != nil {
 		return m.failResult(result, fmt.Sprintf("failed to read backup: %v", err))
 	}
 
-	if err := ioutil.WriteFile(path, data, 0644); err != nil {
+	if err := os.WriteFile(path, data, 0644); err != nil {
 		return m.failResult(result, fmt.Sprintf("failed to restore config: %v", err))
 	}
 
