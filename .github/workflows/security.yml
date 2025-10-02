@@ -35,11 +35,12 @@ jobs:
 
     - name: Run Gosec Security Scanner
       run: |
-        go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest
+        go install github.com/securego/gosec/v2/cmd/gosec@latest
         gosec -fmt sarif -out gosec.sarif -stdout -verbose=text ./...
 
     - name: Upload Gosec SARIF file
       if: always()
+      continue-on-error: true
       uses: github/codeql-action/upload-sarif@v3
       with:
         sarif_file: gosec.sarif
@@ -56,6 +57,7 @@ jobs:
 
     - name: Upload Trivy filesystem scan results
       if: always()
+      continue-on-error: true
       uses: github/codeql-action/upload-sarif@v3
       with:
         sarif_file: 'trivy-fs-results.sarif'
@@ -72,6 +74,7 @@ jobs:
 
     - name: Upload Trivy dependencies scan results
       if: always()
+      continue-on-error: true
       uses: github/codeql-action/upload-sarif@v3
       with:
         sarif_file: 'trivy-deps-results.sarif'
