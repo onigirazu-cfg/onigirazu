@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Onigirazu - README</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            line-height: 1.6;
+            color: #333;
+        }
+        h1, h2, h3, h4, h5, h6 {
+            margin-top: 24px;
+            margin-bottom: 16px;
+            font-weight: 600;
+            line-height: 1.25;
+        }
+        h1 { font-size: 2em; border-bottom: 1px solid #eaecef; padding-bottom: 0.3em; }
+        h2 { font-size: 1.5em; border-bottom: 1px solid #eaecef; padding-bottom: 0.3em; }
+        code {
+            background-color: #f6f8fa;
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+            font-size: 85%;
+        }
+        pre {
+            background-color: #f6f8fa;
+            padding: 16px;
+            border-radius: 6px;
+            overflow: auto;
+        }
+        pre code {
+            background-color: transparent;
+            padding: 0;
+        }
+        a { color: #0366d6; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        blockquote {
+            padding: 0 1em;
+            color: #6a737d;
+            border-left: 0.25em solid #dfe2e5;
+            margin: 0;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 16px 0;
+        }
+        table th, table td {
+            padding: 6px 13px;
+            border: 1px solid #dfe2e5;
+        }
+        table tr:nth-child(2n) {
+            background-color: #f6f8fa;
+        }
+        img { max-width: 100%; }
+        .back-link {
+            margin-bottom: 20px;
+            display: inline-block;
+        }
+    </style>
+</head>
+<body>
+    <a href="index.html" class="back-link">← Back to Documentation</a>
+    <h1>Onigirazu</h1>
+<p>Onigirazu is a modern, high-performance configuration management tool written in Go, inspired by Ansible. It provides a simple yet powerful way to automate infrastructure configuration, application deployment, and system administration tasks.</p>
+<h2>Features</h2>
+<h3>Core Features</h3>
+<ul>
+<li><strong>YAML-based Playbooks</strong>: Human-readable configuration files with improved syntax</li>
+<li><strong>Agentless Architecture</strong>: No need to install agents on target hosts</li>
+<li><strong>SSH-based Communication</strong>: Secure remote execution</li>
+<li><strong>Parallel Execution</strong>: Concurrent task execution with configurable limits</li>
+<li><strong>Idempotent Operations</strong>: Safe to run multiple times</li>
+<li><strong>State Management</strong>: Track changes and maintain system state</li>
+<li><strong>Template Engine</strong>: Jinja2-like templating for dynamic configurations</li>
+<li><strong>Flexible Syntax</strong>: Multiple syntax options including nested module syntax for better organization</li>
+</ul>
+<h3>Advanced Features</h3>
+<ul>
+<li><strong>Enhanced Logging</strong>: Structured logging with multiple output formats</li>
+<li><strong>Progress Tracking</strong>: Real-time execution progress with visual indicators</li>
+<li><strong>Caching System</strong>: Intelligent caching for improved performance</li>
+<li><strong>Retry Logic</strong>: Configurable retry mechanisms with exponential backoff</li>
+<li><strong>Conditional Execution</strong>: Skip tasks based on conditions</li>
+<li><strong>Loop Support</strong>: Iterate over lists and ranges</li>
+<li><strong>Module System</strong>: Extensible architecture with built-in modules</li>
+<li><strong>Inventory Management</strong>: Flexible host and group management</li>
+<li><strong>Variable Interpolation</strong>: Dynamic variable substitution</li>
+<li><strong>Error Handling</strong>: Comprehensive error handling and reporting</li>
+</ul>
+<h2>Installation</h2>
+<h3>📦 Pre-built Binaries (Recommended)</h3>
+<p>Download the latest release for your platform:</p>
+<pre class="codehilite"><code class="language-bash"># Linux x86_64
+curl -LO https://github.com/onigirazu-cfg/onigirazu/releases/latest/download/onigirazu_Linux_x86_64.tar.gz
+tar -xzf onigirazu_Linux_x86_64.tar.gz
+sudo mv onigirazu /usr/local/bin/
+
+# macOS (Intel)
+curl -LO https://github.com/onigirazu-cfg/onigirazu/releases/latest/download/onigirazu_Darwin_x86_64.tar.gz
+tar -xzf onigirazu_Darwin_x86_64.tar.gz
+sudo mv onigirazu /usr/local/bin/
+
+# macOS (Apple Silicon)
+curl -LO https://github.com/onigirazu-cfg/onigirazu/releases/latest/download/onigirazu_Darwin_arm64.tar.gz
+tar -xzf onigirazu_Darwin_arm64.tar.gz
+sudo mv onigirazu /usr/local/bin/
+</code></pre>
+
+<p><strong>Available for</strong>: Linux (amd64, arm64, arm), macOS (amd64, arm64), Windows (amd64), FreeBSD (amd64)</p>
+<h3>🍺 Homebrew</h3>
+<pre class="codehilite"><code class="language-bash">brew tap onigirazu-cfg/tap
+brew install onigirazu
+</code></pre>
+
+<h3>🐳 Docker</h3>
+<pre class="codehilite"><code class="language-bash"># Docker Hub
+docker run --rm onigirazu/onigirazu:latest --version
+
+# GitHub Container Registry
+docker run --rm ghcr.io/onigirazu-cfg/onigirazu:latest --version
+</code></pre>
+
+<h3>📋 Package Managers</h3>
+<ul>
+<li><strong>Debian/Ubuntu</strong>: Download <code>.deb</code> from <a href="https://github.com/onigirazu-cfg/onigirazu/releases">releases</a></li>
+<li><strong>Red Hat/CentOS/Fedora</strong>: Download <code>.rpm</code> from <a href="https://github.com/onigirazu-cfg/onigirazu/releases">releases</a></li>
+<li><strong>Alpine Linux</strong>: Download <code>.apk</code> from <a href="https://github.com/onigirazu-cfg/onigirazu/releases">releases</a></li>
+<li><strong>Arch Linux</strong>: Download <code>.pkg.tar.xz</code> from <a href="https://github.com/onigirazu-cfg/onigirazu/releases">releases</a></li>
+</ul>
+<h3>🔧 From Source</h3>
+<pre class="codehilite"><code class="language-bash"># Clone the repository
+git clone https://github.com/onigirazu-cfg/onigirazu.git
+cd onigirazu
+
+# Build the binary
+make build
+
+# Install (optional)
+make install
+</code></pre>
+
+<h3>Using Go</h3>
+<pre class="codehilite"><code class="language-bash">go install github.com/onigirazu-cfg/onigirazu/cmd/onigirazu@latest
+</code></pre>
+
+<p>📚 <strong>For detailed installation instructions, see <a href="INSTALLATION.md">INSTALLATION.md</a></strong></p>
+<h2>Quick Start</h2>
+<h3>1. Create an Inventory File</h3>
+<p>Create <code>inventory.yaml</code>:</p>
+<pre class="codehilite"><code class="language-yaml">groups:
+  webservers:
+    hosts:
+      web1:
+        address: &quot;192.168.1.10&quot;
+        user: &quot;ubuntu&quot;
+      web2:
+        address: &quot;192.168.1.11&quot;
+        user: &quot;ubuntu&quot;
+    vars:
+      http_port: 80
+</code></pre>
+
+<h3>2. Create a Playbook</h3>
+<p>Create <code>playbook.yaml</code>:</p>
+<pre class="codehilite"><code class="language-yaml">vars:
+  app_name: &quot;myapp&quot;
+
+plays:
+  - name: &quot;Install and configure web servers&quot;
+    hosts:
+      - &quot;webservers&quot;
+
+    tasks:
+      - name: &quot;Install Nginx&quot;
+        module:
+          type: &quot;package&quot;
+          name: nginx
+          state: present
+
+      - name: &quot;Start Nginx service&quot;
+        module:
+          type: &quot;service&quot;
+          name: nginx
+          state: started
+          enabled: true
+</code></pre>
+
+<h3>3. Run the Playbook</h3>
+<pre class="codehilite"><code class="language-bash">onigirazu -playbook playbook.yaml -inventory inventory.yaml
+</code></pre>
+
+<h2>✨ Improved YAML Syntax</h2>
+<p>Onigirazu features a streamlined YAML syntax that eliminates verbose <code>args:</code> blocks and supports unquoted strings:</p>
+<h3>Before (Old Syntax)</h3>
+<pre class="codehilite"><code class="language-yaml">- name: &quot;List files in current directory&quot;
+  module: &quot;command&quot;
+  args:
+    command: &quot;ls -la&quot;
+    shell: true
+</code></pre>
+
+<h3>After (New Syntax)</h3>
+<pre class="codehilite"><code class="language-yaml">- name: &quot;List files in current directory&quot;
+  module: &quot;command&quot;
+  command: ls -la
+  shell: true
+</code></pre>
+
+<h3>Key Benefits</h3>
+<ul>
+<li><strong>Less typing</strong>: No need for <code>args:</code> wrapper</li>
+<li><strong>Cleaner look</strong>: Direct module arguments at task level</li>
+<li><strong>Unquoted strings</strong>: Simple values don't need quotes</li>
+<li><strong>Backward compatible</strong>: Old syntax still works</li>
+<li><strong>Mixed syntax</strong>: Use both approaches in same playbook</li>
+</ul>
+<p>📖 <strong>For complete syntax guide and examples, see <a href="docs/IMPROVED_SYNTAX.md">docs/IMPROVED_SYNTAX.md</a></strong></p>
+<h2>Configuration</h2>
+<p>Onigirazu can be configured using a YAML configuration file:</p>
+<pre class="codehilite"><code class="language-yaml"># onigirazu.yaml
+max_concurrency: 10
+default_timeout: 300s
+log_level: &quot;info&quot;
+log_format: &quot;text&quot;
+enable_caching: true
+cache_ttl: 300s
+</code></pre>
+
+<p>Use the configuration file:</p>
+<pre class="codehilite"><code class="language-bash">onigirazu -config onigirazu.yaml -playbook playbook.yaml -inventory inventory.yaml
+</code></pre>
+
+<h2>Command Line Options</h2>
+<pre class="codehilite"><code class="language-bash">Usage: onigirazu -playbook &lt;path&gt; [options]
+
+Options:
+  -playbook string
+        Path to playbook file
+  -inventory string
+        Path to inventory file
+  -config string
+        Path to configuration file
+  -verbose
+        Verbose output (sets log level to debug)
+  -check
+        Check mode (dry-run)
+  -state string
+        State file for saving state (default &quot;.onigirazu-state&quot;)
+  -log-level string
+        Log level (debug, info, warn, error) (default &quot;info&quot;)
+  -log-format string
+        Log format (text, json) (default &quot;text&quot;)
+  -max-workers int
+        Maximum number of worker threads (default 10)
+  -timeout duration
+        Execution timeout (default 30m0s)
+</code></pre>
+
+<h2>Modules</h2>
+<p>Onigirazu includes several built-in modules:</p>
+<h3>Core Modules</h3>
+<ul>
+<li><strong>file</strong>: File and directory operations</li>
+<li><strong>package</strong>: Package management</li>
+<li><strong>service</strong>: Service management</li>
+<li><strong>command</strong>: Execute commands</li>
+<li><strong>shell</strong>: Execute shell commands</li>
+<li><strong>user</strong>: User management</li>
+<li><strong>group</strong>: Group management</li>
+</ul>
+<h3>Extended Modules</h3>
+<ul>
+<li><strong>template</strong>: Template file processing</li>
+<li><strong>git</strong>: Git repository operations</li>
+</ul>
+<h3>Module Examples</h3>
+<h4>File Module</h4>
+<pre class="codehilite"><code class="language-yaml">- name: &quot;Create directory&quot;
+  module: &quot;file&quot;
+  path: /opt/myapp
+  state: directory
+  owner: myuser
+  group: mygroup
+  mode: &quot;0755&quot;
+</code></pre>
+
+<h4>Package Module</h4>
+<pre class="codehilite"><code class="language-yaml">- name: &quot;Install packages&quot;
+  module: &quot;package&quot;
+  name: nginx
+  state: present
+</code></pre>
+
+<h4>Service Module</h4>
+<pre class="codehilite"><code class="language-yaml">- name: &quot;Start service&quot;
+  module: &quot;service&quot;
+  name: nginx
+  state: started
+  enabled: true
+</code></pre>
+
+<h4>Template Module</h4>
+<pre class="codehilite"><code class="language-yaml">- name: &quot;Generate configuration&quot;
+  module: &quot;template&quot;
+  src: templates/nginx.conf.j2
+  dest: /etc/nginx/nginx.conf
+  owner: root
+  group: root
+  mode: &quot;0644&quot;
+  backup: true
+</code></pre>
+
+<h4>Git Module</h4>
+<pre class="codehilite"><code class="language-yaml">- name: &quot;Clone repository&quot;
+  module: &quot;git&quot;
+  repo: https://github.com/example/myapp.git
+  dest: /opt/myapp
+  version: main
+  force: true
+</code></pre>
+
+<h2>Advanced Features</h2>
+<h3>Loops</h3>
+<p>Execute tasks multiple times with different values:</p>
+<pre class="codehilite"><code class="language-yaml">- name: &quot;Install multiple packages&quot;
+  module: &quot;package&quot;
+  name: &quot;{{ item }}&quot;
+  state: present
+  loop:
+    items:
+      - curl
+      - wget
+      - git
+</code></pre>
+
+<h3>Conditionals</h3>
+<p>Skip tasks based on conditions:</p>
+<pre class="codehilite"><code class="language-yaml">- name: &quot;Install Docker&quot;
+  module: &quot;package&quot;
+  name: docker.io
+  state: present
+  when: &quot;{{ ansible_facts.os_family == 'Debian' }}&quot;
+</code></pre>
+
+<h3>Variables</h3>
+<p>Use variables for dynamic configurations:</p>
+<pre class="codehilite"><code class="language-yaml">vars:
+  app_name: &quot;myapp&quot;
+  app_version: &quot;1.0.0&quot;
+
+tasks:
+  - name: &quot;Create app directory&quot;
+    module: &quot;file&quot;
+    path: &quot;/opt/{{ app_name }}&quot;
+    state: directory
+</code></pre>
+
+<h3>Templates</h3>
+<p>Use Jinja2-like templates for configuration files:</p>
+<pre class="codehilite"><code class="language-yaml"># In playbook
+- name: &quot;Generate config&quot;
+  module: &quot;template&quot;
+  src: app.conf.j2
+  dest: /etc/myapp/app.conf
+</code></pre>
+
+<pre class="codehilite"><code class="language-jinja2"># In templates/app.conf.j2
+server_name = {{ app_name }}
+version = {{ app_version }}
+port = {{ http_port | default(8080) }}
+
+{% if ssl_enabled %}
+ssl_cert = /etc/ssl/certs/{{ app_name }}.crt
+ssl_key = /etc/ssl/private/{{ app_name }}.key
+{% endif %}
+</code></pre>
+
+<h3>Error Handling</h3>
+<p>Control error handling behavior:</p>
+<pre class="codehilite"><code class="language-yaml">- name: &quot;Optional task&quot;
+  module: &quot;command&quot;
+  cmd: some-command
+  ignore_errors: true
+
+- name: &quot;Task with retries&quot;
+  module: &quot;command&quot;
+  cmd: flaky-command
+  retries: 3
+  retry_delay: 5
+</code></pre>
+
+<h2>Architecture</h2>
+<p>Onigirazu follows a modular, interface-driven architecture:</p>
+<h3>Core Components</h3>
+<ul>
+<li><strong>Execution Engine</strong>: Orchestrates playbook execution</li>
+<li><strong>Module Registry</strong>: Manages available modules</li>
+<li><strong>Inventory Manager</strong>: Handles host and group management</li>
+<li><strong>Template Engine</strong>: Processes templates and variables</li>
+<li><strong>State Manager</strong>: Tracks system state and changes</li>
+<li><strong>Progress Tracker</strong>: Monitors execution progress</li>
+<li><strong>Cache Manager</strong>: Provides intelligent caching</li>
+<li><strong>Logger</strong>: Structured logging with multiple formats</li>
+</ul>
+<h3>Interfaces</h3>
+<p>All components implement well-defined interfaces, making the system:</p>
+<ul>
+<li><strong>Testable</strong>: Easy to mock and unit test</li>
+<li><strong>Extensible</strong>: Simple to add new modules and features</li>
+<li><strong>Maintainable</strong>: Clear separation of concerns</li>
+<li><strong>Configurable</strong>: Flexible dependency injection</li>
+</ul>
+<h2>Development</h2>
+<h3>Building from Source</h3>
+<pre class="codehilite"><code class="language-bash"># Clone repository
+git clone https://github.com/onigirazu-cfg/onigirazu.git
+cd onigirazu
+
+# Install dependencies
+go mod download
+
+# Run tests
+make test
+
+# Build binary
+make build
+
+# Run with example
+./bin/onigirazu -playbook examples/playbook.yaml -inventory examples/inventory.yaml
+</code></pre>
+
+<h3>Project Structure</h3>
+<pre class="codehilite"><code>onigirazu/
+├── cmd/onigirazu/           # Main application
+├── pkg/types/               # Core types and structures
+├── internal/
+│   ├── config/             # Configuration management
+│   ├── logger/             # Enhanced logging
+│   ├── cache/              # Caching system
+│   ├── template/           # Template engine
+│   ├── state/              # State management
+│   ├── execution/          # Parallel execution
+│   ├── progress/           # Progress tracking
+│   ├── modules/            # Built-in modules
+│   ├── parser/             # Playbook parsing
+│   ├── inventory/          # Inventory management
+│   ├── engine/             # Execution engine
+│   └── interfaces/         # Interface definitions
+├── examples/               # Example configurations
+├── templates/              # Template examples
+└── docs/                   # Documentation
+</code></pre>
+
+<h3>Adding New Modules</h3>
+<ol>
+<li>Implement the <code>Module</code> interface:</li>
+</ol>
+<pre class="codehilite"><code class="language-go">type MyModule struct{}
+
+func (m *MyModule) GetName() string {
+    return &quot;mymodule&quot;
+}
+
+func (m *MyModule) Execute(host types.Host, args map[string]interface{}) (types.TaskResult, error) {
+    // Module implementation
+    return types.TaskResult{
+        Changed: true,
+        Output:  &quot;Task completed successfully&quot;,
+    }, nil
+}
+</code></pre>
+
+<ol>
+<li>Register the module:</li>
+</ol>
+<pre class="codehilite"><code class="language-go">registry.Register(NewMyModule())
+</code></pre>
+
+<h2>📚 Documentation</h2>
+<p>Onigirazu provides comprehensive documentation to help you get started and master the tool.</p>
+<h3>API Documentation</h3>
+<ul>
+<li><strong><a href="docs/api/index.html">HTML Documentation</a></strong> - Beautiful, interactive API documentation</li>
+<li><strong><a href="docs/api/README.md">API Overview</a></strong> - Documentation structure and guidelines</li>
+<li><strong><a href="docs/api/">Package Documentation</a></strong> - Detailed package-level documentation</li>
+</ul>
+<h3>Quick Documentation Commands</h3>
+<pre class="codehilite"><code class="language-bash"># Generate API documentation
+make docs-generate
+
+# Open HTML documentation in browser
+make docs-open
+
+# Start interactive documentation server
+make docs-serve
+
+# View documentation info
+make docs
+</code></pre>
+
+<h3>Available Documentation</h3>
+<table>
+<thead>
+<tr>
+<th>Package</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>pkg/types</code></td>
+<td>Core types and interfaces</td>
+</tr>
+<tr>
+<td><code>pkg/utils</code></td>
+<td>Utility functions and helpers</td>
+</tr>
+<tr>
+<td><code>internal/config</code></td>
+<td>Configuration management</td>
+</tr>
+<tr>
+<td><code>internal/core</code></td>
+<td>Core execution engine</td>
+</tr>
+<tr>
+<td><code>internal/modules</code></td>
+<td>Built-in modules (command, file, template, etc.)</td>
+</tr>
+<tr>
+<td><code>internal/parser</code></td>
+<td>YAML parsing and validation</td>
+</tr>
+<tr>
+<td><code>internal/workflow</code></td>
+<td>Workflow orchestration</td>
+</tr>
+</tbody>
+</table>
+<h3>Documentation Features</h3>
+<ul>
+<li>🎨 <strong>Beautiful HTML</strong> - Modern, responsive design</li>
+<li>🔍 <strong>Searchable</strong> - Easy navigation and package index</li>
+<li>📱 <strong>Mobile-friendly</strong> - Works on all devices</li>
+<li>🚀 <strong>Auto-generated</strong> - Always up-to-date with code</li>
+<li>🌐 <strong>Interactive server</strong> - Browse with <code>pkgsite</code></li>
+</ul>
+<h2>Contributing</h2>
+<ol>
+<li>Fork the repository</li>
+<li>Create a feature branch</li>
+<li>Make your changes</li>
+<li>Add tests</li>
+<li>Run tests and linting</li>
+<li>Submit a pull request</li>
+</ol>
+<h2>License</h2>
+<p>This project is licensed under the MIT License - see the <a href="LICENSE">LICENSE</a> file for details.</p>
+<h2>Acknowledgments</h2>
+<ul>
+<li>Inspired by Ansible's simplicity and power</li>
+<li>Built with Go's performance and concurrency in mind</li>
+<li>Designed for modern infrastructure automation needs</li>
+</ul>
+<h2>Support</h2>
+<ul>
+<li><strong>📖 Documentation</strong>: <a href="docs/api/index.html">API Documentation</a> | <a href="docs/README.md">Documentation Guide</a></li>
+<li><strong>🐛 Issues</strong>: <a href="https://github.com/onigirazu-cfg/onigirazu/issues">GitHub Issues</a></li>
+<li><strong>💬 Discussions</strong>: <a href="https://github.com/onigirazu-cfg/onigirazu/discussions">GitHub Discussions</a></li>
+<li><strong>📋 Contributing</strong>: <a href="CONTRIBUTING.md">Contributing Guide</a></li>
+</ul>
+<hr />
+<p><strong>Onigirazu</strong> - Modern configuration management made simple.</p>
+</body>
+</html>
