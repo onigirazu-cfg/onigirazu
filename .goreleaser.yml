@@ -19,27 +19,43 @@ builds:
       - windows
       - darwin
       - freebsd
+      - openbsd
+      - netbsd
     goarch:
       - amd64
       - arm64
       - arm
+      - "386"
     goarm:
-      - 6
-      - 7
+      - "6"
+      - "7"
     ignore:
+      # Windows: only amd64 and 386
       - goos: windows
         goarch: arm64
       - goos: windows
         goarch: arm
+      # FreeBSD: only amd64 and 386
       - goos: freebsd
         goarch: arm
       - goos: freebsd
+        goarch: arm64
+      # OpenBSD: only amd64 and 386
+      - goos: openbsd
+        goarch: arm
+      - goos: openbsd
+        goarch: arm64
+      # NetBSD: only amd64 and 386
+      - goos: netbsd
+        goarch: arm
+      - goos: netbsd
         goarch: arm64
     ldflags:
       - -s -w
       - -X github.com/onigirazu-cfg/onigirazu/internal/version.Version={{.Version}}
       - -X github.com/onigirazu-cfg/onigirazu/internal/version.Commit={{.Commit}}
       - -X github.com/onigirazu-cfg/onigirazu/internal/version.Date={{.Date}}
+      - -X github.com/onigirazu-cfg/onigirazu/internal/version.BuildUser={{.Env.USER}}
     flags:
       - -trimpath
     mod_timestamp: '{{ .CommitTimestamp }}'
@@ -128,16 +144,35 @@ release:
   header: |
     ## Onigirazu {{ .Tag }}
 
-    Welcome to this new release of Onigirazu!
+    Welcome to this new release of Onigirazu - a modern configuration management tool!
+
+    ### 🎯 What's New
+    Check the changelog below for all changes in this release.
+
+    ### 📦 Supported Platforms
+    This release includes pre-built binaries for:
+    - **Linux**: x86_64, ARM64, ARMv6, ARMv7, i386
+    - **macOS**: x86_64 (Intel), ARM64 (Apple Silicon)
+    - **Windows**: x86_64, i386
+    - **FreeBSD**: x86_64, i386
+    - **OpenBSD**: x86_64, i386
+    - **NetBSD**: x86_64, i386
 
   footer: |
-    ## Docker Images
+    ## 🐳 Docker Images
 
-    Docker images are available on:
-    - Docker Hub: `docker pull onigirazu/onigirazu:{{ .Tag }}`
-    - GitHub Container Registry: `docker pull ghcr.io/onigirazu-cfg/onigirazu:{{ .Tag }}`
+    Multi-architecture Docker images are available:
+    ```bash
+    # Docker Hub
+    docker pull onigirazu/onigirazu:{{ .Tag }}
 
-    ## Installation
+    # GitHub Container Registry
+    docker pull ghcr.io/onigirazu-cfg/onigirazu:{{ .Tag }}
+    ```
+
+    Supported architectures: `linux/amd64`, `linux/arm64`
+
+    ## 📥 Installation
 
     ### Using Go
     ```bash
@@ -149,8 +184,60 @@ release:
     brew install onigirazu-cfg/tap/onigirazu
     ```
 
+    ### Using Package Managers
+
+    #### Debian/Ubuntu (DEB)
+    ```bash
+    wget https://github.com/onigirazu-cfg/onigirazu/releases/download/{{ .Tag }}/onigirazu_{{ .Tag }}_linux_amd64.deb
+    sudo dpkg -i onigirazu_{{ .Tag }}_linux_amd64.deb
+    ```
+
+    #### RHEL/CentOS/Fedora (RPM)
+    ```bash
+    wget https://github.com/onigirazu-cfg/onigirazu/releases/download/{{ .Tag }}/onigirazu_{{ .Tag }}_linux_amd64.rpm
+    sudo rpm -i onigirazu_{{ .Tag }}_linux_amd64.rpm
+    ```
+
+    #### Arch Linux
+    ```bash
+    wget https://github.com/onigirazu-cfg/onigirazu/releases/download/{{ .Tag }}/onigirazu_{{ .Tag }}_linux_amd64.pkg.tar.zst
+    sudo pacman -U onigirazu_{{ .Tag }}_linux_amd64.pkg.tar.zst
+    ```
+
+    #### Alpine Linux (APK)
+    ```bash
+    wget https://github.com/onigirazu-cfg/onigirazu/releases/download/{{ .Tag }}/onigirazu_{{ .Tag }}_linux_amd64.apk
+    sudo apk add --allow-untrusted onigirazu_{{ .Tag }}_linux_amd64.apk
+    ```
+
     ### Manual Installation
-    Download the appropriate binary for your platform from the assets below.
+    1. Download the appropriate archive for your platform from the assets below
+    2. Extract the binary: `tar -xzf onigirazu_*.tar.gz` (or `unzip` for Windows)
+    3. Move to your PATH: `sudo mv onigirazu /usr/local/bin/` (Linux/macOS)
+    4. Verify installation: `onigirazu --version`
+
+    ### Quick Start
+    ```bash
+    # Check version
+    onigirazu --version
+
+    # Run a playbook
+    onigirazu run playbook.yml -i inventory.yml
+
+    # Get help
+    onigirazu --help
+    ```
+
+    ## 📚 Documentation
+    - [Installation Guide](https://github.com/onigirazu-cfg/onigirazu/blob/main/docs/installation.md)
+    - [Getting Started](https://github.com/onigirazu-cfg/onigirazu/blob/main/docs/getting-started.md)
+    - [Module Reference](https://github.com/onigirazu-cfg/onigirazu/blob/main/docs/modules.md)
+
+    ## 🔐 Verification
+    All binaries are checksummed. Verify your download:
+    ```bash
+    sha256sum -c checksums.txt
+    ```
 
 brews:
   - name: onigirazu

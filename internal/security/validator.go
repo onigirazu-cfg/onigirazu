@@ -61,6 +61,8 @@ const (
 	RuleTypePath    RuleType = "path"
 	RuleTypeNetwork RuleType = "network"
 	RuleTypeContent RuleType = "content"
+	RuleTypeUser    RuleType = "user"
+	RuleTypeGroup   RuleType = "group"
 	RuleTypeCustom  RuleType = "custom"
 )
 
@@ -504,9 +506,17 @@ func (sv *SecurityValidator) validateKeyFile(keyFile string) error {
 }
 
 func (sv *SecurityValidator) validateFilePath(path string) error {
-	// Check for blocked directories
+	// Check for path traversal patterns in original path
+	if strings.Contains(path, "..") {
+		return fmt.Errorf("path traversal detected")
+	}
+
+	// Clean the path to resolve any traversal attempts
+	cleanPath := filepath.Clean(path)
+
+	// Check cleaned path against blocked directories
 	for _, blocked := range sv.config.BlockedDirectories {
-		if strings.HasPrefix(path, blocked) {
+		if strings.HasPrefix(cleanPath, blocked) {
 			return fmt.Errorf("path is in blocked directory: %s", blocked)
 		}
 	}
@@ -515,7 +525,7 @@ func (sv *SecurityValidator) validateFilePath(path string) error {
 	if len(sv.config.AllowedDirectories) > 0 {
 		allowed := false
 		for _, allowedDir := range sv.config.AllowedDirectories {
-			if strings.HasPrefix(path, allowedDir) {
+			if strings.HasPrefix(cleanPath, allowedDir) {
 				allowed = true
 				break
 			}
@@ -523,12 +533,6 @@ func (sv *SecurityValidator) validateFilePath(path string) error {
 		if !allowed {
 			return fmt.Errorf("path is not in allowed directories")
 		}
-	}
-
-	// Check for path traversal
-	cleanPath := filepath.Clean(path)
-	if strings.Contains(cleanPath, "..") {
-		return fmt.Errorf("path traversal detected")
 	}
 
 	return nil
@@ -553,10 +557,20 @@ func (sv *SecurityValidator) validateTaskArgs(task types.Task, result *Validatio
 	// Module-specific argument validation
 	switch task.Module {
 	case "shell", "command":
+		// Check both "cmd" and "command" arguments
+		var cmdStr string
 		if cmd, exists := task.Args["cmd"]; exists {
-			if cmdStr, ok := cmd.(string); ok {
-				sv.validateCommand(cmdStr, result)
+			if str, ok := cmd.(string); ok {
+				cmdStr = str
 			}
+		}
+		if cmd, exists := task.Args["command"]; exists {
+			if str, ok := cmd.(string); ok {
+				cmdStr = str
+			}
+		}
+		if cmdStr != "" {
+			sv.validateCommand(cmdStr, result)
 		}
 	case "copy", "template":
 		if dest, exists := task.Args["dest"]; exists {
@@ -566,6 +580,90 @@ func (sv *SecurityValidator) validateTaskArgs(task types.Task, result *Validatio
 						fmt.Sprintf("Destination path validation failed: %v", err),
 						destStr, "Use a valid destination path")
 				}
+			}
+		}
+	case "file":
+		// Validate file path
+		if path, exists := task.Args["path"]; exists {
+			if pathStr, ok := path.(string); ok {
+				if err := sv.validateFilePath(pathStr); err != nil {
+					result.addViolation("invalid_file_path", RuleTypePath, SeverityHigh,
+						fmt.Sprintf("File path validation failed: %v", err),
+						pathStr, "Use a path within allowed directories")
+				}
+			}
+		}
+		// Validate content size
+		if content, exists := task.Args["content"]; exists {
+			if contentStr, ok := content.(string); ok {
+				contentSize := int64(len(contentStr))
+				if contentSize > sv.config.MaxFileSize {
+					result.addViolation("content_too_large", RuleTypeFile, SeverityHigh,
+						fmt.Sprintf("Content size %d bytes exceeds maximum allowed size %d bytes", contentSize, sv.config.MaxFileSize),
+						contentSize, fmt.Sprintf("Reduce content size to less than %d bytes", sv.config.MaxFileSize))
+				}
+			}
+		}
+	case "user":
+		// Check for system user modifications
+		if name, exists := task.Args["name"]; exists {
+			if nameStr, ok := name.(string); ok {
+				systemUsers := []string{"root", "daemon", "bin", "sys", "sync", "games", "man", "lp", "mail", "news", "uucp", "proxy", "www-data", "backup", "list", "irc", "gnats", "nobody"}
+				for _, sysUser := range systemUsers {
+					if nameStr == sysUser {
+						result.addViolation("system_user_modification", RuleTypeUser, SeverityCritical,
+							fmt.Sprintf("Attempting to modify system user: %s", nameStr),
+							nameStr, "Do not modify system users")
+					}
+				}
+			}
+		}
+		// Check for UID 0 (root equivalent)
+		if uid, exists := task.Args["uid"]; exists {
+			var uidInt int
+			switch v := uid.(type) {
+			case int:
+				uidInt = v
+			case float64:
+				uidInt = int(v)
+			case string:
+				fmt.Sscanf(v, "%d", &uidInt)
+			}
+			if uidInt == 0 {
+				result.addViolation("root_uid_assignment", RuleTypeUser, SeverityCritical,
+					"Attempting to create user with UID 0 (root equivalent)",
+					uid, "Use a non-zero UID for non-root users")
+			}
+		}
+	case "group":
+		// Check for system group modifications
+		if name, exists := task.Args["name"]; exists {
+			if nameStr, ok := name.(string); ok {
+				systemGroups := []string{"root", "daemon", "bin", "sys", "adm", "tty", "disk", "lp", "mail", "news", "uucp", "man", "proxy", "kmem", "dialout", "fax", "voice", "cdrom", "floppy", "tape", "sudo", "audio", "dip", "www-data", "backup"}
+				for _, sysGroup := range systemGroups {
+					if nameStr == sysGroup {
+						result.addViolation("system_group_modification", RuleTypeGroup, SeverityCritical,
+							fmt.Sprintf("Attempting to modify system group: %s", nameStr),
+							nameStr, "Do not modify system groups")
+					}
+				}
+			}
+		}
+		// Check for GID 0 (root equivalent)
+		if gid, exists := task.Args["gid"]; exists {
+			var gidInt int
+			switch v := gid.(type) {
+			case int:
+				gidInt = v
+			case float64:
+				gidInt = int(v)
+			case string:
+				fmt.Sscanf(v, "%d", &gidInt)
+			}
+			if gidInt == 0 {
+				result.addViolation("root_gid_assignment", RuleTypeGroup, SeverityCritical,
+					"Attempting to create group with GID 0 (root equivalent)",
+					gid, "Use a non-zero GID for non-root groups")
 			}
 		}
 	}
@@ -581,26 +679,90 @@ func (sv *SecurityValidator) validateCommand(command string, result *ValidationR
 		}
 	}
 
-	// Check for command injection patterns
-	dangerousPatterns := []string{";", "&", "|", ">", "<", "$", "`"}
-	for _, pattern := range dangerousPatterns {
+	// Check for command substitution patterns
+	if strings.Contains(command, "$(") || strings.Contains(command, "`") {
+		result.addViolation("command_substitution", RuleTypeCommand, SeverityCritical,
+			"Command contains command substitution pattern",
+			command, "Remove command substitution or use separate tasks")
+		return
+	}
+
+	// Check for pipe to shell interpreters
+	pipeToShellPatterns := []string{"| sh", "| bash", "| zsh", "| ksh", "| csh", "| tcsh", "|sh", "|bash", "|zsh"}
+	for _, pattern := range pipeToShellPatterns {
 		if strings.Contains(command, pattern) {
-			result.addWarning("potential_command_injection",
-				fmt.Sprintf("Command contains potentially dangerous character: %s", pattern),
-				command, "Review command for security implications")
+			result.addViolation("pipe_to_shell", RuleTypeCommand, SeverityCritical,
+				"Command pipes output to shell interpreter",
+				command, "Avoid piping to shell interpreters")
+			return
 		}
+	}
+
+	// Count command chaining operators to detect complex chaining
+	semicolonCount := strings.Count(command, ";")
+	andCount := strings.Count(command, "&&")
+	orCount := strings.Count(command, "||")
+	pipeCount := strings.Count(command, "|")
+
+	// Calculate total operator count (excluding simple cases)
+	totalOperators := semicolonCount + andCount + orCount
+
+	// Complex chaining: multiple different operators or semicolons (always dangerous)
+	if semicolonCount > 0 {
+		result.addViolation("command_chaining_semicolon", RuleTypeCommand, SeverityCritical,
+			"Command uses semicolon for command chaining",
+			command, "Use separate tasks instead of semicolon chaining")
+		return
+	}
+
+	// Complex chaining: mixing && and || operators, or more than 2 operators total
+	hasAnd := andCount > 0
+	hasOr := orCount > 0
+	hasPipe := pipeCount > 0
+
+	operatorTypes := 0
+	if hasAnd {
+		operatorTypes++
+	}
+	if hasOr {
+		operatorTypes++
+	}
+	if hasPipe {
+		operatorTypes++
+	}
+
+	// Allow simple chaining (single operator type, max 2 operators)
+	// Block complex chaining (multiple operator types or more than 2 operators)
+	if operatorTypes > 1 || totalOperators > 2 {
+		result.addViolation("complex_command_chaining", RuleTypeCommand, SeverityHigh,
+			"Command uses complex chaining with multiple operator types or too many operators",
+			command, "Simplify command or use separate tasks")
+		return
 	}
 }
 
 func (sv *SecurityValidator) checkDangerousPatterns(task types.Task, result *ValidationResult) {
-	// Check task name for suspicious patterns
-	suspiciousPatterns := []string{"rm -rf", "dd if=", ":(){ :|:& };:", "curl", "wget"}
+	// Check task name and arguments for dangerous patterns
+	criticalPatterns := []string{"rm -rf", "dd if=", ":(){ :|:& };:", "mkfs", "fdisk"}
+	suspiciousPatterns := []string{"curl", "wget"}
 
 	taskStr := fmt.Sprintf("%s %v", task.Name, task.Args)
+	taskStrLower := strings.ToLower(taskStr)
+
+	// Critical patterns should be violations
+	for _, pattern := range criticalPatterns {
+		if strings.Contains(taskStrLower, strings.ToLower(pattern)) {
+			result.addViolation("dangerous_command_pattern", RuleTypeCommand, SeverityCritical,
+				fmt.Sprintf("Task contains dangerous pattern: %s", pattern),
+				pattern, "Remove dangerous command or use safer alternatives")
+		}
+	}
+
+	// Suspicious patterns should be warnings
 	for _, pattern := range suspiciousPatterns {
-		if strings.Contains(strings.ToLower(taskStr), strings.ToLower(pattern)) {
+		if strings.Contains(taskStrLower, strings.ToLower(pattern)) {
 			result.addWarning("suspicious_pattern",
-				fmt.Sprintf("Task contains potentially dangerous pattern: %s", pattern),
+				fmt.Sprintf("Task contains potentially suspicious pattern: %s", pattern),
 				pattern, "Review task for security implications")
 		}
 	}

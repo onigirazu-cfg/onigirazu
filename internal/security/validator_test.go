@@ -381,11 +381,11 @@ func TestSecurityValidator_ValidateVariables(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := validator.ValidateVariables(tt.variables)
+			result := validator.ValidateVariables(tt.variables)
 			if tt.wantErr {
-				assert.Error(t, err)
+				assert.False(t, result.Valid)
 			} else {
-				assert.NoError(t, err)
+				assert.True(t, result.Valid)
 			}
 		})
 	}
