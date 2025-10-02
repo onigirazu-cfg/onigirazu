@@ -24,11 +24,11 @@ jobs:
 
     - name: Check licenses
       run: |
-        go-licenses check ./...
+        go-licenses check ./... --ignore "std"
 
     - name: Generate license report
       run: |
-        go-licenses report ./... > licenses.txt
+        go-licenses report ./... --ignore "std" > licenses.txt
 
     - name: Upload license report
       uses: actions/upload-artifact@v4
