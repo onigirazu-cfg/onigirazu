@@ -101,7 +101,6 @@ jobs:
 
     - name: Install cosign
       uses: sigstore/cosign-installer@v3
-      if: ${{ secrets.COSIGN_PRIVATE_KEY != '' }}
 
     - name: Run GoReleaser
       uses: goreleaser/goreleaser-action@v6
