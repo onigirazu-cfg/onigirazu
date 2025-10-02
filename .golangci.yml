@@ -1,150 +1,153 @@
 version: "2"
-
 run:
-  timeout: 10m
   issues-exit-code: 1
   tests: true
-
-linters-settings:
-  dupl:
-    threshold: 100
-  funlen:
-    lines: 250
-    statements: 250
-    ignore-comments: true
-  gci:
-    sections:
-      - standard
-      - default
-      - prefix(github.com/onigirazu-cfg/onigirazu)
-  gocritic:
-    enabled-tags:
-      - diagnostic
-      - performance
-      - style
-    disabled-checks:
-      - dupImport
-      - ifElseChain
-      - octalLiteral
-      - whyNoLint
-      - wrapperFunc
-  gocyclo:
-    min-complexity: 60
-  goimports:
-    local-prefixes: github.com/onigirazu-cfg/onigirazu
-  mnd:
-    checks:
-      - argument
-    ignored-numbers:
-      - '0'
-      - '1'
-      - '2'
-      - '3'
-      - '4'
-      - '5'
-      - '8'
-      - '10'
-      - '22'
-      - '30'
-      - '50'
-      - '60'
-      - '100'
-      - '100.0'
-      - '500'
-      - '1000'
-      - '1024'
-      - '9090'
-      - '0600'
-      - '0644'
-      - '0700'
-      - '0755'
-  govet:
-    enable:
-      - shadow
-  lll:
-    line-length: 250
-  misspell:
-    locale: US
-
 linters:
   enable:
-    # Format and style linters (work without compilation)
     - misspell
-    - whitespace
-    - nolintlint
     - nakedret
-
+    - nolintlint
+    - whitespace
   disable:
-    # Disable linters that require successful compilation
-    - unused
-    - ineffassign
-    - staticcheck
-    - govet
-    - errcheck
     - bodyclose
+    - copyloopvar
     - depguard
     - dogsled
-    - copyloopvar
+    - errcheck
     - gochecknoinits
+    - goconst
     - gocritic
     - goprintffuncname
     - gosec
+    - govet
+    - ineffassign
+    - noctx
     - rowserrcheck
+    - staticcheck
     - unconvert
     - unparam
-    - noctx
-    # Disable goconst - too strict for string literals
-    - goconst
-
+    - unused
+  settings:
+    dupl:
+      threshold: 100
+    funlen:
+      lines: 250
+      statements: 250
+      ignore-comments: true
+    gocritic:
+      disabled-checks:
+        - dupImport
+        - ifElseChain
+        - octalLiteral
+        - whyNoLint
+        - wrapperFunc
+      enabled-tags:
+        - diagnostic
+        - performance
+        - style
+    gocyclo:
+      min-complexity: 60
+    govet:
+      enable:
+        - shadow
+    lll:
+      line-length: 250
+    misspell:
+      locale: US
+    mnd:
+      checks:
+        - argument
+      ignored-numbers:
+        - "0"
+        - "1"
+        - "2"
+        - "3"
+        - "4"
+        - "5"
+        - "8"
+        - "10"
+        - "22"
+        - "30"
+        - "50"
+        - "60"
+        - "100"
+        - "100.0"
+        - "500"
+        - "1000"
+        - "1024"
+        - "9090"
+        - "0600"
+        - "0644"
+        - "0700"
+        - "0755"
+  exclusions:
+    generated: lax
+    rules:
+      - linters:
+          - funlen
+          - goconst
+          - mnd
+        path: _test\.go
+      - linters:
+          - funlen
+          - gocyclo
+          - mnd
+        path: cmd/
+      - linters:
+          - deadcode
+          - unused
+        path: tests/
+      - linters:
+          - lll
+        source: '^//go:generate '
+      - linters:
+          - staticcheck
+        text: strings.Title has been deprecated
+      - linters:
+          - staticcheck
+        text: io/ioutil.*has been deprecated
+      - linters:
+          - staticcheck
+        text: SA1019
+      - linters:
+          - unused
+        text: is unused
+      - linters:
+          - unused
+        text: U1000
+      - linters:
+          - goconst
+          - unused
+        path: (tests/|cmd/)
+      - path: (.+)\.go$
+        text: declaration of "(err|ctx)" shadows declaration at
+      - path: (.+)\.go$
+        text: 'shadow: declaration of "err" shadows declaration'
+    paths:
+      - .*\.pb\.go$
+      - .*_generated\.go$
+      - vendor
+      - tests
+      - third_party$
+      - builtin$
+      - examples$
 issues:
-  exclude-files:
-    - ".*\\.pb\\.go$"
-    - ".*_generated\\.go$"
-  exclude-dirs:
-    - vendor
-    - tests
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - mnd
-        - funlen
-        - goconst
-    - path: cmd/
-      linters:
-        - mnd
-        - funlen
-        - gocyclo
-    - path: tests/
-      linters:
-        - unused
-        - deadcode
-    - linters:
-        - lll
-      source: "^//go:generate "
-    - text: "strings.Title has been deprecated"
-      linters:
-        - staticcheck
-    - text: "io/ioutil.*has been deprecated"
-      linters:
-        - staticcheck
-    - text: "SA1019"
-      linters:
-        - staticcheck
-    - text: "is unused"
-      linters:
-        - unused
-    - text: "U1000"
-      linters:
-        - unused
-    - path: "(tests/|cmd/)"
-      linters:
-        - unused
-        - goconst
-
-  exclude-use-default: false
-  exclude:
-    - 'declaration of "(err|ctx)" shadows declaration at'
-    - 'shadow: declaration of "err" shadows declaration'
   max-issues-per-linter: 50
   max-same-issues: 10
   new: false
+formatters:
+  settings:
+    gci:
+      sections:
+        - standard
+        - default
+        - prefix(github.com/onigirazu-cfg/onigirazu)
+    goimports:
+      local-prefixes:
+        - github.com/onigirazu-cfg/onigirazu
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
