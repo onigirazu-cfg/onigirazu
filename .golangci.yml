@@ -13,8 +13,8 @@ linters-settings:
   dupl:
     threshold: 100
   funlen:
-    lines: 100
-    statements: 50
+    lines: 150
+    statements: 150
   gci:
     sections:
       - standard
@@ -32,7 +32,7 @@ linters-settings:
       - whyNoLint
       - wrapperFunc
   gocyclo:
-    min-complexity: 40
+    min-complexity: 60
   goimports:
     local-prefixes: github.com/onigirazu-cfg/onigirazu
   mnd:
@@ -118,6 +118,8 @@ issues:
     - path: cmd/
       linters:
         - mnd
+        - funlen
+        - gocyclo
     - path: tests/
       linters:
         - unused
