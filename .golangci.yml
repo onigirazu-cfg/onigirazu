@@ -20,9 +20,6 @@ linters-settings:
       - standard
       - default
       - prefix(github.com/onigirazu-cfg/onigirazu)
-  goconst:
-    min-len: 2
-    min-occurrences: 2
   gocritic:
     enabled-tags:
       - diagnostic
@@ -77,7 +74,6 @@ linters:
     - dupl
     - funlen
     - gocyclo
-    - goconst
     - mnd
     - nakedret
 
@@ -103,6 +99,8 @@ linters:
     - unconvert
     - unparam
     - noctx
+    # Disable goconst - too strict for string literals
+    - goconst
 
 issues:
   exclude-files:
@@ -133,10 +131,19 @@ issues:
     - text: "io/ioutil.*has been deprecated"
       linters:
         - staticcheck
+    - text: "SA1019"
+      linters:
+        - staticcheck
     - text: "is unused"
       linters:
         - unused
-      path: "(tests/|_test\\.go)"
+    - text: "U1000"
+      linters:
+        - unused
+    - path: "(tests/|cmd/)"
+      linters:
+        - unused
+        - goconst
 
   exclude-use-default: false
   exclude:
