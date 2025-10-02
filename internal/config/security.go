@@ -11,22 +11,22 @@ type SecurityConfig struct {
 
 type SSHSecurityConfig struct {
 	StrictHostKeyChecking bool          `yaml:"strict_host_key_checking" default:"true"`
-	KnownHostsFile       string        `yaml:"known_hosts_file"`
-	ConnectionTimeout    time.Duration `yaml:"connection_timeout" default:"30s"`
-	CommandTimeout       time.Duration `yaml:"command_timeout" default:"300s"`
-	MaxRetries          int           `yaml:"max_retries" default:"3"`
-	AllowedCiphers      []string      `yaml:"allowed_ciphers"`
-	AllowedMACs         []string      `yaml:"allowed_macs"`
-	AllowedKexAlgos     []string      `yaml:"allowed_kex_algos"`
+	KnownHostsFile        string        `yaml:"known_hosts_file"`
+	ConnectionTimeout     time.Duration `yaml:"connection_timeout" default:"30s"`
+	CommandTimeout        time.Duration `yaml:"command_timeout" default:"300s"`
+	MaxRetries            int           `yaml:"max_retries" default:"3"`
+	AllowedCiphers        []string      `yaml:"allowed_ciphers"`
+	AllowedMACs           []string      `yaml:"allowed_macs"`
+	AllowedKexAlgos       []string      `yaml:"allowed_kex_algos"`
 }
 
 func DefaultSecurityConfig() SecurityConfig {
 	return SecurityConfig{
 		SSH: SSHSecurityConfig{
 			StrictHostKeyChecking: true,
-			ConnectionTimeout:    30 * time.Second,
-			CommandTimeout:       300 * time.Second,
-			MaxRetries:          3,
+			ConnectionTimeout:     30 * time.Second,
+			CommandTimeout:        300 * time.Second,
+			MaxRetries:            3,
 			AllowedCiphers: []string{
 				"aes128-ctr",
 				"aes192-ctr",

@@ -82,8 +82,8 @@ func (m *TemplateModule) Execute(ctx context.Context, host types.Host, args map[
 	owner := getStringArg(args, "owner", "")
 	group := getStringArg(args, "group", "")
 	variables := getMapArg(args, "vars", make(map[string]interface{}))
-	_ = getBoolArg(args, "force", false)      // force - not used in this implementation
-	_ = getStringArg(args, "validate", "")    // validate - not used in this implementation
+	_ = getBoolArg(args, "force", false)   // force - not used in this implementation
+	_ = getStringArg(args, "validate", "") // validate - not used in this implementation
 
 	// Template options
 	_ = m.parseTemplateOptions(args) // options - not used in this implementation

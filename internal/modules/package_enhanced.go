@@ -48,24 +48,24 @@ type EnhancedPackageManager interface {
 
 // EnhancedPackageState represents the current state of a package
 type EnhancedPackageState struct {
-	Name            string    `json:"name"`
-	Installed       bool      `json:"installed"`
-	Version         string    `json:"version"`
-	AvailableVersion string   `json:"available_version"`
-	Repository      string    `json:"repository"`
-	LastChecked     time.Time `json:"last_checked"`
-	Hash            string    `json:"hash"` // For change detection
+	Name             string    `json:"name"`
+	Installed        bool      `json:"installed"`
+	Version          string    `json:"version"`
+	AvailableVersion string    `json:"available_version"`
+	Repository       string    `json:"repository"`
+	LastChecked      time.Time `json:"last_checked"`
+	Hash             string    `json:"hash"` // For change detection
 }
 
 // EnhancedPackageInfo extends PackageInfo with additional metadata
 type EnhancedPackageInfo struct {
 	PackageInfo
-	Dependencies    []string  `json:"dependencies"`
-	ReverseDeps     []string  `json:"reverse_dependencies"`
-	InstallDate     time.Time `json:"install_date"`
-	LastUpdate      time.Time `json:"last_update"`
-	Checksum        string    `json:"checksum"`
-	Source          string    `json:"source"`
+	Dependencies []string  `json:"dependencies"`
+	ReverseDeps  []string  `json:"reverse_dependencies"`
+	InstallDate  time.Time `json:"install_date"`
+	LastUpdate   time.Time `json:"last_update"`
+	Checksum     string    `json:"checksum"`
+	Source       string    `json:"source"`
 }
 
 // PackageSpec defines a package specification for batch operations
@@ -77,15 +77,15 @@ type PackageSpec struct {
 
 // PackageOperation represents the result of a package operation
 type PackageOperation struct {
-	Package     string        `json:"package"`
-	Operation   string        `json:"operation"`
-	Success     bool          `json:"success"`
-	Changed     bool          `json:"changed"`
-	OldVersion  string        `json:"old_version,omitempty"`
-	NewVersion  string        `json:"new_version,omitempty"`
-	Duration    time.Duration `json:"duration"`
-	Output      string        `json:"output"`
-	Error       string        `json:"error,omitempty"`
+	Package    string        `json:"package"`
+	Operation  string        `json:"operation"`
+	Success    bool          `json:"success"`
+	Changed    bool          `json:"changed"`
+	OldVersion string        `json:"old_version,omitempty"`
+	NewVersion string        `json:"new_version,omitempty"`
+	Duration   time.Duration `json:"duration"`
+	Output     string        `json:"output"`
+	Error      string        `json:"error,omitempty"`
 }
 
 // BatchOperation represents the result of a batch operation
@@ -108,10 +108,10 @@ type OperationPreview struct {
 
 // PackageStateCache provides thread-safe caching of package states
 type PackageStateCache struct {
-	cache    sync.Map
-	ttl      time.Duration
-	hits     int64
-	misses   int64
+	cache  sync.Map
+	ttl    time.Duration
+	hits   int64
+	misses int64
 }
 
 // NewPackageStateCache creates a new package state cache

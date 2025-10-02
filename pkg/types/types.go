@@ -67,7 +67,7 @@ func (t *Task) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		"timeout":       true,
 		"retries":       true,
 		"delay":         true,
-		"until":        true,
+		"until":         true,
 		"changed_when":  true,
 		"failed_when":   true,
 		"include":       true,
@@ -252,21 +252,21 @@ type FormattedTask struct {
 	Args   interface{} `yaml:",inline"`
 
 	// Task-level fields
-	When         string        `yaml:"when,omitempty"`
-	Loop         *Loop         `yaml:"loop,omitempty"`
-	Register     string        `yaml:"register,omitempty"`
-	IgnoreErrors bool          `yaml:"ignore_errors,omitempty"`
-	Tags         []string      `yaml:"tags,omitempty"`
-	Notify       []string      `yaml:"notify,omitempty"`
-	Timeout      string        `yaml:"timeout,omitempty"`
-	Retries      int           `yaml:"retries,omitempty"`
-	Delay        string        `yaml:"delay,omitempty"`
-	Until        string        `yaml:"until,omitempty"`
-	ChangedWhen  string        `yaml:"changed_when,omitempty"`
-	FailedWhen   string        `yaml:"failed_when,omitempty"`
-	Include      string        `yaml:"include,omitempty"`
-	Serial       bool          `yaml:"serial,omitempty"`
-	RetryDelay   string        `yaml:"retry_delay,omitempty"`
+	When         string   `yaml:"when,omitempty"`
+	Loop         *Loop    `yaml:"loop,omitempty"`
+	Register     string   `yaml:"register,omitempty"`
+	IgnoreErrors bool     `yaml:"ignore_errors,omitempty"`
+	Tags         []string `yaml:"tags,omitempty"`
+	Notify       []string `yaml:"notify,omitempty"`
+	Timeout      string   `yaml:"timeout,omitempty"`
+	Retries      int      `yaml:"retries,omitempty"`
+	Delay        string   `yaml:"delay,omitempty"`
+	Until        string   `yaml:"until,omitempty"`
+	ChangedWhen  string   `yaml:"changed_when,omitempty"`
+	FailedWhen   string   `yaml:"failed_when,omitempty"`
+	Include      string   `yaml:"include,omitempty"`
+	Serial       bool     `yaml:"serial,omitempty"`
+	RetryDelay   string   `yaml:"retry_delay,omitempty"`
 }
 
 // MarshalYAML implements custom YAML marshaling for Task

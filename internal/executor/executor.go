@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/crypto/ssh"
 	sshpkg "github.com/onigirazu-cfg/onigirazu/internal/ssh"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
+	"golang.org/x/crypto/ssh"
 )
 
 // CommandExecutor handles command execution on local or remote hosts

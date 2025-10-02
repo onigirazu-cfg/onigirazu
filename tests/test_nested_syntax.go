@@ -2,8 +2,8 @@ package tests
 
 import (
 	"fmt"
-	"gopkg.in/yaml.v2"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
+	"gopkg.in/yaml.v2"
 )
 
 func test_nested_syntaxMain() {

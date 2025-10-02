@@ -168,9 +168,9 @@ func (p *ConnectionPool) GetStats() PoolStats {
 	defer p.mutex.RUnlock()
 
 	stats := PoolStats{
-		TotalConnections: len(p.connections),
+		TotalConnections:  len(p.connections),
 		ActiveConnections: 0,
-		IdleConnections: 0,
+		IdleConnections:   0,
 	}
 
 	for _, wrapper := range p.connections {

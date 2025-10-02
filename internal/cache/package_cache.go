@@ -7,19 +7,19 @@ import (
 
 // PackageInfo represents cached package information
 type PackageInfo struct {
-	Name         string
-	Version      string
-	Installed    bool
-	CachedAt     time.Time
-	ExpiresAt    time.Time
+	Name      string
+	Version   string
+	Installed bool
+	CachedAt  time.Time
+	ExpiresAt time.Time
 }
 
 // PackageCache provides caching for package information
 type PackageCache struct {
-	mu       sync.RWMutex
-	cache    map[string]map[string]*PackageInfo // host -> package -> info
-	ttl      time.Duration
-	enabled  bool
+	mu      sync.RWMutex
+	cache   map[string]map[string]*PackageInfo // host -> package -> info
+	ttl     time.Duration
+	enabled bool
 }
 
 // PackageCacheConfig holds configuration for package cache

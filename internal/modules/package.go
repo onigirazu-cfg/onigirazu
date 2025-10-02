@@ -347,7 +347,7 @@ func (m *PackageModule) Validate(args map[string]interface{}) error {
 }
 
 // AptManager implements package management for APT (Debian/Ubuntu)
-type AptManager struct{
+type AptManager struct {
 	executor *executor.CommandExecutor
 	hostname string
 }
@@ -532,7 +532,7 @@ func (a *AptManager) Clean() error {
 }
 
 // YumManager implements package management for YUM (RHEL/CentOS)
-type YumManager struct{
+type YumManager struct {
 	executor *executor.CommandExecutor
 }
 
@@ -665,7 +665,7 @@ func (y *YumManager) Clean() error {
 }
 
 // BrewManager implements package management for Homebrew (macOS)
-type BrewManager struct{
+type BrewManager struct {
 	executor *executor.CommandExecutor
 }
 
@@ -779,7 +779,7 @@ func (b *BrewManager) Clean() error {
 // Additional package managers (DnfManager, PacmanManager, etc.) would follow similar patterns...
 
 // GenericPackageManager provides a fallback implementation
-type GenericPackageManager struct{
+type GenericPackageManager struct {
 	executor *executor.CommandExecutor
 }
 

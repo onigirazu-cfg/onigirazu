@@ -6,8 +6,8 @@ import (
 	"os"
 	"time"
 
-	"golang.org/x/crypto/ssh"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
+	"golang.org/x/crypto/ssh"
 )
 
 // Client wraps SSH connection functionality

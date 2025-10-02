@@ -3,10 +3,10 @@ package tests
 import (
 	"context"
 	"fmt"
-	"os"
+	"github.com/onigirazu-cfg/onigirazu/internal/logger"
 	"github.com/onigirazu-cfg/onigirazu/internal/parser"
 	"github.com/onigirazu-cfg/onigirazu/internal/template"
-	"github.com/onigirazu-cfg/onigirazu/internal/logger"
+	"os"
 )
 
 func debugEnhancedParser() {
