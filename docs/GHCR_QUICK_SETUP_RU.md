@@ -2,35 +2,9 @@
 
 ## 🎯 Что нужно сделать
 
-Для публикации Docker образов в GitHub Container Registry (GHCR) нужно выполнить всего **3 простых шага**:
+Для публикации Docker образов в GitHub Container Registry (GHCR) нужно выполнить всего **1 простой шаг**:
 
-## Шаг 1: Создать Personal Access Token
-
-1. Откройте GitHub → **Settings** (ваш профиль, не репозиторий)
-2. Перейдите в **Developer settings** → **Personal access tokens** → **Tokens (classic)**
-3. Нажмите **"Generate new token (classic)"**
-4. Заполните форму:
-   - **Note**: `ONIGIRAZU_RELEASE_TOKEN`
-   - **Expiration**: `No expiration` (или выберите срок)
-   - **Scopes** (отметьте галочками):
-     - ✅ `repo` (Full control of private repositories)
-     - ✅ `write:packages` (Upload packages)
-     - ✅ `read:packages` (Download packages)
-     - ✅ `delete:packages` (Delete packages)
-5. Нажмите **"Generate token"**
-6. **⚠️ ВАЖНО:** Скопируйте токен сразу! Он больше не будет показан.
-
-## Шаг 2: Добавить токен в секреты репозитория
-
-1. Откройте репозиторий **onigirazu-cfg/onigirazu**
-2. Перейдите в **Settings** → **Secrets and variables** → **Actions**
-3. Нажмите **"New repository secret"**
-4. Заполните:
-   - **Name**: `GH_TOKEN`
-   - **Secret**: вставьте скопированный токен
-5. Нажмите **"Add secret"**
-
-## Шаг 3: Настроить права для Actions
+## Шаг 1: Настроить права для Actions
 
 1. В репозитории перейдите в **Settings** → **Actions** → **General**
 2. Прокрутите до раздела **"Workflow permissions"**
@@ -51,11 +25,43 @@ git tag -a v1.0.0 -m "Release v1.0.0"
 git push origin v1.0.0
 ```
 
-Через несколько минут:
+Через 10-15 минут:
 
 - ✅ Релиз будет создан на GitHub
-- ✅ Бинарники для всех платформ будут собраны
-- ✅ Docker образы будут опубликованы в GHCR
+- ✅ Бинарники для всех платформ будут собраны (19 платформ)
+- ✅ Docker образы будут опубликованы в GHCR (amd64, arm64)
+- ✅ Пакеты для различных менеджеров пакетов (deb, rpm, apk и др.)
+- ✅ Базовые конфигурационные файлы включены в архивы
+
+## 📦 Что включено в релиз
+
+Каждый релиз содержит:
+
+### Бинарники для платформ
+
+- **Linux**: x86_64, ARM64, ARMv6, ARMv7, i386
+- **macOS**: x86_64 (Intel), ARM64 (Apple Silicon)
+- **Windows**: x86_64, i386
+- **FreeBSD**: x86_64, i386
+- **OpenBSD**: x86_64, i386
+- **NetBSD**: x86_64, i386
+
+### Конфигурационные файлы
+
+- `config.example.yml` - пример конфигурации Onigirazu
+- `inventory.example.yml` - пример файла инвентаря
+- `playbook.example.yml` - пример playbook с базовыми задачами
+- Полная документация в папке `docs/`
+- Примеры использования в папке `examples/`
+
+### Форматы пакетов
+
+- `.tar.gz` / `.zip` - архивы с бинарниками
+- `.deb` - для Debian/Ubuntu
+- `.rpm` - для RHEL/CentOS/Fedora
+- `.apk` - для Alpine Linux
+- Arch Linux пакеты
+- Homebrew формулы
 
 ## 🐳 Использование образов
 
