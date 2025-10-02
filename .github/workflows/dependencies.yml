@@ -107,8 +107,8 @@ jobs:
       uses: peter-evans/create-pull-request@v6
       with:
         token: ${{ secrets.GH_TOKEN }}
-        commit-message: 'chore: update Go dependencies (${{ github.event.inputs.update_type || 'minor' }})'
-        title: '🔄 Update Go dependencies (${{ github.event.inputs.update_type || 'minor' }})'
+        commit-message: "chore: update Go dependencies (${{ github.event.inputs.update_type || 'minor' }})"
+        title: "🔄 Update Go dependencies (${{ github.event.inputs.update_type || 'minor' }})"
         body: |
           ## 📦 Dependency Updates
 
@@ -128,17 +128,6 @@ jobs:
           - [x] Race condition tests pass
           - [x] Security scan completed
           - [x] Vulnerability check completed
-
-          ---
-
-          <details>
-          <summary>📋 Detailed Changes</summary>
-
-          ```
-          $(cat dependency-changes.txt)
-          ```
-
-          </details>
 
           ---
 
