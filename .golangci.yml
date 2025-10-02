@@ -1,4 +1,4 @@
-version: 2
+version: "2"
 
 run:
   timeout: 10m
@@ -30,7 +30,6 @@ linters-settings:
       - wrapperFunc
   gocyclo:
     min-complexity: 60
-    max-complexity: 60
   goimports:
     local-prefixes: github.com/onigirazu-cfg/onigirazu
   mnd:
