@@ -78,7 +78,7 @@ jobs:
     - name: Run security scan
       continue-on-error: true
       run: |
-        go install github.com/securecodewarrior/github-action-gosec@latest || true
+        go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest || true
         gosec ./... || echo "Security issues found, but continuing..."
 
     - name: Generate dependency report
