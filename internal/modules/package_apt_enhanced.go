@@ -16,7 +16,6 @@ import (
 type EnhancedAptManager struct {
 	executor    *executor.CommandExecutor
 	cache       *PackageStateCache
-	cacheMutex  sync.RWMutex
 	lastUpdate  time.Time
 	updateMutex sync.Mutex
 }

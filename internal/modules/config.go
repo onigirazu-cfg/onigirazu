@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -340,7 +339,7 @@ func (m *ConfigModule) Validate(args map[string]interface{}) error {
 
 // loadConfig loads configuration from file
 func (m *ConfigModule) loadConfig(path string, format ConfigFormat) (map[string]interface{}, error) {
-	data, err := ioutil.ReadFile(path) // #nosec G304 -- path is validated by security validator
+	data, err := os.ReadFile(path) // #nosec G304 -- path is validated by security validator
 	if err != nil {
 		return nil, err
 	}

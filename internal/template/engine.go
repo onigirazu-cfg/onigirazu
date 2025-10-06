@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 	"text/template"
+	"unicode"
 
 	"github.com/onigirazu-cfg/onigirazu/internal/bufferpool"
 )
@@ -23,7 +24,7 @@ func NewEngine() *Engine {
 			"default":   defaultFunc,
 			"upper":     strings.ToUpper,
 			"lower":     strings.ToLower,
-			"title":     strings.Title,
+			"title":     toTitle,
 			"trim":      strings.TrimSpace,
 			"replace":   strings.ReplaceAll,
 			"split":     strings.Split,
@@ -200,6 +201,23 @@ func defaultFunc(value, defaultValue interface{}) interface{} {
 		return defaultValue
 	}
 	return value
+}
+
+// toTitle converts string to title case (first letter of each word capitalized)
+func toTitle(s string) string {
+	if s == "" {
+		return s
+	}
+
+	words := strings.Fields(s)
+	for i, word := range words {
+		if len(word) > 0 {
+			runes := []rune(word)
+			runes[0] = unicode.ToUpper(runes[0])
+			words[i] = string(runes)
+		}
+	}
+	return strings.Join(words, " ")
 }
 
 func lenFunc(value interface{}) int {

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/onigirazu-cfg/onigirazu/internal/template"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
@@ -340,13 +341,30 @@ func (m *TemplateModule) parseTemplateOptions(args map[string]interface{}) map[s
 	return options
 }
 
+// toTitle converts string to title case (first letter of each word capitalized)
+func toTitle(s string) string {
+	if s == "" {
+		return s
+	}
+
+	words := strings.Fields(s)
+	for i, word := range words {
+		if len(word) > 0 {
+			runes := []rune(word)
+			runes[0] = unicode.ToUpper(runes[0])
+			words[i] = string(runes)
+		}
+	}
+	return strings.Join(words, " ")
+}
+
 // getTemplateFunctions returns available template functions
 func (m *TemplateModule) getTemplateFunctions() map[string]interface{} {
 	return map[string]interface{}{
 		// String functions
 		"upper":     strings.ToUpper,
 		"lower":     strings.ToLower,
-		"title":     strings.Title,
+		"title":     toTitle,
 		"trim":      strings.TrimSpace,
 		"replace":   strings.ReplaceAll,
 		"contains":  strings.Contains,
