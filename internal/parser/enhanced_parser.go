@@ -34,7 +34,7 @@ func (p *EnhancedParser) ParsePlaybook(ctx context.Context, filePath string) (*t
 	p.logger.Debug("Parsing playbook: %s", filePath)
 
 	// Read file content
-	content, err := os.ReadFile(filePath)
+	content, err := os.ReadFile(filePath) // #nosec G304 -- filePath is provided by user as playbook file
 	if err != nil {
 		return nil, fmt.Errorf("failed to read playbook file %s: %w", filePath, err)
 	}
@@ -71,7 +71,7 @@ func (p *EnhancedParser) ParsePlaybook(ctx context.Context, filePath string) (*t
 func (p *EnhancedParser) ParseInventory(ctx context.Context, filePath string) (*types.Inventory, error) {
 	p.logger.Debug("Parsing inventory: %s", filePath)
 
-	content, err := os.ReadFile(filePath)
+	content, err := os.ReadFile(filePath) // #nosec G304 -- filePath is provided by user as inventory file
 	if err != nil {
 		return nil, fmt.Errorf("failed to read inventory file %s: %w", filePath, err)
 	}
@@ -301,7 +301,7 @@ func (p *EnhancedParser) processPlayIncludes(ctx context.Context, play *types.Pl
 func (p *EnhancedParser) loadIncludedTasks(ctx context.Context, includePath, baseDir string) ([]types.Task, error) {
 	fullPath := filepath.Join(baseDir, includePath)
 
-	content, err := os.ReadFile(fullPath)
+	content, err := os.ReadFile(fullPath) // #nosec G304 -- fullPath is constructed from baseDir and include path
 	if err != nil {
 		return nil, fmt.Errorf("failed to read included file %s: %w", fullPath, err)
 	}
@@ -351,7 +351,7 @@ func (p *EnhancedParser) ValidateFile(filePath string) error {
 	}
 
 	// Check if file exists and is readable
-	content, err := os.ReadFile(filePath)
+	content, err := os.ReadFile(filePath) // #nosec G304 -- filePath is provided by user for validation
 	if err != nil {
 		return fmt.Errorf("cannot read file %s: %w", filePath, err)
 	}

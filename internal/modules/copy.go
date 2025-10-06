@@ -2,7 +2,7 @@ package modules
 
 import (
 	"context"
-	"crypto/md5"
+	"crypto/sha256"
 	"fmt"
 	"io"
 	"os"
@@ -72,7 +72,7 @@ func (m *CopyModule) Execute(ctx context.Context, host types.Host, args map[stri
 		result.Output["source"] = "content"
 	} else if src != "" {
 		// Read from source file
-		sourceData, err = os.ReadFile(src)
+		sourceData, err = os.ReadFile(src) // #nosec G304 -- src is validated by security validator
 		if err != nil {
 			result.Failed = true
 			result.Error = fmt.Sprintf("failed to read source file %s: %v", src, err)
@@ -97,19 +97,19 @@ func (m *CopyModule) Execute(ctx context.Context, host types.Host, args map[stri
 		return result, err
 	}
 
-	// Calculate checksums
-	sourceChecksum := fmt.Sprintf("%x", md5.Sum(sourceData))
+	// Calculate checksums using SHA256 for better security
+	sourceChecksum := fmt.Sprintf("%x", sha256.Sum256(sourceData))
 	result.Output["checksum"] = sourceChecksum
 
 	var destChecksum string
 	if destExists {
-		destData, err := os.ReadFile(dest)
+		destData, err := os.ReadFile(dest) // #nosec G304 -- dest is validated by security validator
 		if err != nil {
 			result.Failed = true
 			result.Error = fmt.Sprintf("failed to read destination file %s: %v", dest, err)
 			return result, err
 		}
-		destChecksum = fmt.Sprintf("%x", md5.Sum(destData))
+		destChecksum = fmt.Sprintf("%x", sha256.Sum256(destData))
 		result.Output["dest_checksum"] = destChecksum
 	}
 
@@ -135,14 +135,14 @@ func (m *CopyModule) Execute(ctx context.Context, host types.Host, args map[stri
 
 	// Ensure destination directory exists
 	destDir := filepath.Dir(dest)
-	if err := os.MkdirAll(destDir, 0755); err != nil {
+	if err := os.MkdirAll(destDir, 0750); err != nil {
 		result.Failed = true
 		result.Error = fmt.Sprintf("failed to create destination directory %s: %v", destDir, err)
 		return result, err
 	}
 
 	// Write the file
-	if err := os.WriteFile(dest, sourceData, 0644); err != nil {
+	if err := os.WriteFile(dest, sourceData, 0600); err != nil {
 		result.Failed = true
 		result.Error = fmt.Sprintf("failed to write file %s: %v", dest, err)
 		return result, err
@@ -219,13 +219,13 @@ func (m *CopyModule) Validate(args map[string]interface{}) error {
 
 // copyFile copies a file from src to dst
 func copyFile(src, dst string) error {
-	sourceFile, err := os.Open(src)
+	sourceFile, err := os.Open(src) // #nosec G304 -- src is validated by security validator
 	if err != nil {
 		return err
 	}
 	defer sourceFile.Close()
 
-	destFile, err := os.Create(dst)
+	destFile, err := os.Create(dst) // #nosec G304 -- dst is validated by security validator
 	if err != nil {
 		return err
 	}

@@ -663,15 +663,24 @@ func (m *Metrics) StartMetricsServer(addr string) error {
 	mux.Handle("/metrics", m.GetPrometheusHandler())
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK"))
+		_, _ = w.Write([]byte("OK"))
 	})
 	mux.HandleFunc("/summary", func(w http.ResponseWriter, r *http.Request) {
 		summary := m.GetSummary()
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(summary)
+		_ = json.NewEncoder(w).Encode(summary)
 	})
 
-	return http.ListenAndServe(addr, mux)
+	// Create HTTP server with timeouts for security
+	server := &http.Server{
+		Addr:         addr,
+		Handler:      mux,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+
+	return server.ListenAndServe()
 }
 
 // RecordTaskResult records the result of a task execution

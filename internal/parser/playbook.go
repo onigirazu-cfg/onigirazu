@@ -22,7 +22,7 @@ func New() *Parser {
 
 // ParsePlaybook parses playbook from YAML file
 func (p *Parser) ParsePlaybook(ctx context.Context, filePath string) (*types.Playbook, error) {
-	data, err := os.ReadFile(filePath)
+	data, err := os.ReadFile(filePath) // #nosec G304 -- filePath is provided by user as playbook file
 	if err != nil {
 		return nil, fmt.Errorf("error reading playbook: %w", err)
 	}
@@ -97,7 +97,7 @@ func (p *Parser) ValidateTask(task *types.Task, playIndex, taskIndex int) error 
 
 // ParseInventory parses inventory from YAML file
 func (p *Parser) ParseInventory(ctx context.Context, filePath string) (*types.Inventory, error) {
-	data, err := os.ReadFile(filePath)
+	data, err := os.ReadFile(filePath) // #nosec G304 -- filePath is provided by user as inventory file
 	if err != nil {
 		return nil, fmt.Errorf("error reading inventory: %w", err)
 	}

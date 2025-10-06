@@ -229,7 +229,8 @@ func (wo *WorkflowOrchestrator) RegisterWorkflow(workflow *Workflow) error {
 	// Register triggers with scheduler
 	for _, trigger := range workflow.Triggers {
 		if trigger.Type == TriggerTypeSchedule && trigger.Enabled {
-			wo.scheduler.ScheduleWorkflow(workflow.ID, trigger.Schedule)
+			// Ignore scheduling errors during registration, they will be logged by scheduler
+			_ = wo.scheduler.ScheduleWorkflow(workflow.ID, trigger.Schedule)
 		}
 	}
 
@@ -596,7 +597,8 @@ func (wo *WorkflowOrchestrator) executeNotificationStep(execution *WorkflowExecu
 // executeStepActions executes a list of step actions
 func (wo *WorkflowOrchestrator) executeStepActions(execution *WorkflowExecution, actions []StepAction) {
 	for _, action := range actions {
-		wo.executeAction(execution, action)
+		// Actions are best-effort, errors are logged but don't stop execution
+		_ = wo.executeAction(execution, action)
 	}
 }
 
@@ -649,8 +651,29 @@ func (wo *WorkflowOrchestrator) calculateRetryDelay(policy RetryPolicy, attempt 
 	case BackoffTypeLinear:
 		return policy.Delay * time.Duration(attempt+1)
 	case BackoffTypeExponential:
-		delay := policy.Delay * time.Duration(1<<uint(attempt))
-		if delay > policy.MaxDelay {
+		// Prevent integer overflow by capping the attempt value
+		// Max safe value for bit shift is 62 (since 1<<63 would overflow)
+		safeAttempt := attempt
+		if safeAttempt < 0 {
+			safeAttempt = 0
+		}
+		if safeAttempt > 62 {
+			safeAttempt = 62
+		}
+
+		// Use uint conversion only after validation to avoid gosec warning
+		// safeAttempt is guaranteed to be in range [0, 62]
+		var multiplier uint64 = 1 << uint(safeAttempt) // #nosec G115 -- safeAttempt is validated to be in [0,62]
+
+		// Check if multiplier would overflow when converted to int64/time.Duration
+		// time.Duration is int64, so max safe value is 1<<63-1
+		const maxInt64 = uint64(1<<63 - 1)
+		if multiplier > maxInt64 {
+			return policy.MaxDelay
+		}
+
+		delay := policy.Delay * time.Duration(multiplier) // #nosec G115 -- multiplier is validated to fit in int64
+		if delay > policy.MaxDelay || delay < 0 {
 			return policy.MaxDelay
 		}
 		return delay

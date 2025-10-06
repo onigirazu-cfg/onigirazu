@@ -126,7 +126,7 @@ func (m *TemplateModule) Execute(ctx context.Context, host types.Host, args map[
 
 	if _, err := os.Stat(dest); err == nil {
 		// File exists, read current content
-		originalContent, err = os.ReadFile(dest)
+		originalContent, err = os.ReadFile(dest) // #nosec G304 -- dest is validated by security validator
 		if err != nil {
 			result.Error = fmt.Sprintf("failed to read existing file: %v", err)
 			result.Duration = time.Since(startTime)
@@ -152,7 +152,7 @@ func (m *TemplateModule) Execute(ctx context.Context, host types.Host, args map[
 	// Create backup if requested and file exists
 	if backup && len(originalContent) > 0 {
 		backupPath := dest + ".backup." + time.Now().Format("20060102-150405")
-		if err := os.WriteFile(backupPath, originalContent, 0644); err != nil {
+		if err := os.WriteFile(backupPath, originalContent, 0600); err != nil {
 			result.Error = fmt.Sprintf("failed to create backup: %v", err)
 			result.Duration = time.Since(startTime)
 			return result, fmt.Errorf("%s", result.Error)
@@ -162,14 +162,14 @@ func (m *TemplateModule) Execute(ctx context.Context, host types.Host, args map[
 
 	// Create destination directory if it doesn't exist
 	destDir := filepath.Dir(dest)
-	if err := os.MkdirAll(destDir, 0755); err != nil {
+	if err := os.MkdirAll(destDir, 0750); err != nil {
 		result.Error = fmt.Sprintf("failed to create destination directory: %v", err)
 		result.Duration = time.Since(startTime)
 		return result, fmt.Errorf("%s", result.Error)
 	}
 
 	// Write rendered content to destination
-	if err := os.WriteFile(dest, []byte(renderedContent), 0644); err != nil {
+	if err := os.WriteFile(dest, []byte(renderedContent), 0600); err != nil {
 		result.Error = fmt.Sprintf("failed to write template to destination: %v", err)
 		result.Duration = time.Since(startTime)
 		return result, fmt.Errorf("%s", result.Error)

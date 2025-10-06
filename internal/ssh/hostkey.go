@@ -3,7 +3,8 @@ package ssh
 import (
 	"bufio"
 	"bytes"
-	"crypto/md5"
+	"crypto/sha256"
+	"encoding/base64"
 	"fmt"
 	"net"
 	"os"
@@ -38,7 +39,8 @@ func NewHostKeyManager(knownHostsFile string, strictMode bool) *HostKeyManager {
 		strictMode:     strictMode,
 	}
 
-	hkm.loadKnownHosts()
+	// Load known hosts, ignore errors as file may not exist yet
+	_ = hkm.loadKnownHosts()
 	return hkm
 }
 
@@ -146,15 +148,10 @@ func (hkm *HostKeyManager) addHostKey(hostname string, key ssh.PublicKey) error 
 }
 
 func (hkm *HostKeyManager) GetFingerprint(key ssh.PublicKey) string {
-	hash := md5.Sum(key.Marshal())
-	fingerprint := ""
-	for i, b := range hash {
-		if i > 0 {
-			fingerprint += ":"
-		}
-		fingerprint += fmt.Sprintf("%02x", b)
-	}
-	return fingerprint
+	// Use SHA256 instead of MD5 for better security
+	hash := sha256.Sum256(key.Marshal())
+	// Return base64-encoded SHA256 fingerprint (modern OpenSSH format)
+	return "SHA256:" + base64.RawStdEncoding.EncodeToString(hash[:])
 }
 
 func (hkm *HostKeyManager) IsStrictMode() bool {

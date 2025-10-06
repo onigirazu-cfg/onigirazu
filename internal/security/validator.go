@@ -1,7 +1,8 @@
 package security
 
 import (
-	"crypto/md5"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"net"
 	"os"
@@ -627,7 +628,7 @@ func (sv *SecurityValidator) validateTaskArgs(task types.Task, result *Validatio
 			case float64:
 				uidInt = int(v)
 			case string:
-				fmt.Sscanf(v, "%d", &uidInt)
+				_, _ = fmt.Sscanf(v, "%d", &uidInt)
 			}
 			if uidInt == 0 {
 				result.addViolation("root_uid_assignment", RuleTypeUser, SeverityCritical,
@@ -658,7 +659,7 @@ func (sv *SecurityValidator) validateTaskArgs(task types.Task, result *Validatio
 			case float64:
 				gidInt = int(v)
 			case string:
-				fmt.Sscanf(v, "%d", &gidInt)
+				_, _ = fmt.Sscanf(v, "%d", &gidInt)
 			}
 			if gidInt == 0 {
 				result.addViolation("root_gid_assignment", RuleTypeGroup, SeverityCritical,
@@ -949,10 +950,15 @@ func (sa *SecurityAuditor) GetAuditLog() []AuditEntry {
 	return log
 }
 
-// generateAuditID generates a unique audit ID
+// generateAuditID generates a unique audit ID using cryptographically secure random bytes
 func generateAuditID() string {
-	hash := md5.Sum([]byte(fmt.Sprintf("%d", time.Now().UnixNano())))
-	return fmt.Sprintf("%x", hash)[:16]
+	// Use crypto/rand for secure random ID generation
+	b := make([]byte, 8) // 8 bytes = 16 hex characters
+	if _, err := rand.Read(b); err != nil {
+		// Fallback to timestamp-based ID if random generation fails
+		return fmt.Sprintf("%016x", time.Now().UnixNano())
+	}
+	return hex.EncodeToString(b)
 }
 
 // SetMaxFileSize sets the maximum file size

@@ -64,12 +64,12 @@ func main() {
 	if output != "" {
 		// Create directory if it doesn't exist
 		dir := filepath.Dir(output)
-		if err := os.MkdirAll(dir, 0755); err != nil {
+		if err := os.MkdirAll(dir, 0750); err != nil {
 			log.Fatalf("Failed to create output directory: %v", err)
 		}
 
 		// Write to file
-		if err := os.WriteFile(output, []byte(formatted), 0644); err != nil {
+		if err := os.WriteFile(output, []byte(formatted), 0600); err != nil {
 			log.Fatalf("Failed to write output file: %v", err)
 		}
 		fmt.Fprintf(os.Stderr, "Formatted YAML written to: %s\n", output)

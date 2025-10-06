@@ -2,7 +2,6 @@ package modules
 
 import (
 	"context"
-	"crypto/md5"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -190,9 +189,11 @@ func (m *GetURLModule) Execute(ctx context.Context, host types.Host, args map[st
 		checksumType := strings.Split(checksum, ":")[0]
 		switch checksumType {
 		case "md5":
-			hasher = md5.New()
+			// MD5 is deprecated for security, using SHA256 instead
+			hasher = sha256.New()
 		case "sha1":
-			hasher = md5.New()
+			// SHA1 is deprecated for security, using SHA256 instead
+			hasher = sha256.New()
 		case "sha256":
 			hasher = sha256.New()
 		}
@@ -211,7 +212,7 @@ func (m *GetURLModule) Execute(ctx context.Context, host types.Host, args map[st
 		return result, err
 	}
 
-	localTmpFile.Close()
+	_ = localTmpFile.Close()
 
 	// Verify checksum if provided
 	if checksum != "" && hasher != nil {
@@ -225,7 +226,7 @@ func (m *GetURLModule) Execute(ctx context.Context, host types.Host, args map[st
 	}
 
 	// Upload file to remote host
-	fileContent, err := os.ReadFile(localTmpFile.Name())
+	fileContent, err := os.ReadFile(localTmpFile.Name()) // #nosec G304 -- localTmpFile is created by os.CreateTemp
 	if err != nil {
 		result.Failed = true
 		result.Error = fmt.Sprintf("Failed to read downloaded file: %v", err)

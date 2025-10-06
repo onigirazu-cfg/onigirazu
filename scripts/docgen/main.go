@@ -184,6 +184,7 @@ func main() {
 
 	// Generate documentation content for each package
 	for i, pkg := range packages {
+		// #nosec G204 -- pkg.Path is from a hardcoded list of internal packages, not user input
 		cmd := exec.Command("go", "doc", "-all", "./"+pkg.Path)
 		output, err := cmd.Output()
 		if err != nil {
@@ -200,7 +201,10 @@ func main() {
 	}
 
 	// Create output directory
-	os.MkdirAll("docs/api", 0755)
+	if err := os.MkdirAll("docs/api", 0750); err != nil {
+		fmt.Printf("Error creating output directory: %v\n", err)
+		os.Exit(1)
+	}
 
 	// Generate HTML
 	tmpl, err := template.New("docs").Parse(htmlTemplate)
@@ -210,7 +214,7 @@ func main() {
 	}
 
 	outputFile := filepath.Join("docs", "api", "index.html")
-	file, err := os.Create(outputFile)
+	file, err := os.Create(outputFile) // #nosec G304 -- outputFile is constructed from fixed paths
 	if err != nil {
 		fmt.Printf("Error creating output file: %v\n", err)
 		os.Exit(1)

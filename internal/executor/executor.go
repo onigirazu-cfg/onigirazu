@@ -138,7 +138,8 @@ func (e *CommandExecutor) executeSSHWithContext(ctx context.Context, command str
 		case resultChan <- result{string(output), err}:
 		case <-ctx.Done():
 			// Контекст отменен, пытаемся завершить сессию
-			session.Signal(ssh.SIGTERM)
+			// Ignore signal error as session may already be closed
+			_ = session.Signal(ssh.SIGTERM)
 		}
 	}()
 
@@ -148,7 +149,8 @@ func (e *CommandExecutor) executeSSHWithContext(ctx context.Context, command str
 		return res.output, res.err
 	case <-ctx.Done():
 		// Пытаемся корректно завершить сессию
-		session.Signal(ssh.SIGTERM)
+		// Ignore signal error as we're already in error state
+		_ = session.Signal(ssh.SIGTERM)
 		return "", fmt.Errorf("command execution canceled: %w", ctx.Err())
 	}
 }

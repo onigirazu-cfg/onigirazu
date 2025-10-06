@@ -274,12 +274,12 @@ func (m *ConfigModule) executeRestore(ctx context.Context, result types.TaskResu
 	}
 
 	// Copy backup to original location
-	data, err := os.ReadFile(backupPath)
+	data, err := os.ReadFile(backupPath) // #nosec G304 -- backupPath is validated by security validator
 	if err != nil {
 		return m.failResult(result, fmt.Sprintf("failed to read backup: %v", err))
 	}
 
-	if err := os.WriteFile(path, data, 0644); err != nil {
+	if err := os.WriteFile(path, data, 0600); err != nil {
 		return m.failResult(result, fmt.Sprintf("failed to restore config: %v", err))
 	}
 
@@ -340,7 +340,7 @@ func (m *ConfigModule) Validate(args map[string]interface{}) error {
 
 // loadConfig loads configuration from file
 func (m *ConfigModule) loadConfig(path string, format ConfigFormat) (map[string]interface{}, error) {
-	data, err := ioutil.ReadFile(path)
+	data, err := ioutil.ReadFile(path) // #nosec G304 -- path is validated by security validator
 	if err != nil {
 		return nil, err
 	}
@@ -363,7 +363,7 @@ func (m *ConfigModule) loadConfig(path string, format ConfigFormat) (map[string]
 func (m *ConfigModule) saveConfig(path string, format ConfigFormat, config map[string]interface{}) error {
 	// Ensure directory exists
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0750); err != nil {
 		return err
 	}
 
@@ -383,7 +383,7 @@ func (m *ConfigModule) saveConfig(path string, format ConfigFormat, config map[s
 		return err
 	}
 
-	return os.WriteFile(path, data, 0644)
+	return os.WriteFile(path, data, 0600)
 }
 
 // createBackup creates a backup of the file
@@ -395,12 +395,12 @@ func (m *ConfigModule) createBackup(path string) (string, error) {
 	timestamp := time.Now().Format("20060102_150405")
 	backupPath := fmt.Sprintf("%s.backup.%s", path, timestamp)
 
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 -- path is validated by security validator
 	if err != nil {
 		return "", err
 	}
 
-	err = os.WriteFile(backupPath, data, 0644)
+	err = os.WriteFile(backupPath, data, 0600)
 	return backupPath, err
 }
 

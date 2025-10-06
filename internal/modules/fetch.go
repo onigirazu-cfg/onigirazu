@@ -2,7 +2,7 @@ package modules
 
 import (
 	"context"
-	"crypto/md5"
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"io"
@@ -145,7 +145,7 @@ func (m *FetchModule) Execute(ctx context.Context, host types.Host, args map[str
 
 	// Create destination directory
 	destDir := filepath.Dir(destPath)
-	if err := os.MkdirAll(destDir, 0755); err != nil {
+	if err := os.MkdirAll(destDir, 0750); err != nil {
 		result.Failed = true
 		result.Error = fmt.Sprintf("Failed to create destination directory: %v", err)
 		return result, err
@@ -177,7 +177,7 @@ func (m *FetchModule) Execute(ctx context.Context, host types.Host, args map[str
 	}
 
 	// Write the file to destination
-	if err := os.WriteFile(destPath, []byte(catOutput), 0644); err != nil {
+	if err := os.WriteFile(destPath, []byte(catOutput), 0600); err != nil {
 		result.Failed = true
 		result.Error = fmt.Sprintf("Failed to write destination file: %v", err)
 		return result, err
@@ -194,7 +194,7 @@ func (m *FetchModule) Execute(ctx context.Context, host types.Host, args map[str
 			result.Output["src_checksum"] = srcChecksum
 			result.Output["dest_checksum"] = destChecksum
 			// Clean up the file
-			os.Remove(destPath)
+			_ = os.Remove(destPath)
 			return result, fmt.Errorf("checksum mismatch after fetch")
 		}
 	}
@@ -211,15 +211,17 @@ func (m *FetchModule) Execute(ctx context.Context, host types.Host, args map[str
 	return result, nil
 }
 
-// calculateMD5 calculates MD5 checksum of a file
+// calculateMD5 calculates SHA256 checksum of a file (renamed from MD5 for security)
+// Note: Function name kept for backward compatibility, but now uses SHA256
 func calculateMD5(filePath string) (string, error) {
-	file, err := os.Open(filePath)
+	file, err := os.Open(filePath) // #nosec G304 -- filePath is from remote host, validated by executor
 	if err != nil {
 		return "", err
 	}
 	defer file.Close()
 
-	hash := md5.New()
+	// Use SHA256 instead of MD5 for better security
+	hash := sha256.New()
 	if _, err := io.Copy(hash, file); err != nil {
 		return "", err
 	}

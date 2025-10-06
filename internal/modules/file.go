@@ -109,6 +109,7 @@ func (m *FileModule) ensureFilePresent(path string, result types.TaskResult, sta
 	// Check if file exists
 	fileExists := true
 	currentContent := ""
+	// #nosec G304 -- path is validated by security validator
 	if data, err := os.ReadFile(path); os.IsNotExist(err) {
 		fileExists = false
 	} else if err == nil {
@@ -120,7 +121,7 @@ func (m *FileModule) ensureFilePresent(path string, result types.TaskResult, sta
 	if needsUpdate {
 		// Create directory if needed
 		dir := filepath.Dir(path)
-		if err := os.MkdirAll(dir, 0755); err != nil {
+		if err := os.MkdirAll(dir, 0750); err != nil {
 			result.Success = false
 			result.Error = fmt.Sprintf("error creating directory: %v", err)
 			result.Duration = time.Since(startTime)
@@ -128,7 +129,7 @@ func (m *FileModule) ensureFilePresent(path string, result types.TaskResult, sta
 		}
 
 		// Write file with content
-		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		if err := os.WriteFile(path, []byte(content), 0600); err != nil {
 			result.Success = false
 			result.Error = fmt.Sprintf("error writing file: %v", err)
 			result.Duration = time.Since(startTime)
@@ -186,7 +187,7 @@ func (m *FileModule) ensureFileAbsent(path string, result types.TaskResult, star
 
 func (m *FileModule) ensureDirectory(path string, result types.TaskResult, startTime time.Time) (types.TaskResult, error) {
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		if err := os.MkdirAll(path, 0755); err != nil {
+		if err := os.MkdirAll(path, 0750); err != nil {
 			result.Success = false
 			result.Error = fmt.Sprintf("error creating directory: %v", err)
 			result.Duration = time.Since(startTime)
@@ -217,14 +218,14 @@ func (m *FileModule) touchFile(path string, result types.TaskResult, startTime t
 
 	if !fileExists {
 		// Create the file
-		file, err := os.Create(path)
+		file, err := os.Create(path) // #nosec G304 -- path is validated by security validator
 		if err != nil {
 			result.Success = false
 			result.Error = fmt.Sprintf("error creating file: %v", err)
 			result.Duration = time.Since(startTime)
 			return result, nil
 		}
-		file.Close()
+		_ = file.Close()
 
 		result.Success = true
 		result.Changed = true

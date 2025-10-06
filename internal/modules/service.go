@@ -292,7 +292,7 @@ func (s *SystemdManagerFixed) GetStatus(name string) (ServiceStatus, error) {
 						status.SubState = value
 					case "MainPID":
 						if value != "0" {
-							fmt.Sscanf(value, "%d", &status.PID)
+							_, _ = fmt.Sscanf(value, "%d", &status.PID)
 						}
 					case "Description":
 						status.Description = value

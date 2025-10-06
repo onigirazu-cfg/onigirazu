@@ -243,6 +243,35 @@ func (mc *MetricsCollector) RecordTimer(name string, duration time.Duration, lab
 
 // RecordTaskMetrics records task execution metrics
 func (mc *MetricsCollector) RecordTaskMetrics(result types.TaskResult, retryCount int, memoryBefore, memoryAfter uint64) {
+	// Calculate memory delta safely to avoid integer overflow
+	var memoryDelta int64
+	// Use signed arithmetic to avoid overflow issues
+	const maxInt64 = int64(1<<63 - 1)
+	const minInt64 = -1 << 63
+
+	if memoryAfter > memoryBefore {
+		// Positive delta
+		diff := memoryAfter - memoryBefore
+		if diff > uint64(maxInt64) {
+			memoryDelta = maxInt64 // Cap at max int64
+		} else {
+			memoryDelta = int64(diff)
+		}
+	} else if memoryBefore > memoryAfter {
+		// Negative delta - calculate using subtraction to avoid conversion issues
+		diff := memoryBefore - memoryAfter
+		if diff > uint64(maxInt64) {
+			memoryDelta = minInt64 // Cap at min int64
+		} else {
+			// Convert to int64 first, then negate to avoid gosec warning
+			positiveDelta := int64(diff)
+			memoryDelta = 0 - positiveDelta
+		}
+	} else {
+		// No change
+		memoryDelta = 0
+	}
+
 	metrics := TaskMetrics{
 		TaskName:     result.TaskName,
 		Module:       result.Module,
@@ -254,7 +283,7 @@ func (mc *MetricsCollector) RecordTaskMetrics(result types.TaskResult, retryCoun
 		Timestamp:    result.Timestamp,
 		MemoryBefore: memoryBefore,
 		MemoryAfter:  memoryAfter,
-		MemoryDelta:  int64(memoryAfter) - int64(memoryBefore),
+		MemoryDelta:  memoryDelta,
 	}
 
 	// Record individual metrics

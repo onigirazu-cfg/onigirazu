@@ -163,7 +163,7 @@ func LoadConfig(path string) (*Config, error) {
 		return DefaultConfig(), nil
 	}
 
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 -- path is provided by user as config file
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}

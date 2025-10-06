@@ -51,7 +51,8 @@ func (ws *WorkflowScheduler) ScheduleWorkflow(workflowID, schedule string) error
 	// Add new schedule
 	entryID, err := ws.cron.AddFunc(schedule, func() {
 		if callback, exists := ws.callbacks[workflowID]; exists {
-			callback(workflowID)
+			// Callback is executed in background, errors are handled by the callback itself
+			callback(workflowID) // #nosec G104 -- callback errors are handled internally
 		}
 	})
 

@@ -75,7 +75,7 @@ func (m *Manager) LoadInventory(ctx context.Context, filePath string) error {
 	m.lastUpdated = time.Now()
 
 	// Cache the inventory
-	m.cache.Set(ctx, cacheKey, inventory)
+	_ = m.cache.Set(ctx, cacheKey, inventory)
 
 	m.logger.Info("Successfully loaded inventory: %d groups, %d hosts",
 		len(inventory.Groups), m.getTotalHostCount())

@@ -90,7 +90,7 @@ func (p *ConnectionPool) GetConnection(host types.Host) (*Client, error) {
 		}
 
 		// Connection is invalid, close and remove it
-		wrapper.client.Close()
+		_ = wrapper.client.Close() // Ignore close error, connection is already invalid
 		delete(p.connections, key)
 	}
 
@@ -272,7 +272,7 @@ func (p *ConnectionPool) cleanup() {
 	// Close and remove stale connections
 	for _, key := range toRemove {
 		if wrapper, exists := p.connections[key]; exists {
-			wrapper.client.Close()
+			_ = wrapper.client.Close() // Ignore close error during cleanup
 			delete(p.connections, key)
 		}
 	}

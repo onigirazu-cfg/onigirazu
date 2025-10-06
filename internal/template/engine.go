@@ -84,7 +84,7 @@ func (e *Engine) Render(ctx context.Context, templateStr string, variables map[s
 
 // RenderFile renders a template file with variables
 func (e *Engine) RenderFile(ctx context.Context, filePath string, variables map[string]interface{}) (string, error) {
-	content, err := os.ReadFile(filePath)
+	content, err := os.ReadFile(filePath) // #nosec G304 -- filePath is validated by security validator
 	if err != nil {
 		return "", fmt.Errorf("failed to read template file %s: %w", filePath, err)
 	}

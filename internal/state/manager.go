@@ -31,7 +31,7 @@ func (m *Manager) LoadState() (*types.State, error) {
 		}, nil
 	}
 
-	data, err := os.ReadFile(m.stateFile)
+	data, err := os.ReadFile(m.stateFile) // #nosec G304 -- stateFile is constructed from fixed state file path
 	if err != nil {
 		return nil, fmt.Errorf("error reading state file: %w", err)
 	}
@@ -48,7 +48,7 @@ func (m *Manager) LoadState() (*types.State, error) {
 func (m *Manager) SaveState(state *types.State) error {
 	// Create directory if it doesn't exist
 	dir := filepath.Dir(m.stateFile)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0750); err != nil {
 		return fmt.Errorf("error creating directory: %w", err)
 	}
 
@@ -57,7 +57,7 @@ func (m *Manager) SaveState(state *types.State) error {
 		return fmt.Errorf("error serializing state: %w", err)
 	}
 
-	if err := os.WriteFile(m.stateFile, data, 0644); err != nil {
+	if err := os.WriteFile(m.stateFile, data, 0600); err != nil {
 		return fmt.Errorf("error writing state file: %w", err)
 	}
 
@@ -76,7 +76,7 @@ func (m *Manager) UpdateState(state *types.State, results []types.PlayResult) {
 
 // CalculateChecksum calculates file checksum
 func (m *Manager) CalculateChecksum(filePath string) (string, error) {
-	file, err := os.Open(filePath)
+	file, err := os.Open(filePath) // #nosec G304 -- filePath is validated by security validator
 	if err != nil {
 		return "", err
 	}

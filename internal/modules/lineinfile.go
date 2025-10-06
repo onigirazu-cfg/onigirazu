@@ -116,7 +116,7 @@ func (m *LineinfileModule) Execute(ctx context.Context, host types.Host, args ma
 	// Read existing lines
 	var lines []string
 	if fileExists {
-		file, err := os.Open(path)
+		file, err := os.Open(path) // #nosec G304 -- path is validated by security validator
 		if err != nil {
 			result.Success = false
 			result.Error = fmt.Sprintf("failed to open file: %v", err)
@@ -303,16 +303,16 @@ func (m *LineinfileModule) ensureLine(lines []string, line string, pattern *rege
 
 // copyFile creates a backup copy of a file
 func (m *LineinfileModule) copyFile(src, dst string) error {
-	input, err := os.ReadFile(src)
+	input, err := os.ReadFile(src) // #nosec G304 -- src is validated by security validator
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(dst, input, 0644)
+	return os.WriteFile(dst, input, 0600)
 }
 
 // writeLines writes lines to a file
 func (m *LineinfileModule) writeLines(path string, lines []string) error {
-	file, err := os.Create(path)
+	file, err := os.Create(path) // #nosec G304 -- path is validated by security validator
 	if err != nil {
 		return err
 	}
