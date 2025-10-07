@@ -183,11 +183,6 @@ release:
     go install github.com/onigirazu-cfg/onigirazu/cmd/onigirazu@{{ .Tag }}
     ```
 
-    ### Using Homebrew (macOS/Linux)
-    ```bash
-    brew install onigirazu-cfg/tap/onigirazu
-    ```
-
     ### Using Package Managers
 
     #### Debian/Ubuntu (DEB)
@@ -243,22 +238,28 @@ release:
     sha256sum -c checksums.txt
     ```
 
-brews:
-  - name: onigirazu
-    repository:
-      owner: onigirazu-cfg
-      name: homebrew-tap
-    directory: Formula
-    homepage: https://github.com/onigirazu-cfg/onigirazu
-    description: "Modern configuration management tool inspired by Ansible"
-    license: MIT
-    test: |
-      system "#{bin}/onigirazu --version"
-    dependencies:
-      - name: go
-        type: optional
-    install: |-
-      bin.install "onigirazu"
+# Homebrew tap disabled until repository is created
+# To enable:
+# 1. Create repository: onigirazu-cfg/homebrew-tap
+# 2. Add GITHUB_TOKEN with repo access to secrets
+# 3. Uncomment the section below
+#
+# brews:
+#   - name: onigirazu
+#     repository:
+#       owner: onigirazu-cfg
+#       name: homebrew-tap
+#     directory: Formula
+#     homepage: https://github.com/onigirazu-cfg/onigirazu
+#     description: "Modern configuration management tool inspired by Ansible"
+#     license: MIT
+#     test: |
+#       system "#{bin}/onigirazu --version"
+#     dependencies:
+#       - name: go
+#         type: optional
+#     install: |-
+#       bin.install "onigirazu"
 
 nfpms:
   - id: onigirazu
@@ -339,12 +340,18 @@ nfpms:
         - statically-linked-binary
         - changelog-file-missing-in-native-package
 
-publishers:
-  - name: fury.io
-    ids:
-      - onigirazu
-    dir: "{{ dir .ArtifactPath }}"
-    cmd: curl -F package=@{{ .ArtifactName }} https://{{ .Env.FURY_TOKEN }}@push.fury.io/onigirazu/
+# fury.io publisher disabled until FURY_TOKEN is configured
+# To enable:
+# 1. Create account at https://gemfury.com/
+# 2. Add FURY_TOKEN to GitHub secrets
+# 3. Uncomment the section below
+#
+# publishers:
+#   - name: fury.io
+#     ids:
+#       - onigirazu
+#     dir: "{{ dir .ArtifactPath }}"
+#     cmd: curl -F package=@{{ .ArtifactName }} https://{{ .Env.FURY_TOKEN }}@push.fury.io/onigirazu/
 
 # Docker images are built by GitHub Actions workflow (see .github/workflows/release.yml)
 # This allows better control over multi-arch builds with QEMU and Buildx
