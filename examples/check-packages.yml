@@ -8,47 +8,30 @@ plays:
     tasks:
       # Check if packages are installed using command module
       - name: "Check if git is installed"
-        module:
-          type: "command"
+        command:
           command: "which git"
-
       - name: "Check if curl is installed"
-        module:
-          type: "command"
+        command:
           command: "which curl"
-
       - name: "Check if wget is installed"
-        module:
-          type: "command"
+        command:
           command: "which wget"
-
       - name: "Check if tree is installed"
-        module:
-          type: "command"
+        command:
           command: "which tree"
-
       - name: "Check if nano is installed"
-        module:
-          type: "command"
+        command:
           command: "which nano"
-
       - name: "Check if jq is installed"
-        module:
-          type: "command"
+        command:
           command: "which jq"
-
       - name: "Check if htop is installed"
-        module:
-          type: "command"
+        command:
           command: "which htop"
-
       - name: "Check if vim is installed"
-        module:
-          type: "command"
+        command:
           command: "which vim"
-
       # Also check package manager status
       - name: "List installed packages (apt)"
-        module:
-          type: "command"
+        command:
           command: "dpkg -l | grep -E '(tree|nano|jq|htop|vim)'"

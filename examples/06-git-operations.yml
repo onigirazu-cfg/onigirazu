@@ -11,56 +11,43 @@ plays:
     tasks:
       # Create projects directory
       - name: "Create projects directory"
-        module:
-          type: "file"
+        file:
           path: "{{ projects_dir }}"
           state: "directory"
           mode: "0755"
-
       # Clone repository
       - name: "Clone public repository"
-        module:
-          type: "git"
+        git:
           repo: "https://github.com/octocat/Hello-World.git"
           dest: "{{ projects_dir }}/hello-world"
           clone: true
-
       # Clone specific branch
       - name: "Clone specific branch"
-        module:
-          type: "git"
+        git:
           repo: "https://github.com/octocat/Hello-World.git"
           dest: "{{ projects_dir }}/hello-world-branch"
           branch: "master"
           clone: true
-
       # Update existing repository
       - name: "Update repository"
-        module:
-          type: "git"
+        git:
           dest: "{{ projects_dir }}/hello-world"
           update: true
-
       # Checkout specific commit
       - name: "Checkout specific commit"
-        module:
-          type: "git"
+        git:
           dest: "{{ projects_dir }}/hello-world"
           version: "HEAD~1"
-
       # Clone with depth limit
       - name: "Shallow clone"
-        module:
-          type: "git"
+        git:
           repo: "https://github.com/octocat/Hello-World.git"
           dest: "{{ projects_dir }}/hello-world-shallow"
           depth: 1
           clone: true
-
       # Clone private repository (requires SSH key)
       - name: "Clone private repository"
-        module:
-          type: "git"
+        git:
           repo: "git@github.com:user/private-repo.git"
           dest: "{{ projects_dir }}/private-repo"
           key_file: "~/.ssh/id_rsa"
@@ -69,15 +56,12 @@ plays:
 
       # Reset repository to clean state
       - name: "Reset repository"
-        module:
-          type: "git"
+        git:
           dest: "{{ projects_dir }}/hello-world"
           force: true
-
       # Get repository information
       - name: "Get current commit hash"
-        module:
-          type: "command"
+        command:
           cmd: "git"
           args: ["rev-parse", "HEAD"]
           chdir: "{{ projects_dir }}/hello-world"
@@ -85,8 +69,7 @@ plays:
 
       # Check repository status
       - name: "Check repository status"
-        module:
-          type: "command"
+        command:
           cmd: "git"
           args: ["status", "--porcelain"]
           chdir: "{{ projects_dir }}/hello-world"

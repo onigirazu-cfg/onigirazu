@@ -4,6 +4,5 @@ plays:
     hosts: all
     tasks:
       - name: "Test command"
-        module:
-          type: command
+        command:
           command: "echo 'Hello World'"

@@ -15,34 +15,29 @@ plays:
     tasks:
       # System preparation
       - name: "Update package cache"
-        module:
-          type: "enhanced_package"
+        enhanced_package:
           update_cache: true
 
       - name: "Install essential packages"
-        module:
-          type: "package"
+        package:
           name: ["curl", "wget", "git", "htop", "vim", "unzip"]
           state: "present"
 
       # Security setup
       - name: "Install security tools"
-        module:
-          type: "package"
+        package:
           name: ["fail2ban", "ufw"]
           state: "present"
         when: "ansible_os_family != 'Darwin'"
 
       # User and group management
       - name: "Create application group"
-        module:
-          type: "group"
+        group:
           name: "{{ app_group }}"
           state: "present"
 
       - name: "Create application user"
-        module:
-          type: "user"
+        user:
           name: "{{ app_user }}"
           group: "{{ app_group }}"
           home: "{{ app_dir }}"
@@ -52,8 +47,7 @@ plays:
 
       # Directory structure
       - name: "Create application directory"
-        module:
-          type: "file"
+        file:
           path: "{{ app_dir }}"
           state: "directory"
           owner: "{{ app_user }}"
@@ -61,8 +55,7 @@ plays:
           mode: "0755"
 
       - name: "Create configuration directory"
-        module:
-          type: "file"
+        file:
           path: "{{ config_dir }}"
           state: "directory"
           owner: "root"
@@ -70,8 +63,7 @@ plays:
           mode: "0750"
 
       - name: "Create log directory"
-        module:
-          type: "file"
+        file:
           path: "{{ log_dir }}"
           state: "directory"
           owner: "{{ app_user }}"
@@ -80,8 +72,7 @@ plays:
 
       # Application deployment
       - name: "Clone application repository"
-        module:
-          type: "git"
+        git:
           repo: "https://github.com/example/webapp.git"
           dest: "{{ app_dir }}/src"
           clone: true
@@ -89,8 +80,7 @@ plays:
 
       # Configuration files
       - name: "Create application configuration"
-        module:
-          type: "file"
+        file:
           path: "{{ config_dir }}/app.conf"
           content: |
             # Application Configuration
@@ -106,8 +96,7 @@ plays:
 
       # Service configuration
       - name: "Create systemd service file"
-        module:
-          type: "file"
+        file:
           path: "/etc/systemd/system/webapp.service"
           content: |
             [Unit]
@@ -130,8 +119,7 @@ plays:
 
       # Log rotation
       - name: "Configure log rotation"
-        module:
-          type: "file"
+        file:
           path: "/etc/logrotate.d/webapp"
           content: |
             {{ log_dir }}/*.log {
@@ -151,8 +139,7 @@ plays:
 
       # Firewall configuration
       - name: "Configure firewall"
-        module:
-          type: "command"
+        command:
           cmd: "ufw"
           args: ["allow", "8080/tcp"]
         when: "ansible_os_family != 'Darwin'"
@@ -160,15 +147,13 @@ plays:
 
       # Service management
       - name: "Reload systemd daemon"
-        module:
-          type: "command"
+        command:
           cmd: "systemctl"
           args: ["daemon-reload"]
         when: "ansible_os_family != 'Darwin'"
 
       - name: "Enable and start webapp service"
-        module:
-          type: "service"
+        service:
           name: "webapp"
           state: "started"
           enabled: true
@@ -177,14 +162,12 @@ plays:
 
       # Health check
       - name: "Wait for application to start"
-        module:
-          type: "command"
+        command:
           cmd: "sleep"
           args: ["5"]
 
       - name: "Check application health"
-        module:
-          type: "command"
+        command:
           cmd: "curl"
           args: ["-f", "http://localhost:8080/health"]
         ignore_errors: true

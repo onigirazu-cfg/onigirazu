@@ -7,31 +7,20 @@ plays:
     hosts: all
     tasks:
       - name: "Check OS release"
-        module:
-          type: "command"
+        command:
           command: "cat /etc/os-release"
-
       - name: "Check if yum is available"
-        module:
-          type: "command"
+        command:
           command: "which yum"
-
       - name: "Check if dnf is available"
-        module:
-          type: "command"
+        command:
           command: "which dnf"
-
       - name: "Check if apt is available"
-        module:
-          type: "command"
+        command:
           command: "which apt"
-
       - name: "Check tree command output"
-        module:
-          type: "command"
+        command:
           command: "tree --version"
-
       - name: "Check nano command output"
-        module:
-          type: "command"
+        command:
           command: "nano --version"

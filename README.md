@@ -134,14 +134,12 @@ plays:
 
     tasks:
       - name: "Install Nginx"
-        module:
-          type: "package"
+        package:
           name: nginx
           state: present
 
       - name: "Start Nginx service"
-        module:
-          type: "service"
+        service:
           name: nginx
           state: started
           enabled: true
@@ -161,9 +159,9 @@ Onigirazu features a streamlined YAML syntax that eliminates verbose `args:` blo
 
 ```yaml
 - name: "List files in current directory"
-  module: "command"
-  args:
-    command: "ls -la"
+  module:
+    type: "command"
+    cmd: "ls -la"
     shell: true
 ```
 
@@ -171,9 +169,9 @@ Onigirazu features a streamlined YAML syntax that eliminates verbose `args:` blo
 
 ```yaml
 - name: "List files in current directory"
-  module: "command"
-  command: ls -la
-  shell: true
+  command:
+    cmd: ls -la
+    shell: true
 ```
 
 ### Key Benefits

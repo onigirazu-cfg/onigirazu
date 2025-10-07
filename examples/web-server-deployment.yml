@@ -16,23 +16,20 @@ plays:
     tasks:
       # Install web server and dependencies
       - name: "Install Nginx"
-        module:
-          type: "package"
+        package:
           name: "nginx"
           state: "present"
         when: "ansible_os_family != 'Darwin'"
 
       - name: "Install SSL tools"
-        module:
-          type: "package"
+        package:
           name: ["openssl", "certbot"]
           state: "present"
         when: "ansible_os_family != 'Darwin'"
 
       # macOS alternative
       - name: "Install Nginx on macOS"
-        module:
-          type: "command"
+        command:
           cmd: "brew"
           args: ["install", "nginx"]
         when: "ansible_os_family == 'Darwin'"
@@ -40,18 +37,15 @@ plays:
 
       # Create application directory
       - name: "Create web application directory"
-        module:
-          type: "file"
+        file:
           path: "{{ app_dir }}"
           state: "directory"
           owner: "{{ app_user }}"
           group: "{{ app_user }}"
           mode: "0755"
-
       # Deploy application files
       - name: "Create index.html"
-        module:
-          type: "file"
+        file:
           path: "{{ app_dir }}/index.html"
           content: |
             <!DOCTYPE html>
@@ -85,10 +79,8 @@ plays:
           owner: "{{ app_user }}"
           group: "{{ app_user }}"
           mode: "0644"
-
       - name: "Create CSS file"
-        module:
-          type: "file"
+        file:
           path: "{{ app_dir }}/style.css"
           content: |
             /* Additional styles */
@@ -102,42 +94,34 @@ plays:
           owner: "{{ app_user }}"
           group: "{{ app_user }}"
           mode: "0644"
-
       # Nginx configuration
       - name: "Create Nginx site configuration"
-        module:
-          type: "file"
+        file:
           path: "{{ nginx_conf_dir }}/sites-available/{{ app_name }}"
           content: |
             server {
                 listen 80;
                 listen [::]:80;
                 server_name {{ domain_name }} www.{{ domain_name }};
-
                 root {{ app_dir }};
                 index index.html index.htm;
-
                 location / {
                     try_files $uri $uri/ =404;
                 }
-
                 location ~* \.(css|js|png|jpg|jpeg|gif|ico|svg)$ {
                     expires 1y;
                     add_header Cache-Control "public, immutable";
                 }
-
                 # Security headers
                 add_header X-Frame-Options "SAMEORIGIN" always;
                 add_header X-XSS-Protection "1; mode=block" always;
                 add_header X-Content-Type-Options "nosniff" always;
                 add_header Referrer-Policy "no-referrer-when-downgrade" always;
-
                 # Gzip compression
                 gzip on;
                 gzip_vary on;
                 gzip_min_length 1024;
                 gzip_types text/plain text/css text/xml text/javascript application/javascript application/xml+rss application/json;
-
                 # Logs
                 access_log /var/log/nginx/{{ app_name }}_access.log;
                 error_log /var/log/nginx/{{ app_name }}_error.log;
@@ -147,8 +131,7 @@ plays:
 
       # Enable site
       - name: "Enable Nginx site"
-        module:
-          type: "file"
+        file:
           src: "{{ nginx_conf_dir }}/sites-available/{{ app_name }}"
           dest: "{{ nginx_conf_dir }}/sites-enabled/{{ app_name }}"
           state: "link"
@@ -156,24 +139,21 @@ plays:
 
       # Remove default site
       - name: "Remove default Nginx site"
-        module:
-          type: "file"
+        file:
           path: "{{ nginx_conf_dir }}/sites-enabled/default"
           state: "absent"
         when: "ansible_os_family != 'Darwin'"
 
       # Test Nginx configuration
       - name: "Test Nginx configuration"
-        module:
-          type: "command"
+        command:
           cmd: "nginx"
           args: ["-t"]
         when: "ansible_os_family != 'Darwin'"
 
       # Start and enable Nginx
       - name: "Start and enable Nginx"
-        module:
-          type: "service"
+        service:
           name: "nginx"
           state: "started"
           enabled: true
@@ -181,16 +161,14 @@ plays:
 
       # Firewall configuration
       - name: "Allow HTTP traffic"
-        module:
-          type: "command"
+        command:
           cmd: "ufw"
           args: ["allow", "80/tcp"]
         when: "ansible_os_family != 'Darwin'"
         ignore_errors: true
 
       - name: "Allow HTTPS traffic"
-        module:
-          type: "command"
+        command:
           cmd: "ufw"
           args: ["allow", "443/tcp"]
         when: "ansible_os_family != 'Darwin'"
@@ -198,8 +176,7 @@ plays:
 
       # SSL certificate (self-signed for demo)
       - name: "Generate self-signed SSL certificate"
-        module:
-          type: "command"
+        command:
           cmd: "openssl"
           args: [
             "req", "-x509", "-nodes", "-days", "365",
@@ -213,22 +190,18 @@ plays:
 
       # Health check
       - name: "Wait for Nginx to start"
-        module:
-          type: "command"
+        command:
           cmd: "sleep"
           args: ["3"]
-
       - name: "Check web server response"
-        module:
-          type: "command"
+        command:
           cmd: "curl"
           args: ["-f", "-s", "http://localhost/"]
         register: health_check
         ignore_errors: true
 
       - name: "Display deployment status"
-        module:
-          type: "command"
+        command:
           cmd: "echo"
           args: ["Web server deployment completed successfully!"]
         when: "health_check.rc == 0"

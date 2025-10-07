@@ -6,38 +6,25 @@ plays:
 
     tasks:
       - name: "Display OS Family"
-        module:
-          type: "debug"
+        debug:
           msg: "OS Family: {{ ansible_os_family }}"
-
       - name: "Display Distribution"
-        module:
-          type: "debug"
+        debug:
           msg: "Distribution: {{ ansible_distribution }} {{ ansible_distribution_version }}"
-
       - name: "Display Architecture"
-        module:
-          type: "debug"
+        debug:
           msg: "Architecture: {{ ansible_architecture }}"
-
       - name: "Display Kernel"
-        module:
-          type: "debug"
+        debug:
           msg: "Kernel: {{ ansible_kernel }} {{ ansible_kernel_version }}"
-
       - name: "Display Hardware"
-        module:
-          type: "debug"
+        debug:
           msg: "CPU Cores: {{ ansible_processor_cores }}, Memory: {{ ansible_memtotal_mb }}"
-
       - name: "Display Network"
-        module:
-          type: "debug"
+        debug:
           msg: "FQDN: {{ ansible_fqdn }}, IP: {{ ansible_default_ipv4.address }}"
-
       - name: "Install package based on OS family"
-        module:
-          type: "package"
+        package:
           name: "htop"
           state: "present"
         when: "ansible_os_family == 'Debian'"

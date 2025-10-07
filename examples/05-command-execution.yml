@@ -11,78 +11,64 @@ plays:
     tasks:
       # Simple command execution
       - name: "Check system uptime"
-        module:
-          type: "command"
+        command:
           cmd: "uptime"
         register: uptime_result
 
       # Command with arguments
       - name: "List directory contents"
-        module:
-          type: "command"
+        command:
           cmd: "ls"
           args: ["-la", "/tmp"]
         register: ls_result
 
       # Shell command with pipes
       - name: "Count running processes"
-        module:
-          type: "shell"
+        shell:
           cmd: "ps aux | wc -l"
         register: process_count
 
       # Command with working directory
       - name: "Create and enter directory"
-        module:
-          type: "command"
+        command:
           cmd: "pwd"
           chdir: "{{ work_dir }}"
           creates: "{{ work_dir }}"
-
       # Command with environment variables
       - name: "Run command with custom environment"
-        module:
-          type: "command"
+        command:
           cmd: "env"
           environment:
             CUSTOM_VAR: "hello_world"
             PATH: "{{ ansible_env.PATH }}"
-
       # Conditional command execution
       - name: "Install Homebrew on macOS"
-        module:
-          type: "shell"
+        shell:
           cmd: '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"'
         when: "ansible_os_family == 'Darwin' and not homebrew_installed"
 
       # Command with timeout
       - name: "Run command with timeout"
-        module:
-          type: "command"
+        command:
           cmd: "sleep"
           args: ["2"]
           timeout: 5
-
       # Check command result
       - name: "Verify command success"
-        module:
-          type: "command"
+        command:
           cmd: "echo"
           args: ["Command executed successfully"]
         when: "uptime_result.rc == 0"
 
       # Download file using curl
       - name: "Download file"
-        module:
-          type: "command"
+        command:
           cmd: "curl"
           args: ["-o", "/tmp/test.txt", "https://httpbin.org/get"]
           creates: "/tmp/test.txt"
-
       # Complex shell operation
       - name: "System information gathering"
-        module:
-          type: "shell"
+        shell:
           cmd: |
             echo "=== System Information ==="
             echo "Hostname: $(hostname)"

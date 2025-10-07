@@ -8,8 +8,7 @@ plays:
     tasks:
       # Install multiple packages in one task
       - name: "Install essential development tools"
-        module:
-          type: "package"
+        package:
           name:
             - "git"
             - "curl"
@@ -19,11 +18,9 @@ plays:
             - "htop"
             - "vim"
           state: "present"
-
       # Remove unnecessary packages
       - name: "Remove unnecessary packages"
-        module:
-          type: "package"
+        package:
           name:
             - "nano"
           state: "absent"

@@ -13,15 +13,12 @@ plays:
     tasks:
       # Create directory structure
       - name: "Create application directory"
-        module:
-          type: "file"
+        file:
           path: "{{ config_dir }}"
           state: "directory"
           mode: "0755"
-
       - name: "Create configuration file"
-        module:
-          type: "file"
+        file:
           path: "{{ config_dir }}/app.conf"
           state: "file"
           content: |
@@ -30,20 +27,16 @@ plays:
             app_version={{ app_version }}
             debug=false
           mode: "0644"
-
       # Copy files
       - name: "Copy README file"
-        module:
-          type: "copy"
+        copy:
           src: "/Users/denys.rastiegaiev/work/go_teransible/README.md"
           dest: "{{ config_dir }}/README.md"
           mode: "0644"
           backup: true
-
       # Template processing
       - name: "Create configuration from template"
-        module:
-          type: "template"
+        template:
           src: "config.j2"
           dest: "{{ config_dir }}/config.yml"
           variables:
@@ -51,25 +44,19 @@ plays:
             app_version: "{{ app_version }}"
             environment: "development"
           mode: "0600"
-
       # Create symbolic link
       - name: "Create symbolic link"
-        module:
-          type: "file"
+        file:
           src: "{{ config_dir }}/app.conf"
           dest: "{{ config_dir }}/current.conf"
           state: "link"
-
       # Set file permissions
       - name: "Set executable permissions"
-        module:
-          type: "file"
+        file:
           path: "{{ config_dir }}/app.conf"
           mode: "0755"
-
       # Remove file
       - name: "Remove temporary file"
-        module:
-          type: "file"
+        file:
           path: "{{ config_dir }}/temp.txt"
           state: "absent"

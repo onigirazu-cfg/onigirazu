@@ -8,43 +8,33 @@ plays:
     tasks:
       # System information
       - name: "Get system information"
-        module:
-          type: "command"
+        command:
           cmd: "uname"
           args: ["-a"]
         register: system_info
 
       - name: "Display system info"
-        module:
-          type: "shell"
+        shell:
           cmd: "echo 'System: {{ system_info.stdout }}'"
-
       # Install essential packages
       - name: "Install essential tools"
-        module:
-          type: "package"
+        package:
           name: ["git", "curl", "wget", "tree", "htop"]
           state: "present"
-
       # Create user directory structure
       - name: "Create projects directory"
-        module:
-          type: "file"
+        file:
           path: "/home/usx/projects"
           state: "directory"
           mode: "0755"
-
       - name: "Create scripts directory"
-        module:
-          type: "file"
+        file:
           path: "/home/usx/scripts"
           state: "directory"
           mode: "0755"
-
       # Create a welcome script
       - name: "Create welcome script"
-        module:
-          type: "file"
+        file:
           path: "/home/usx/scripts/welcome.sh"
           state: "present"
           mode: "0755"
@@ -55,23 +45,18 @@ plays:
             echo "Date: $(date)"
             echo "System: $(uname -a)"
             echo "Uptime: $(uptime)"
-
       # Test the script
       - name: "Run welcome script"
-        module:
-          type: "shell"
+        shell:
           cmd: "/home/usx/scripts/welcome.sh"
         register: welcome_output
 
       - name: "Display welcome output"
-        module:
-          type: "shell"
+        shell:
           cmd: "echo '{{ welcome_output.stdout }}'"
-
       # Create a simple config file
       - name: "Create server config"
-        module:
-          type: "file"
+        file:
           path: "/home/usx/.server_config"
           state: "present"
           content: |
@@ -81,15 +66,12 @@ plays:
             SETUP_DATE={{ ansible_date_time.iso8601 }}
             ONIGIRAZU_VERSION=latest
           mode: "0644"
-
       # Check disk space
       - name: "Check disk space"
-        module:
-          type: "shell"
+        shell:
           cmd: "df -h /"
         register: disk_space
 
       - name: "Display disk space"
-        module:
-          type: "shell"
+        shell:
           cmd: "echo 'Disk space: {{ disk_space.stdout }}'"

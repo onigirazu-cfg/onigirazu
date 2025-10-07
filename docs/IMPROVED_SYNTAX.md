@@ -1,6 +1,6 @@
 # YAML Syntax for Onigirazu
 
-Onigirazu uses a structured YAML syntax for defining tasks with module parameters.
+Onigirazu uses a simplified YAML syntax for defining tasks with module parameters.
 
 ## 🎯 Syntax Overview
 
@@ -8,8 +8,7 @@ Onigirazu uses a structured YAML syntax for defining tasks with module parameter
 
 ```yaml
 - name: "List files in current directory"
-  module:
-    type: "command"
+  command:
     cmd: "ls -la"
 ```
 
@@ -17,20 +16,19 @@ Onigirazu uses a structured YAML syntax for defining tasks with module parameter
 
 ```yaml
 - name: "List files in current directory"
-  module: { type: "command", cmd: "ls -la" }
+  command: { cmd: "ls -la" }
 ```
 
 ## 📋 **Features**
 
 ### 1. **Structured Module Definition**
 
-Module parameters are specified within the `module:` block:
+Module parameters are specified directly under the module name:
 
 ```yaml
 # File operations
 - name: "Create configuration file"
-  module:
-    type: "file"
+  file:
     path: "/tmp/config.conf"
     state: "touch"
     mode: "0644"
@@ -39,8 +37,7 @@ Module parameters are specified within the `module:` block:
 
 # Copy with content
 - name: "Deploy script"
-  module:
-    type: "copy"
+  copy:
     dest: "/usr/local/bin/deploy.sh"
     content: |
       #!/bin/bash
@@ -50,8 +47,7 @@ Module parameters are specified within the `module:` block:
 
 # Service management
 - name: "Start nginx service"
-  module:
-    type: "service"
+  service:
     name: "nginx"
     state: "started"
     enabled: true
@@ -63,8 +59,7 @@ Simple string values can be written without quotes (YAML standard):
 
 ```yaml
 - name: "Package installation"
-  module:
-    type: package
+  package:
     name: git
     state: present
 ```
@@ -75,8 +70,7 @@ Lists and objects work naturally:
 
 ```yaml
 - name: "User management"
-  module:
-    type: "user"
+  user:
     name: "appuser"
     state: "present"
     groups:
@@ -93,10 +87,10 @@ For simple modules, you can use inline YAML object syntax:
 
 ```yaml
 - name: "Quick package install"
-  module: { type: "package", name: "git", state: "present" }
+  package: { name: "git", state: "present" }
 
 - name: "Quick command"
-  module: { type: "command", cmd: "echo 'Hello World'" }
+  command: { cmd: "echo 'Hello World'" }
 ```
 
 ## 🔧 **Reserved Fields**
@@ -129,13 +123,12 @@ The following fields are reserved for task control and will not be passed as mod
 ```yaml
 # Expanded syntax
 - name: "Check disk space"
-  module:
-    type: "command"
+  command:
     cmd: "df -h"
 
 # Inline syntax
 - name: "Check disk space"
-  module: { type: "command", cmd: "df -h" }
+  command: { cmd: "df -h" }
 ```
 
 ### File Management
@@ -143,8 +136,7 @@ The following fields are reserved for task control and will not be passed as mod
 ```yaml
 # Expanded syntax
 - name: "Create application directory"
-  module:
-    type: "file"
+  file:
     path: "/opt/myapp"
     state: "directory"
     mode: "0755"
@@ -153,15 +145,14 @@ The following fields are reserved for task control and will not be passed as mod
 
 # Inline syntax
 - name: "Create application directory"
-  module: { type: "file", path: "/opt/myapp", state: "directory", mode: "0755" }
+  file: { path: "/opt/myapp", state: "directory", mode: "0755" }
 ```
 
 ### Template Deployment
 
 ```yaml
 - name: "Deploy nginx configuration"
-  module:
-    type: "template"
+  template:
     src: "nginx.conf.j2"
     dest: "/etc/nginx/nginx.conf"
     backup: true
@@ -177,8 +168,7 @@ The following fields are reserved for task control and will not be passed as mod
 ```yaml
 # Multiple packages
 - name: "Install development tools"
-  module:
-    type: "package"
+  package:
     name:
       - "git"
       - "curl"
@@ -188,17 +178,18 @@ The following fields are reserved for task control and will not be passed as mod
 
 # Single package (inline)
 - name: "Install git"
-  module: { type: "package", name: "git", state: "present" }
+  package: { name: "git", state: "present" }
 ```
 
 ## 🚀 **Benefits**
 
-1. **Clear Structure**: Module type and parameters are clearly organized
-2. **Better Readability**: Hierarchical YAML structure is easy to understand
+1. **Clear Structure**: Module name and parameters are clearly organized
+2. **Better Readability**: Simplified YAML structure is easy to understand
 3. **Flexible**: Choose between expanded or inline syntax
-4. **Type Safety**: Module type is explicitly declared
+4. **Less Verbose**: No need for `module:` and `type:` wrappers
 5. **Standard YAML**: Follows YAML best practices
 6. **Consistent**: Same pattern across all modules
+7. **Ansible-like**: Familiar syntax for Ansible users
 
 ## 🔄 **Syntax Styles**
 
@@ -208,8 +199,7 @@ You can choose the style that best fits your needs:
 
 ```yaml
 - name: "Setup application"
-  module:
-    type: "file"
+  file:
     path: "/opt/app"
     state: "directory"
     mode: "0755"
@@ -221,7 +211,7 @@ You can choose the style that best fits your needs:
 
 ```yaml
 - name: "Setup application"
-  module: { type: "file", path: "/opt/app", state: "directory", mode: "0755" }
+  file: { path: "/opt/app", state: "directory", mode: "0755" }
 ```
 
 ## 📚 **More Examples**
@@ -230,8 +220,7 @@ You can choose the style that best fits your needs:
 
 ```yaml
 - name: "System information"
-  module:
-    type: "shell"
+  shell:
     cmd: |
       echo "Hostname: $(hostname)"
       echo "OS: $(uname -s)"
@@ -242,8 +231,7 @@ You can choose the style that best fits your needs:
 
 ```yaml
 - name: "Start and enable nginx"
-  module:
-    type: "service"
+  service:
     name: "nginx"
     state: "started"
     enabled: true
@@ -253,8 +241,7 @@ You can choose the style that best fits your needs:
 
 ```yaml
 - name: "Deploy configuration"
-  module:
-    type: "copy"
+  copy:
     src: "app.conf"
     dest: "/etc/app/app.conf"
     mode: "0644"
@@ -265,9 +252,9 @@ You can choose the style that best fits your needs:
 
 1. **Use expanded syntax** for tasks with many parameters
 2. **Use inline syntax** for simple, one-line tasks
-3. **Always specify module type** explicitly
+3. **Use module name directly** as the field name (e.g., `package:`, `service:`, `file:`)
 4. **Use quotes** for strings with special characters
 5. **Indent consistently** (2 spaces recommended)
 6. **Group related tasks** together in your playbooks
 
-Start using this syntax for cleaner, more maintainable playbooks!
+Start using this simplified syntax for cleaner, more maintainable playbooks!

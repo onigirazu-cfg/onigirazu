@@ -8,8 +8,7 @@ plays:
     tasks:
       # Start and enable service
       - name: "Start and enable SSH service"
-        module:
-          type: "service"
+        service:
           name: "ssh"
           state: "started"
           enabled: true
@@ -17,48 +16,42 @@ plays:
 
       # macOS service management
       - name: "Start macOS service"
-        module:
-          type: "service"
+        service:
           name: "com.apple.ssh"
           state: "started"
         when: "ansible_os_family == 'Darwin'"
 
       # Stop service
       - name: "Stop unnecessary service"
-        module:
-          type: "service"
+        service:
           name: "bluetooth"
           state: "stopped"
         ignore_errors: true
 
       # Restart service
       - name: "Restart network service"
-        module:
-          type: "service"
+        service:
           name: "networking"
           state: "restarted"
         when: "ansible_os_family == 'Debian'"
 
       # Reload service configuration
       - name: "Reload service configuration"
-        module:
-          type: "service"
+        service:
           name: "nginx"
           state: "reloaded"
         ignore_errors: true
 
       # Disable service
       - name: "Disable service on boot"
-        module:
-          type: "service"
+        service:
           name: "apache2"
           enabled: false
         ignore_errors: true
 
       # Check service status
       - name: "Check service status"
-        module:
-          type: "command"
+        command:
           cmd: "systemctl is-active ssh"
         register: service_status
         ignore_errors: true

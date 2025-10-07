@@ -2,6 +2,36 @@
 
 ## [Unreleased]
 
+## [1.9.0] - 2025-01-16
+
+### ✨ Added
+
+- **Simplified YAML Syntax**: New Ansible-like syntax for task definitions
+  - Module name is now used directly as the field name (e.g., `package:`, `service:`, `file:`)
+  - Removed redundant `module:` and `type:` wrappers
+  - Cleaner, more intuitive syntax with one less nesting level
+  - Example: `package: { name: git, state: present }` instead of `module: { type: package, name: git, state: present }`
+  - Full backward compatibility maintained - old syntax still works
+
+### 🔧 Changed
+
+- Updated task parser to support both old and new syntax formats
+- Modified `MarshalYAML` to output tasks using the new simplified syntax
+- Updated all example playbooks (25 files) to use the new syntax
+- Updated documentation (README.md, docs/IMPROVED_SYNTAX.md) with new syntax examples
+
+### 📖 Documentation
+
+- Completely revised `docs/IMPROVED_SYNTAX.md` with new syntax examples
+- Updated README.md Quick Start guide with simplified syntax
+- All 25 example YAML files migrated to new syntax
+
+### 🔄 Backward Compatibility
+
+- **100% backward compatible**: All existing playbooks with old syntax continue to work
+- Parser automatically detects and handles both syntax formats
+- No breaking changes introduced
+
 ## [1.8.0] - 2025-01-15
 
 ### ✨ Added

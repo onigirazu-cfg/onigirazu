@@ -4,7 +4,6 @@ plays:
     hosts: localhost
     tasks:
       - name: "Test command"
-        module:
-          type: "command"
+        command:
           cmd: "echo"
           args: ["Hello World"]

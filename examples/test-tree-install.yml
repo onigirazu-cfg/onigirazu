@@ -5,7 +5,6 @@ plays:
     hosts: all
     tasks:
       - name: "Install tree package"
-        module:
-          type: "package"
+        package:
           name: "tree"
           state: "present"
