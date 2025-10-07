@@ -263,7 +263,15 @@ brews:
 nfpms:
   - id: onigirazu
     package_name: onigirazu
-    file_name_template: '{{ .ConventionalFileName }}'
+    # Custom file name template to avoid armv6/armv7 conflicts
+    file_name_template: >-
+      {{ .PackageName }}_{{ .Version }}_
+      {{- if eq .Arch "arm" }}
+        {{- if eq .Arm "6" }}armv6
+        {{- else if eq .Arm "7" }}armv7
+        {{- else }}{{ .Arch }}{{ end }}
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if not (eq .Amd64 "v1") }}{{ .Amd64 }}{{ end }}
     vendor: Onigirazu Team
     homepage: https://github.com/onigirazu-cfg/onigirazu
     maintainer: Onigirazu Team <team@onigirazu.dev>
