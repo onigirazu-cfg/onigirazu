@@ -21,8 +21,7 @@ Onigirazu modules are the building blocks for automation tasks. Each module perf
 
 ```yaml
 - name: "Task Name"
-  module: "module_name"
-  args:
+  module_name:
     parameter1: value1
     parameter2: value2
   when: "condition"
@@ -69,8 +68,7 @@ Gather system information and facts about target hosts.
 
 ```yaml
 - name: "Gather system facts"
-  module: "facts"
-  args:
+  facts:
     gather_subset:
       - "hardware"
       - "network"
@@ -117,14 +115,12 @@ Execute commands on target hosts.
 
 ```yaml
 - name: "Check disk usage"
-  module: "command"
-  args:
+  command:
     cmd: "df -h"
   register: "disk_usage"
 
 - name: "Create backup directory"
-  module: "command"
-  args:
+  command:
     cmd: "mkdir -p /backup/{{ ansible_date_time.date }}"
     creates: "/backup/{{ ansible_date_time.date }}"
 ```
@@ -160,8 +156,7 @@ Execute shell commands with full shell features.
 
 ```yaml
 - name: "Process log files"
-  module: "shell"
-  args:
+  shell:
     cmd: |
       for log in /var/log/*.log; do
         if [ -f "$log" ]; then
@@ -190,8 +185,7 @@ Execute local scripts on remote hosts.
 
 ```yaml
 - name: "Run deployment script"
-  module: "script"
-  args:
+  script:
     path: "./scripts/deploy.sh"
     args:
       - "production"
@@ -229,8 +223,7 @@ Manage files and directories.
 
 ```yaml
 - name: "Create application directory"
-  module: "file"
-  args:
+  file:
     path: "/opt/myapp"
     state: "directory"
     mode: "0755"
@@ -238,8 +231,7 @@ Manage files and directories.
     group: "appgroup"
 
 - name: "Create symbolic link"
-  module: "file"
-  args:
+  file:
     src: "/opt/myapp/current"
     dest: "/opt/myapp/releases/v1.2.3"
     state: "link"
@@ -266,8 +258,7 @@ Copy files to target hosts.
 
 ```yaml
 - name: "Copy configuration file"
-  module: "copy"
-  args:
+  copy:
     src: "./config/app.conf"
     dest: "/etc/myapp/app.conf"
     backup: true
@@ -276,8 +267,7 @@ Copy files to target hosts.
     group: "root"
 
 - name: "Create file with content"
-  module: "copy"
-  args:
+  copy:
     content: |
       server {
         listen 80;
@@ -309,8 +299,7 @@ Process Jinja2 templates and copy to target hosts.
 
 ```yaml
 - name: "Deploy application configuration"
-  module: "template"
-  args:
+  template:
     src: "./templates/app.conf.j2"
     dest: "/etc/myapp/app.conf"
     backup: true
@@ -338,15 +327,13 @@ Fetch files from target hosts to local machine.
 
 ```yaml
 - name: "Fetch log files"
-  module: "fetch"
-  args:
+  fetch:
     src: "/var/log/myapp.log"
     dest: "./logs/"
     flat: false
 
 - name: "Backup configuration"
-  module: "fetch"
-  args:
+  fetch:
     src: "/etc/myapp/app.conf"
     dest: "./backups/{{ inventory_hostname }}-app.conf"
     flat: true
@@ -393,8 +380,7 @@ Manage configuration files in various formats.
 
 ```yaml
 - name: "Update database configuration"
-  module: "config"
-  args:
+  config:
     path: "/etc/myapp/config.yml"
     format: "yaml"
     action: "set"
@@ -403,8 +389,7 @@ Manage configuration files in various formats.
     backup: true
 
 - name: "Merge configuration"
-  module: "config"
-  args:
+  config:
     path: "/etc/myapp/config.json"
     format: "json"
     action: "merge"
@@ -438,16 +423,14 @@ Manage single lines in text files.
 
 ```yaml
 - name: "Add user to sudoers"
-  module: "lineinfile"
-  args:
+  lineinfile:
     path: "/etc/sudoers"
     line: "myuser ALL=(ALL) NOPASSWD: ALL"
     regexp: "^myuser"
     backup: true
 
 - name: "Configure SSH"
-  module: "lineinfile"
-  args:
+  lineinfile:
     path: "/etc/ssh/sshd_config"
     regexp: "^#?PasswordAuthentication"
     line: "PasswordAuthentication no"
@@ -475,8 +458,7 @@ Manage blocks of text in files.
 
 ```yaml
 - name: "Configure application block"
-  module: "blockinfile"
-  args:
+  blockinfile:
     path: "/etc/hosts"
     block: |
       # Application servers
@@ -514,15 +496,13 @@ Manage system services.
 
 ```yaml
 - name: "Start and enable nginx"
-  module: "service"
-  args:
+  service:
     name: "nginx"
     state: "started"
     enabled: true
 
 - name: "Restart application service"
-  module: "service"
-  args:
+  service:
     name: "myapp"
     state: "restarted"
     daemon_reload: true
@@ -548,8 +528,7 @@ Advanced systemd service management.
 
 ```yaml
 - name: "Configure systemd service"
-  module: "systemd"
-  args:
+  systemd:
     name: "myapp.service"
     state: "started"
     enabled: true
@@ -557,8 +536,7 @@ Advanced systemd service management.
     scope: "system"
 
 - name: "Mask unwanted service"
-  module: "systemd"
-  args:
+  systemd:
     name: "unwanted.service"
     masked: true
 ```
@@ -589,8 +567,7 @@ Universal package management.
 
 ```yaml
 - name: "Install web server packages"
-  module: "package"
-  args:
+  package:
     name:
       - "nginx"
       - "php-fpm"
@@ -599,8 +576,7 @@ Universal package management.
     update_cache: true
 
 - name: "Install specific version"
-  module: "package"
-  args:
+  package:
     name: "docker-ce"
     version: "20.10.17"
     state: "present"
@@ -626,14 +602,12 @@ Debian/Ubuntu package management.
 
 ```yaml
 - name: "Update package cache"
-  module: "apt"
-  args:
+  apt:
     update_cache: true
     cache_valid_time: 3600
 
 - name: "Upgrade all packages"
-  module: "apt"
-  args:
+  apt:
     upgrade: "dist"
     update_cache: true
     autoremove: true
@@ -658,14 +632,12 @@ RedHat/CentOS package management.
 
 ```yaml
 - name: "Install development tools"
-  module: "yum"
-  args:
+  yum:
     name: "@Development Tools"
     state: "present"
 
 - name: "Install from specific repo"
-  module: "yum"
-  args:
+  yum:
     name: "docker-ce"
     state: "present"
     enablerepo: "docker-ce-stable"
@@ -694,16 +666,14 @@ Interact with HTTP/HTTPS services.
 
 ```yaml
 - name: "Check API health"
-  module: "uri"
-  args:
+  uri:
     url: "https://api.example.com/health"
     method: "GET"
     timeout: 10
   register: "health_check"
 
 - name: "Send webhook notification"
-  module: "uri"
-  args:
+  uri:
     url: "https://hooks.slack.com/services/..."
     method: "POST"
     body_format: "json"
@@ -735,8 +705,7 @@ Download files from HTTP/HTTPS/FTP.
 
 ```yaml
 - name: "Download application binary"
-  module: "get_url"
-  args:
+  get_url:
     url: "https://releases.example.com/myapp/v1.2.3/myapp-linux-amd64"
     dest: "/usr/local/bin/myapp"
     mode: "0755"
@@ -770,8 +739,7 @@ Manage user accounts.
 
 ```yaml
 - name: "Create application user"
-  module: "user"
-  args:
+  user:
     name: "appuser"
     uid: 1001
     group: "appgroup"
@@ -780,8 +748,7 @@ Manage user accounts.
     create_home: true
 
 - name: "Add user to groups"
-  module: "user"
-  args:
+  user:
     name: "myuser"
     groups:
       - "docker"
@@ -806,8 +773,7 @@ Manage user groups.
 
 ```yaml
 - name: "Create application group"
-  module: "group"
-  args:
+  group:
     name: "appgroup"
     gid: 1001
     system: false
@@ -833,16 +799,14 @@ Manage SSH authorized keys.
 
 ```yaml
 - name: "Add SSH key for user"
-  module: "authorized_key"
-  args:
+  authorized_key:
     user: "myuser"
     key: "{{ lookup('file', '~/.ssh/id_rsa.pub') }}"
     state: "present"
     comment: "Deployment key"
 
 - name: "Set exclusive SSH keys"
-  module: "authorized_key"
-  args:
+  authorized_key:
     user: "appuser"
     key: |
       ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQ... user1@host1
@@ -868,13 +832,11 @@ Print debug information.
 
 ```yaml
 - name: "Debug variable"
-  module: "debug"
-  args:
+  debug:
     var: "ansible_facts"
 
 - name: "Debug message"
-  module: "debug"
-  args:
+  debug:
     msg: "Current user is {{ ansible_user_id }}"
 ```
 
@@ -893,8 +855,7 @@ Set variables for use in subsequent tasks.
 
 ```yaml
 - name: "Set deployment facts"
-  module: "set_fact"
-  args:
+  set_fact:
     deployment_time: "{{ ansible_date_time.iso8601 }}"
     app_version: "v1.2.3"
     environment: "production"
@@ -922,15 +883,13 @@ Wait for conditions to be met.
 
 ```yaml
 - name: "Wait for service to start"
-  module: "wait_for"
-  args:
+  wait_for:
     port: 8080
     host: "{{ inventory_hostname }}"
     timeout: 60
 
 - name: "Wait for log message"
-  module: "wait_for"
-  args:
+  wait_for:
     path: "/var/log/myapp.log"
     search_regex: "Server started successfully"
     timeout: 120
@@ -953,13 +912,11 @@ Pause execution for user input or time.
 
 ```yaml
 - name: "Pause for confirmation"
-  module: "pause"
-  args:
+  pause:
     prompt: "Press enter to continue with deployment"
 
 - name: "Wait before next step"
-  module: "pause"
-  args:
+  pause:
     seconds: 30
 ```
 
@@ -977,8 +934,7 @@ Fail execution with custom message.
 
 ```yaml
 - name: "Fail if conditions not met"
-  module: "fail"
-  args:
+  fail:
     msg: "Database connection failed"
   when: "database_check.rc != 0"
 ```

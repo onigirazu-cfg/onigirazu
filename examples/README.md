@@ -25,23 +25,20 @@ plays:
     hosts: "all"
     tasks:
       - name: "Gather system facts"
-        module: "facts"
+        facts:
         register: "system_info"
 
       - name: "Display hostname"
-        module: "debug"
-        args:
+        debug:
           msg: "Hostname: {{ ansible_hostname }}"
 
       - name: "Check disk space"
-        module: "command"
-        args:
+        command:
           cmd: "df -h /"
         register: "disk_space"
 
       - name: "Display disk usage"
-        module: "debug"
-        args:
+        debug:
           var: "disk_space.stdout"
 ```
 
@@ -59,8 +56,7 @@ plays:
 
     tasks:
       - name: "Create application directory"
-        module: "file"
-        args:
+        file:
           path: "{{ app_config_dir }}"
           state: "directory"
           mode: "0755"
@@ -68,15 +64,13 @@ plays:
           group: "appgroup"
 
       - name: "Create backup directory"
-        module: "file"
-        args:
+        file:
           path: "{{ backup_dir }}"
           state: "directory"
           mode: "0755"
 
       - name: "Deploy configuration file"
-        module: "template"
-        args:
+        template:
           src: "./templates/app.conf.j2"
           dest: "{{ app_config_dir }}/app.conf"
           backup: true
@@ -86,8 +80,7 @@ plays:
         notify: "restart application"
 
       - name: "Set configuration values"
-        module: "config"
-        args:
+        config:
           path: "{{ app_config_dir }}/settings.yml"
           format: "yaml"
           action: "set"
@@ -102,8 +95,7 @@ plays:
 
     handlers:
       - name: "restart application"
-        module: "service"
-        args:
+        service:
           name: "myapp"
           state: "restarted"
 ```
@@ -120,15 +112,13 @@ plays:
 
     tasks:
       - name: "Update package cache (Debian/Ubuntu)"
-        module: "apt"
-        args:
+        apt:
           update_cache: true
           cache_valid_time: 3600
         when: "ansible_os_family == 'Debian'"
 
       - name: "Install essential packages"
-        module: "package"
-        args:
+        package:
           name:
             - "curl"
             - "wget"
@@ -139,15 +129,13 @@ plays:
           state: "present"
 
       - name: "Install web server (Nginx)"
-        module: "package"
-        args:
+        package:
           name: "nginx"
           state: "present"
         notify: "start nginx"
 
       - name: "Install database client"
-        module: "package"
-        args:
+        package:
           name: "{{ db_client_package }}"
           state: "present"
         vars:
@@ -162,8 +150,7 @@ plays:
 
     handlers:
       - name: "start nginx"
-        module: "service"
-        args:
+        service:
           name: "nginx"
           state: "started"
           enabled: true
@@ -183,26 +170,22 @@ plays:
 
     tasks:
       - name: "Check system resources"
-        module: "command"
-        args:
+        command:
           cmd: "free -m | awk 'NR==2{printf \"%.2f%%\", $3*100/$2}'"
         register: "memory_usage"
 
       - name: "Fail if memory usage too high"
-        module: "fail"
-        args:
+        fail:
           msg: "Memory usage too high: {{ memory_usage.stdout }}%"
         when: "memory_usage.stdout | float > 80"
 
       - name: "Check disk space"
-        module: "command"
-        args:
+        command:
           cmd: "df / | awk 'NR==2 {print $5}' | sed 's/%//'"
         register: "disk_usage"
 
       - name: "Fail if disk usage too high"
-        module: "fail"
-        args:
+        fail:
           msg: "Disk usage too high: {{ disk_usage.stdout }}%"
         when: "disk_usage.stdout | int > 85"
 
@@ -212,15 +195,13 @@ plays:
 
     tasks:
       - name: "Create backup directory"
-        module: "file"
-        args:
+        file:
           path: "/backup/{{ ansible_date_time.date }}"
           state: "directory"
           mode: "0755"
 
       - name: "Backup database"
-        module: "command"
-        args:
+        command:
           cmd: >
             mysqldump -u {{ db_user }} -p{{ db_password }}
             --single-transaction --routines --triggers
@@ -228,8 +209,7 @@ plays:
         no_log: true
 
       - name: "Compress backup"
-        module: "command"
-        args:
+        command:
           cmd: "gzip /backup/{{ ansible_date_time.date }}/{{ db_name }}.sql"
 
   - name: "Application Deployment"
@@ -238,35 +218,30 @@ plays:
 
     tasks:
       - name: "Stop application service"
-        module: "service"
-        args:
+        service:
           name: "myapp"
           state: "stopped"
 
       - name: "Create release directory"
-        module: "file"
-        args:
+        file:
           path: "/opt/myapp/releases/{{ app_version }}"
           state: "directory"
           owner: "appuser"
           group: "appgroup"
 
       - name: "Download application archive"
-        module: "get_url"
-        args:
+        get_url:
           url: "{{ app_download_url }}/{{ app_version }}/myapp-{{ app_version }}.tar.gz"
           dest: "/tmp/myapp-{{ app_version }}.tar.gz"
           mode: "0644"
 
       - name: "Extract application"
-        module: "command"
-        args:
+        command:
           cmd: "tar -xzf /tmp/myapp-{{ app_version }}.tar.gz -C /opt/myapp/releases/{{ app_version }} --strip-components=1"
           creates: "/opt/myapp/releases/{{ app_version }}/app.py"
 
       - name: "Update symlink"
-        module: "file"
-        args:
+        file:
           src: "/opt/myapp/releases/{{ app_version }}"
           dest: "/opt/myapp/current"
           state: "link"
@@ -274,29 +249,25 @@ plays:
           group: "appgroup"
 
       - name: "Install dependencies"
-        module: "command"
-        args:
+        command:
           cmd: "pip install -r requirements.txt"
           chdir: "/opt/myapp/current"
         become_user: "appuser"
 
       - name: "Run database migrations"
-        module: "command"
-        args:
+        command:
           cmd: "python manage.py migrate"
           chdir: "/opt/myapp/current"
         become_user: "appuser"
         run_once: true
 
       - name: "Start application service"
-        module: "service"
-        args:
+        service:
           name: "myapp"
           state: "started"
 
       - name: "Wait for application to start"
-        module: "wait_for"
-        args:
+        wait_for:
           port: 8080
           host: "{{ inventory_hostname }}"
           timeout: 60
@@ -306,8 +277,7 @@ plays:
 
     tasks:
       - name: "Health check"
-        module: "uri"
-        args:
+        uri:
           url: "http://{{ inventory_hostname }}:8080/health"
           method: "GET"
           status_code: 200
@@ -317,22 +287,19 @@ plays:
         delay: 10
 
       - name: "Verify application version"
-        module: "uri"
-        args:
+        uri:
           url: "http://{{ inventory_hostname }}:8080/version"
           method: "GET"
           return_content: true
         register: "version_check"
 
       - name: "Validate version"
-        module: "fail"
-        args:
+        fail:
           msg: "Version mismatch: expected {{ app_version }}, got {{ version_check.json.version }}"
         when: "version_check.json.version != app_version"
 
       - name: "Send deployment notification"
-        module: "uri"
-        args:
+        uri:
           url: "{{ slack_webhook_url }}"
           method: "POST"
           body_format: "json"
@@ -361,20 +328,17 @@ plays:
 
     tasks:
       - name: "Get current version"
-        module: "command"
-        args:
+        command:
           cmd: "readlink /opt/myapp/current"
         register: "current_version"
         changed_when: false
 
       - name: "Set rollback version"
-        module: "set_fact"
-        args:
+        set_fact:
           rollback_version: "{{ current_version.stdout | basename }}"
 
       - name: "Remove from load balancer"
-        module: "uri"
-        args:
+        uri:
           url: "{{ lb_api_url }}/servers/{{ inventory_hostname }}/disable"
           method: "POST"
           headers:
@@ -382,16 +346,14 @@ plays:
         delegate_to: "localhost"
 
       - name: "Wait for connections to drain"
-        module: "pause"
-        args:
+        pause:
           seconds: 30
 
       - name: "Deploy new version"
         include_tasks: "deploy-tasks.yml"
 
       - name: "Health check"
-        module: "uri"
-        args:
+        uri:
           url: "http://{{ inventory_hostname }}:8080/health"
           method: "GET"
           status_code: 200
@@ -403,34 +365,29 @@ plays:
       - name: "Rollback on health check failure"
         block:
           - name: "Stop new version"
-            module: "service"
-            args:
+            service:
               name: "myapp"
               state: "stopped"
 
           - name: "Restore previous version"
-            module: "file"
-            args:
+            file:
               src: "/opt/myapp/releases/{{ rollback_version }}"
               dest: "/opt/myapp/current"
               state: "link"
 
           - name: "Start previous version"
-            module: "service"
-            args:
+            service:
               name: "myapp"
               state: "started"
 
           - name: "Fail deployment"
-            module: "fail"
-            args:
+            fail:
               msg: "Health check failed, rolled back to {{ rollback_version }}"
 
         when: "health_check.status != 200 and rollback_on_failure"
 
       - name: "Add back to load balancer"
-        module: "uri"
-        args:
+        uri:
           url: "{{ lb_api_url }}/servers/{{ inventory_hostname }}/enable"
           method: "POST"
           headers:
@@ -438,8 +395,7 @@ plays:
         delegate_to: "localhost"
 
       - name: "Verify load balancer status"
-        module: "uri"
-        args:
+        uri:
           url: "{{ lb_api_url }}/servers/{{ inventory_hostname }}/status"
           method: "GET"
           headers:
@@ -450,8 +406,7 @@ plays:
         delay: 5
 
       - name: "Cleanup old releases"
-        module: "shell"
-        args:
+        shell:
           cmd: |
             cd /opt/myapp/releases
             ls -t | tail -n +6 | xargs rm -rf
@@ -482,29 +437,25 @@ plays:
 
     tasks:
       - name: "Update system packages"
-        module: "package"
-        args:
+        package:
           name: "*"
           state: "latest"
         when: "ansible_os_family == 'RedHat'"
 
       - name: "Update system packages (Debian)"
-        module: "apt"
-        args:
+        apt:
           upgrade: "dist"
           update_cache: true
           autoremove: true
         when: "ansible_os_family == 'Debian'"
 
       - name: "Install security packages"
-        module: "package"
-        args:
+        package:
           name: "{{ security_packages }}"
           state: "present"
 
       - name: "Create admin users"
-        module: "user"
-        args:
+        user:
           name: "{{ item.name }}"
           groups: "sudo"
           shell: "/bin/bash"
@@ -512,16 +463,14 @@ plays:
         loop: "{{ admin_users }}"
 
       - name: "Set up SSH keys for admin users"
-        module: "authorized_key"
-        args:
+        authorized_key:
           user: "{{ item.name }}"
           key: "{{ item.key }}"
           state: "present"
         loop: "{{ admin_users }}"
 
       - name: "Configure SSH security"
-        module: "lineinfile"
-        args:
+        lineinfile:
           path: "/etc/ssh/sshd_config"
           regexp: "{{ item.regexp }}"
           line: "{{ item.line }}"
@@ -534,8 +483,7 @@ plays:
         notify: "restart ssh"
 
       - name: "Configure firewall"
-        module: "ufw"
-        args:
+        ufw:
           rule: "{{ item.rule }}"
           port: "{{ item.port }}"
           proto: "{{ item.proto | default('tcp') }}"
@@ -546,56 +494,48 @@ plays:
         notify: "enable firewall"
 
       - name: "Configure automatic updates"
-        module: "template"
-        args:
+        template:
           src: "./templates/50unattended-upgrades.j2"
           dest: "/etc/apt/apt.conf.d/50unattended-upgrades"
           mode: "0644"
         when: "ansible_os_family == 'Debian'"
 
       - name: "Configure fail2ban"
-        module: "template"
-        args:
+        template:
           src: "./templates/jail.local.j2"
           dest: "/etc/fail2ban/jail.local"
           mode: "0644"
         notify: "restart fail2ban"
 
       - name: "Set timezone"
-        module: "timezone"
-        args:
+        timezone:
           name: "{{ server_timezone | default('UTC') }}"
 
       - name: "Configure NTP"
-        module: "package"
-        args:
+        package:
           name: "chrony"
           state: "present"
         notify: "start chrony"
 
     handlers:
       - name: "restart ssh"
-        module: "service"
-        args:
+        service:
           name: "sshd"
           state: "restarted"
 
       - name: "enable firewall"
-        module: "ufw"
-        args:
+        ufw:
           state: "enabled"
           policy: "deny"
 
       - name: "restart fail2ban"
-        module: "service"
-        args:
+        service:
           name: "fail2ban"
           state: "restarted"
           enabled: true
 
       - name: "start chrony"
-        module: "service"
-        args:
+        service:
           name: "chrony"
           state: "started"
           enabled: true
@@ -621,14 +561,12 @@ plays:
 
     tasks:
       - name: "Install HAProxy"
-        module: "package"
-        args:
+        package:
           name: "haproxy"
           state: "present"
 
       - name: "Configure HAProxy"
-        module: "template"
-        args:
+        template:
           src: "./templates/haproxy.cfg.j2"
           dest: "/etc/haproxy/haproxy.cfg"
           backup: true
@@ -636,23 +574,20 @@ plays:
         notify: "restart haproxy"
 
       - name: "Enable HAProxy service"
-        module: "service"
-        args:
+        service:
           name: "haproxy"
           enabled: true
           state: "started"
 
       - name: "Configure rsyslog for HAProxy"
-        module: "lineinfile"
-        args:
+        lineinfile:
           path: "/etc/rsyslog.conf"
           line: "$UDPServerRun 514"
           regexp: "^#?\\$UDPServerRun"
         notify: "restart rsyslog"
 
       - name: "Create HAProxy log configuration"
-        module: "copy"
-        args:
+        copy:
           content: |
             $UDPServerAddress 127.0.0.1
             local0.*    /var/log/haproxy.log
@@ -661,8 +596,7 @@ plays:
         notify: "restart rsyslog"
 
       - name: "Configure log rotation"
-        module: "copy"
-        args:
+        copy:
           content: |
             /var/log/haproxy.log {
                 daily
@@ -679,14 +613,12 @@ plays:
 
     handlers:
       - name: "restart haproxy"
-        module: "service"
-        args:
+        service:
           name: "haproxy"
           state: "restarted"
 
       - name: "restart rsyslog"
-        module: "service"
-        args:
+        service:
           name: "rsyslog"
           state: "restarted"
 ```
@@ -729,8 +661,7 @@ plays:
 
     tasks:
       - name: "Remove unused packages"
-        module: "package"
-        args:
+        package:
           name:
             - "telnet"
             - "rsh-server"
@@ -744,8 +675,7 @@ plays:
           state: "absent"
 
       - name: "Set password policy"
-        module: "lineinfile"
-        args:
+        lineinfile:
           path: "/etc/login.defs"
           regexp: "{{ item.regexp }}"
           line: "{{ item.line }}"
@@ -757,8 +687,7 @@ plays:
           - { regexp: "^PASS_MIN_LEN", line: "PASS_MIN_LEN 8" }
 
       - name: "Configure PAM password requirements"
-        module: "lineinfile"
-        args:
+        lineinfile:
           path: "/etc/pam.d/common-password"
           regexp: "pam_pwquality.so"
           line: "password requisite pam_pwquality.so retry=3 minlen=8 difok=3 ucredit=-1 lcredit=-1 dcredit=-1 ocredit=-1"
@@ -766,8 +695,7 @@ plays:
         when: "ansible_os_family == 'Debian'"
 
       - name: "Set kernel parameters"
-        module: "sysctl"
-        args:
+        sysctl:
           name: "{{ item.name }}"
           value: "{{ item.value }}"
           state: "present"
@@ -775,14 +703,12 @@ plays:
         loop: "{{ sysctl_settings }}"
 
       - name: "Configure audit daemon"
-        module: "package"
-        args:
+        package:
           name: "auditd"
           state: "present"
 
       - name: "Configure audit rules"
-        module: "copy"
-        args:
+        copy:
           content: |
             # Monitor authentication events
             -w /var/log/auth.log -p wa -k authentication
@@ -812,8 +738,7 @@ plays:
         notify: "restart auditd"
 
       - name: "Remove unauthorized users"
-        module: "user"
-        args:
+        user:
           name: "{{ item }}"
           state: "absent"
           remove: true
@@ -821,8 +746,7 @@ plays:
         when: "item not in allowed_users"
 
       - name: "Set file permissions on sensitive files"
-        module: "file"
-        args:
+        file:
           path: "{{ item.path }}"
           mode: "{{ item.mode }}"
           owner: "{{ item.owner | default('root') }}"
@@ -836,8 +760,7 @@ plays:
           - { path: "/etc/crontab", mode: "0600" }
 
       - name: "Configure automatic security updates"
-        module: "template"
-        args:
+        template:
           src: "./templates/auto-upgrades.j2"
           dest: "/etc/apt/apt.conf.d/20auto-upgrades"
           mode: "0644"
@@ -846,26 +769,22 @@ plays:
       - name: "Install and configure AIDE"
         block:
           - name: "Install AIDE"
-            module: "package"
-            args:
+            package:
               name: "aide"
               state: "present"
 
           - name: "Initialize AIDE database"
-            module: "command"
-            args:
+            command:
               cmd: "aideinit"
               creates: "/var/lib/aide/aide.db.new"
 
           - name: "Move AIDE database"
-            module: "command"
-            args:
+            command:
               cmd: "mv /var/lib/aide/aide.db.new /var/lib/aide/aide.db"
               creates: "/var/lib/aide/aide.db"
 
           - name: "Schedule AIDE checks"
-            module: "cron"
-            args:
+            cron:
               name: "AIDE integrity check"
               minute: "0"
               hour: "2"
@@ -874,8 +793,7 @@ plays:
 
     handlers:
       - name: "restart auditd"
-        module: "service"
-        args:
+        service:
           name: "auditd"
           state: "restarted"
           enabled: true
@@ -897,39 +815,34 @@ plays:
 
     tasks:
       - name: "Create compliance report directory"
-        module: "file"
-        args:
+        file:
           path: "{{ compliance_report_dir }}"
           state: "directory"
           mode: "0755"
 
       - name: "Check password policy compliance"
-        module: "shell"
-        args:
+        shell:
           cmd: |
             grep "^PASS_MAX_DAYS" /etc/login.defs | awk '{print $2}'
         register: "pass_max_days"
         changed_when: false
 
       - name: "Check SSH configuration compliance"
-        module: "shell"
-        args:
+        shell:
           cmd: |
             sshd -T | grep -E "(passwordauthentication|permitrootlogin|protocol)"
         register: "ssh_config"
         changed_when: false
 
       - name: "Check firewall status"
-        module: "command"
-        args:
+        command:
           cmd: "ufw status"
         register: "firewall_status"
         changed_when: false
         failed_when: false
 
       - name: "Check for unauthorized SUID files"
-        module: "shell"
-        args:
+        shell:
           cmd: |
             find / -perm -4000 -type f 2>/dev/null | grep -v -E "(sudo|su|passwd|ping)"
         register: "suid_files"
@@ -937,8 +850,7 @@ plays:
         failed_when: false
 
       - name: "Check for world-writable files"
-        module: "shell"
-        args:
+        shell:
           cmd: |
             find / -perm -002 -type f 2>/dev/null | head -20
         register: "world_writable"
@@ -946,15 +858,13 @@ plays:
         failed_when: false
 
       - name: "Generate compliance report"
-        module: "template"
-        args:
+        template:
           src: "./templates/compliance-report.j2"
           dest: "{{ compliance_report_dir }}/compliance-{{ inventory_hostname }}.html"
           mode: "0644"
 
       - name: "Fetch compliance report"
-        module: "fetch"
-        args:
+        fetch:
           src: "{{ compliance_report_dir }}/compliance-{{ inventory_hostname }}.html"
           dest: "./reports/"
           flat: true
@@ -980,8 +890,7 @@ plays:
 
     tasks:
       - name: "Create prometheus user"
-        module: "user"
-        args:
+        user:
           name: "{{ prometheus_user }}"
           system: true
           shell: "/bin/false"
@@ -989,8 +898,7 @@ plays:
           create_home: false
 
       - name: "Create prometheus directories"
-        module: "file"
-        args:
+        file:
           path: "{{ item }}"
           state: "directory"
           owner: "{{ prometheus_user }}"
@@ -1002,23 +910,20 @@ plays:
           - "/var/log/prometheus"
 
       - name: "Download Prometheus"
-        module: "get_url"
-        args:
+        get_url:
           url: "https://github.com/prometheus/prometheus/releases/download/v{{ prometheus_version }}/prometheus-{{ prometheus_version }}.linux-amd64.tar.gz"
           dest: "/tmp/prometheus-{{ prometheus_version }}.tar.gz"
           mode: "0644"
 
       - name: "Extract Prometheus"
-        module: "unarchive"
-        args:
+        unarchive:
           src: "/tmp/prometheus-{{ prometheus_version }}.tar.gz"
           dest: "/tmp"
           remote_src: true
           creates: "/tmp/prometheus-{{ prometheus_version }}.linux-amd64"
 
       - name: "Install Prometheus binaries"
-        module: "copy"
-        args:
+        copy:
           src: "/tmp/prometheus-{{ prometheus_version }}.linux-amd64/{{ item }}"
           dest: "/usr/local/bin/{{ item }}"
           mode: "0755"
@@ -1030,8 +935,7 @@ plays:
           - "promtool"
 
       - name: "Configure Prometheus"
-        module: "template"
-        args:
+        template:
           src: "./templates/prometheus.yml.j2"
           dest: "{{ prometheus_config_dir }}/prometheus.yml"
           owner: "{{ prometheus_user }}"
@@ -1040,8 +944,7 @@ plays:
         notify: "restart prometheus"
 
       - name: "Create Prometheus systemd service"
-        module: "template"
-        args:
+        template:
           src: "./templates/prometheus.service.j2"
           dest: "/etc/systemd/system/prometheus.service"
           mode: "0644"
@@ -1050,8 +953,7 @@ plays:
           - "restart prometheus"
 
       - name: "Start and enable Prometheus"
-        module: "service"
-        args:
+        service:
           name: "prometheus"
           state: "started"
           enabled: true
@@ -1066,31 +968,27 @@ plays:
 
     tasks:
       - name: "Create node_exporter user"
-        module: "user"
-        args:
+        user:
           name: "{{ node_exporter_user }}"
           system: true
           shell: "/bin/false"
           create_home: false
 
       - name: "Download Node Exporter"
-        module: "get_url"
-        args:
+        get_url:
           url: "https://github.com/prometheus/node_exporter/releases/download/v{{ node_exporter_version }}/node_exporter-{{ node_exporter_version }}.linux-amd64.tar.gz"
           dest: "/tmp/node_exporter-{{ node_exporter_version }}.tar.gz"
           mode: "0644"
 
       - name: "Extract Node Exporter"
-        module: "unarchive"
-        args:
+        unarchive:
           src: "/tmp/node_exporter-{{ node_exporter_version }}.tar.gz"
           dest: "/tmp"
           remote_src: true
           creates: "/tmp/node_exporter-{{ node_exporter_version }}.linux-amd64"
 
       - name: "Install Node Exporter binary"
-        module: "copy"
-        args:
+        copy:
           src: "/tmp/node_exporter-{{ node_exporter_version }}.linux-amd64/node_exporter"
           dest: "/usr/local/bin/node_exporter"
           mode: "0755"
@@ -1099,8 +997,7 @@ plays:
           remote_src: true
 
       - name: "Create Node Exporter systemd service"
-        module: "copy"
-        args:
+        copy:
           content: |
             [Unit]
             Description=Node Exporter
@@ -1122,8 +1019,7 @@ plays:
           - "restart node_exporter"
 
       - name: "Start and enable Node Exporter"
-        module: "service"
-        args:
+        service:
           name: "node_exporter"
           state: "started"
           enabled: true
@@ -1134,62 +1030,53 @@ plays:
 
     tasks:
       - name: "Add Grafana APT key"
-        module: "apt_key"
-        args:
+        apt_key:
           url: "https://packages.grafana.com/gpg.key"
           state: "present"
         when: "ansible_os_family == 'Debian'"
 
       - name: "Add Grafana repository"
-        module: "apt_repository"
-        args:
+        apt_repository:
           repo: "deb https://packages.grafana.com/oss/deb stable main"
           state: "present"
         when: "ansible_os_family == 'Debian'"
 
       - name: "Install Grafana"
-        module: "package"
-        args:
+        package:
           name: "grafana"
           state: "present"
           update_cache: true
 
       - name: "Configure Grafana"
-        module: "template"
-        args:
+        template:
           src: "./templates/grafana.ini.j2"
           dest: "/etc/grafana/grafana.ini"
           backup: true
         notify: "restart grafana"
 
       - name: "Start and enable Grafana"
-        module: "service"
-        args:
+        service:
           name: "grafana-server"
           state: "started"
           enabled: true
 
     handlers:
       - name: "reload systemd"
-        module: "systemd"
-        args:
+        systemd:
           daemon_reload: true
 
       - name: "restart prometheus"
-        module: "service"
-        args:
+        service:
           name: "prometheus"
           state: "restarted"
 
       - name: "restart node_exporter"
-        module: "service"
-        args:
+        service:
           name: "node_exporter"
           state: "restarted"
 
       - name: "restart grafana"
-        module: "service"
-        args:
+        service:
           name: "grafana-server"
           state: "restarted"
 ```
@@ -1217,8 +1104,7 @@ plays:
 
     tasks:
       - name: "Create alertmanager user"
-        module: "user"
-        args:
+        user:
           name: "{{ alertmanager_user }}"
           system: true
           shell: "/bin/false"
@@ -1226,8 +1112,7 @@ plays:
           create_home: false
 
       - name: "Create alertmanager directories"
-        module: "file"
-        args:
+        file:
           path: "{{ item }}"
           state: "directory"
           owner: "{{ alertmanager_user }}"
@@ -1238,23 +1123,20 @@ plays:
           - "{{ alertmanager_data_dir }}"
 
       - name: "Download Alertmanager"
-        module: "get_url"
-        args:
+        get_url:
           url: "https://github.com/prometheus/alertmanager/releases/download/v{{ alertmanager_version }}/alertmanager-{{ alertmanager_version }}.linux-amd64.tar.gz"
           dest: "/tmp/alertmanager-{{ alertmanager_version }}.tar.gz"
           mode: "0644"
 
       - name: "Extract Alertmanager"
-        module: "unarchive"
-        args:
+        unarchive:
           src: "/tmp/alertmanager-{{ alertmanager_version }}.tar.gz"
           dest: "/tmp"
           remote_src: true
           creates: "/tmp/alertmanager-{{ alertmanager_version }}.linux-amd64"
 
       - name: "Install Alertmanager binaries"
-        module: "copy"
-        args:
+        copy:
           src: "/tmp/alertmanager-{{ alertmanager_version }}.linux-amd64/{{ item }}"
           dest: "/usr/local/bin/{{ item }}"
           mode: "0755"
@@ -1266,8 +1148,7 @@ plays:
           - "amtool"
 
       - name: "Configure Alertmanager"
-        module: "template"
-        args:
+        template:
           src: "./templates/alertmanager.yml.j2"
           dest: "{{ alertmanager_config_dir }}/alertmanager.yml"
           owner: "{{ alertmanager_user }}"
@@ -1276,8 +1157,7 @@ plays:
         notify: "restart alertmanager"
 
       - name: "Create alert rules"
-        module: "template"
-        args:
+        template:
           src: "./templates/alert-rules.yml.j2"
           dest: "/etc/prometheus/alert-rules.yml"
           owner: "prometheus"
@@ -1286,8 +1166,7 @@ plays:
         notify: "restart prometheus"
 
       - name: "Create Alertmanager systemd service"
-        module: "template"
-        args:
+        template:
           src: "./templates/alertmanager.service.j2"
           dest: "/etc/systemd/system/alertmanager.service"
           mode: "0644"
@@ -1296,27 +1175,23 @@ plays:
           - "restart alertmanager"
 
       - name: "Start and enable Alertmanager"
-        module: "service"
-        args:
+        service:
           name: "alertmanager"
           state: "started"
           enabled: true
 
     handlers:
       - name: "reload systemd"
-        module: "systemd"
-        args:
+        systemd:
           daemon_reload: true
 
       - name: "restart alertmanager"
-        module: "service"
-        args:
+        service:
           name: "alertmanager"
           state: "restarted"
 
       - name: "restart prometheus"
-        module: "service"
-        args:
+        service:
           name: "prometheus"
           state: "restarted"
 ```

@@ -111,17 +111,15 @@ plays:
     hosts: "all"
     tasks:
       - name: "Gather system facts"
-        module: "facts"
+        facts:
         register: "system_info"
 
       - name: "Display hostname"
-        module: "debug"
-        args:
+        debug:
           msg: "Hello from {{ ansible_hostname }}!"
 
       - name: "Show system information"
-        module: "debug"
-        args:
+        debug:
           msg: |
             System: {{ ansible_distribution }} {{ ansible_distribution_version }}
             Architecture: {{ ansible_architecture }}
@@ -182,15 +180,13 @@ plays:
     become: true
     tasks:
       - name: "Update package cache"
-        module: "package"
-        args:
+        package:
           name: "*"
           state: "latest"
           update_cache: true
 
       - name: "Install essential tools"
-        module: "package"
-        args:
+        package:
           name:
             - "curl"
             - "wget"
@@ -200,16 +196,14 @@ plays:
           state: "present"
 
       - name: "Install web server"
-        module: "package"
-        args:
+        package:
           name: "nginx"
           state: "present"
         notify: "start nginx"
 
     handlers:
       - name: "start nginx"
-        module: "service"
-        args:
+        service:
           name: "nginx"
           state: "started"
           enabled: true
@@ -247,8 +241,7 @@ plays:
 
     tasks:
       - name: "Create web directory"
-        module: "file"
-        args:
+        file:
           path: "/var/www/html"
           state: "directory"
           owner: "www-data"
@@ -256,8 +249,7 @@ plays:
           mode: "0755"
 
       - name: "Create index page"
-        module: "copy"
-        args:
+        copy:
           content: |
             <!DOCTYPE html>
             <html>
@@ -276,8 +268,7 @@ plays:
           mode: "0644"
 
       - name: "Configure nginx site"
-        module: "copy"
-        args:
+        copy:
           content: "{{ nginx_config }}"
           dest: "/etc/nginx/sites-available/default"
           backup: true
@@ -285,8 +276,7 @@ plays:
 
     handlers:
       - name: "reload nginx"
-        module: "service"
-        args:
+        service:
           name: "nginx"
           state: "reloaded"
 ```
@@ -304,22 +294,19 @@ plays:
     become: true
     tasks:
       - name: "Ensure nginx is running"
-        module: "service"
-        args:
+        service:
           name: "nginx"
           state: "started"
           enabled: true
 
       - name: "Check service status"
-        module: "command"
-        args:
+        command:
           cmd: "systemctl is-active nginx"
         register: "nginx_status"
         changed_when: false
 
       - name: "Display service status"
-        module: "debug"
-        args:
+        debug:
           msg: "Nginx status: {{ nginx_status.stdout }}"
 ```
 
@@ -357,13 +344,11 @@ plays:
 
     tasks:
       - name: "Display environment"
-        module: "debug"
-        args:
+        debug:
           msg: "Configuring {{ environment }} environment"
 
       - name: "Configure application"
-        module: "template"
-        args:
+        template:
           src: "templates/app.conf.j2"
           dest: "/etc/myapp/app.conf"
           backup: true
@@ -383,22 +368,19 @@ plays:
     hosts: "all"
     tasks:
       - name: "Install package (Ubuntu/Debian)"
-        module: "apt"
-        args:
+        apt:
           name: "apache2"
           state: "present"
         when: "ansible_os_family == 'Debian'"
 
       - name: "Install package (CentOS/RHEL)"
-        module: "yum"
-        args:
+        yum:
           name: "httpd"
           state: "present"
         when: "ansible_os_family == 'RedHat'"
 
       - name: "Configure firewall (if enabled)"
-        module: "ufw"
-        args:
+        ufw:
           rule: "allow"
           port: "80"
         when: "firewall_enabled | default(false)"
@@ -423,8 +405,7 @@ plays:
 
     tasks:
       - name: "Create user accounts"
-        module: "user"
-        args:
+        user:
           name: "{{ item.name }}"
           uid: "{{ item.uid }}"
           groups: "{{ item.groups }}"
@@ -433,8 +414,7 @@ plays:
         loop: "{{ users }}"
 
       - name: "Install packages"
-        module: "package"
-        args:
+        package:
           name: "{{ item }}"
           state: "present"
         loop:
@@ -474,8 +454,7 @@ plays:
     become: true
     tasks:
       - name: "Disable password authentication"
-        module: "lineinfile"
-        args:
+        lineinfile:
           path: "/etc/ssh/sshd_config"
           regexp: "^#?PasswordAuthentication"
           line: "PasswordAuthentication no"
@@ -483,8 +462,7 @@ plays:
         notify: "restart ssh"
 
       - name: "Disable root login"
-        module: "lineinfile"
-        args:
+        lineinfile:
           path: "/etc/ssh/sshd_config"
           regexp: "^#?PermitRootLogin"
           line: "PermitRootLogin no"
@@ -493,8 +471,7 @@ plays:
 
     handlers:
       - name: "restart ssh"
-        module: "service"
-        args:
+        service:
           name: "sshd"
           state: "restarted"
 ```

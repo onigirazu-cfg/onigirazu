@@ -48,7 +48,7 @@
 
 ```yaml
 - name: "Install package"
-  module: "package"
+  package:
   name: "tree"
   state: "present"
 ```
