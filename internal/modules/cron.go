@@ -113,7 +113,6 @@ func (m *CronModule) handleJob(ctx context.Context, host types.Host, args map[st
 			changed = true
 			result.Output["action"] = "job_added"
 		}
-
 	} else if state == "absent" {
 		if _, exists := jobs[name]; exists {
 			delete(jobs, name)
@@ -173,7 +172,6 @@ func (m *CronModule) handleFile(ctx context.Context, host types.Host, args map[s
 			changed = true
 			result.Output["action"] = "crontab_updated"
 		}
-
 	} else if state == "absent" {
 		// Remove crontab
 		if _, err := m.executor.Execute("crontab", "-r", "-u", user); err != nil {
@@ -259,7 +257,6 @@ func (m *CronModule) handleSystem(ctx context.Context, host types.Host, args map
 			result.Output["action"] = "cron_file_created"
 			result.Output["file"] = cronFile
 		}
-
 	} else if state == "absent" {
 		// Check if file exists
 		_, err := m.executor.Execute("test", "-f", cronFile)

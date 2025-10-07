@@ -226,7 +226,6 @@ func (m *SystemdModule) handleUnit(ctx context.Context, host types.Host, args ma
 				return m.failResult(result, fmt.Sprintf("failed to reload systemd: %v", err))
 			}
 		}
-
 	} else if state == "absent" {
 		unitPath := path
 		if unitPath == "" {
