@@ -30,112 +30,111 @@ linters:
     - unparam
     - unused
 
-linters-settings:
-  dupl:
-    threshold: 100
-  funlen:
-    lines: 250
-    statements: 250
-  gocritic:
-    disabled-checks:
-      - dupImport
-      - ifElseChain
-      - octalLiteral
-      - whyNoLint
-      - wrapperFunc
-    enabled-tags:
-      - diagnostic
-      - performance
-      - style
-  gocyclo:
-    min-complexity: 60
-  govet:
-    enable:
-      - shadow
-  lll:
-    line-length: 250
-  misspell:
-    locale: US
-  mnd:
-    checks:
-      - argument
-    ignored-numbers:
-      - "0"
-      - "1"
-      - "2"
-      - "3"
-      - "4"
-      - "5"
-      - "8"
-      - "10"
-      - "22"
-      - "30"
-      - "50"
-      - "60"
-      - "100"
-      - "100.0"
-      - "500"
-      - "1000"
-      - "1024"
-      - "9090"
-      - "0600"
-      - "0644"
-      - "0700"
-      - "0755"
-  gci:
-    sections:
-      - standard
-      - default
-      - prefix(github.com/onigirazu-cfg/onigirazu)
-  goimports:
-    local-prefixes: github.com/onigirazu-cfg/onigirazu
+  settings:
+    dupl:
+      threshold: 100
+    funlen:
+      lines: 250
+      statements: 250
+    gocritic:
+      disabled-checks:
+        - dupImport
+        - ifElseChain
+        - octalLiteral
+        - whyNoLint
+        - wrapperFunc
+      enabled-tags:
+        - diagnostic
+        - performance
+        - style
+    gocyclo:
+      min-complexity: 60
+    govet:
+      enable:
+        - shadow
+    lll:
+      line-length: 250
+    misspell:
+      locale: US
+    mnd:
+      checks:
+        - argument
+      ignored-numbers:
+        - "0"
+        - "1"
+        - "2"
+        - "3"
+        - "4"
+        - "5"
+        - "8"
+        - "10"
+        - "22"
+        - "30"
+        - "50"
+        - "60"
+        - "100"
+        - "100.0"
+        - "500"
+        - "1000"
+        - "1024"
+        - "9090"
+        - "0600"
+        - "0644"
+        - "0700"
+        - "0755"
+
+  exclusions:
+    generated: lax
+    warn-unused: true
+    presets:
+      - comments
+      - std-error-handling
+      - common-false-positives
+    rules:
+      - path: _test\.go
+        linters:
+          - funlen
+          - goconst
+          - mnd
+      - path: cmd/
+        linters:
+          - funlen
+          - gocyclo
+          - mnd
+      - path: tests/
+        linters:
+          - unused
+      - linters:
+          - lll
+        source: '^//go:generate '
+      - linters:
+          - staticcheck
+        text: strings.Title has been deprecated
+      - linters:
+          - staticcheck
+        text: io/ioutil.*has been deprecated
+      - linters:
+          - staticcheck
+        text: SA1019
+      - linters:
+          - unused
+        text: is unused
+      - linters:
+          - unused
+        text: U1000
+      - path: (tests/|cmd/)
+        linters:
+          - goconst
+          - unused
+      - path: (.+)\.go$
+        text: declaration of "(err|ctx)" shadows declaration at
+      - path: (.+)\.go$
+        text: 'shadow: declaration of "err" shadows declaration'
+    paths:
+      - third_party
+      - builtin
+      - examples
 
 issues:
   max-issues-per-linter: 50
   max-same-issues: 10
-  exclude-use-default: true
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - funlen
-        - goconst
-        - mnd
-    - path: cmd/
-      linters:
-        - funlen
-        - gocyclo
-        - mnd
-    - path: tests/
-      linters:
-        - deadcode
-        - unused
-    - source: '^//go:generate '
-      linters:
-        - lll
-    - text: strings.Title has been deprecated
-      linters:
-        - staticcheck
-    - text: io/ioutil.*has been deprecated
-      linters:
-        - staticcheck
-    - text: SA1019
-      linters:
-        - staticcheck
-    - text: is unused
-      linters:
-        - unused
-    - text: U1000
-      linters:
-        - unused
-    - path: (tests/|cmd/)
-      linters:
-        - goconst
-        - unused
-    - path: (.+)\.go$
-      text: declaration of "(err|ctx)" shadows declaration at
-    - path: (.+)\.go$
-      text: 'shadow: declaration of "err" shadows declaration'
-  exclude-dirs:
-    - third_party
-    - builtin
-    - examples
