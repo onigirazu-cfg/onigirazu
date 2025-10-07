@@ -246,9 +246,13 @@ func (m *CronModule) handleSystem(ctx context.Context, host types.Host, args map
 
 			// Set permissions
 			if cronType == "d" {
-				m.executor.Execute("chmod", "644", cronFile)
+				if _, err := m.executor.Execute("chmod", "644", cronFile); err != nil {
+					return m.failResult(result, fmt.Sprintf("failed to set permissions: %v", err))
+				}
 			} else {
-				m.executor.Execute("chmod", "755", cronFile)
+				if _, err := m.executor.Execute("chmod", "755", cronFile); err != nil {
+					return m.failResult(result, fmt.Sprintf("failed to set permissions: %v", err))
+				}
 			}
 
 			changed = true
@@ -321,8 +325,8 @@ func (m *CronModule) setCrontab(user string, content string) error {
 		return fmt.Errorf("failed to install crontab: %v", err)
 	}
 
-	// Clean up temp file
-	m.executor.Execute("rm", "-f", tmpFile)
+	// Clean up temp file (ignore errors as it's just cleanup)
+	_, _ = m.executor.Execute("rm", "-f", tmpFile)
 
 	return nil
 }

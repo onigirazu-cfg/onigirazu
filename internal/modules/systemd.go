@@ -236,9 +236,9 @@ func (m *SystemdModule) handleUnit(ctx context.Context, host types.Host, args ma
 		// Check if unit file exists
 		_, err := m.executor.Execute("test", "-f", unitPath)
 		if err == nil {
-			// Stop and disable service first
-			m.executor.Execute("systemctl", "stop", name)
-			m.executor.Execute("systemctl", "disable", name)
+			// Stop and disable service first (ignore errors as service might not be running/enabled)
+			_, _ = m.executor.Execute("systemctl", "stop", name)
+			_, _ = m.executor.Execute("systemctl", "disable", name)
 
 			// Remove unit file
 			if _, err := m.executor.Execute("rm", "-f", unitPath); err != nil {
