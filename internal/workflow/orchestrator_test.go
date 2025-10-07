@@ -490,11 +490,11 @@ func TestWorkflowOrchestrator_CancelExecution(t *testing.T) {
 
 	// Verify status
 	if execution.Status != StatusCancelled {
-		t.Errorf("Expected status cancelled, got '%s'", execution.Status)
+		t.Errorf("Expected status canceled, got '%s'", execution.Status)
 	}
 }
 
-// TestWorkflowOrchestrator_CancelExecution_NonExistent tests cancelling non-existent execution
+// TestWorkflowOrchestrator_CancelExecution_NonExistent tests canceling non-existent execution
 func TestWorkflowOrchestrator_CancelExecution_NonExistent(t *testing.T) {
 	config := OrchestratorConfig{
 		MaxConcurrentWorkflows: 10,

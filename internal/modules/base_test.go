@@ -441,7 +441,7 @@ func TestBaseModule_Execute_ContextCancellation(t *testing.T) {
 		"name": "Test Task",
 	}
 
-	// Create cancelled context
+	// Create canceled context
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 

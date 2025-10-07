@@ -208,7 +208,7 @@ func TestGetURLModule_Execute_ValidationError(t *testing.T) {
 func TestGetURLModule_Execute_ContextTimeout(t *testing.T) {
 	module := NewGetURLModule()
 
-	// Create a context that's already cancelled
+	// Create a context that's already canceled
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately
 
@@ -226,7 +226,7 @@ func TestGetURLModule_Execute_ContextTimeout(t *testing.T) {
 
 	// Should fail due to context cancellation or executor creation failure
 	if err == nil && !result.Failed {
-		t.Log("Execute() with cancelled context may succeed if executor creation is fast")
+		t.Log("Execute() with canceled context may succeed if executor creation is fast")
 	}
 
 	// Verify result structure
