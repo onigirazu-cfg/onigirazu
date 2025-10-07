@@ -20,8 +20,6 @@ type mockLogger struct {
 	warnCalls  int32
 	errorCalls int32
 	retryCalls int32
-	mu         sync.Mutex
-	messages   []string
 }
 
 func (m *mockLogger) Debug(format string, args ...interface{}) {

@@ -171,6 +171,7 @@ type StepExecution struct {
 	Output     map[string]interface{} `json:"output"`
 	Error      string                 `json:"error,omitempty"`
 	Metadata   map[string]interface{} `json:"metadata"`
+	mutex      sync.RWMutex           `json:"-"` // Protect concurrent access to step execution state
 }
 
 // ExecutionStatus represents the status of execution
@@ -508,7 +509,11 @@ func (wo *WorkflowOrchestrator) executeTaskStep(execution *WorkflowExecution, st
 	// This would integrate with the task execution engine
 	// For now, simulate task execution
 	time.Sleep(100 * time.Millisecond)
+
+	stepExecution.mutex.Lock()
 	stepExecution.Output["result"] = "task completed"
+	stepExecution.mutex.Unlock()
+
 	return nil
 }
 
@@ -517,7 +522,11 @@ func (wo *WorkflowOrchestrator) executePlaybookStep(execution *WorkflowExecution
 	// This would integrate with the playbook execution engine
 	// For now, simulate playbook execution
 	time.Sleep(500 * time.Millisecond)
+
+	stepExecution.mutex.Lock()
 	stepExecution.Output["result"] = "playbook completed"
+	stepExecution.mutex.Unlock()
+
 	return nil
 }
 
@@ -530,7 +539,9 @@ func (wo *WorkflowOrchestrator) executeWaitStep(execution *WorkflowExecution, st
 
 	select {
 	case <-time.After(duration):
+		stepExecution.mutex.Lock()
 		stepExecution.Output["waited"] = duration.String()
+		stepExecution.mutex.Unlock()
 		return nil
 	case <-execution.Context.Done():
 		return execution.Context.Err()
@@ -541,11 +552,13 @@ func (wo *WorkflowOrchestrator) executeWaitStep(execution *WorkflowExecution, st
 func (wo *WorkflowOrchestrator) executeConditionStep(execution *WorkflowExecution, step WorkflowStep, stepExecution *StepExecution) error {
 	// Evaluate conditions and set result
 	result := wo.evaluateStepConditions(step)
-	stepExecution.Output["condition_result"] = result
 
+	stepExecution.mutex.Lock()
+	stepExecution.Output["condition_result"] = result
 	if !result {
 		stepExecution.Status = StatusSkipped
 	}
+	stepExecution.mutex.Unlock()
 
 	return nil
 }
@@ -568,7 +581,10 @@ func (wo *WorkflowOrchestrator) executeLoopStep(execution *WorkflowExecution, st
 		results[i] = fmt.Sprintf("iteration_%d_result", i)
 	}
 
+	stepExecution.mutex.Lock()
 	stepExecution.Output["loop_results"] = results
+	stepExecution.mutex.Unlock()
+
 	return nil
 }
 
@@ -589,7 +605,11 @@ func (wo *WorkflowOrchestrator) executeParallelStep(execution *WorkflowExecution
 	}
 
 	wg.Wait()
+
+	stepExecution.mutex.Lock()
 	stepExecution.Output["parallel_results"] = results
+	stepExecution.mutex.Unlock()
+
 	return nil
 }
 
@@ -604,8 +624,11 @@ func (wo *WorkflowOrchestrator) executeNotificationStep(execution *WorkflowExecu
 		}
 	}
 
+	stepExecution.mutex.Lock()
 	stepExecution.Output["notification_sent"] = true
 	stepExecution.Output["message"] = message
+	stepExecution.mutex.Unlock()
+
 	return nil
 }
 
