@@ -1,6 +1,5 @@
 version: "2"
 run:
-  issues-exit-code: 1
   tests: true
 linters:
   enable:
@@ -33,7 +32,6 @@ linters:
     funlen:
       lines: 250
       statements: 250
-      ignore-comments: true
     gocritic:
       disabled-checks:
         - dupImport
@@ -82,6 +80,11 @@ linters:
         - "0755"
   exclusions:
     generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
     rules:
       - linters:
           - funlen
@@ -124,17 +127,12 @@ linters:
       - path: (.+)\.go$
         text: 'shadow: declaration of "err" shadows declaration'
     paths:
-      - .*\.pb\.go$
-      - .*_generated\.go$
-      - vendor
-      - tests
       - third_party$
       - builtin$
       - examples$
 issues:
   max-issues-per-linter: 50
   max-same-issues: 10
-  new: false
 formatters:
   settings:
     gci:
