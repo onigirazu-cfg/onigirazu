@@ -274,8 +274,12 @@ func TestWorkflowOrchestrator_ExecuteWorkflow_Simple(t *testing.T) {
 		t.Errorf("Expected workflow ID '%s', got '%s'", workflow.ID, execution.WorkflowID)
 	}
 
-	if execution.Status != StatusPending {
-		t.Errorf("Expected status pending, got '%s'", execution.Status)
+	execution.mutex.RLock()
+	status := execution.Status
+	execution.mutex.RUnlock()
+
+	if status != StatusPending {
+		t.Errorf("Expected status pending, got '%s'", status)
 	}
 
 	if execution.Context == nil {
@@ -489,8 +493,12 @@ func TestWorkflowOrchestrator_CancelExecution(t *testing.T) {
 	}
 
 	// Verify status
-	if execution.Status != StatusCancelled {
-		t.Errorf("Expected status canceled, got '%s'", execution.Status)
+	execution.mutex.RLock()
+	status := execution.Status
+	execution.mutex.RUnlock()
+
+	if status != StatusCancelled {
+		t.Errorf("Expected status canceled, got '%s'", status)
 	}
 }
 

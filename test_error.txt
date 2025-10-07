@@ -1,0 +1,386 @@
+Run go test -race -coverprofile=coverage.out -covermode=atomic -timeout=10m ./...
+	github.com/onigirazu-cfg/onigirazu/cmd/onigirazu		coverage: 0.0% of statements
+	github.com/onigirazu-cfg/onigirazu/cmd/yaml-format		coverage: 0.0% of statements
+ok  	github.com/onigirazu-cfg/onigirazu/internal/bufferpool	1.012s	coverage: 94.4% of statements
+ok  	github.com/onigirazu-cfg/onigirazu/internal/cache	2.449s	coverage: 94.2% of statements
+ok  	github.com/onigirazu-cfg/onigirazu/internal/config	1.013s	coverage: 23.5% of statements
+ok  	github.com/onigirazu-cfg/onigirazu/internal/core	1.020s	coverage: 69.7% of statements
+ok  	github.com/onigirazu-cfg/onigirazu/internal/engine	3.074s	coverage: 67.4% of statements
+ok  	github.com/onigirazu-cfg/onigirazu/internal/execution	1.859s	coverage: 87.8% of statements
+ok  	github.com/onigirazu-cfg/onigirazu/internal/executor	1.116s	coverage: 45.3% of statements
+ok  	github.com/onigirazu-cfg/onigirazu/internal/facts	1.014s	coverage: 30.4% of statements
+?   	github.com/onigirazu-cfg/onigirazu/internal/interfaces	[no test files]
+ok  	github.com/onigirazu-cfg/onigirazu/internal/inventory	1.021s	coverage: 85.3% of statements
+ok  	github.com/onigirazu-cfg/onigirazu/internal/logger	1.012s	coverage: 10.9% of statements
+ok  	github.com/onigirazu-cfg/onigirazu/internal/metrics	1.019s	coverage: 42.1% of statements
+ok  	github.com/onigirazu-cfg/onigirazu/internal/modules	2.266s	coverage: 26.7% of statements
+	github.com/onigirazu-cfg/onigirazu/internal/monitoring		coverage: 0.0% of statements
+ok  	github.com/onigirazu-cfg/onigirazu/internal/parser	1.029s	coverage: 14.4% of statements
+	github.com/onigirazu-cfg/onigirazu/internal/progress		coverage: 0.0% of statements
+ok  	github.com/onigirazu-cfg/onigirazu/internal/security	3.431s	coverage: 59.0% of statements
+ok  	github.com/onigirazu-cfg/onigirazu/internal/ssh	1.015s	coverage: 27.6% of statements
+	github.com/onigirazu-cfg/onigirazu/internal/state		coverage: 0.0% of statements
+	github.com/onigirazu-cfg/onigirazu/internal/template		coverage: 0.0% of statements
+	github.com/onigirazu-cfg/onigirazu/internal/version		coverage: 0.0% of statements
+==================
+WARNING: DATA RACE
+Write at 0x00c00007d110 by goroutine 183:
+  runtime.mapassign_faststr()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/internal/runtime/maps/runtime_faststr_swiss.go:263 +0x0
+  github.com/onigirazu-cfg/onigirazu/internal/workflow.(*WorkflowOrchestrator).executeStep()
+      /home/runner/work/onigirazu/onigirazu/internal/workflow/orchestrator.go:430 +0x370
+  github.com/onigirazu-cfg/onigirazu/internal/workflow.(*WorkflowOrchestrator).executeStepsWithDependencies.func1()
+      /home/runner/work/onigirazu/onigirazu/internal/workflow/orchestrator.go:354 +0x10c
+  github.com/onigirazu-cfg/onigirazu/internal/workflow.(*WorkflowOrchestrator).executeStepsWithDependencies.gowrap1()
+      /home/runner/work/onigirazu/onigirazu/internal/workflow/orchestrator.go:356 +0xbd
+
+Previous write at 0x00c00007d110 by goroutine 184:
+  runtime.mapassign_faststr()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/internal/runtime/maps/runtime_faststr_swiss.go:263 +0x0
+  github.com/onigirazu-cfg/onigirazu/internal/workflow.(*WorkflowOrchestrator).executeStep()
+      /home/runner/work/onigirazu/onigirazu/internal/workflow/orchestrator.go:430 +0x370
+  github.com/onigirazu-cfg/onigirazu/internal/workflow.(*WorkflowOrchestrator).executeStepsWithDependencies.func1()
+      /home/runner/work/onigirazu/onigirazu/internal/workflow/orchestrator.go:354 +0x10c
+  github.com/onigirazu-cfg/onigirazu/internal/workflow.(*WorkflowOrchestrator).executeStepsWithDependencies.gowrap1()
+      /home/runner/work/onigirazu/onigirazu/internal/workflow/orchestrator.go:356 +0xbd
+
+Goroutine 183 (running) created at:
+  github.com/onigirazu-cfg/onigirazu/internal/workflow.(*WorkflowOrchestrator).executeStepsWithDependencies()
+      /home/runner/work/onigirazu/onigirazu/internal/workflow/orchestrator.go:352 +0x7cd
+  github.com/onigirazu-cfg/onigirazu/internal/workflow.(*WorkflowOrchestrator).executeWorkflowSteps()
+      /home/runner/work/onigirazu/onigirazu/internal/workflow/orchestrator.go:318 +0x329
+  github.com/onigirazu-cfg/onigirazu/internal/workflow.(*WorkflowOrchestrator).executeWorkflowAsync()
+      /home/runner/work/onigirazu/onigirazu/internal/workflow/orchestrator.go:296 +0x179
+  github.com/onigirazu-cfg/onigirazu/internal/workflow.(*WorkflowOrchestrator).ExecuteWorkflow.gowrap1()
+      /home/runner/work/onigirazu/onigirazu/internal/workflow/orchestrator.go:283 +0x4f
+
+Goroutine 184 (running) created at:
+  github.com/onigirazu-cfg/onigirazu/internal/workflow.(*WorkflowOrchestrator).executeStepsWithDependencies()
+      /home/runner/work/onigirazu/onigirazu/internal/workflow/orchestrator.go:352 +0x7cd
+  github.com/onigirazu-cfg/onigirazu/internal/workflow.(*WorkflowOrchestrator).executeWorkflowSteps()
+      /home/runner/work/onigirazu/onigirazu/internal/workflow/orchestrator.go:318 +0x329
+  github.com/onigirazu-cfg/onigirazu/internal/workflow.(*WorkflowOrchestrator).executeWorkflowAsync()
+      /home/runner/work/onigirazu/onigirazu/internal/workflow/orchestrator.go:296 +0x179
+  github.com/onigirazu-cfg/onigirazu/internal/workflow.(*WorkflowOrchestrator).ExecuteWorkflow.gowrap1()
+      /home/runner/work/onigirazu/onigirazu/internal/workflow/orchestrator.go:283 +0x4f
+==================
+--- FAIL: TestWorkflowOrchestrator_ExecuteWorkflow_WithDependencies (1.00s)
+    testing.go:1490: race detected during execution of test
+--- FAIL: TestWorkflowOrchestrator_CalculateRetryDelay (0.00s)
+    --- FAIL: TestWorkflowOrchestrator_CalculateRetryDelay/Linear_backoff (0.00s)
+        orchestrator_advanced_test.go:510: Expected delay <= 2s, got 3s
+==================
+WARNING: DATA RACE
+Write at 0x00c000210230 by goroutine 217:
+  github.com/onigirazu-cfg/onigirazu/internal/workflow.(*WorkflowOrchestrator).executeWorkflowAsync()
+      /home/runner/work/onigirazu/onigirazu/internal/workflow/orchestrator.go:292 +0xe5
+  github.com/onigirazu-cfg/onigirazu/internal/workflow.(*WorkflowOrchestrator).ExecuteWorkflow.gowrap1()
+      /home/runner/work/onigirazu/onigirazu/internal/workflow/orchestrator.go:283 +0x4f
+
+Previous read at 0x00c000210230 by goroutine 216:
+  github.com/onigirazu-cfg/onigirazu/internal/workflow.(*WorkflowOrchestrator).countRunningExecutions()
+      /home/runner/work/onigirazu/onigirazu/internal/workflow/orchestrator.go:691 +0x244
+  github.com/onigirazu-cfg/onigirazu/internal/workflow.(*WorkflowOrchestrator).ExecuteWorkflow()
+      /home/runner/work/onigirazu/onigirazu/internal/workflow/orchestrator.go:255 +0x186
+  github.com/onigirazu-cfg/onigirazu/internal/workflow.TestWorkflowOrchestrator_MaxConcurrentLimit()
+      /home/runner/work/onigirazu/onigirazu/internal/workflow/orchestrator_advanced_test.go:551 +0x45e
+  testing.tRunner()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:1792 +0x225
+  testing.(*T).Run.gowrap1()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:1851 +0x44
+
+Goroutine 217 (running) created at:
+  github.com/onigirazu-cfg/onigirazu/internal/workflow.(*WorkflowOrchestrator).ExecuteWorkflow()
+      /home/runner/work/onigirazu/onigirazu/internal/workflow/orchestrator.go:283 +0xd56
+  github.com/onigirazu-cfg/onigirazu/internal/workflow.TestWorkflowOrchestrator_MaxConcurrentLimit()
+      /home/runner/work/onigirazu/onigirazu/internal/workflow/orchestrator_advanced_test.go:546 +0x3a4
+  testing.tRunner()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:1792 +0x225
+  testing.(*T).Run.gowrap1()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:1851 +0x44
+
+Goroutine 216 (running) created at:
+  testing.(*T).Run()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:1851 +0x8f2
+  testing.runTests.func1()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:2279 +0x85
+  testing.tRunner()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:1792 +0x225
+  testing.runTests()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:2277 +0x96c
+  testing.(*M).Run()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:2142 +0xeea
+  main.main()
+      _testmain.go:185 +0x164
+==================
+==================
+WARNING: DATA RACE
+Read at 0x00c0002102e0 by goroutine 216:
+  github.com/onigirazu-cfg/onigirazu/internal/workflow.(*WorkflowOrchestrator).countRunningExecutions()
+      /home/runner/work/onigirazu/onigirazu/internal/workflow/orchestrator.go:691 +0x244
+  github.com/onigirazu-cfg/onigirazu/internal/workflow.(*WorkflowOrchestrator).ExecuteWorkflow()
+      /home/runner/work/onigirazu/onigirazu/internal/workflow/orchestrator.go:255 +0x186
+  github.com/onigirazu-cfg/onigirazu/internal/workflow.TestWorkflowOrchestrator_MaxConcurrentLimit()
+      /home/runner/work/onigirazu/onigirazu/internal/workflow/orchestrator_advanced_test.go:558 +0x51e
+  testing.tRunner()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:1792 +0x225
+  testing.(*T).Run.gowrap1()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:1851 +0x44
+
+Previous write at 0x00c0002102e0 by goroutine 218:
+  github.com/onigirazu-cfg/onigirazu/internal/workflow.(*WorkflowOrchestrator).executeWorkflowAsync()
+      /home/runner/work/onigirazu/onigirazu/internal/workflow/orchestrator.go:292 +0xe5
+  github.com/onigirazu-cfg/onigirazu/internal/workflow.(*WorkflowOrchestrator).ExecuteWorkflow.gowrap1()
+      /home/runner/work/onigirazu/onigirazu/internal/workflow/orchestrator.go:283 +0x4f
+
+Goroutine 216 (running) created at:
+  testing.(*T).Run()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:1851 +0x8f2
+  testing.runTests.func1()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:2279 +0x85
+  testing.tRunner()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:1792 +0x225
+  testing.runTests()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:2277 +0x96c
+  testing.(*M).Run()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:2142 +0xeea
+  main.main()
+      _testmain.go:185 +0x164
+
+Goroutine 218 (running) created at:
+  github.com/onigirazu-cfg/onigirazu/internal/workflow.(*WorkflowOrchestrator).ExecuteWorkflow()
+      /home/runner/work/onigirazu/onigirazu/internal/workflow/orchestrator.go:283 +0xd56
+  github.com/onigirazu-cfg/onigirazu/internal/workflow.TestWorkflowOrchestrator_MaxConcurrentLimit()
+      /home/runner/work/onigirazu/onigirazu/internal/workflow/orchestrator_advanced_test.go:551 +0x45e
+  testing.tRunner()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:1792 +0x225
+  testing.(*T).Run.gowrap1()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:1851 +0x44
+==================
+--- FAIL: TestWorkflowOrchestrator_MaxConcurrentLimit (0.10s)
+    testing.go:1490: race detected during execution of test
+==================
+WARNING: DATA RACE
+Read at 0x00c000012b3f by goroutine 221:
+  github.com/onigirazu-cfg/onigirazu/internal/workflow.TestWorkflowOrchestrator_EventBusIntegration()
+      /home/runner/work/onigirazu/onigirazu/internal/workflow/orchestrator_advanced_test.go:608 +0x487
+  testing.tRunner()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:1792 +0x225
+  testing.(*T).Run.gowrap1()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:1851 +0x44
+
+Previous write at 0x00c000012b3f by goroutine 223:
+  github.com/onigirazu-cfg/onigirazu/internal/workflow.TestWorkflowOrchestrator_EventBusIntegration.func1()
+      /home/runner/work/onigirazu/onigirazu/internal/workflow/orchestrator_advanced_test.go:580 +0x2e
+  github.com/onigirazu-cfg/onigirazu/internal/workflow.(*EventBus).Publish.func1()
+      /home/runner/work/onigirazu/onigirazu/internal/workflow/eventbus.go:88 +0xfd
+  github.com/onigirazu-cfg/onigirazu/internal/workflow.(*EventBus).Publish.gowrap1()
+      /home/runner/work/onigirazu/onigirazu/internal/workflow/eventbus.go:89 +0x41
+
+Goroutine 221 (running) created at:
+  testing.(*T).Run()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:1851 +0x8f2
+  testing.runTests.func1()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:2279 +0x85
+  testing.tRunner()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:1792 +0x225
+  testing.runTests()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:2277 +0x96c
+  testing.(*M).Run()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:2142 +0xeea
+  main.main()
+      _testmain.go:185 +0x164
+
+Goroutine 223 (finished) created at:
+  github.com/onigirazu-cfg/onigirazu/internal/workflow.(*EventBus).Publish()
+      /home/runner/work/onigirazu/onigirazu/internal/workflow/eventbus.go:80 +0x2a7
+  github.com/onigirazu-cfg/onigirazu/internal/workflow.(*WorkflowOrchestrator).executeWorkflowAsync()
+      /home/runner/work/onigirazu/onigirazu/internal/workflow/orchestrator.go:293 +0x15c
+  github.com/onigirazu-cfg/onigirazu/internal/workflow.(*WorkflowOrchestrator).ExecuteWorkflow.gowrap1()
+      /home/runner/work/onigirazu/onigirazu/internal/workflow/orchestrator.go:283 +0x4f
+==================
+--- FAIL: TestWorkflowOrchestrator_EventBusIntegration (0.20s)
+    testing.go:1490: race detected during execution of test
+==================
+WARNING: DATA RACE
+Write at 0x00c000152180 by goroutine 234:
+  github.com/onigirazu-cfg/onigirazu/internal/workflow.(*WorkflowOrchestrator).executeWorkflowAsync()
+      /home/runner/work/onigirazu/onigirazu/internal/workflow/orchestrator.go:292 +0xe5
+  github.com/onigirazu-cfg/onigirazu/internal/workflow.(*WorkflowOrchestrator).ExecuteWorkflow.gowrap1()
+      /home/runner/work/onigirazu/onigirazu/internal/workflow/orchestrator.go:283 +0x4f
+
+Previous read at 0x00c000152180 by goroutine 233:
+  github.com/onigirazu-cfg/onigirazu/internal/workflow.TestWorkflowOrchestrator_ExecuteWorkflow_Simple()
+      /home/runner/work/onigirazu/onigirazu/internal/workflow/orchestrator_test.go:277 +0x6eb
+  testing.tRunner()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:1792 +0x225
+  testing.(*T).Run.gowrap1()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:1851 +0x44
+
+Goroutine 234 (running) created at:
+  github.com/onigirazu-cfg/onigirazu/internal/workflow.(*WorkflowOrchestrator).ExecuteWorkflow()
+      /home/runner/work/onigirazu/onigirazu/internal/workflow/orchestrator.go:283 +0xd56
+  github.com/onigirazu-cfg/onigirazu/internal/workflow.TestWorkflowOrchestrator_ExecuteWorkflow_Simple()
+      /home/runner/work/onigirazu/onigirazu/internal/workflow/orchestrator_test.go:260 +0x430
+  testing.tRunner()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:1792 +0x225
+  testing.(*T).Run.gowrap1()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:1851 +0x44
+
+Goroutine 233 (running) created at:
+  testing.(*T).Run()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:1851 +0x8f2
+  testing.runTests.func1()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:2279 +0x85
+  testing.tRunner()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:1792 +0x225
+  testing.runTests()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:2277 +0x96c
+  testing.(*M).Run()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:2142 +0xeea
+  main.main()
+      _testmain.go:185 +0x164
+==================
+--- FAIL: TestWorkflowOrchestrator_ExecuteWorkflow_Simple (0.20s)
+    testing.go:1490: race detected during execution of test
+==================
+WARNING: DATA RACE
+Write at 0x00c000152230 by goroutine 237:
+  github.com/onigirazu-cfg/onigirazu/internal/workflow.(*WorkflowOrchestrator).executeWorkflowAsync()
+      /home/runner/work/onigirazu/onigirazu/internal/workflow/orchestrator.go:292 +0xe5
+  github.com/onigirazu-cfg/onigirazu/internal/workflow.(*WorkflowOrchestrator).ExecuteWorkflow.gowrap1()
+      /home/runner/work/onigirazu/onigirazu/internal/workflow/orchestrator.go:283 +0x4f
+
+Previous read at 0x00c000152230 by goroutine 236:
+  github.com/onigirazu-cfg/onigirazu/internal/workflow.(*WorkflowOrchestrator).countRunningExecutions()
+      /home/runner/work/onigirazu/onigirazu/internal/workflow/orchestrator.go:691 +0x244
+  github.com/onigirazu-cfg/onigirazu/internal/workflow.(*WorkflowOrchestrator).ExecuteWorkflow()
+      /home/runner/work/onigirazu/onigirazu/internal/workflow/orchestrator.go:255 +0x186
+  github.com/onigirazu-cfg/onigirazu/internal/workflow.TestWorkflowOrchestrator_ListExecutions()
+      /home/runner/work/onigirazu/onigirazu/internal/workflow/orchestrator_test.go:320 +0x297
+  testing.tRunner()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:1792 +0x225
+  testing.(*T).Run.gowrap1()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:1851 +0x44
+
+Goroutine 237 (running) created at:
+  github.com/onigirazu-cfg/onigirazu/internal/workflow.(*WorkflowOrchestrator).ExecuteWorkflow()
+      /home/runner/work/onigirazu/onigirazu/internal/workflow/orchestrator.go:283 +0xd56
+  github.com/onigirazu-cfg/onigirazu/internal/workflow.TestWorkflowOrchestrator_ListExecutions()
+      /home/runner/work/onigirazu/onigirazu/internal/workflow/orchestrator_test.go:320 +0x297
+  testing.tRunner()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:1792 +0x225
+  testing.(*T).Run.gowrap1()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:1851 +0x44
+
+Goroutine 236 (finished) created at:
+  testing.(*T).Run()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:1851 +0x8f2
+  testing.runTests.func1()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:2279 +0x85
+  testing.tRunner()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:1792 +0x225
+  testing.runTests()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:2277 +0x96c
+  testing.(*M).Run()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:2142 +0xeea
+  main.main()
+      _testmain.go:185 +0x164
+==================
+==================
+WARNING: DATA RACE
+Read at 0x00c000210390 by goroutine 245:
+  github.com/onigirazu-cfg/onigirazu/internal/workflow.(*WorkflowOrchestrator).CancelExecution()
+      /home/runner/work/onigirazu/onigirazu/internal/workflow/orchestrator.go:734 +0x139
+  github.com/onigirazu-cfg/onigirazu/internal/workflow.TestWorkflowOrchestrator_CancelExecution()
+      /home/runner/work/onigirazu/onigirazu/internal/workflow/orchestrator_test.go:486 +0x41a
+  testing.tRunner()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:1792 +0x225
+  testing.(*T).Run.gowrap1()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:1851 +0x44
+
+Previous write at 0x00c000210390 by goroutine 246:
+  github.com/onigirazu-cfg/onigirazu/internal/workflow.(*WorkflowOrchestrator).executeWorkflowAsync()
+      /home/runner/work/onigirazu/onigirazu/internal/workflow/orchestrator.go:292 +0xe5
+  github.com/onigirazu-cfg/onigirazu/internal/workflow.(*WorkflowOrchestrator).ExecuteWorkflow.gowrap1()
+      /home/runner/work/onigirazu/onigirazu/internal/workflow/orchestrator.go:283 +0x4f
+
+Goroutine 245 (running) created at:
+  testing.(*T).Run()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:1851 +0x8f2
+  testing.runTests.func1()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:2279 +0x85
+  testing.tRunner()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:1792 +0x225
+  testing.runTests()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:2277 +0x96c
+  testing.(*M).Run()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:2142 +0xeea
+  main.main()
+      _testmain.go:185 +0x164
+
+Goroutine 246 (running) created at:
+  github.com/onigirazu-cfg/onigirazu/internal/workflow.(*WorkflowOrchestrator).ExecuteWorkflow()
+      /home/runner/work/onigirazu/onigirazu/internal/workflow/orchestrator.go:283 +0xd56
+  github.com/onigirazu-cfg/onigirazu/internal/workflow.TestWorkflowOrchestrator_CancelExecution()
+      /home/runner/work/onigirazu/onigirazu/internal/workflow/orchestrator_test.go:477 +0x358
+  testing.tRunner()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:1792 +0x225
+  testing.(*T).Run.gowrap1()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:1851 +0x44
+==================
+--- FAIL: TestWorkflowOrchestrator_CancelExecution (0.10s)
+    testing.go:1490: race detected during execution of test
+==================
+WARNING: DATA RACE
+Write at 0x00c000210390 by goroutine 246:
+  github.com/onigirazu-cfg/onigirazu/internal/workflow.(*WorkflowOrchestrator).executeWorkflowAsync()
+      /home/runner/work/onigirazu/onigirazu/internal/workflow/orchestrator.go:303 +0x2d3
+  github.com/onigirazu-cfg/onigirazu/internal/workflow.(*WorkflowOrchestrator).ExecuteWorkflow.gowrap1()
+      /home/runner/work/onigirazu/onigirazu/internal/workflow/orchestrator.go:283 +0x4f
+
+Previous write at 0x00c000210390 by goroutine 245:
+  github.com/onigirazu-cfg/onigirazu/internal/workflow.(*WorkflowOrchestrator).CancelExecution()
+      /home/runner/work/onigirazu/onigirazu/internal/workflow/orchestrator.go:736 +0x304
+  github.com/onigirazu-cfg/onigirazu/internal/workflow.TestWorkflowOrchestrator_CancelExecution()
+      /home/runner/work/onigirazu/onigirazu/internal/workflow/orchestrator_test.go:486 +0x41a
+  testing.tRunner()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:1792 +0x225
+  testing.(*T).Run.gowrap1()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:1851 +0x44
+
+Goroutine 246 (running) created at:
+  github.com/onigirazu-cfg/onigirazu/internal/workflow.(*WorkflowOrchestrator).ExecuteWorkflow()
+      /home/runner/work/onigirazu/onigirazu/internal/workflow/orchestrator.go:283 +0xd56
+  github.com/onigirazu-cfg/onigirazu/internal/workflow.TestWorkflowOrchestrator_CancelExecution()
+      /home/runner/work/onigirazu/onigirazu/internal/workflow/orchestrator_test.go:477 +0x358
+  testing.tRunner()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:1792 +0x225
+  testing.(*T).Run.gowrap1()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:1851 +0x44
+
+Goroutine 245 (running) created at:
+  testing.(*T).Run()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:1851 +0x8f2
+  testing.runTests.func1()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:2279 +0x85
+  testing.tRunner()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:1792 +0x225
+  testing.runTests()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:2277 +0x96c
+  testing.(*M).Run()
+      /opt/hostedtoolcache/go/1.24.7/x64/src/testing/testing.go:2142 +0xeea
+  main.main()
+      _testmain.go:185 +0x164
+==================
+FAIL
+coverage: 90.6% of statements
+FAIL	github.com/onigirazu-cfg/onigirazu/internal/workflow	8.042s
+	github.com/onigirazu-cfg/onigirazu/pkg/errors		coverage: 0.0% of statements
+ok  	github.com/onigirazu-cfg/onigirazu/pkg/formatter	1.014s	coverage: 77.0% of statements
+ok  	github.com/onigirazu-cfg/onigirazu/pkg/types	1.018s	coverage: 64.3% of statements
+	github.com/onigirazu-cfg/onigirazu/pkg/utils		coverage: 0.0% of statements
+	github.com/onigirazu-cfg/onigirazu/scripts/docgen		coverage: 0.0% of statements
+ok  	github.com/onigirazu-cfg/onigirazu/tests	1.294s	coverage: [no statements]
+FAIL
+Error: Process completed with exit code 1.

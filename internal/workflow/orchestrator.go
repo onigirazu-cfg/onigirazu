@@ -156,6 +156,7 @@ type WorkflowExecution struct {
 	Metadata   map[string]interface{}    `json:"metadata"`
 	Context    context.Context           `json:"-"`
 	CancelFunc context.CancelFunc        `json:"-"`
+	mutex      sync.RWMutex              `json:"-"` // Protect concurrent access to execution state
 }
 
 // StepExecution represents a step execution instance
@@ -289,22 +290,27 @@ func (wo *WorkflowOrchestrator) ExecuteWorkflow(workflowID string, trigger *Work
 func (wo *WorkflowOrchestrator) executeWorkflowAsync(execution *WorkflowExecution, workflow *Workflow) {
 	defer execution.CancelFunc()
 
+	execution.mutex.Lock()
 	execution.Status = StatusRunning
+	execution.mutex.Unlock()
 	wo.eventBus.Publish("workflow.started", execution)
 
 	// Execute workflow steps
 	err := wo.executeWorkflowSteps(execution, workflow)
 
 	// Update execution status
+	execution.mutex.Lock()
 	execution.EndTime = time.Now()
 	execution.Duration = execution.EndTime.Sub(execution.StartTime)
 
 	if err != nil {
 		execution.Status = StatusFailed
 		execution.Error = err.Error()
+		execution.mutex.Unlock()
 		wo.eventBus.Publish("workflow.failed", execution)
 	} else {
 		execution.Status = StatusCompleted
+		execution.mutex.Unlock()
 		wo.eventBus.Publish("workflow.completed", execution)
 	}
 }
@@ -427,7 +433,9 @@ func (wo *WorkflowOrchestrator) executeStep(execution *WorkflowExecution, step W
 		Metadata:  make(map[string]interface{}),
 	}
 
+	execution.mutex.Lock()
 	execution.Steps[step.ID] = stepExecution
+	execution.mutex.Unlock()
 
 	// Execute step with retry policy
 	var err error
@@ -649,7 +657,13 @@ func (wo *WorkflowOrchestrator) calculateRetryDelay(policy RetryPolicy, attempt 
 	case BackoffTypeFixed:
 		return policy.Delay
 	case BackoffTypeLinear:
-		return policy.Delay * time.Duration(attempt+1)
+		// Linear backoff: delay * attempt (0-indexed, so attempt 0 = 0*delay, attempt 1 = 1*delay, etc.)
+		// But we want at least the base delay, so use max(1, attempt)
+		multiplier := attempt
+		if multiplier < 1 {
+			multiplier = 1
+		}
+		return policy.Delay * time.Duration(multiplier)
 	case BackoffTypeExponential:
 		// Prevent integer overflow by capping the attempt value
 		// Max safe value for bit shift is 62 (since 1<<63 would overflow)
@@ -688,7 +702,10 @@ func (wo *WorkflowOrchestrator) countRunningExecutions() int {
 
 	count := 0
 	for _, execution := range wo.executions {
-		if execution.Status == StatusRunning {
+		execution.mutex.RLock()
+		isRunning := execution.Status == StatusRunning
+		execution.mutex.RUnlock()
+		if isRunning {
 			count++
 		}
 	}
@@ -731,9 +748,15 @@ func (wo *WorkflowOrchestrator) CancelExecution(id string) error {
 		return fmt.Errorf("execution not found: %s", id)
 	}
 
-	if execution.Status == StatusRunning {
-		execution.CancelFunc()
+	execution.mutex.Lock()
+	isRunning := execution.Status == StatusRunning
+	if isRunning {
 		execution.Status = StatusCancelled
+	}
+	execution.mutex.Unlock()
+
+	if isRunning {
+		execution.CancelFunc()
 		wo.eventBus.Publish("workflow.cancelled", execution)
 	}
 

@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"sync"
 	"testing"
 	"time"
 )
@@ -574,10 +575,13 @@ func TestWorkflowOrchestrator_EventBusIntegration(t *testing.T) {
 	}
 	wo := NewWorkflowOrchestrator(config)
 
-	// Subscribe to workflow events
+	// Subscribe to workflow events with mutex protection
+	var eventMutex sync.Mutex
 	eventReceived := false
 	wo.eventBus.Subscribe("workflow.started", func(event Event) {
+		eventMutex.Lock()
 		eventReceived = true
+		eventMutex.Unlock()
 	})
 
 	workflow := &Workflow{
@@ -605,7 +609,11 @@ func TestWorkflowOrchestrator_EventBusIntegration(t *testing.T) {
 	// Wait for event to be published
 	time.Sleep(200 * time.Millisecond)
 
-	if !eventReceived {
+	eventMutex.Lock()
+	received := eventReceived
+	eventMutex.Unlock()
+
+	if !received {
 		t.Error("Expected workflow.started event to be received")
 	}
 }
