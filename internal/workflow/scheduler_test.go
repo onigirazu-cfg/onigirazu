@@ -160,10 +160,8 @@ func TestWorkflowScheduler_SetCallback(t *testing.T) {
 	defer ws.Stop()
 
 	workflowID := "test-workflow"
-	callbackCalled := false
 
 	callback := func(id string) error {
-		callbackCalled = true
 		return nil
 	}
 

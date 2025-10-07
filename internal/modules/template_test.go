@@ -186,7 +186,6 @@ func TestTemplateModule_Execute_SimpleTemplate(t *testing.T) {
 
 	host := types.Host{
 		Name:    "test-host",
-		Host:    "localhost",
 		Port:    22,
 		Address: "127.0.0.1",
 		User:    "testuser",
@@ -255,7 +254,6 @@ func TestTemplateModule_Execute_TemplateAlreadyUpToDate(t *testing.T) {
 
 	host := types.Host{
 		Name:    "test-host",
-		Host:    "localhost",
 		Port:    22,
 		Address: "127.0.0.1",
 		User:    "testuser",
@@ -294,7 +292,6 @@ func TestTemplateModule_Execute_MissingSourceFile(t *testing.T) {
 
 	host := types.Host{
 		Name:    "test-host",
-		Host:    "localhost",
 		Port:    22,
 		Address: "127.0.0.1",
 		User:    "testuser",
@@ -345,7 +342,6 @@ func TestTemplateModule_Execute_WithBackup(t *testing.T) {
 
 	host := types.Host{
 		Name:    "test-host",
-		Host:    "localhost",
 		Port:    22,
 		Address: "127.0.0.1",
 		User:    "testuser",
@@ -375,10 +371,7 @@ func TestTemplateModule_Execute_WithBackup(t *testing.T) {
 	}
 
 	// Verify backup file was created
-	output, ok := result.Output.(map[string]interface{})
-	if !ok {
-		t.Fatalf("Expected output to be map[string]interface{}")
-	}
+	output := result.Output
 
 	backupFile, ok := output["backup_file"].(string)
 	if !ok || backupFile == "" {
@@ -415,7 +408,6 @@ func TestTemplateModule_Execute_CreateDirectory(t *testing.T) {
 
 	host := types.Host{
 		Name:    "test-host",
-		Host:    "localhost",
 		Port:    22,
 		Address: "127.0.0.1",
 		User:    "testuser",
@@ -461,7 +453,6 @@ func TestTemplateModule_Execute_WithHostVars(t *testing.T) {
 
 	host := types.Host{
 		Name:    "test-host",
-		Host:    "localhost",
 		Port:    2222,
 		Address: "127.0.0.1",
 		User:    "testuser",
@@ -516,7 +507,6 @@ func TestTemplateModule_Execute_WithTimeout(t *testing.T) {
 
 	host := types.Host{
 		Name:    "test-host",
-		Host:    "localhost",
 		Port:    22,
 		Address: "127.0.0.1",
 		User:    "testuser",
@@ -549,7 +539,6 @@ func TestTemplateModule_Execute_MissingSrc(t *testing.T) {
 
 	host := types.Host{
 		Name:    "test-host",
-		Host:    "localhost",
 		Port:    22,
 		Address: "127.0.0.1",
 		User:    "testuser",
@@ -579,7 +568,6 @@ func TestTemplateModule_Execute_MissingDest(t *testing.T) {
 
 	host := types.Host{
 		Name:    "test-host",
-		Host:    "localhost",
 		Port:    22,
 		Address: "127.0.0.1",
 		User:    "testuser",
@@ -634,7 +622,6 @@ func BenchmarkTemplateModule_Execute(b *testing.B) {
 
 	host := types.Host{
 		Name:    "test-host",
-		Host:    "localhost",
 		Port:    22,
 		Address: "127.0.0.1",
 		User:    "testuser",

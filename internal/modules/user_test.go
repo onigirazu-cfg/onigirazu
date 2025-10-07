@@ -245,33 +245,18 @@ func TestNewUserModule(t *testing.T) {
 	}
 }
 
-// TestUserModule_Execute_MissingName tests error when name is missing
+// TestUserModule_Execute_MissingName tests validation when name is missing
 func TestUserModule_Execute_MissingName(t *testing.T) {
 	module := NewUserModuleFixed()
 
-	host := types.Host{
-		Name: "test-host",
-		Host: "localhost",
-		Port: 22,
-	}
-
+	// Test validation directly since Execute requires name for TaskName
 	args := map[string]interface{}{
 		"state": "present",
 	}
 
-	ctx := context.Background()
-	result, err := module.Execute(ctx, host, args)
-
-	if err != nil {
-		t.Fatalf("Execute failed: %v", err)
-	}
-
-	if result.Success {
-		t.Errorf("Expected failure, got success")
-	}
-
-	if result.Error == "" {
-		t.Errorf("Expected error message, got empty string")
+	err := module.Validate(args)
+	if err == nil {
+		t.Errorf("Expected validation error for missing name, got nil")
 	}
 }
 
@@ -280,9 +265,9 @@ func TestUserModule_Execute_MissingState(t *testing.T) {
 	module := NewUserModuleFixed()
 
 	host := types.Host{
-		Name: "test-host",
-		Host: "localhost",
-		Port: 22,
+		Name:    "test-host",
+		Address: "localhost",
+		Port:    22,
 	}
 
 	args := map[string]interface{}{
@@ -310,9 +295,9 @@ func TestUserModule_Execute_InvalidState(t *testing.T) {
 	module := NewUserModuleFixed()
 
 	host := types.Host{
-		Name: "test-host",
-		Host: "localhost",
-		Port: 22,
+		Name:    "test-host",
+		Address: "localhost",
+		Port:    22,
 	}
 
 	args := map[string]interface{}{
@@ -341,9 +326,9 @@ func TestUserModule_Execute_WithTimeout(t *testing.T) {
 	module := NewUserModuleFixed()
 
 	host := types.Host{
-		Name: "test-host",
-		Host: "localhost",
-		Port: 22,
+		Name:    "test-host",
+		Address: "localhost",
+		Port:    22,
 	}
 
 	args := map[string]interface{}{

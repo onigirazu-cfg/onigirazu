@@ -138,9 +138,9 @@ func TestLineinfileModule_Execute_AddLine(t *testing.T) {
 	tmpFile.Close()
 
 	host := types.Host{
-		Name: "test-host",
-		Host: "localhost",
-		Port: 22,
+		Name:    "test-host",
+		Address: "localhost",
+		Port:    22,
 	}
 
 	args := map[string]interface{}{
@@ -195,9 +195,9 @@ func TestLineinfileModule_Execute_LineExists(t *testing.T) {
 	tmpFile.Close()
 
 	host := types.Host{
-		Name: "test-host",
-		Host: "localhost",
-		Port: 22,
+		Name:    "test-host",
+		Address: "localhost",
+		Port:    22,
 	}
 
 	args := map[string]interface{}{
@@ -242,9 +242,9 @@ func TestLineinfileModule_Execute_RemoveLine(t *testing.T) {
 	tmpFile.Close()
 
 	host := types.Host{
-		Name: "test-host",
-		Host: "localhost",
-		Port: 22,
+		Name:    "test-host",
+		Address: "localhost",
+		Port:    22,
 	}
 
 	args := map[string]interface{}{
@@ -299,9 +299,9 @@ func TestLineinfileModule_Execute_WithRegexp(t *testing.T) {
 	tmpFile.Close()
 
 	host := types.Host{
-		Name: "test-host",
-		Host: "localhost",
-		Port: 22,
+		Name:    "test-host",
+		Address: "localhost",
+		Port:    22,
 	}
 
 	args := map[string]interface{}{
@@ -351,9 +351,9 @@ func TestLineinfileModule_Execute_CreateFile(t *testing.T) {
 	defer os.Remove(tmpPath)
 
 	host := types.Host{
-		Name: "test-host",
-		Host: "localhost",
-		Port: 22,
+		Name:    "test-host",
+		Address: "localhost",
+		Port:    22,
 	}
 
 	args := map[string]interface{}{
@@ -402,9 +402,9 @@ func TestLineinfileModule_Execute_NoCreate(t *testing.T) {
 	tmpPath := os.TempDir() + "/lineinfile_test_nocreate_" + time.Now().Format("20060102150405") + ".txt"
 
 	host := types.Host{
-		Name: "test-host",
-		Host: "localhost",
-		Port: 22,
+		Name:    "test-host",
+		Address: "localhost",
+		Port:    22,
 	}
 
 	args := map[string]interface{}{
@@ -445,9 +445,9 @@ func TestLineinfileModule_Execute_InsertAfter(t *testing.T) {
 	tmpFile.Close()
 
 	host := types.Host{
-		Name: "test-host",
-		Host: "localhost",
-		Port: 22,
+		Name:    "test-host",
+		Address: "localhost",
+		Port:    22,
 	}
 
 	args := map[string]interface{}{
@@ -518,9 +518,9 @@ func TestLineinfileModule_Execute_InsertBefore(t *testing.T) {
 	tmpFile.Close()
 
 	host := types.Host{
-		Name: "test-host",
-		Host: "localhost",
-		Port: 22,
+		Name:    "test-host",
+		Address: "localhost",
+		Port:    22,
 	}
 
 	args := map[string]interface{}{
@@ -585,9 +585,9 @@ func TestLineinfileModule_Execute_InvalidRegexp(t *testing.T) {
 	tmpFile.Close()
 
 	host := types.Host{
-		Name: "test-host",
-		Host: "localhost",
-		Port: 22,
+		Name:    "test-host",
+		Address: "localhost",
+		Port:    22,
 	}
 
 	args := map[string]interface{}{
@@ -626,9 +626,9 @@ func TestLineinfileModule_Execute_WithTimeout(t *testing.T) {
 	tmpFile.Close()
 
 	host := types.Host{
-		Name: "test-host",
-		Host: "localhost",
-		Port: 22,
+		Name:    "test-host",
+		Address: "localhost",
+		Port:    22,
 	}
 
 	args := map[string]interface{}{
@@ -685,9 +685,9 @@ func BenchmarkLineinfileModule_Execute(b *testing.B) {
 	tmpFile.Close()
 
 	host := types.Host{
-		Name: "test-host",
-		Host: "localhost",
-		Port: 22,
+		Name:    "test-host",
+		Address: "localhost",
+		Port:    22,
 	}
 
 	args := map[string]interface{}{

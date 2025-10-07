@@ -13,9 +13,9 @@ func TestDebugModule_Execute_WithMsg(t *testing.T) {
 	module := NewDebugModule()
 
 	host := types.Host{
-		Name: "test-host",
-		Host: "localhost",
-		Port: 22,
+		Name:    "test-host",
+		Address: "localhost",
+		Port:    22,
 	}
 
 	args := map[string]interface{}{
@@ -48,9 +48,9 @@ func TestDebugModule_Execute_WithVar(t *testing.T) {
 	module := NewDebugModule()
 
 	host := types.Host{
-		Name: "test-host",
-		Host: "localhost",
-		Port: 22,
+		Name:    "test-host",
+		Address: "localhost",
+		Port:    22,
 	}
 
 	args := map[string]interface{}{
@@ -85,9 +85,9 @@ func TestDebugModule_Execute_WithComplexVar(t *testing.T) {
 	module := NewDebugModule()
 
 	host := types.Host{
-		Name: "test-host",
-		Host: "localhost",
-		Port: 22,
+		Name:    "test-host",
+		Address: "localhost",
+		Port:    22,
 	}
 
 	complexVar := map[string]interface{}{
@@ -124,9 +124,9 @@ func TestDebugModule_Execute_WithNonStringMsg(t *testing.T) {
 	module := NewDebugModule()
 
 	host := types.Host{
-		Name: "test-host",
-		Host: "localhost",
-		Port: 22,
+		Name:    "test-host",
+		Address: "localhost",
+		Port:    22,
 	}
 
 	args := map[string]interface{}{
@@ -157,9 +157,9 @@ func TestDebugModule_Execute_MissingParameters(t *testing.T) {
 	module := NewDebugModule()
 
 	host := types.Host{
-		Name: "test-host",
-		Host: "localhost",
-		Port: 22,
+		Name:    "test-host",
+		Address: "localhost",
+		Port:    22,
 	}
 
 	args := map[string]interface{}{
@@ -187,9 +187,9 @@ func TestDebugModule_Execute_WithTimeout(t *testing.T) {
 	module := NewDebugModule()
 
 	host := types.Host{
-		Name: "test-host",
-		Host: "localhost",
-		Port: 22,
+		Name:    "test-host",
+		Address: "localhost",
+		Port:    22,
 	}
 
 	args := map[string]interface{}{
@@ -312,9 +312,9 @@ func TestDebugModule_Execute_EmptyMsg(t *testing.T) {
 	module := NewDebugModule()
 
 	host := types.Host{
-		Name: "test-host",
-		Host: "localhost",
-		Port: 22,
+		Name:    "test-host",
+		Address: "localhost",
+		Port:    22,
 	}
 
 	args := map[string]interface{}{
@@ -343,9 +343,9 @@ func BenchmarkDebugModule_Execute(b *testing.B) {
 	module := NewDebugModule()
 
 	host := types.Host{
-		Name: "test-host",
-		Host: "localhost",
-		Port: 22,
+		Name:    "test-host",
+		Address: "localhost",
+		Port:    22,
 	}
 
 	args := map[string]interface{}{

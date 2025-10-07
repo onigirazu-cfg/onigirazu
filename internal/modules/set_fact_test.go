@@ -13,9 +13,9 @@ func TestSetFactModule_Execute_SingleFact(t *testing.T) {
 	module := NewSetFactModule()
 
 	host := types.Host{
-		Name: "test-host",
-		Host: "localhost",
-		Port: 22,
+		Name:    "test-host",
+		Address: "localhost",
+		Port:    22,
 	}
 
 	args := map[string]interface{}{
@@ -54,9 +54,9 @@ func TestSetFactModule_Execute_MultipleFacts(t *testing.T) {
 	module := NewSetFactModule()
 
 	host := types.Host{
-		Name: "test-host",
-		Host: "localhost",
-		Port: 22,
+		Name:    "test-host",
+		Address: "localhost",
+		Port:    22,
 	}
 
 	args := map[string]interface{}{
@@ -114,9 +114,9 @@ func TestSetFactModule_Execute_ComplexFacts(t *testing.T) {
 	module := NewSetFactModule()
 
 	host := types.Host{
-		Name: "test-host",
-		Host: "localhost",
-		Port: 22,
+		Name:    "test-host",
+		Address: "localhost",
+		Port:    22,
 	}
 
 	complexValue := map[string]interface{}{
@@ -155,9 +155,9 @@ func TestSetFactModule_Execute_NoFacts(t *testing.T) {
 	module := NewSetFactModule()
 
 	host := types.Host{
-		Name: "test-host",
-		Host: "localhost",
-		Port: 22,
+		Name:    "test-host",
+		Address: "localhost",
+		Port:    22,
 	}
 
 	args := map[string]interface{}{
@@ -185,9 +185,9 @@ func TestSetFactModule_Execute_WithTimeout(t *testing.T) {
 	module := NewSetFactModule()
 
 	host := types.Host{
-		Name: "test-host",
-		Host: "localhost",
-		Port: 22,
+		Name:    "test-host",
+		Address: "localhost",
+		Port:    22,
 	}
 
 	args := map[string]interface{}{
@@ -303,9 +303,9 @@ func TestSetFactModule_Execute_NilValues(t *testing.T) {
 	module := NewSetFactModule()
 
 	host := types.Host{
-		Name: "test-host",
-		Host: "localhost",
-		Port: 22,
+		Name:    "test-host",
+		Address: "localhost",
+		Port:    22,
 	}
 
 	args := map[string]interface{}{
@@ -336,9 +336,9 @@ func TestSetFactModule_Execute_EmptyStringFact(t *testing.T) {
 	module := NewSetFactModule()
 
 	host := types.Host{
-		Name: "test-host",
-		Host: "localhost",
-		Port: 22,
+		Name:    "test-host",
+		Address: "localhost",
+		Port:    22,
 	}
 
 	args := map[string]interface{}{
@@ -367,9 +367,9 @@ func TestSetFactModule_Execute_ZeroValues(t *testing.T) {
 	module := NewSetFactModule()
 
 	host := types.Host{
-		Name: "test-host",
-		Host: "localhost",
-		Port: 22,
+		Name:    "test-host",
+		Address: "localhost",
+		Port:    22,
 	}
 
 	args := map[string]interface{}{
@@ -408,9 +408,9 @@ func BenchmarkSetFactModule_Execute(b *testing.B) {
 	module := NewSetFactModule()
 
 	host := types.Host{
-		Name: "test-host",
-		Host: "localhost",
-		Port: 22,
+		Name:    "test-host",
+		Address: "localhost",
+		Port:    22,
 	}
 
 	args := map[string]interface{}{

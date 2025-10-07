@@ -140,9 +140,9 @@ func TestServiceModule_Execute_StartService(t *testing.T) {
 	}
 
 	host := types.Host{
-		Name: "test-host",
-		Host: "localhost",
-		Port: 22,
+		Name:    "test-host",
+		Address: "localhost",
+		Port:    22,
 	}
 
 	args := map[string]interface{}{
@@ -189,9 +189,9 @@ func TestServiceModule_Execute_StopService(t *testing.T) {
 	}
 
 	host := types.Host{
-		Name: "test-host",
-		Host: "localhost",
-		Port: 22,
+		Name:    "test-host",
+		Address: "localhost",
+		Port:    22,
 	}
 
 	args := map[string]interface{}{
@@ -237,9 +237,9 @@ func TestServiceModule_Execute_RestartService(t *testing.T) {
 	}
 
 	host := types.Host{
-		Name: "test-host",
-		Host: "localhost",
-		Port: 22,
+		Name:    "test-host",
+		Address: "localhost",
+		Port:    22,
 	}
 
 	args := map[string]interface{}{
@@ -281,9 +281,9 @@ func TestServiceModule_Execute_ReloadService(t *testing.T) {
 	}
 
 	host := types.Host{
-		Name: "test-host",
-		Host: "localhost",
-		Port: 22,
+		Name:    "test-host",
+		Address: "localhost",
+		Port:    22,
 	}
 
 	args := map[string]interface{}{
@@ -326,9 +326,9 @@ func TestServiceModule_Execute_EnableService(t *testing.T) {
 	}
 
 	host := types.Host{
-		Name: "test-host",
-		Host: "localhost",
-		Port: 22,
+		Name:    "test-host",
+		Address: "localhost",
+		Port:    22,
 	}
 
 	args := map[string]interface{}{
@@ -376,9 +376,9 @@ func TestServiceModule_Execute_DisableService(t *testing.T) {
 	}
 
 	host := types.Host{
-		Name: "test-host",
-		Host: "localhost",
-		Port: 22,
+		Name:    "test-host",
+		Address: "localhost",
+		Port:    22,
 	}
 
 	args := map[string]interface{}{
@@ -426,9 +426,9 @@ func TestServiceModule_Execute_NoChange(t *testing.T) {
 	}
 
 	host := types.Host{
-		Name: "test-host",
-		Host: "localhost",
-		Port: 22,
+		Name:    "test-host",
+		Address: "localhost",
+		Port:    22,
 	}
 
 	args := map[string]interface{}{
@@ -474,9 +474,9 @@ func TestServiceModule_Execute_MissingName(t *testing.T) {
 	}
 
 	host := types.Host{
-		Name: "test-host",
-		Host: "localhost",
-		Port: 22,
+		Name:    "test-host",
+		Address: "localhost",
+		Port:    22,
 	}
 
 	args := map[string]interface{}{
@@ -514,9 +514,9 @@ func TestServiceModule_Execute_StartFailure(t *testing.T) {
 	}
 
 	host := types.Host{
-		Name: "test-host",
-		Host: "localhost",
-		Port: 22,
+		Name:    "test-host",
+		Address: "localhost",
+		Port:    22,
 	}
 
 	args := map[string]interface{}{
@@ -554,9 +554,9 @@ func TestServiceModule_Execute_GetStatusFailure(t *testing.T) {
 	}
 
 	host := types.Host{
-		Name: "test-host",
-		Host: "localhost",
-		Port: 22,
+		Name:    "test-host",
+		Address: "localhost",
+		Port:    22,
 	}
 
 	args := map[string]interface{}{
@@ -663,9 +663,9 @@ func TestServiceModule_Execute_WithTimeout(t *testing.T) {
 	}
 
 	host := types.Host{
-		Name: "test-host",
-		Host: "localhost",
-		Port: 22,
+		Name:    "test-host",
+		Address: "localhost",
+		Port:    22,
 	}
 
 	args := map[string]interface{}{
@@ -737,9 +737,9 @@ func BenchmarkServiceModule_Execute(b *testing.B) {
 	}
 
 	host := types.Host{
-		Name: "test-host",
-		Host: "localhost",
-		Port: 22,
+		Name:    "test-host",
+		Address: "localhost",
+		Port:    22,
 	}
 
 	args := map[string]interface{}{

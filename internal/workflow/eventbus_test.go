@@ -31,9 +31,8 @@ func TestNewEventBus(t *testing.T) {
 func TestEventBus_Subscribe(t *testing.T) {
 	eb := NewEventBus()
 
-	handlerCalled := false
 	handler := func(event Event) {
-		handlerCalled = true
+		// Handler implementation
 	}
 
 	eb.Subscribe("test.event", handler)

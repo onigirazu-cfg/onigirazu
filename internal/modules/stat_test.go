@@ -22,6 +22,7 @@ func TestStatModule_Validate(t *testing.T) {
 		{
 			name: "valid path",
 			args: map[string]interface{}{
+				"name": "test",
 				"path": "/tmp/test.txt",
 			},
 			wantErr: false,
@@ -36,6 +37,7 @@ func TestStatModule_Validate(t *testing.T) {
 		{
 			name: "path not string",
 			args: map[string]interface{}{
+				"name": "test",
 				"path": 123,
 			},
 			wantErr: true,
@@ -43,6 +45,7 @@ func TestStatModule_Validate(t *testing.T) {
 		{
 			name: "path is empty string",
 			args: map[string]interface{}{
+				"name": "test",
 				"path": "",
 			},
 			wantErr: false, // Empty string is valid, will just fail during execution
@@ -50,6 +53,7 @@ func TestStatModule_Validate(t *testing.T) {
 		{
 			name: "path is nil",
 			args: map[string]interface{}{
+				"name": "test",
 				"path": nil,
 			},
 			wantErr: true,
@@ -108,9 +112,9 @@ func TestStatModule_Execute_FileExists(t *testing.T) {
 	tmpFile.Close()
 
 	host := types.Host{
-		Name: "test-host",
-		Host: "localhost",
-		Port: 22,
+		Name:    "test-host",
+		Address: "localhost",
+		Port:    22,
 	}
 
 	args := map[string]interface{}{
@@ -134,10 +138,7 @@ func TestStatModule_Execute_FileExists(t *testing.T) {
 	}
 
 	// Check output structure
-	output, ok := result.Output.(map[string]interface{})
-	if !ok {
-		t.Fatalf("Expected output to be map[string]interface{}")
-	}
+	output := result.Output
 
 	// Verify exists flag
 	exists, ok := output["exists"].(bool)
@@ -192,9 +193,9 @@ func TestStatModule_Execute_FileNotExists(t *testing.T) {
 	module := NewStatModule()
 
 	host := types.Host{
-		Name: "test-host",
-		Host: "localhost",
-		Port: 22,
+		Name:    "test-host",
+		Address: "localhost",
+		Port:    22,
 	}
 
 	nonExistentPath := "/tmp/this_file_should_not_exist_" + time.Now().Format("20060102150405")
@@ -220,10 +221,7 @@ func TestStatModule_Execute_FileNotExists(t *testing.T) {
 	}
 
 	// Check output structure
-	output, ok := result.Output.(map[string]interface{})
-	if !ok {
-		t.Fatalf("Expected output to be map[string]interface{}")
-	}
+	output := result.Output
 
 	// Verify exists flag is false
 	exists, ok := output["exists"].(bool)
@@ -249,9 +247,9 @@ func TestStatModule_Execute_Directory(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	host := types.Host{
-		Name: "test-host",
-		Host: "localhost",
-		Port: 22,
+		Name:    "test-host",
+		Address: "localhost",
+		Port:    22,
 	}
 
 	args := map[string]interface{}{
@@ -271,10 +269,7 @@ func TestStatModule_Execute_Directory(t *testing.T) {
 	}
 
 	// Check output structure
-	output, ok := result.Output.(map[string]interface{})
-	if !ok {
-		t.Fatalf("Expected output to be map[string]interface{}")
-	}
+	output := result.Output
 
 	// Verify it's a directory
 	isdir, ok := output["isdir"].(bool)
@@ -309,9 +304,9 @@ func TestStatModule_Execute_Symlink(t *testing.T) {
 	defer os.Remove(symlinkPath)
 
 	host := types.Host{
-		Name: "test-host",
-		Host: "localhost",
-		Port: 22,
+		Name:    "test-host",
+		Address: "localhost",
+		Port:    22,
 	}
 
 	args := map[string]interface{}{
@@ -331,10 +326,7 @@ func TestStatModule_Execute_Symlink(t *testing.T) {
 	}
 
 	// Check output structure
-	output, ok := result.Output.(map[string]interface{})
-	if !ok {
-		t.Fatalf("Expected output to be map[string]interface{}")
-	}
+	output := result.Output
 
 	// Note: os.Stat follows symlinks, so islnk will be false
 	// To detect symlinks, we'd need to use os.Lstat instead
@@ -350,9 +342,9 @@ func TestStatModule_Execute_MissingPath(t *testing.T) {
 	module := NewStatModule()
 
 	host := types.Host{
-		Name: "test-host",
-		Host: "localhost",
-		Port: 22,
+		Name:    "test-host",
+		Address: "localhost",
+		Port:    22,
 	}
 
 	args := map[string]interface{}{
@@ -388,9 +380,9 @@ func TestStatModule_Execute_WithTimeout(t *testing.T) {
 	tmpFile.Close()
 
 	host := types.Host{
-		Name: "test-host",
-		Host: "localhost",
-		Port: 22,
+		Name:    "test-host",
+		Address: "localhost",
+		Port:    22,
 	}
 
 	args := map[string]interface{}{
@@ -430,9 +422,9 @@ func TestStatModule_Execute_PermissionChecks(t *testing.T) {
 	}
 
 	host := types.Host{
-		Name: "test-host",
-		Host: "localhost",
-		Port: 22,
+		Name:    "test-host",
+		Address: "localhost",
+		Port:    22,
 	}
 
 	args := map[string]interface{}{
@@ -452,10 +444,7 @@ func TestStatModule_Execute_PermissionChecks(t *testing.T) {
 	}
 
 	// Check output structure
-	output, ok := result.Output.(map[string]interface{})
-	if !ok {
-		t.Fatalf("Expected output to be map[string]interface{}")
-	}
+	output := result.Output
 
 	// Verify mode
 	mode, ok := output["mode"].(string)
@@ -504,9 +493,9 @@ func BenchmarkStatModule_Execute(b *testing.B) {
 	tmpFile.Close()
 
 	host := types.Host{
-		Name: "test-host",
-		Host: "localhost",
-		Port: 22,
+		Name:    "test-host",
+		Address: "localhost",
+		Port:    22,
 	}
 
 	args := map[string]interface{}{
