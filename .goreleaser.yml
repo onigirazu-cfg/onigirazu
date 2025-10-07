@@ -344,9 +344,8 @@ dockers:
       - "ghcr.io/onigirazu-cfg/onigirazu:{{ .Tag }}-amd64"
     dockerfile: Dockerfile
     use: buildx
-    extra_files:
-      - go.mod
-      - go.sum
+    goos: linux
+    goarch: amd64
     build_flag_templates:
       - "--pull"
       - "--label=org.opencontainers.image.created={{.Date}}"
@@ -359,9 +358,8 @@ dockers:
       - "ghcr.io/onigirazu-cfg/onigirazu:{{ .Tag }}-arm64v8"
     dockerfile: Dockerfile
     use: buildx
-    extra_files:
-      - go.mod
-      - go.sum
+    goos: linux
+    goarch: arm64
     build_flag_templates:
       - "--pull"
       - "--label=org.opencontainers.image.created={{.Date}}"
@@ -369,7 +367,6 @@ dockers:
       - "--label=org.opencontainers.image.revision={{.FullCommit}}"
       - "--label=org.opencontainers.image.version={{.Version}}"
       - "--platform=linux/arm64/v8"
-    goarch: arm64
 
 docker_manifests:
   - name_template: "onigirazu/onigirazu:{{ .Tag }}"
