@@ -1,0 +1,59 @@
+# Onigirazu Inventory Example (TOML format)
+# This file defines hosts and groups for your infrastructure
+
+# Individual hosts
+[hosts.localhost]
+address = "127.0.0.1"
+connection = "local"
+[hosts.localhost.vars]
+ansible_python_interpreter = "/usr/bin/python3"
+
+[hosts.web-server-01]
+address = "192.168.1.10"
+port = 22
+user = "deploy"
+[hosts.web-server-01.vars]
+http_port = 80
+https_port = 443
+domain = "example.com"
+
+[hosts.db-server-01]
+address = "192.168.1.20"
+port = 22
+user = "deploy"
+[hosts.db-server-01.vars]
+db_port = 5432
+db_name = "production"
+
+# Groups of hosts
+[groups.webservers]
+hosts = ["web-server-01"]
+[groups.webservers.vars]
+nginx_version = "latest"
+enable_ssl = true
+
+[groups.databases]
+hosts = ["db-server-01"]
+[groups.databases.vars]
+postgresql_version = "15"
+max_connections = 100
+
+[groups.development]
+hosts = ["localhost"]
+[groups.development.vars]
+environment = "dev"
+debug = true
+
+[groups.production]
+hosts = ["web-server-01", "db-server-01"]
+[groups.production.vars]
+environment = "prod"
+debug = false
+backup_enabled = true
+
+[groups.all]
+children = ["webservers", "databases"]
+[groups.all.vars]
+timezone = "UTC"
+ntp_servers = ["0.pool.ntp.org", "1.pool.ntp.org"]
+dns_servers = ["8.8.8.8", "8.8.4.4"]

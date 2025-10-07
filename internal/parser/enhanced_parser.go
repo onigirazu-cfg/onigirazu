@@ -15,18 +15,22 @@ import (
 
 // EnhancedParser provides advanced playbook parsing capabilities
 type EnhancedParser struct {
-	templateEngine interfaces.TemplateEngine
-	logger         interfaces.Logger
-	variables      map[string]interface{}
+	templateEngine  interfaces.TemplateEngine
+	logger          interfaces.Logger
+	variables       map[string]interface{}
+	inventoryParser *InventoryParser
 }
 
 // NewEnhancedParser creates a new enhanced parser
 func NewEnhancedParser(templateEngine interfaces.TemplateEngine, logger interfaces.Logger) *EnhancedParser {
-	return &EnhancedParser{
+	parser := &EnhancedParser{
 		templateEngine: templateEngine,
 		logger:         logger,
 		variables:      make(map[string]interface{}),
 	}
+	// Create inventory parser
+	parser.inventoryParser = NewInventoryParser(logger)
+	return parser
 }
 
 // ParsePlaybook parses a playbook file with template rendering
@@ -67,34 +71,29 @@ func (p *EnhancedParser) ParsePlaybook(ctx context.Context, filePath string) (*t
 	return &playbook, nil
 }
 
-// ParseInventory parses an inventory file
+// ParseInventory parses an inventory file (supports YAML, TOML, and simple list formats)
 func (p *EnhancedParser) ParseInventory(ctx context.Context, filePath string) (*types.Inventory, error) {
 	p.logger.Debug("Parsing inventory: %s", filePath)
 
-	content, err := os.ReadFile(filePath) // #nosec G304 -- filePath is provided by user as inventory file
+	// Use the new inventory parser for multi-format support
+	inventory, err := p.inventoryParser.ParseInventoryFile(ctx, filePath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read inventory file %s: %w", filePath, err)
-	}
-
-	// Render templates in the content
-	renderedContent, err := p.templateEngine.Render(ctx, string(content), p.variables)
-	if err != nil {
-		return nil, fmt.Errorf("failed to render templates in inventory %s: %w", filePath, err)
-	}
-
-	var inventory types.Inventory
-	if err := yaml.Unmarshal([]byte(renderedContent), &inventory); err != nil {
-		return nil, fmt.Errorf("failed to parse YAML in inventory %s: %w", filePath, err)
+		return nil, fmt.Errorf("failed to parse inventory file %s: %w", filePath, err)
 	}
 
 	// Validate inventory
-	if err := p.validateInventory(&inventory); err != nil {
+	if err := p.validateInventory(inventory); err != nil {
 		return nil, fmt.Errorf("inventory validation failed for %s: %w", filePath, err)
 	}
 
 	p.logger.Info("Successfully parsed inventory: %s (%d groups, %d hosts)",
-		filePath, len(inventory.Groups), p.countHosts(&inventory))
-	return &inventory, nil
+		filePath, len(inventory.Groups), p.countHosts(inventory))
+	return inventory, nil
+}
+
+// FindInventoryFile searches for inventory file in common locations
+func (p *EnhancedParser) FindInventoryFile(baseDir string) (string, error) {
+	return p.inventoryParser.FindInventoryFile(baseDir)
 }
 
 // SetVariables sets global variables for template rendering

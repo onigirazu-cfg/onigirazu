@@ -11,13 +11,19 @@ import (
 )
 
 type Parser struct {
-	variables map[string]interface{}
+	variables       map[string]interface{}
+	inventoryParser *InventoryParser
 }
 
 func New() *Parser {
 	return &Parser{
 		variables: make(map[string]interface{}),
 	}
+}
+
+// SetInventoryParser sets the inventory parser (for dependency injection)
+func (p *Parser) SetInventoryParser(invParser *InventoryParser) {
+	p.inventoryParser = invParser
 }
 
 // ParsePlaybook parses playbook from YAML file
@@ -95,8 +101,14 @@ func (p *Parser) ValidateTask(task *types.Task, playIndex, taskIndex int) error 
 	return nil
 }
 
-// ParseInventory parses inventory from YAML file
+// ParseInventory parses inventory from file (supports YAML, TOML, and simple list formats)
 func (p *Parser) ParseInventory(ctx context.Context, filePath string) (*types.Inventory, error) {
+	// Use new inventory parser if available
+	if p.inventoryParser != nil {
+		return p.inventoryParser.ParseInventoryFile(ctx, filePath)
+	}
+
+	// Fallback to old YAML-only parsing for backward compatibility
 	data, err := os.ReadFile(filePath) // #nosec G304 -- filePath is provided by user as inventory file
 	if err != nil {
 		return nil, fmt.Errorf("error reading inventory: %w", err)

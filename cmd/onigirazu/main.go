@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -156,8 +157,8 @@ func main() {
 	moduleRegistry := modules.NewRegistry()
 
 	// Initialize parser and inventory manager
-	playbookParser := parser.NewEnhancedParser(templateEngine, log)
-	inventoryManager := inventory.NewManager(playbookParser, log, cacheManager)
+	enhancedParser := parser.NewEnhancedParser(templateEngine, log)
+	inventoryManager := inventory.NewManager(enhancedParser, log, cacheManager)
 
 	// Initialize execution engine
 	executionEngine := engine.NewExecutionEngine(
@@ -179,10 +180,28 @@ func main() {
 		defer timeoutCancel()
 	}
 
-	// Load inventory if specified
+	// Load inventory
+	var finalInventoryPath string
 	if *inventoryPath != "" {
-		log.Info("Loading inventory from: %s", *inventoryPath)
-		if err := inventoryManager.LoadInventory(ctx, *inventoryPath); err != nil {
+		// Use specified inventory path
+		finalInventoryPath = *inventoryPath
+	} else {
+		// Try to find inventory file in playbook directory
+		playbookDir := filepath.Dir(*playbookPath)
+		foundPath, err := enhancedParser.FindInventoryFile(playbookDir)
+		if err != nil {
+			log.Warn("No inventory file found in playbook directory: %v", err)
+			log.Info("Continuing without inventory (only 'localhost' will be available)")
+		} else {
+			finalInventoryPath = foundPath
+			log.Info("Auto-detected inventory file: %s", finalInventoryPath)
+		}
+	}
+
+	// Load inventory if we have a path
+	if finalInventoryPath != "" {
+		log.Info("Loading inventory from: %s", finalInventoryPath)
+		if err := inventoryManager.LoadInventory(ctx, finalInventoryPath); err != nil {
 			log.Error("Failed to load inventory: %v", err)
 			os.Exit(1)
 		}
@@ -190,7 +209,7 @@ func main() {
 
 	// Parse playbook
 	log.Info("Parsing playbook: %s", *playbookPath)
-	playbook, err := playbookParser.ParsePlaybook(ctx, *playbookPath)
+	playbook, err := enhancedParser.ParsePlaybook(ctx, *playbookPath)
 	if err != nil {
 		log.Error("Failed to parse playbook: %v", err)
 		os.Exit(1)
