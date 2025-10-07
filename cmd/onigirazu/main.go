@@ -51,7 +51,6 @@ func main() {
 	// Handle version flag
 	if *showVersion {
 		fmt.Println(version.GetFullVersion())
-		fmt.Println("Configuration Management Tool inspired by Ansible")
 		os.Exit(0)
 	}
 

@@ -41,20 +41,20 @@ All examples use the modern nested module syntax:
 ### Local Testing
 
 ```bash
-onigirazu --inventory inventory.yml --config onigirazu.yml --playbook quick-test.yml
+onigirazu -inventory inventory.yml -config onigirazu.yml -playbook quick-test.yml
 ```
 
 ### Remote Server (cs.rastiegaiev.com)
 
 ```bash
 # Basic package management
-onigirazu --inventory inventory-remote.yml --config onigirazu.yml --playbook 01-package-management.yml
+onigirazu -inventory inventory-remote.yml -config onigirazu.yml -playbook 01-package-management.yml
 
 # CS server specific setup
-onigirazu --inventory inventory-remote.yml --config onigirazu.yml --playbook cs-server-setup.yml
+onigirazu -inventory inventory-remote.yml -config onigirazu.yml -playbook cs-server-setup.yml
 
 # Complete server setup
-onigirazu --inventory inventory-remote.yml --config onigirazu.yml --playbook complete-server-setup.yml
+onigirazu -inventory inventory-remote.yml -config onigirazu.yml -playbook complete-server-setup.yml
 ```
 
 ### Setup Steps

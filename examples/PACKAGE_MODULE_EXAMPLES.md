@@ -256,11 +256,11 @@ The module is fully idempotent:
 
 ```bash
 # First run - installs missing packages
-$ ./onigirazu -playbook install.yml -inventory hosts.yml
+$ onigirazu -playbook install.yml -inventory hosts.yml
 # Result: changed=true (packages installed)
 
 # Second run - no changes needed
-$ ./onigirazu -playbook install.yml -inventory hosts.yml
+$ onigirazu -playbook install.yml -inventory hosts.yml
 # Result: changed=false (packages already installed)
 ```
 
@@ -375,8 +375,8 @@ ssh user@host "dpkg -l | grep -E '^ii  (git|curl|wget)'"
 
 ```bash
 # Run playbook twice
-./onigirazu -playbook test.yml -inventory hosts.yml
-./onigirazu -playbook test.yml -inventory hosts.yml
+onigirazu -playbook test.yml -inventory hosts.yml
+onigirazu -playbook test.yml -inventory hosts.yml
 
 # Second run should show: changed=false
 ```

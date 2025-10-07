@@ -40,17 +40,10 @@ func GetVersion() string {
 	return Version
 }
 
-// GetFullVersion returns a detailed version string
+// GetFullVersion returns a simple version string
 func GetFullVersion() string {
-	info := GetBuildInfo()
-	if info.Version == "dev" {
-		return fmt.Sprintf("Onigirazu %s (%s)", info.Version, info.GoVersion)
+	if Version == "dev" {
+		return "Onigirazu dev"
 	}
-	commit := info.Commit
-	if len(commit) > 8 {
-		commit = commit[:8]
-	}
-
-	return fmt.Sprintf("Onigirazu %s (commit: %s, built: %s, %s)",
-		info.Version, commit, info.Date, info.GoVersion)
+	return fmt.Sprintf("Onigirazu %s", Version)
 }

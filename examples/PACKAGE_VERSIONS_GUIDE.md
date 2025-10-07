@@ -312,10 +312,10 @@ plays:
 
 ```bash
 # Always test version changes in staging first
-./onigirazu -playbook staging.yml -inventory staging-hosts.yml
+onigirazu -playbook staging.yml -inventory staging-hosts.yml
 
 # Then apply to production
-./onigirazu -playbook production.yml -inventory prod-hosts.yml
+onigirazu -playbook production.yml -inventory prod-hosts.yml
 ```
 
 ---

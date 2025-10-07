@@ -90,8 +90,8 @@ ssh usx@cs.rastiegaiev.com "sudo apt-get remove -y tree jq"
 **Execution:**
 
 ```bash
-./onigirazu -playbook examples/01-package-management-improved.yml \
-            -inventory examples/inventory-correct.yml
+onigirazu -playbook examples/01-package-management-improved.yml \
+          -inventory examples/inventory-correct.yml
 ```
 
 **Results:**
@@ -123,8 +123,8 @@ ii  wget    1.21.4-1ubuntu4.1           amd64
 **Execution:**
 
 ```bash
-./onigirazu -playbook examples/01-package-management-improved.yml \
-            -inventory examples/inventory-correct.yml
+onigirazu -playbook examples/01-package-management-improved.yml \
+          -inventory examples/inventory-correct.yml
 ```
 
 **Results:**

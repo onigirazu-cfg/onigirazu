@@ -1044,9 +1044,7 @@ func setupHealthCheck() {
 ```go
 // cmd/onigirazu/main.go
 if *versionFlag {
-    fmt.Printf("Onigirazu version %s\n", version.Version)
-    fmt.Printf("Go version: %s\n", runtime.Version())
-    fmt.Printf("OS/Arch: %s/%s\n", runtime.GOOS, runtime.GOARCH)
+    fmt.Printf("Onigirazu %s\n", version.Version)
     os.Exit(0)
 }
 ```

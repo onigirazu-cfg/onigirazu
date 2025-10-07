@@ -24,8 +24,8 @@ plays:
 ### Run the Playbook
 
 ```bash
-./onigirazu -playbook examples/01-package-management-improved.yml \
-            -inventory examples/inventory-correct.yml
+onigirazu -playbook examples/01-package-management-improved.yml \
+          -inventory examples/inventory-correct.yml
 ```
 
 ## 📋 Syntax Comparison
@@ -127,7 +127,7 @@ plays:
 ### View Task Output
 
 ```bash
-./onigirazu -playbook playbook.yml -inventory hosts.yml -verbose
+onigirazu -playbook playbook.yml -inventory hosts.yml -verbose
 ```
 
 ### Verify on Remote Host
@@ -140,8 +140,8 @@ ssh user@host "dpkg -l | grep -E '^ii  (git|curl|wget)'"
 
 ```bash
 # Run twice - second run should show changed=false
-./onigirazu -playbook playbook.yml -inventory hosts.yml
-./onigirazu -playbook playbook.yml -inventory hosts.yml
+onigirazu -playbook playbook.yml -inventory hosts.yml
+onigirazu -playbook playbook.yml -inventory hosts.yml
 ```
 
 ## 💡 Tips

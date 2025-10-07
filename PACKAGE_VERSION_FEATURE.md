@@ -124,8 +124,8 @@ version: "latest"  # Global default
 ### Test Execution
 
 ```bash
-./onigirazu -playbook examples/03-package-versions.yml \
-            -inventory examples/inventory-correct.yml
+onigirazu -playbook examples/03-package-versions.yml \
+          -inventory examples/inventory-correct.yml
 ```
 
 **Results:**

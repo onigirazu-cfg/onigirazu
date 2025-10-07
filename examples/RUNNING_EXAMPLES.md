@@ -9,10 +9,10 @@
 cd /Users/denys.rastiegaiev/work/go_teransible/examples
 
 # Запуск playbook для управления пакетами
-onigirazu --inventory inventory-remote.yml --config onigirazu.yml --playbook 01-package-management.yml
+onigirazu -inventory inventory-remote.yml -config onigirazu.yml -playbook 01-package-management.yml
 
 # Запуск с указанием конкретного хоста (если поддерживается)
-onigirazu --inventory inventory-remote.yml --config onigirazu.yml --playbook 01-package-management.yml
+onigirazu -inventory inventory-remote.yml -config onigirazu.yml -playbook 01-package-management.yml
 ```
 
 ### Расположение файлов
@@ -28,31 +28,31 @@ onigirazu --inventory inventory-remote.yml --config onigirazu.yml --playbook 01-
 #### 1. Управление пакетами
 
 ```bash
-onigirazu --inventory inventory-remote.yml --config onigirazu.yml --playbook 01-package-management.yml
+onigirazu -inventory inventory-remote.yml -config onigirazu.yml -playbook 01-package-management.yml
 ```
 
 #### 2. Файловые операции
 
 ```bash
-onigirazu --inventory inventory-remote.yml --config onigirazu.yml --playbook 02-file-operations.yml
+onigirazu -inventory inventory-remote.yml -config onigirazu.yml -playbook 02-file-operations.yml
 ```
 
 #### 3. Управление сервисами
 
 ```bash
-onigirazu --inventory inventory-remote.yml --config onigirazu.yml --playbook 03-service-management.yml
+onigirazu -inventory inventory-remote.yml -config onigirazu.yml -playbook 03-service-management.yml
 ```
 
 #### 4. Быстрый тест
 
 ```bash
-onigirazu --inventory inventory-remote.yml --config onigirazu.yml --playbook quick-test.yml
+onigirazu -inventory inventory-remote.yml -config onigirazu.yml -playbook quick-test.yml
 ```
 
 #### 5. Полная настройка сервера
 
 ```bash
-onigirazu --inventory inventory-remote.yml --config onigirazu.yml --playbook complete-server-setup.yml
+onigirazu -inventory inventory-remote.yml -config onigirazu.yml -playbook complete-server-setup.yml
 ```
 
 ### Дополнительные опции
@@ -60,25 +60,25 @@ onigirazu --inventory inventory-remote.yml --config onigirazu.yml --playbook com
 #### Запуск с verbose режимом
 
 ```bash
-onigirazu --inventory inventory-remote.yml --config onigirazu.yml --verbose --playbook 01-package-management.yml
+onigirazu -inventory inventory-remote.yml -config onigirazu.yml -verbose -playbook 01-package-management.yml
 ```
 
 #### Проверка синтаксиса (dry-run)
 
 ```bash
-onigirazu --inventory inventory-remote.yml --config onigirazu.yml --check --playbook 01-package-management.yml
+onigirazu -inventory inventory-remote.yml -config onigirazu.yml -check -playbook 01-package-management.yml
 ```
 
 #### Интерактивный режим
 
 ```bash
-onigirazu --inventory inventory-remote.yml --config onigirazu.yml --interactive --playbook 01-package-management.yml
+onigirazu -inventory inventory-remote.yml -config onigirazu.yml -interactive -playbook 01-package-management.yml
 ```
 
 #### Показать различия при изменении файлов
 
 ```bash
-onigirazu --inventory inventory-remote.yml --config onigirazu.yml --diff --playbook 02-file-operations.yml
+onigirazu -inventory inventory-remote.yml -config onigirazu.yml -diff -playbook 02-file-operations.yml
 ```
 
 ## Настройка SSH подключения
@@ -130,7 +130,7 @@ ping cs.rastiegaiev.com
 ssh -v usx@cs.rastiegaiev.com
 
 # Тест с Onigirazu (если поддерживается ping модуль)
-onigirazu --inventory inventory-remote.yml --config onigirazu.yml --playbook quick-test.yml
+onigirazu -inventory inventory-remote.yml -config onigirazu.yml -playbook quick-test.yml
 ```
 
 ### Решение проблем
@@ -168,23 +168,23 @@ ansible_python_interpreter: /usr/bin/python3
 ### Локальное тестирование
 
 ```bash
-onigirazu --inventory inventory.yml --config onigirazu.yml --playbook quick-test.yml
+onigirazu -inventory inventory.yml -config onigirazu.yml -playbook quick-test.yml
 ```
 
 ### Развертывание на продакшене
 
 ```bash
-onigirazu --inventory inventory-remote.yml --config onigirazu.yml --playbook complete-server-setup.yml
+onigirazu -inventory inventory-remote.yml -config onigirazu.yml -playbook complete-server-setup.yml
 ```
 
 ### Обновление конфигурации
 
 ```bash
-onigirazu --inventory inventory-remote.yml --config onigirazu.yml --playbook 02-file-operations.yml
+onigirazu -inventory inventory-remote.yml -config onigirazu.yml -playbook 02-file-operations.yml
 ```
 
 ### Установка пакетов
 
 ```bash
-onigirazu --inventory inventory-remote.yml --config onigirazu.yml --playbook 01-package-management.yml
+onigirazu -inventory inventory-remote.yml -config onigirazu.yml -playbook 01-package-management.yml
 ```
