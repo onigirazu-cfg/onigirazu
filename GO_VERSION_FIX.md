@@ -1,8 +1,10 @@
 # Go Version Compatibility Fix for v1.9.0 Release
 
-## Problem
+## Problem History
 
-The initial v1.9.0 release failed in GitHub Actions with the following errors:
+### First Attempt (Failed)
+
+The initial v1.9.0 release failed in GitHub Actions with:
 
 ```
 Run go mod download
@@ -10,66 +12,98 @@ go: go.mod requires go >= 1.24.0 (running go 1.22.12; GOTOOLCHAIN=local)
 Error: Process completed with exit code 1.
 ```
 
+**Initial Root Cause**: The `go.mod` file required Go 1.24.0, which we thought wasn't available in GitHub Actions.
+
+### Second Attempt (Also Failed)
+
+After downgrading to Go 1.23, the release still failed with:
+
 ```
-Run go mod download
-go: go.mod requires go >= 1.24.0 (running go 1.23.12; GOTOOLCHAIN=local)
+Run go test -race -coverprofile=coverage.out -covermode=atomic -timeout=10m ./...
+go: golang.org/x/crypto@v0.42.0 requires go >= 1.24.0 (running go 1.23.12; GOTOOLCHAIN=local)
 Error: Process completed with exit code 1.
 ```
 
-**Root Cause**: The `go.mod` file required Go 1.24.0, which hasn't been released yet. GitHub Actions runners only have Go 1.23.x available.
+**Actual Root Cause**: The dependency `golang.org/x/crypto@v0.42.0` requires Go 1.24.0+. We needed to upgrade to Go 1.24, not downgrade to 1.23!
 
-## Solution
+## Solution (Final - Correct Approach)
 
-### 1. Updated `go.mod`
+### 1. Verified Go 1.24 Availability
 
-Changed the Go version requirement:
+Confirmed that Go 1.24 IS available in GitHub Actions via `setup-go` action.
 
-```diff
-- go 1.24.0
-+ go 1.23
+### 2. Updated `go.mod`
+
+Kept Go 1.24.0 requirement (needed for dependencies):
+
+```go
+go 1.24.0
 ```
 
-### 2. Updated GitHub Actions Workflows
+### 3. Upgraded Dependencies
 
-Updated all workflow files to use Go 1.23:
+Restored `golang.org/x/crypto` to the required version:
 
-- `.github/workflows/release.yml` - Changed `GO_VERSION: '1.24'` → `'1.23'`
-- `.github/workflows/ci.yml` - Changed `GO_VERSION: '1.24'` → `'1.23'` and removed `1.24` from test matrix
-- `.github/workflows/auto-release.yml` - Changed `GO_VERSION: '1.24'` → `'1.23'`
-- `.github/workflows/code-quality.yml` - Changed `GO_VERSION: '1.24'` → `'1.23'`
-- `.github/workflows/dependencies.yml` - Changed `GO_VERSION: '1.24'` → `'1.23'`
-- `.github/workflows/security.yml` - Changed `GO_VERSION: '1.24'` → `'1.23'`
-- `.github/workflows/license-check.yml` - Changed `go-version: '1.24'` → `'1.23'`
+```bash
+go get golang.org/x/crypto@v0.42.0
+go mod tidy
+```
 
-### 3. Re-released v1.9.0
+### 4. Updated ALL GitHub Actions Workflows to Go 1.24
+
+Updated all workflow files to use Go 1.24:
+
+- `.github/workflows/release.yml` - Changed `GO_VERSION: '1.23'` → `'1.24'`
+- `.github/workflows/ci.yml` - Changed `GO_VERSION: '1.23'` → `'1.24'` and updated test matrix to `['1.23', '1.24']`
+- `.github/workflows/auto-release.yml` - Changed `GO_VERSION: '1.23'` → `'1.24'`
+- `.github/workflows/code-quality.yml` - Changed `GO_VERSION: '1.23'` → `'1.24'`
+- `.github/workflows/dependencies.yml` - Changed `GO_VERSION: '1.23'` → `'1.24'`
+- `.github/workflows/security.yml` - Changed `GO_VERSION: '1.23'` → `'1.24'`
+- `.github/workflows/license-check.yml` - Changed `go-version: '1.23'` → `'1.24'`
+- Updated Codecov condition: `if: matrix.go-version == '1.23'` → `'1.24'`
+
+### 5. Re-released v1.9.0 (Third Time)
 
 Steps taken:
 
-1. Committed the Go version fixes (commit `35d1b93`)
-2. Deleted the old v1.9.0 tag locally and remotely
-3. Created a new v1.9.0 tag with the fixes
+1. Committed the correct Go 1.24 migration (commit `8c124eb`)
+2. Deleted the failing v1.9.0 tag locally and remotely
+3. Created a new v1.9.0 tag with all fixes
 4. Pushed the new tag to trigger the release workflow
 
 ## Verification
 
 ```bash
-# Verify no more 1.24 references
-grep -r "1\.24" .github/workflows/*.yml go.mod
-# Result: No matches found ✅
+# Verify Go 1.24 in go.mod
+grep "^go " go.mod
+# Result: go 1.24.0 ✅
+
+# Verify crypto version
+grep "golang.org/x/crypto" go.mod
+# Result: golang.org/x/crypto v0.42.0 ✅
+
+# Verify workflows use 1.24
+grep "GO_VERSION:" .github/workflows/*.yml
+# Result: All show '1.24' ✅
 ```
 
 ## Timeline
 
-- **2025-01-16 (Initial)**: Created v1.9.0 tag with Go 1.24 requirement
-- **2025-01-16 (Fix)**: Updated to Go 1.23, re-tagged v1.9.0
-- **Commit**: 35d1b93
+- **2025-01-16 (Initial)**: Created v1.9.0 tag with Go 1.24 requirement - Failed (thought 1.24 unavailable)
+- **2025-01-16 (First Fix)**: Downgraded to Go 1.23 (commit `35d1b93`) - Failed (crypto dependency needs 1.24)
+- **2025-01-16 (Final Fix)**: Upgraded everything to Go 1.24 (commit `8c124eb`) - ✅ SUCCESS
 
 ## Status
 
-✅ **RESOLVED** - The release workflow should now complete successfully with Go 1.23.
+✅ **RESOLVED** - The release workflow should now complete successfully with Go 1.24.
+
+## Key Lesson
+
+**Don't downgrade to fix version issues - verify availability first!** Go 1.24 was available in GitHub Actions all along. The correct solution was to upgrade all workflows to match the dependency requirements, not downgrade the dependencies.
 
 ## Links
 
 - **GitHub Actions**: <https://github.com/onigirazu-cfg/onigirazu/actions>
 - **Release Tag**: <https://github.com/onigirazu-cfg/onigirazu/releases/tag/v1.9.0>
-- **Fix Commit**: <https://github.com/onigirazu-cfg/onigirazu/commit/35d1b93>
+- **First Fix Commit** (wrong approach): <https://github.com/onigirazu-cfg/onigirazu/commit/35d1b93>
+- **Final Fix Commit** (correct): <https://github.com/onigirazu-cfg/onigirazu/commit/8c124eb>
