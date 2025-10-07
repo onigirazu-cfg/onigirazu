@@ -287,75 +287,75 @@ Options:
 <h3>Module Examples</h3>
 <h4>File Module</h4>
 <pre class="codehilite"><code class="language-yaml">- name: &quot;Create directory&quot;
-  module: &quot;file&quot;
-  path: /opt/myapp
-  state: directory
-  owner: myuser
-  group: mygroup
-  mode: &quot;0755&quot;
+  file:
+    path: /opt/myapp
+    state: directory
+    owner: myuser
+    group: mygroup
+    mode: &quot;0755&quot;
 </code></pre>
 
 <h4>Package Module</h4>
 <pre class="codehilite"><code class="language-yaml">- name: &quot;Install packages&quot;
-  module: &quot;package&quot;
-  name: nginx
-  state: present
+  package:
+    name: nginx
+    state: present
 </code></pre>
 
 <h4>Service Module</h4>
 <pre class="codehilite"><code class="language-yaml">- name: &quot;Start service&quot;
-  module: &quot;service&quot;
-  name: nginx
-  state: started
-  enabled: true
+  service:
+    name: nginx
+    state: started
+    enabled: true
 </code></pre>
 
 <h4>Template Module</h4>
 <pre class="codehilite"><code class="language-yaml">- name: &quot;Generate configuration&quot;
-  module: &quot;template&quot;
-  src: templates/nginx.conf.j2
-  dest: /etc/nginx/nginx.conf
-  owner: root
-  group: root
-  mode: &quot;0644&quot;
-  backup: true
+  template:
+    src: templates/nginx.conf.j2
+    dest: /etc/nginx/nginx.conf
+    owner: root
+    group: root
+    mode: &quot;0644&quot;
+    backup: true
 </code></pre>
 
 <h4>Git Module</h4>
 <pre class="codehilite"><code class="language-yaml">- name: &quot;Clone repository&quot;
-  module: &quot;git&quot;
-  repo: https://github.com/example/myapp.git
-  dest: /opt/myapp
-  version: main
-  force: true
+  git:
+    repo: https://github.com/example/myapp.git
+    dest: /opt/myapp
+    version: main
+    force: true
 </code></pre>
 
 <h4>Systemd Module</h4>
 <pre class="codehilite"><code class="language-yaml">- name: &quot;Manage systemd service&quot;
-  module: &quot;systemd&quot;
-  operation: service
-  name: nginx
-  state: started
-  enabled: true
+  systemd:
+    operation: service
+    name: nginx
+    state: started
+    enabled: true
 </code></pre>
 
 <h4>Cron Module</h4>
 <pre class="codehilite"><code class="language-yaml">- name: &quot;Schedule backup job&quot;
-  module: &quot;cron&quot;
-  operation: job
-  name: &quot;Daily backup&quot;
-  job: &quot;/usr/local/bin/backup.sh&quot;
-  hour: &quot;2&quot;
-  minute: &quot;0&quot;
+  cron:
+    operation: job
+    name: &quot;Daily backup&quot;
+    job: &quot;/usr/local/bin/backup.sh&quot;
+    hour: &quot;2&quot;
+    minute: &quot;0&quot;
 </code></pre>
 
 <h4>Firewall Module</h4>
 <pre class="codehilite"><code class="language-yaml">- name: &quot;Allow HTTP traffic&quot;
-  module: &quot;firewall&quot;
-  operation: rule
-  port: 80
-  protocol: tcp
-  action: allow
+  firewall:
+    operation: rule
+    port: 80
+    protocol: tcp
+    action: allow
 </code></pre>
 
 <p>For detailed documentation on systemd, cron, and firewall modules, see <a href="docs/MODULES_SYSTEMD_CRON_FIREWALL.md">docs/MODULES_SYSTEMD_CRON_FIREWALL.md</a>.</p>
@@ -363,9 +363,9 @@ Options:
 <h3>Loops</h3>
 <p>Execute tasks multiple times with different values:</p>
 <pre class="codehilite"><code class="language-yaml">- name: &quot;Install multiple packages&quot;
-  module: &quot;package&quot;
-  name: &quot;{{ item }}&quot;
-  state: present
+  package:
+    name: &quot;{{ item }}&quot;
+    state: present
   loop:
     items:
       - curl
@@ -376,9 +376,9 @@ Options:
 <h3>Conditionals</h3>
 <p>Skip tasks based on conditions:</p>
 <pre class="codehilite"><code class="language-yaml">- name: &quot;Install Docker&quot;
-  module: &quot;package&quot;
-  name: docker.io
-  state: present
+  package:
+    name: docker.io
+    state: present
   when: &quot;{{ ansible_facts.os_family == 'Debian' }}&quot;
 </code></pre>
 
@@ -390,18 +390,18 @@ Options:
 
 tasks:
   - name: &quot;Create app directory&quot;
-    module: &quot;file&quot;
-    path: &quot;/opt/{{ app_name }}&quot;
-    state: directory
+    file:
+      path: &quot;/opt/{{ app_name }}&quot;
+      state: directory
 </code></pre>
 
 <h3>Templates</h3>
 <p>Use Jinja2-like templates for configuration files:</p>
 <pre class="codehilite"><code class="language-yaml"># In playbook
 - name: &quot;Generate config&quot;
-  module: &quot;template&quot;
-  src: app.conf.j2
-  dest: /etc/myapp/app.conf
+  template:
+    src: app.conf.j2
+    dest: /etc/myapp/app.conf
 </code></pre>
 
 <pre class="codehilite"><code class="language-jinja2"># In templates/app.conf.j2
@@ -418,13 +418,13 @@ ssl_key = /etc/ssl/private/{{ app_name }}.key
 <h3>Error Handling</h3>
 <p>Control error handling behavior:</p>
 <pre class="codehilite"><code class="language-yaml">- name: &quot;Optional task&quot;
-  module: &quot;command&quot;
-  cmd: some-command
+  command:
+    cmd: some-command
   ignore_errors: true
 
 - name: &quot;Task with retries&quot;
-  module: &quot;command&quot;
-  cmd: flaky-command
+  command:
+    cmd: flaky-command
   retries: 3
   retry_delay: 5
 </code></pre>
