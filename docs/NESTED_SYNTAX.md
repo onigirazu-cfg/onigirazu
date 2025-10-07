@@ -1,17 +1,8 @@
-# Nested Module Syntax in Onigirazu
+# Module Syntax in Onigirazu
 
-Onigirazu поддерживает два различных синтаксиса для определения модулей в задачах:
+Onigirazu поддерживает два стиля синтаксиса для определения модулей в задачах:
 
-## 1. Flat Syntax (текущий стандарт)
-
-```yaml
-- name: "Install package"
-  module: "package"
-  name: "tree"
-  state: "present"
-```
-
-## 2. Nested Syntax (новый рекомендуемый)
+## 1. Expanded Syntax (рекомендуемый для сложных задач)
 
 ```yaml
 - name: "Install package"
@@ -21,7 +12,14 @@ Onigirazu поддерживает два различных синтаксис�
     state: "present"
 ```
 
-## Преимущества вложенного синтаксиса
+## 2. Inline Syntax (удобный для простых задач)
+
+```yaml
+- name: "Install package"
+  module: { type: "package", name: "tree", state: "present" }
+```
+
+## Преимущества expanded синтаксиса
 
 ### Логическая группировка
 
@@ -34,21 +32,19 @@ Onigirazu поддерживает два различных синтаксис�
 ### Лучшая читаемость
 
 ```yaml
-# Вложенный синтаксис - четко видно, что относится к модулю
+# Expanded синтаксис - четко видно, что относится к модулю
 - name: "Complex task with conditions"
   module:
     type: "command"
-    command: "systemctl restart nginx"
+    cmd: "systemctl restart nginx"
     creates: "/var/run/nginx.pid"
   when: "nginx_restart_needed"
   ignore_errors: true
   notify: "check nginx status"
 
-# vs плоский синтаксис - сложнее различить параметры
+# vs Inline синтаксис - компактнее, но менее читаемый для сложных задач
 - name: "Complex task with conditions"
-  module: "command"
-  command: "systemctl restart nginx"
-  creates: "/var/run/nginx.pid"
+  module: { type: "command", cmd: "systemctl restart nginx", creates: "/var/run/nginx.pid" }
   when: "nginx_restart_needed"
   ignore_errors: true
   notify: "check nginx status"
@@ -62,7 +58,7 @@ Onigirazu поддерживает два различных синтаксис�
 - name: "Check system info"
   module:
     type: "command"
-    command: "uname -a"
+    cmd: "uname -a"
 ```
 
 ### Package модуль
@@ -99,76 +95,74 @@ Onigirazu поддерживает два различных синтаксис�
     enabled: true
 ```
 
-## Обратная совместимость
+## Гибкость использования
 
-Оба синтаксиса полностью поддерживаются и могут использоваться в одном playbook:
+Оба стиля синтаксиса могут использоваться в одном playbook:
 
 ```yaml
 plays:
   - name: "Mixed syntax example"
     hosts: servers
     tasks:
-      # Flat syntax
+      # Inline syntax - для простых задач
       - name: "Task 1"
-        module: "command"
-        command: "echo 'flat'"
+        module: { type: "command", cmd: "echo 'inline'" }
 
-      # Nested syntax (рекомендуемый)
+      # Expanded syntax - для сложных задач (рекомендуемый)
       - name: "Task 2"
         module:
           type: "command"
-          command: "echo 'nested'"
+          cmd: "echo 'expanded'"
 ```
 
-## Установка вложенного синтаксиса как правила
+## Рекомендации по выбору стиля
 
-### Через конфигурационный файл
+### Используйте Expanded Syntax когда
 
-Создайте файл `onigirazu.yml` в корне проекта:
+1. **Задача имеет много параметров** (более 3-4)
+2. **Параметры содержат сложные значения** (многострочные строки, списки, объекты)
+3. **Нужна максимальная читаемость** (для документации, обучения)
+4. **Задача критична** и требует тщательного review
+
+### Используйте Inline Syntax когда
+
+1. **Задача простая** (1-3 параметра)
+2. **Все значения короткие** (простые строки, числа, булевы значения)
+3. **Нужна компактность** (много похожих простых задач)
+4. **Задача очевидна** и не требует детального изучения
+
+## Примеры выбора стиля
+
+### ✅ Хороший выбор Inline
 
 ```yaml
-# Предпочтительный синтаксис (рекомендация)
-preferred_module_syntax: "nested"
-enforce_module_syntax: false
+- name: "Install git"
+  module: { type: "package", name: "git", state: "present" }
 
-# Строгий режим (только вложенный синтаксис)
-preferred_module_syntax: "nested"
-enforce_module_syntax: true
+- name: "Check uptime"
+  module: { type: "command", cmd: "uptime" }
 ```
 
-### Через переменные окружения
-
-```bash
-# Установить вложенный синтаксис как предпочтительный
-export ONIGIRAZU_PREFERRED_MODULE_SYNTAX="nested"
-
-# Принудительно требовать только вложенный синтаксис
-export ONIGIRAZU_ENFORCE_MODULE_SYNTAX="true"
-```
-
-### Примеры конфигураций
-
-**Мягкий режим** (рекомендация, но разрешены оба синтаксиса):
+### ✅ Хороший выбор Expanded
 
 ```yaml
-preferred_module_syntax: "nested"
-enforce_module_syntax: false
+- name: "Deploy application configuration"
+  module:
+    type: "copy"
+    dest: "/etc/app/config.yml"
+    content: |
+      server:
+        host: 0.0.0.0
+        port: 8080
+      database:
+        host: db.example.com
+        port: 5432
+    mode: "0644"
+    owner: "app"
+    group: "app"
+    backup: true
 ```
-
-**Строгий режим** (только вложенный синтаксис):
-
-```yaml
-preferred_module_syntax: "nested"
-enforce_module_syntax: true
-```
-
-## Рекомендации
-
-1. **Для новых проектов** - используйте строгий режим с вложенным синтаксисом
-2. **Для существующих проектов** - начните с мягкого режима и постепенно мигрируйте
-3. **Для команд** - установите единый стандарт через конфигурацию
-4. **Для CI/CD** - используйте строгий режим для обеспечения консистентности
 
 ## Техническая реализация
 
-Поддержка вложенного синтаксиса реализована в методе `UnmarshalYAML` структуры `Task` в файле `pkg/types/types.go`. Парсер автоматически определяет тип синтаксиса и корректно извлекает параметры модуля.
+Оба стиля синтаксиса поддерживаются парсером YAML в методе `UnmarshalYAML` структуры `Task` в файле `pkg/types/types.go`. Парсер автоматически определяет стиль синтаксиса и корректно извлекает параметры модуля.

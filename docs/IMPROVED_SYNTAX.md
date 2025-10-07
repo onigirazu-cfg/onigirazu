@@ -1,60 +1,60 @@
-# Improved YAML Syntax for Onigirazu
+# YAML Syntax for Onigirazu
 
-Onigirazu now supports a more compact and readable YAML syntax for tasks, eliminating the need for the verbose `args:` block in most cases.
+Onigirazu uses a structured YAML syntax for defining tasks with module parameters.
 
-## 🎯 Key Improvements
+## 🎯 Syntax Overview
 
-### ✅ **Before (Old Syntax)**
+### **Standard Syntax**
 
 ```yaml
 - name: "List files in current directory"
-  module: "command"
-  args:
-    command: "ls -la"
-    shell: true
+  module:
+    type: "command"
+    cmd: "ls -la"
 ```
 
-### ✨ **After (New Syntax)**
+### **Alternative: Inline Module Type**
 
 ```yaml
 - name: "List files in current directory"
-  module: "command"
-  command: "ls -la"
-  shell: true
+  module: { type: "command", cmd: "ls -la" }
 ```
 
 ## 📋 **Features**
 
-### 1. **Inline Module Arguments**
+### 1. **Structured Module Definition**
 
-Module arguments can now be specified directly at the task level, without the `args:` wrapper:
+Module parameters are specified within the `module:` block:
 
 ```yaml
 # File operations
 - name: "Create configuration file"
-  module: "file"
-  path: "/tmp/config.conf"
-  state: "touch"
-  mode: "0644"
-  owner: "root"
-  group: "root"
+  module:
+    type: "file"
+    path: "/tmp/config.conf"
+    state: "touch"
+    mode: "0644"
+    owner: "root"
+    group: "root"
 
 # Copy with content
 - name: "Deploy script"
-  module: "copy"
-  dest: "/usr/local/bin/deploy.sh"
-  content: |
-    #!/bin/bash
-    echo "Deployment script"
-  mode: "0755"
-  backup: true
+  module:
+    type: "copy"
+    dest: "/usr/local/bin/deploy.sh"
+    content: |
+      #!/bin/bash
+      echo "Deployment script"
+    mode: "0755"
+    backup: true
 
 # Service management
 - name: "Start nginx service"
-  module: "service"
-  name: "nginx"
-  state: "started"
-  enabled: true
+  module:
+    type: "service"
+    name: "nginx"
+    state: "started"
+    enabled: true
 ```
 
 ### 2. **String Values Without Quotes**
@@ -63,9 +63,10 @@ Simple string values can be written without quotes (YAML standard):
 
 ```yaml
 - name: "Package installation"
-  module: "package"
-  name: git
-  state: present
+  module:
+    type: package
+    name: git
+    state: present
 ```
 
 ### 3. **Complex Data Types**
@@ -74,44 +75,28 @@ Lists and objects work naturally:
 
 ```yaml
 - name: "User management"
-  module: "user"
-  name: "appuser"
-  state: "present"
-  groups:
-    - "users"
-    - "wheel"
-    - "docker"
-  shell: "/bin/bash"
-  create_home: true
+  module:
+    type: "user"
+    name: "appuser"
+    state: "present"
+    groups:
+      - "users"
+      - "wheel"
+      - "docker"
+    shell: "/bin/bash"
+    create_home: true
 ```
 
-### 4. **Backward Compatibility**
+### 4. **Inline Syntax**
 
-The old `args:` syntax is still fully supported:
-
-```yaml
-# This still works perfectly
-- name: "Old syntax compatibility"
-  module: "command"
-  args:
-    command: "echo 'Hello World'"
-    shell: true
-```
-
-### 5. **Mixed Syntax**
-
-You can even mix both approaches in the same task:
+For simple modules, you can use inline YAML object syntax:
 
 ```yaml
-- name: "Mixed syntax example"
-  module: "copy"
-  dest: "/tmp/script.sh"
-  mode: "0755"
-  args:
-    content: |
-      #!/bin/bash
-      echo "Complex script content"
-      # More script logic here
+- name: "Quick package install"
+  module: { type: "package", name: "git", state: "present" }
+
+- name: "Quick command"
+  module: { type: "command", cmd: "echo 'Hello World'" }
 ```
 
 ## 🔧 **Reserved Fields**
@@ -142,50 +127,41 @@ The following fields are reserved for task control and will not be passed as mod
 ### Command Execution
 
 ```yaml
-# Old way
+# Expanded syntax
 - name: "Check disk space"
-  module: "command"
-  args:
-    command: "df -h"
-    shell: true
+  module:
+    type: "command"
+    cmd: "df -h"
 
-# New way
+# Inline syntax
 - name: "Check disk space"
-  module: "command"
-  command: "df -h"
-  shell: true
+  module: { type: "command", cmd: "df -h" }
 ```
 
 ### File Management
 
 ```yaml
-# Old way
+# Expanded syntax
 - name: "Create application directory"
-  module: "file"
-  args:
+  module:
+    type: "file"
     path: "/opt/myapp"
     state: "directory"
     mode: "0755"
     owner: "app"
     group: "app"
 
-# New way
+# Inline syntax
 - name: "Create application directory"
-  module: "file"
-  path: "/opt/myapp"
-  state: "directory"
-  mode: "0755"
-  owner: "app"
-  group: "app"
+  module: { type: "file", path: "/opt/myapp", state: "directory", mode: "0755" }
 ```
 
 ### Template Deployment
 
 ```yaml
-# Old way
 - name: "Deploy nginx configuration"
-  module: "template"
-  args:
+  module:
+    type: "template"
     src: "nginx.conf.j2"
     dest: "/etc/nginx/nginx.conf"
     backup: true
@@ -194,27 +170,15 @@ The following fields are reserved for task control and will not be passed as mod
     group: "root"
   notify:
     - "restart nginx"
-
-# New way
-- name: "Deploy nginx configuration"
-  module: "template"
-  src: "nginx.conf.j2"
-  dest: "/etc/nginx/nginx.conf"
-  backup: true
-  mode: "0644"
-  owner: "root"
-  group: "root"
-  notify:
-    - "restart nginx"
 ```
 
 ### Package Management
 
 ```yaml
-# Old way
+# Multiple packages
 - name: "Install development tools"
-  module: "package"
-  args:
+  module:
+    type: "package"
     name:
       - "git"
       - "curl"
@@ -222,64 +186,88 @@ The following fields are reserved for task control and will not be passed as mod
       - "htop"
     state: "present"
 
-# New way
-- name: "Install development tools"
-  module: "package"
-  name:
-    - "git"
-    - "curl"
-    - "vim"
-    - "htop"
-  state: "present"
+# Single package (inline)
+- name: "Install git"
+  module: { type: "package", name: "git", state: "present" }
 ```
 
 ## 🚀 **Benefits**
 
-1. **Reduced Verbosity**: Eliminates unnecessary `args:` wrapper
-2. **Better Readability**: More natural YAML structure
-3. **Faster Writing**: Less typing required
-4. **Backward Compatible**: Existing playbooks continue to work
-5. **Flexible**: Mix old and new syntax as needed
-6. **Standard YAML**: Follows YAML best practices
+1. **Clear Structure**: Module type and parameters are clearly organized
+2. **Better Readability**: Hierarchical YAML structure is easy to understand
+3. **Flexible**: Choose between expanded or inline syntax
+4. **Type Safety**: Module type is explicitly declared
+5. **Standard YAML**: Follows YAML best practices
+6. **Consistent**: Same pattern across all modules
 
-## 🔄 **Migration Guide**
+## 🔄 **Syntax Styles**
 
-To migrate existing playbooks:
+You can choose the style that best fits your needs:
 
-1. **Automatic**: No changes required - old syntax still works
-2. **Gradual**: Update tasks one by one when convenient
-3. **Mixed**: Use both syntaxes in the same playbook
-4. **Complete**: Remove all `args:` blocks for maximum compactness
-
-### Migration Example
+### Expanded Style (Recommended for Complex Tasks)
 
 ```yaml
-# Before
-tasks:
-  - name: "Setup application"
-    module: "file"
-    args:
-      path: "/opt/app"
-      state: "directory"
-      mode: "0755"
-
-# After
-tasks:
-  - name: "Setup application"
-    module: "file"
+- name: "Setup application"
+  module:
+    type: "file"
     path: "/opt/app"
     state: "directory"
     mode: "0755"
+    owner: "app"
+    group: "app"
 ```
 
-## ✅ **Testing**
+### Inline Style (Good for Simple Tasks)
 
-The new syntax has been thoroughly tested with:
+```yaml
+- name: "Setup application"
+  module: { type: "file", path: "/opt/app", state: "directory", mode: "0755" }
+```
 
-- ✅ Unit tests for YAML parsing
-- ✅ Integration tests with real modules
-- ✅ Backward compatibility verification
-- ✅ Mixed syntax scenarios
-- ✅ Complex data type handling
+## 📚 **More Examples**
 
-Start using the improved syntax today for cleaner, more maintainable playbooks!
+### Shell Commands
+
+```yaml
+- name: "System information"
+  module:
+    type: "shell"
+    cmd: |
+      echo "Hostname: $(hostname)"
+      echo "OS: $(uname -s)"
+      echo "Kernel: $(uname -r)"
+```
+
+### Service Management
+
+```yaml
+- name: "Start and enable nginx"
+  module:
+    type: "service"
+    name: "nginx"
+    state: "started"
+    enabled: true
+```
+
+### Copy Files
+
+```yaml
+- name: "Deploy configuration"
+  module:
+    type: "copy"
+    src: "app.conf"
+    dest: "/etc/app/app.conf"
+    mode: "0644"
+    backup: true
+```
+
+## ✅ **Best Practices**
+
+1. **Use expanded syntax** for tasks with many parameters
+2. **Use inline syntax** for simple, one-line tasks
+3. **Always specify module type** explicitly
+4. **Use quotes** for strings with special characters
+5. **Indent consistently** (2 spaces recommended)
+6. **Group related tasks** together in your playbooks
+
+Start using this syntax for cleaner, more maintainable playbooks!
