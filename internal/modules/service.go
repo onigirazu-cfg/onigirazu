@@ -624,7 +624,7 @@ func (m *ServiceModuleFixed) failResult(result types.TaskResult, message string)
 	result.Failed = true
 	result.Error = message
 	result.Duration = time.Since(result.Timestamp)
-	return result, fmt.Errorf("%s", message)
+	return result, nil
 }
 
 // hasSystemd checks if systemd is available

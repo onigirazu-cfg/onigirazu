@@ -487,7 +487,7 @@ func TestServiceModule_Execute_MissingName(t *testing.T) {
 	result, err := module.Execute(ctx, host, args)
 
 	if err != nil {
-		t.Fatalf("Execute failed: %v", err)
+		t.Errorf("Execute returned error: %v", err)
 	}
 
 	if result.Success {
@@ -528,7 +528,7 @@ func TestServiceModule_Execute_StartFailure(t *testing.T) {
 	result, err := module.Execute(ctx, host, args)
 
 	if err != nil {
-		t.Fatalf("Execute failed: %v", err)
+		t.Errorf("Execute returned error: %v", err)
 	}
 
 	if result.Success {
@@ -568,7 +568,7 @@ func TestServiceModule_Execute_GetStatusFailure(t *testing.T) {
 	result, err := module.Execute(ctx, host, args)
 
 	if err != nil {
-		t.Fatalf("Execute failed: %v", err)
+		t.Errorf("Execute returned error: %v", err)
 	}
 
 	if result.Success {

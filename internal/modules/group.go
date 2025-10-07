@@ -113,6 +113,21 @@ func (m *GroupModuleFixed) Validate(args map[string]interface{}) error {
 		}
 	}
 
+	// Validate system argument if provided
+	if system, exists := args["system"]; exists {
+		if systemBool, ok := system.(bool); ok {
+			// Valid boolean
+			_ = systemBool
+		} else if systemStr, ok := system.(string); ok {
+			// Allow string representation of boolean
+			if systemStr != "true" && systemStr != "false" && systemStr != "yes" && systemStr != "no" {
+				return fmt.Errorf("argument 'system' must be a boolean or 'true'/'false'/'yes'/'no'")
+			}
+		} else {
+			return fmt.Errorf("argument 'system' must be a boolean")
+		}
+	}
+
 	return nil
 }
 

@@ -22,6 +22,7 @@ func TestLineinfileModule_Validate(t *testing.T) {
 		{
 			name: "valid minimal args",
 			args: map[string]interface{}{
+				"name": "test_lineinfile",
 				"path": "/tmp/test.txt",
 				"line": "test line",
 			},
@@ -30,6 +31,7 @@ func TestLineinfileModule_Validate(t *testing.T) {
 		{
 			name: "valid with state present",
 			args: map[string]interface{}{
+				"name":  "test_lineinfile",
 				"path":  "/tmp/test.txt",
 				"line":  "test line",
 				"state": "present",
@@ -39,6 +41,7 @@ func TestLineinfileModule_Validate(t *testing.T) {
 		{
 			name: "valid with state absent",
 			args: map[string]interface{}{
+				"name":  "test_lineinfile",
 				"path":  "/tmp/test.txt",
 				"line":  "test line",
 				"state": "absent",

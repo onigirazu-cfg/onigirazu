@@ -77,7 +77,16 @@ func (eb *EventBus) Publish(eventType string, data interface{}) {
 
 	if exists {
 		for _, handler := range handlers {
-			go handler(event) // Handle asynchronously
+			go func(h EventHandler) {
+				defer func() {
+					if r := recover(); r != nil {
+						// Log panic but don't crash
+						// In production, you might want to log this properly
+						_ = r
+					}
+				}()
+				h(event)
+			}(handler) // Handle asynchronously with panic recovery
 		}
 	}
 }
