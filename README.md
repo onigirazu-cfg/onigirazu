@@ -253,6 +253,12 @@ Onigirazu includes several built-in modules:
 - **template**: Template file processing
 - **git**: Git repository operations
 
+### System Management Modules
+
+- **systemd**: Systemd service and unit management (service control, unit files, timers, daemon reload)
+- **cron**: Cron job management (user crontabs, system cron, job scheduling)
+- **firewall**: Unified firewall management with automatic detection (UFW, firewalld, iptables)
+
 ### Module Examples
 
 #### File Module
@@ -309,6 +315,42 @@ Onigirazu includes several built-in modules:
   version: main
   force: true
 ```
+
+#### Systemd Module
+
+```yaml
+- name: "Manage systemd service"
+  module: "systemd"
+  operation: service
+  name: nginx
+  state: started
+  enabled: true
+```
+
+#### Cron Module
+
+```yaml
+- name: "Schedule backup job"
+  module: "cron"
+  operation: job
+  name: "Daily backup"
+  job: "/usr/local/bin/backup.sh"
+  hour: "2"
+  minute: "0"
+```
+
+#### Firewall Module
+
+```yaml
+- name: "Allow HTTP traffic"
+  module: "firewall"
+  operation: rule
+  port: 80
+  protocol: tcp
+  action: allow
+```
+
+For detailed documentation on systemd, cron, and firewall modules, see [docs/MODULES_SYSTEMD_CRON_FIREWALL.md](docs/MODULES_SYSTEMD_CRON_FIREWALL.md).
 
 ## Advanced Features
 

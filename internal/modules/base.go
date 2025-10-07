@@ -104,3 +104,12 @@ func getMapArg(args map[string]interface{}, key string, defaultValue map[string]
 	}
 	return defaultValue
 }
+
+// failResult creates a failed task result with error message
+func (m *BaseModule) failResult(result types.TaskResult, errorMsg string) (types.TaskResult, error) {
+	result.Success = false
+	result.Changed = false
+	result.Error = errorMsg
+	result.Duration = time.Since(result.Timestamp)
+	return result, fmt.Errorf("%s", errorMsg)
+}

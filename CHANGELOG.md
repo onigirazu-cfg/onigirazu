@@ -2,6 +2,46 @@
 
 ## [Unreleased]
 
+## [1.8.0] - 2025-01-15
+
+### ✨ Added
+
+- **New Systemd Module**: Comprehensive systemd management
+  - Service management (start, stop, restart, reload, enable, disable, mask)
+  - Unit file creation and management
+  - Systemd timer management
+  - Daemon reload functionality
+  - Service status checking
+- **New Cron Module**: Complete cron job management
+  - Individual cron job management in user crontabs
+  - Full crontab file management with backup support
+  - System cron management (cron.d, cron.daily, cron.hourly, cron.weekly, cron.monthly)
+  - Cron job listing and inspection
+  - Support for special time strings (@reboot, @daily, etc.)
+- **New Firewall Module**: Unified firewall management with automatic detection
+  - Support for UFW (Ubuntu/Debian)
+  - Support for firewalld (RHEL/CentOS/Fedora)
+  - Support for iptables (fallback)
+  - Port-based rules (allow/deny)
+  - Service-based rules (UFW and firewalld)
+  - Source-based rules (IP addresses and subnets)
+  - Firewall enable/disable
+  - Rule listing and reload
+
+### 📖 Documentation
+
+- Created comprehensive module documentation: `docs/MODULES_SYSTEMD_CRON_FIREWALL.md`
+- Added example playbooks:
+  - `examples/10-systemd-management.yml` - Systemd module examples
+  - `examples/11-cron-management.yml` - Cron module examples
+  - `examples/12-firewall-management.yml` - Firewall module examples
+
+## [1.7.2] - 2025-01-14
+
+### 🐛 Fixed
+
+- Docker image publishing workflow for releases
+
 ## [1.7.1] - 2025-10-07
 
 ### ✨ Added

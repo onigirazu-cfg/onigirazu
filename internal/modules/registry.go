@@ -36,6 +36,9 @@ func NewRegistry() *Registry {
 	registry.RegisterModule(NewSetFactModule())
 	registry.RegisterModule(NewStatModule())
 	registry.RegisterModule(NewLineinfileModule())
+	registry.RegisterModule(NewSystemdModule())
+	registry.RegisterModule(NewCronModule())
+	registry.RegisterModule(NewFirewallModule())
 
 	return registry
 }
