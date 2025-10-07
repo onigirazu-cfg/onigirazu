@@ -467,9 +467,12 @@ func TestWorkflowOrchestrator_CancelExecution(t *testing.T) {
 		Timeout: 10 * time.Second,
 		Steps: []WorkflowStep{
 			{
-				ID:        "step1",
-				Name:      "Long Step",
-				Type:      StepTypeWait,
+				ID:   "step1",
+				Name: "Long Step",
+				Type: StepTypeWait,
+				Action: StepAction{
+					Timeout: 5 * time.Second, // Long wait to ensure we can cancel
+				},
 				Variables: make(map[string]interface{}),
 			},
 		},
@@ -483,8 +486,8 @@ func TestWorkflowOrchestrator_CancelExecution(t *testing.T) {
 		t.Fatalf("Expected successful execution start, got error: %v", err)
 	}
 
-	// Wait for execution to start
-	time.Sleep(100 * time.Millisecond)
+	// Wait for execution to start and step to begin
+	time.Sleep(200 * time.Millisecond)
 
 	// Cancel execution
 	err = wo.CancelExecution(execution.ID)
@@ -492,13 +495,17 @@ func TestWorkflowOrchestrator_CancelExecution(t *testing.T) {
 		t.Fatalf("Expected successful cancellation, got error: %v", err)
 	}
 
+	// Wait a bit for cancellation to take effect
+	time.Sleep(100 * time.Millisecond)
+
 	// Verify status
 	execution.mutex.RLock()
 	status := execution.Status
+	errMsg := execution.Error
 	execution.mutex.RUnlock()
 
 	if status != StatusCancelled {
-		t.Errorf("Expected status canceled, got '%s'", status)
+		t.Errorf("Expected status canceled, got '%s' (error: %s)", status, errMsg)
 	}
 }
 
