@@ -2,7 +2,62 @@
 
 ## [Unreleased]
 
+## [1.7.1] - 2025-10-07
+
+### ✨ Added
+
+- **Multi-Format Inventory Support**: Support for three inventory file formats
+  - **YAML format**: Traditional Ansible-style inventory (existing)
+  - **TOML format**: Modern structured configuration format with full feature parity
+  - **Simple list format**: Plain text files with one host per line (IP, user@host, user@host:port)
+- **Automatic Inventory Detection**: Auto-discovery of inventory files in playbook directory
+  - Searches for common inventory file names: `inventory.yml`, `inventory.yaml`, `inventory.toml`, `hosts`, etc.
+  - Intelligent format detection based on file extension and content analysis
+  - Graceful fallback to localhost-only when no inventory found
+- **Smart Format Detection**: Automatic format recognition with fallback chain
+  - Extension-based detection (`.yml`, `.yaml`, `.toml`, `.txt`)
+  - Content-based heuristics for ambiguous cases
+  - Priority: YAML → TOML → Simple list
+- **Simple List Parser**: Flexible host address parsing
+  - Plain IP addresses: `192.168.1.10`
+  - IP with custom port: `192.168.1.10:2222`
+  - With username: `user@192.168.1.10`
+  - Full format: `user@192.168.1.10:2222`
+  - Automatic defaults (port 22, user "root")
+
+### 🔧 Changed
+
+- Enhanced `EnhancedParser` with integrated inventory parsing capabilities
+- Updated `main.go` to implement auto-detection when `-inventory` flag is not provided
+- Added `github.com/pelletier/go-toml/v2` dependency for TOML support
+
+### 🐛 Fixed
+
+- Fixed golangci-lint configuration compatibility (removed unsupported `version` field)
+- Fixed Docker multi-architecture build support (simplified to use pre-built binaries)
+- Fixed `go.mod` tidiness (moved go-toml to direct dependencies)
+- Fixed release process (disabled GPG signing)
+
+### 📖 Documentation
+
+- Created comprehensive `docs/inventory-formats.md` guide
+  - Format specifications and examples
+  - Migration guide from YAML to TOML
+  - Best practices and recommendations
+  - Auto-detection behavior explanation
+- Added example files:
+  - `inventory.example.toml` - TOML format example
+  - `inventory.example.txt` - Simple list format example
+
+### 🔄 Backward Compatibility
+
+- **100% backward compatible**: All existing YAML inventory files work unchanged
+- Optional feature: Auto-detection only activates when `-inventory` flag is omitted
+- Existing `-inventory` flag behavior preserved
+
 ## [1.7.0] - 2025-10-07
+
+**Note**: This release was superseded by v1.7.1 due to build configuration issues.
 
 ### ✨ Added
 
