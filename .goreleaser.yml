@@ -98,10 +98,10 @@ signs:
       - "--detach-sign"
       - "${artifact}"
 
-sboms:
-  - artifacts: archive
-  - id: source
-    artifacts: source
+# sboms:
+#   - artifacts: archive
+#   - id: source
+#     artifacts: source
 
 snapshot:
   name_template: "{{ incpatch .Version }}-next"
@@ -247,7 +247,7 @@ brews:
     repository:
       owner: onigirazu-cfg
       name: homebrew-tap
-    folder: Formula
+    directory: Formula
     homepage: https://github.com/onigirazu-cfg/onigirazu
     description: "Modern configuration management tool inspired by Ansible"
     license: MIT
@@ -291,12 +291,24 @@ nfpms:
         dst: /usr/share/doc/onigirazu/README.md
         file_info:
           mode: 0644
-      - src: ./docs/**/*
-        dst: /usr/share/doc/onigirazu/
+      - src: ./LICENSE
+        dst: /usr/share/doc/onigirazu/LICENSE
         file_info:
           mode: 0644
-      - src: ./examples/**/*
-        dst: /usr/share/onigirazu/examples/
+      - src: docs/**/*
+        dst: /usr/share/doc/onigirazu/docs
+        file_info:
+          mode: 0644
+      - src: ./config.example.yml
+        dst: /usr/share/onigirazu/config.example.yml
+        file_info:
+          mode: 0644
+      - src: ./inventory.example.yml
+        dst: /usr/share/onigirazu/inventory.example.yml
+        file_info:
+          mode: 0644
+      - src: ./playbook.example.yml
+        dst: /usr/share/onigirazu/playbook.example.yml
         file_info:
           mode: 0644
       - dst: /var/log/onigirazu
@@ -331,6 +343,9 @@ dockers:
       - "ghcr.io/onigirazu-cfg/onigirazu:{{ .Tag }}-amd64"
     dockerfile: Dockerfile
     use: buildx
+    extra_files:
+      - go.mod
+      - go.sum
     build_flag_templates:
       - "--pull"
       - "--label=org.opencontainers.image.created={{.Date}}"
@@ -343,6 +358,9 @@ dockers:
       - "ghcr.io/onigirazu-cfg/onigirazu:{{ .Tag }}-arm64v8"
     dockerfile: Dockerfile
     use: buildx
+    extra_files:
+      - go.mod
+      - go.sum
     build_flag_templates:
       - "--pull"
       - "--label=org.opencontainers.image.created={{.Date}}"
