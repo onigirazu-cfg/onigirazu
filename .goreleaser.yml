@@ -338,50 +338,5 @@ publishers:
     dir: "{{ dir .ArtifactPath }}"
     cmd: curl -F package=@{{ .ArtifactName }} https://{{ .Env.FURY_TOKEN }}@push.fury.io/onigirazu/
 
-dockers:
-  - image_templates:
-      - "onigirazu/onigirazu:{{ .Tag }}-amd64"
-      - "ghcr.io/onigirazu-cfg/onigirazu:{{ .Tag }}-amd64"
-    dockerfile: Dockerfile
-    use: buildx
-    goos: linux
-    goarch: amd64
-    build_flag_templates:
-      - "--pull"
-      - "--label=org.opencontainers.image.created={{.Date}}"
-      - "--label=org.opencontainers.image.title={{.ProjectName}}"
-      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
-      - "--label=org.opencontainers.image.version={{.Version}}"
-      - "--platform=linux/amd64"
-  - image_templates:
-      - "onigirazu/onigirazu:{{ .Tag }}-arm64v8"
-      - "ghcr.io/onigirazu-cfg/onigirazu:{{ .Tag }}-arm64v8"
-    dockerfile: Dockerfile
-    use: buildx
-    goos: linux
-    goarch: arm64
-    build_flag_templates:
-      - "--pull"
-      - "--label=org.opencontainers.image.created={{.Date}}"
-      - "--label=org.opencontainers.image.title={{.ProjectName}}"
-      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
-      - "--label=org.opencontainers.image.version={{.Version}}"
-      - "--platform=linux/arm64/v8"
-
-docker_manifests:
-  - name_template: "onigirazu/onigirazu:{{ .Tag }}"
-    image_templates:
-      - "onigirazu/onigirazu:{{ .Tag }}-amd64"
-      - "onigirazu/onigirazu:{{ .Tag }}-arm64v8"
-  - name_template: "ghcr.io/onigirazu-cfg/onigirazu:{{ .Tag }}"
-    image_templates:
-      - "ghcr.io/onigirazu-cfg/onigirazu:{{ .Tag }}-amd64"
-      - "ghcr.io/onigirazu-cfg/onigirazu:{{ .Tag }}-arm64v8"
-  - name_template: "onigirazu/onigirazu:latest"
-    image_templates:
-      - "onigirazu/onigirazu:{{ .Tag }}-amd64"
-      - "onigirazu/onigirazu:{{ .Tag }}-arm64v8"
-  - name_template: "ghcr.io/onigirazu-cfg/onigirazu:latest"
-    image_templates:
-      - "ghcr.io/onigirazu-cfg/onigirazu:{{ .Tag }}-amd64"
-      - "ghcr.io/onigirazu-cfg/onigirazu:{{ .Tag }}-arm64v8"
+# Docker images are built by GitHub Actions workflow (see .github/workflows/release.yml)
+# This allows better control over multi-arch builds with QEMU and Buildx
