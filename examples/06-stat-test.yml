@@ -5,14 +5,12 @@ plays:
     gather_facts: false
     tasks:
       - name: Check if /etc/hosts exists
-        module: stat
-        args:
+        stat:
           path: /etc/hosts
         register: hosts_file
 
       - name: Debug hosts file stat
-        module: debug
-        args:
+        debug:
           msg: |
             File: {{ hosts_file.path }}
             Exists: {{ hosts_file.exists }}
@@ -21,14 +19,12 @@ plays:
             Mode: {{ hosts_file.mode }}
 
       - name: Check if /tmp directory exists
-        module: stat
-        args:
+        stat:
           path: /tmp
         register: tmp_dir
 
       - name: Debug tmp directory stat
-        module: debug
-        args:
+        debug:
           msg: |
             Path: {{ tmp_dir.path }}
             Exists: {{ tmp_dir.exists }}
@@ -37,36 +33,30 @@ plays:
             Writable: {{ tmp_dir.writable }}
 
       - name: Check non-existent file
-        module: stat
-        args:
+        stat:
           path: /this/does/not/exist
         register: nonexistent
 
       - name: Debug non-existent file
-        module: debug
-        args:
+        debug:
           msg: "File exists: {{ nonexistent.exists }}"
 
       - name: Create a test file
-        module: shell
-        args:
+        shell:
           cmd: echo "Test content" > /tmp/onigirazu-test.txt
 
       - name: Stat the created file
-        module: stat
-        args:
+        stat:
           path: /tmp/onigirazu-test.txt
         register: test_file
 
       - name: Debug test file
-        module: debug
-        args:
+        debug:
           msg: |
             Created file exists: {{ test_file.exists }}
             Is regular file: {{ test_file.isreg }}
             Size: {{ test_file.size }} bytes
 
       - name: Clean up test file
-        module: shell
-        args:
+        shell:
           cmd: rm -f /tmp/onigirazu-test.txt

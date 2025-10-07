@@ -6,32 +6,28 @@ plays:
     tasks:
       # Setup: Create test directory
       - name: Create test directory
-        module: file
-        args:
+        file:
           path: /tmp/get-url-test
           state: directory
           mode: "0755"
 
       # Test 1: Download a small HTML file
       - name: Download example.com homepage
-        module: get_url
-        args:
+        get_url:
           url: http://example.com/
           dest: /tmp/get-url-test/example.html
           mode: "0644"
 
       # Test 2: Download same file again (should be idempotent)
       - name: Download same file again (idempotent check)
-        module: get_url
-        args:
+        get_url:
           url: http://example.com/
           dest: /tmp/get-url-test/example.html
           mode: "0644"
 
       # Test 3: Force download even if file exists
       - name: Force download even if file exists
-        module: get_url
-        args:
+        get_url:
           url: http://example.com/
           dest: /tmp/get-url-test/example-forced.html
           force: true
@@ -39,8 +35,7 @@ plays:
 
       # Test 4: Download with backup
       - name: Download with backup
-        module: get_url
-        args:
+        get_url:
           url: http://example.com/
           dest: /tmp/get-url-test/example-backup.html
           backup: true
@@ -49,8 +44,7 @@ plays:
 
       # Test 5: Download with custom timeout
       - name: Download with custom timeout
-        module: get_url
-        args:
+        get_url:
           url: http://example.com/
           dest: /tmp/get-url-test/example-timeout.html
           timeout: 10
@@ -58,30 +52,25 @@ plays:
 
       # Verification: Check downloaded files
       - name: Verify example.html exists
-        module: stat
-        args:
+        stat:
           path: /tmp/get-url-test/example.html
         register: example_stat
 
       - name: Display example.html info
-        module: debug
-        args:
+        debug:
           msg: "example.html exists: {{ example_stat.stat.exists }}, size: {{ example_stat.stat.size }} bytes"
 
       - name: Verify example-timeout.html exists
-        module: stat
-        args:
+        stat:
           path: /tmp/get-url-test/example-timeout.html
         register: timeout_stat
 
       - name: Display example-timeout.html info
-        module: debug
-        args:
+        debug:
           msg: "example-timeout.html exists: {{ timeout_stat.stat.exists }}, size: {{ timeout_stat.stat.size }} bytes"
 
       # Cleanup
       - name: Cleanup test directory
-        module: file
-        args:
+        file:
           path: /tmp/get-url-test
           state: absent

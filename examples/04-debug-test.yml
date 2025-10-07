@@ -5,32 +5,27 @@ plays:
     gather_facts: false
     tasks:
       - name: Debug with simple message
-        module: debug
-        args:
+        debug:
           msg: "Hello from Onigirazu!"
 
       - name: Debug with variable
-        module: debug
-        args:
+        debug:
           msg: "Testing variable interpolation: {{ test_var }}"
         vars:
           test_var: "This is a test value"
 
       - name: Debug with multiple lines
-        module: debug
-        args:
+        debug:
           msg: |
             This is a multi-line message
             Line 2: Testing debug output
             Line 3: All systems operational
 
       - name: Set a fact
-        module: shell
-        args:
+        shell:
           cmd: echo "Dynamic value from shell"
         register: shell_result
 
       - name: Debug shell result
-        module: debug
-        args:
+        debug:
           msg: "Shell command output: {{ shell_result.stdout }}"
