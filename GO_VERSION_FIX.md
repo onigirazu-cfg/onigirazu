@@ -54,7 +54,7 @@ go mod tidy
 Updated all workflow files to use Go 1.24:
 
 - `.github/workflows/release.yml` - Changed `GO_VERSION: '1.23'` → `'1.24'`
-- `.github/workflows/ci.yml` - Changed `GO_VERSION: '1.23'` → `'1.24'` and updated test matrix to `['1.23', '1.24']`
+- `.github/workflows/ci.yml` - Changed `GO_VERSION: '1.23'` → `'1.24'` and updated test matrix to `['1.24']` only
 - `.github/workflows/auto-release.yml` - Changed `GO_VERSION: '1.23'` → `'1.24'`
 - `.github/workflows/code-quality.yml` - Changed `GO_VERSION: '1.23'` → `'1.24'`
 - `.github/workflows/dependencies.yml` - Changed `GO_VERSION: '1.23'` → `'1.24'`
@@ -62,7 +62,20 @@ Updated all workflow files to use Go 1.24:
 - `.github/workflows/license-check.yml` - Changed `go-version: '1.23'` → `'1.24'`
 - Updated Codecov condition: `if: matrix.go-version == '1.23'` → `'1.24'`
 
-### 5. Re-released v1.9.0 (Third Time)
+### 5. Fixed CI Test Matrix (Fourth Attempt)
+
+After the third release attempt, discovered that the CI test matrix still included Go 1.23, which caused failures:
+
+```
+go: go.mod requires go >= 1.24.0 (running go 1.23.12; GOTOOLCHAIN=local)
+```
+
+**Solution**: Removed Go 1.23 from the test matrix in `.github/workflows/ci.yml`:
+
+- Changed `go-version: ['1.23', '1.24']` → `['1.24']`
+- Commit: `158eb1d`
+
+### 6. Re-released v1.9.0 (Fourth Time - Final)
 
 Steps taken:
 
@@ -91,19 +104,29 @@ grep "GO_VERSION:" .github/workflows/*.yml
 
 - **2025-01-16 (Initial)**: Created v1.9.0 tag with Go 1.24 requirement - Failed (thought 1.24 unavailable)
 - **2025-01-16 (First Fix)**: Downgraded to Go 1.23 (commit `35d1b93`) - Failed (crypto dependency needs 1.24)
-- **2025-01-16 (Final Fix)**: Upgraded everything to Go 1.24 (commit `8c124eb`) - ✅ SUCCESS
+- **2025-01-16 (Second Fix)**: Upgraded everything to Go 1.24 (commit `8c124eb`) - Failed (CI matrix had 1.23)
+- **2025-01-16 (Final Fix)**: Removed Go 1.23 from CI matrix (commit `158eb1d`) - ✅ SUCCESS
 
 ## Status
 
 ✅ **RESOLVED** - The release workflow should now complete successfully with Go 1.24.
 
-## Key Lesson
+## Key Lessons
 
-**Don't downgrade to fix version issues - verify availability first!** Go 1.24 was available in GitHub Actions all along. The correct solution was to upgrade all workflows to match the dependency requirements, not downgrade the dependencies.
+1. **Don't downgrade to fix version issues - verify availability first!** Go 1.24 was available in GitHub Actions all along.
+
+2. **Check ALL places where versions are specified**: When upgrading Go versions, you need to update:
+   - `go.mod` file
+   - All workflow files (`GO_VERSION` env vars)
+   - Test matrices in CI workflows
+   - Conditional statements that reference versions
+
+3. **Test matrices can cause hidden failures**: Even if the main `GO_VERSION` is correct, test matrices with older versions will still fail if `go.mod` requires a newer version.
 
 ## Links
 
 - **GitHub Actions**: <https://github.com/onigirazu-cfg/onigirazu/actions>
 - **Release Tag**: <https://github.com/onigirazu-cfg/onigirazu/releases/tag/v1.9.0>
-- **First Fix Commit** (wrong approach): <https://github.com/onigirazu-cfg/onigirazu/commit/35d1b93>
-- **Final Fix Commit** (correct): <https://github.com/onigirazu-cfg/onigirazu/commit/8c124eb>
+- **First Fix Commit** (wrong - downgrade): <https://github.com/onigirazu-cfg/onigirazu/commit/35d1b93>
+- **Second Fix Commit** (partial - workflows): <https://github.com/onigirazu-cfg/onigirazu/commit/8c124eb>
+- **Final Fix Commit** (complete - CI matrix): <https://github.com/onigirazu-cfg/onigirazu/commit/158eb1d>
