@@ -303,9 +303,9 @@ func (wo *WorkflowOrchestrator) executeWorkflowAsync(execution *WorkflowExecutio
 	execution.EndTime = time.Now()
 	execution.Duration = execution.EndTime.Sub(execution.StartTime)
 
-	// Check if execution was already cancelled
+	// Check if execution was already canceled
 	if execution.Status == StatusCancelled {
-		// Don't overwrite cancelled status
+		// Don't overwrite canceled status
 		execution.mutex.Unlock()
 		return
 	}
