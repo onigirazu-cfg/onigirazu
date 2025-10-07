@@ -1117,8 +1117,7 @@ func TestModuleWithMocks(t *testing.T) {
 //
 // Example usage:
 //   - name: "Create configuration file"
-//     module: "my_module"
-//     args:
+//     my_module:
 //       path: "/etc/myapp/config.yml"
 //       content: "{{ config_template }}"
 //       backup: true

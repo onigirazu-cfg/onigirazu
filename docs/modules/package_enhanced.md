@@ -31,8 +31,7 @@ The Enhanced Package Module (`package_enhanced`) provides improved package manag
 
 ```yaml
 - name: "Install package with enhanced module"
-  module: "package_enhanced"
-  args:
+  package_enhanced:
     name: "curl"
     state: "present"
     update_cache: true
@@ -42,8 +41,7 @@ The Enhanced Package Module (`package_enhanced`) provides improved package manag
 
 ```yaml
 - name: "Preview package installation"
-  module: "package_enhanced"
-  args:
+  package_enhanced:
     name: "git"
     state: "present"
     dry_run: true
@@ -53,8 +51,7 @@ The Enhanced Package Module (`package_enhanced`) provides improved package manag
 
 ```yaml
 - name: "Install specific version"
-  module: "package_enhanced"
-  args:
+  package_enhanced:
     name: "nginx"
     state: "present"
     version: "1.18.0"
@@ -64,8 +61,7 @@ The Enhanced Package Module (`package_enhanced`) provides improved package manag
 
 ```yaml
 - name: "Ensure package is latest"
-  module: "package_enhanced"
-  args:
+  package_enhanced:
     name: "docker"
     state: "latest"
 ```
@@ -74,8 +70,7 @@ The Enhanced Package Module (`package_enhanced`) provides improved package manag
 
 ```yaml
 - name: "Remove package"
-  module: "package_enhanced"
-  args:
+  package_enhanced:
     name: "apache2"
     state: "absent"
 ```
@@ -210,10 +205,9 @@ The enhanced module is backward compatible with the standard package module. Sim
 
 ```yaml
 # Old
-module: "package"
-
+package:
 # New
-module: "package_enhanced"
+package_enhanced:
 ```
 
 ## Future Enhancements
