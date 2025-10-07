@@ -263,89 +263,89 @@ Onigirazu includes several built-in modules:
 
 ```yaml
 - name: "Create directory"
-  module: "file"
-  path: /opt/myapp
-  state: directory
-  owner: myuser
-  group: mygroup
-  mode: "0755"
+  file:
+    path: /opt/myapp
+    state: directory
+    owner: myuser
+    group: mygroup
+    mode: "0755"
 ```
 
 #### Package Module
 
 ```yaml
 - name: "Install packages"
-  module: "package"
-  name: nginx
-  state: present
+  package:
+    name: nginx
+    state: present
 ```
 
 #### Service Module
 
 ```yaml
 - name: "Start service"
-  module: "service"
-  name: nginx
-  state: started
-  enabled: true
+  service:
+    name: nginx
+    state: started
+    enabled: true
 ```
 
 #### Template Module
 
 ```yaml
 - name: "Generate configuration"
-  module: "template"
-  src: templates/nginx.conf.j2
-  dest: /etc/nginx/nginx.conf
-  owner: root
-  group: root
-  mode: "0644"
-  backup: true
+  template:
+    src: templates/nginx.conf.j2
+    dest: /etc/nginx/nginx.conf
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
 ```
 
 #### Git Module
 
 ```yaml
 - name: "Clone repository"
-  module: "git"
-  repo: https://github.com/example/myapp.git
-  dest: /opt/myapp
-  version: main
-  force: true
+  git:
+    repo: https://github.com/example/myapp.git
+    dest: /opt/myapp
+    version: main
+    force: true
 ```
 
 #### Systemd Module
 
 ```yaml
 - name: "Manage systemd service"
-  module: "systemd"
-  operation: service
-  name: nginx
-  state: started
-  enabled: true
+  systemd:
+    operation: service
+    name: nginx
+    state: started
+    enabled: true
 ```
 
 #### Cron Module
 
 ```yaml
 - name: "Schedule backup job"
-  module: "cron"
-  operation: job
-  name: "Daily backup"
-  job: "/usr/local/bin/backup.sh"
-  hour: "2"
-  minute: "0"
+  cron:
+    operation: job
+    name: "Daily backup"
+    job: "/usr/local/bin/backup.sh"
+    hour: "2"
+    minute: "0"
 ```
 
 #### Firewall Module
 
 ```yaml
 - name: "Allow HTTP traffic"
-  module: "firewall"
-  operation: rule
-  port: 80
-  protocol: tcp
-  action: allow
+  firewall:
+    operation: rule
+    port: 80
+    protocol: tcp
+    action: allow
 ```
 
 For detailed documentation on systemd, cron, and firewall modules, see [docs/MODULES_SYSTEMD_CRON_FIREWALL.md](docs/MODULES_SYSTEMD_CRON_FIREWALL.md).
@@ -358,9 +358,9 @@ Execute tasks multiple times with different values:
 
 ```yaml
 - name: "Install multiple packages"
-  module: "package"
-  name: "{{ item }}"
-  state: present
+  package:
+    name: "{{ item }}"
+    state: present
   loop:
     items:
       - curl
@@ -374,9 +374,9 @@ Skip tasks based on conditions:
 
 ```yaml
 - name: "Install Docker"
-  module: "package"
-  name: docker.io
-  state: present
+  package:
+    name: docker.io
+    state: present
   when: "{{ ansible_facts.os_family == 'Debian' }}"
 ```
 
@@ -391,9 +391,9 @@ vars:
 
 tasks:
   - name: "Create app directory"
-    module: "file"
-    path: "/opt/{{ app_name }}"
-    state: directory
+    file:
+      path: "/opt/{{ app_name }}"
+      state: directory
 ```
 
 ### Templates
@@ -403,9 +403,9 @@ Use Jinja2-like templates for configuration files:
 ```yaml
 # In playbook
 - name: "Generate config"
-  module: "template"
-  src: app.conf.j2
-  dest: /etc/myapp/app.conf
+  template:
+    src: app.conf.j2
+    dest: /etc/myapp/app.conf
 ```
 
 ```jinja2
@@ -426,13 +426,13 @@ Control error handling behavior:
 
 ```yaml
 - name: "Optional task"
-  module: "command"
-  cmd: some-command
+  command:
+    cmd: some-command
   ignore_errors: true
 
 - name: "Task with retries"
-  module: "command"
-  cmd: flaky-command
+  command:
+    cmd: flaky-command
   retries: 3
   retry_delay: 5
 ```
