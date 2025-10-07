@@ -179,14 +179,12 @@ plays:
 
     tasks:
       - name: &quot;Install Nginx&quot;
-        module:
-          type: &quot;package&quot;
+        package:
           name: nginx
           state: present
 
       - name: &quot;Start Nginx service&quot;
-        module:
-          type: &quot;service&quot;
+        service:
           name: nginx
           state: started
           enabled: true
@@ -200,17 +198,17 @@ plays:
 <p>Onigirazu features a streamlined YAML syntax that eliminates verbose <code>args:</code> blocks and supports unquoted strings:</p>
 <h3>Before (Old Syntax)</h3>
 <pre class="codehilite"><code class="language-yaml">- name: &quot;List files in current directory&quot;
-  module: &quot;command&quot;
-  args:
-    command: &quot;ls -la&quot;
+  module:
+    type: &quot;command&quot;
+    cmd: &quot;ls -la&quot;
     shell: true
 </code></pre>
 
 <h3>After (New Syntax)</h3>
 <pre class="codehilite"><code class="language-yaml">- name: &quot;List files in current directory&quot;
-  module: &quot;command&quot;
-  command: ls -la
-  shell: true
+  command:
+    cmd: ls -la
+    shell: true
 </code></pre>
 
 <h3>Key Benefits</h3>
