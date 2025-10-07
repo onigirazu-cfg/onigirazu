@@ -280,6 +280,12 @@ Options:
 <li><strong>template</strong>: Template file processing</li>
 <li><strong>git</strong>: Git repository operations</li>
 </ul>
+<h3>System Management Modules</h3>
+<ul>
+<li><strong>systemd</strong>: Systemd service and unit management (service control, unit files, timers, daemon reload)</li>
+<li><strong>cron</strong>: Cron job management (user crontabs, system cron, job scheduling)</li>
+<li><strong>firewall</strong>: Unified firewall management with automatic detection (UFW, firewalld, iptables)</li>
+</ul>
 <h3>Module Examples</h3>
 <h4>File Module</h4>
 <pre class="codehilite"><code class="language-yaml">- name: &quot;Create directory&quot;
@@ -326,6 +332,35 @@ Options:
   force: true
 </code></pre>
 
+<h4>Systemd Module</h4>
+<pre class="codehilite"><code class="language-yaml">- name: &quot;Manage systemd service&quot;
+  module: &quot;systemd&quot;
+  operation: service
+  name: nginx
+  state: started
+  enabled: true
+</code></pre>
+
+<h4>Cron Module</h4>
+<pre class="codehilite"><code class="language-yaml">- name: &quot;Schedule backup job&quot;
+  module: &quot;cron&quot;
+  operation: job
+  name: &quot;Daily backup&quot;
+  job: &quot;/usr/local/bin/backup.sh&quot;
+  hour: &quot;2&quot;
+  minute: &quot;0&quot;
+</code></pre>
+
+<h4>Firewall Module</h4>
+<pre class="codehilite"><code class="language-yaml">- name: &quot;Allow HTTP traffic&quot;
+  module: &quot;firewall&quot;
+  operation: rule
+  port: 80
+  protocol: tcp
+  action: allow
+</code></pre>
+
+<p>For detailed documentation on systemd, cron, and firewall modules, see <a href="docs/MODULES_SYSTEMD_CRON_FIREWALL.md">docs/MODULES_SYSTEMD_CRON_FIREWALL.md</a>.</p>
 <h2>Advanced Features</h2>
 <h3>Loops</h3>
 <p>Execute tasks multiple times with different values:</p>
