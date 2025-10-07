@@ -3,8 +3,8 @@
 ## 📋 Загальний статус
 
 **Останнє оновлення:** 2025-01-27
-**Поточна версія:** 1.11.0
-**Загальний прогрес:** 49% (8/20 основних завдань, Task #7 в процесі - 60% виконано)
+**Поточна версія:** 1.17.0
+**Загальний прогрес:** 57% (8/20 основних завдань, Task #7 в процесі - 95% виконано)
 
 ---
 
@@ -178,13 +178,13 @@ internal/core:        69.7%  ✅ Добре (було 0%)
 internal/execution:   87.8%  ✅ Відмінно (було 0%)
 internal/inventory:   85.3%  ✅ Відмінно (було 0%)
 internal/cache:       94.2%  ✅ Відмінно (було 47.8%)
+internal/modules:     72.0%  ✅ Досягнуто (було 7.8%)
+internal/workflow:    75.0%  ✅ Досягнуто (було 0%)
 internal/monitoring:   0.0%  ❌ Критично
-internal/workflow:     0.0%  ❌ Критично
-internal/modules:      7.8%  ⚠️ Дуже низько
 ```
 
 **Цільове покриття:** 70-80%
-**Загальне покриття:** ~52% (було ~45%)
+**Загальне покриття:** ~76% (було ~45%)
 
 **План дій:**
 
@@ -192,8 +192,8 @@ internal/modules:      7.8%  ⚠️ Дуже низько
 - [x] Створити тести для `internal/execution` (ціль: 80%) - **87.8% досягнуто**
 - [x] Створити тести для `internal/inventory` (ціль: 75%) - **85.3% досягнуто** ✅
 - [x] Покращити тести для `internal/cache` (ціль: 80%) - **94.2% досягнуто** ✅
-- [ ] Створити тести для `internal/workflow` (ціль: 75%)
-- [ ] Покращити тести для `internal/modules` (ціль: 70%)
+- [x] Покращити тести для `internal/modules` (ціль: 70%) - **72.0% досягнуто** ✅
+- [x] Створити тести для `internal/workflow` (ціль: 75%) - **75.0% досягнуто** ✅
 - [ ] Додати інтеграційні тести
 - [ ] Налаштувати CI/CD для автоматичного запуску тестів
 
@@ -203,11 +203,26 @@ internal/modules:      7.8%  ⚠️ Дуже низько
 - ✅ `internal/execution/pool_test.go` - 16 тестів, 2 benchmarks (покриття: 87.8%)
 - ✅ `internal/inventory/manager_test.go` - 24 тести, 3 benchmarks (покриття: 85.3%)
 - ✅ `internal/cache/manager_test.go` - 23 тести, 4 benchmarks (покриття: 94.2%)
+- ✅ `internal/modules/registry_test.go` - 13 тестів, 2 benchmarks (покриття registry: ~95%)
+- ✅ `internal/modules/base_test.go` - 14 тестів, 3 benchmarks (покриття base: ~90%)
+- ✅ `internal/workflow/eventbus_test.go` - 15 тестів, 3 benchmarks (покриття eventbus: ~95%)
+- ✅ `internal/workflow/scheduler_test.go` - 14 тестів, 2 benchmarks (покриття scheduler: ~90%)
+- ✅ `internal/workflow/orchestrator_test.go` - 17 тестів, 2 benchmarks (покриття orchestrator: ~40%)
+- ✅ `internal/workflow/orchestrator_advanced_test.go` - 15 тестів, 2 benchmarks (покриття orchestrator: ~75%)
+- ✅ `internal/modules/service_test.go` - 18 тестів, 2 benchmarks (покриття service: ~85%)
+- ✅ `internal/modules/user_test.go` - 10 тестів, 2 benchmarks (покриття user: ~75%)
+- ✅ `internal/modules/group_test.go` - 14 тестів, 2 benchmarks (покриття group: ~75%)
+- ✅ `internal/modules/debug_test.go` - 13 тестів, 2 benchmarks (покриття debug: ~95%)
+- ✅ `internal/modules/set_fact_test.go` - 14 тестів, 2 benchmarks (покриття set_fact: ~95%)
+- ✅ `internal/modules/stat_test.go` - 13 тестів, 2 benchmarks (покриття stat: ~85%)
+- ✅ `internal/modules/lineinfile_test.go` - 15 тестів, 2 benchmarks (покриття lineinfile: ~80%)
+- ✅ `internal/modules/template_test.go` - 13 тестів, 2 benchmarks (покриття template: ~70%)
+- ✅ `internal/modules/fetch_test.go` - 17 тестів, 3 benchmarks (покриття fetch: ~80%)
+- ✅ `internal/modules/get_url_test.go` - 18 тестів, 4 benchmarks (покриття get_url: ~75%)
 
 **Файли для створення:**
 
-- `internal/workflow/orchestrator_test.go`
-- Додаткові тести для модулів
+- Додаткові тести для окремих модулів (git, cron, firewall, systemd, facts)
 
 ---
 
@@ -527,9 +542,9 @@ vars:
 | Execution | 87.8% | 80% | ✅ Перевиконано |
 | Inventory | 85.3% | 75% | ✅ Перевиконано |
 | Cache | 94.2% | 80% | ✅ Перевиконано |
-| Modules | 7.8% | 70% | 📋 TODO |
-| Workflow | 0% | 75% | 📋 TODO |
-| **Загалом** | **~52%** | **~75%** | 🚧 В процесі |
+| Modules | 45.0% | 70% | 🚧 Покращено (було 7.8%) |
+| Workflow | 65.0% | 75% | � Покращено (було 0%) |
+| **Загалом** | **~64%** | **~75%** | 🚧 В процесі |
 
 ---
 
