@@ -7,9 +7,11 @@ import (
 	"regexp"
 	"strings"
 	"text/template"
+	"time"
 	"unicode"
 
 	"github.com/onigirazu-cfg/onigirazu/internal/bufferpool"
+	"github.com/onigirazu-cfg/onigirazu/internal/cache"
 	"github.com/onigirazu-cfg/onigirazu/internal/plugins"
 )
 
@@ -17,6 +19,7 @@ import (
 type Engine struct {
 	funcMap       template.FuncMap
 	pluginManager *plugins.Manager
+	templateCache *cache.TemplateCache
 }
 
 // NewEngine creates a new template engine
@@ -55,6 +58,8 @@ func NewEngine() *Engine {
 			"toJson":    toJsonFunc,
 			"fromJson":  fromJsonFunc,
 		},
+		// Initialize template cache with 30 minute TTL and max 1000 templates
+		templateCache: cache.NewTemplateCache(30*time.Minute, 1000),
 	}
 
 	return engine
@@ -126,8 +131,8 @@ func (e *Engine) Render(ctx context.Context, templateStr string, variables map[s
 		return "", fmt.Errorf("failed to convert template syntax: %w", err)
 	}
 
-	// Create and parse template
-	tmpl, err := template.New("template").Funcs(e.funcMap).Parse(converted)
+	// Get or parse template from cache
+	tmpl, err := e.templateCache.GetOrParse(ctx, converted, e.funcMap)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse template: %w", err)
 	}
@@ -460,4 +465,22 @@ func toJsonFunc(value interface{}) string {
 func fromJsonFunc(jsonStr string) interface{} {
 	// This would need proper JSON unmarshaling
 	return jsonStr
+}
+
+// GetCacheStats returns template cache statistics
+func (e *Engine) GetCacheStats() cache.TemplateCacheStats {
+	return e.templateCache.Stats()
+}
+
+// ClearCache clears the template cache
+func (e *Engine) ClearCache(ctx context.Context) error {
+	return e.templateCache.Clear(ctx)
+}
+
+// Close closes the template engine and cleans up resources
+func (e *Engine) Close() error {
+	if e.templateCache != nil {
+		return e.templateCache.Close()
+	}
+	return nil
 }
