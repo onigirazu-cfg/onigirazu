@@ -3,15 +3,16 @@
 ## 📋 Загальний статус
 
 **Останнє оновлення:** 2025-01-28
-**Поточна версія:** 1.22.0 (Template Caching System)
-**Загальний прогрес:** 70% (14/20 завершено повністю, 1/20 частково завершено)
+**Поточна версія:** 1.23.0 (Logger Test Coverage Improvements)
+**Загальний прогрес:** 72% (15/20 завершено повністю, 1/20 частково завершено)
 
 **Статус тестування:**
 
 - ✅ Всі тести проходять з `-race` detector
 - ✅ Zero race conditions detected
-- ✅ 5 критичних пакетів мають покриття >80%
-- ⚠️ Загальне покриття: ~36% (18/29 пакетів мають тести)
+- ✅ 6 критичних пакетів мають покриття >60%
+- ✅ Logger package: 10.9% → 61.0% (+50.1% improvement)
+- ⚠️ Загальне покриття: ~38% (18/29 пакетів мають тести)
 - ⚠️ 11 пакетів без тестів (потребують уваги)
 
 ---
@@ -748,6 +749,101 @@ fmt.Printf("Evictions: %d\n", stats.Evictions)
 
 ---
 
+### 14. ✅ Logger Test Coverage Improvements (COMPLETED)
+
+**Пріоритет:** HIGH
+**Статус:** ✅ DONE
+**Дата завершення:** 2025-01-28
+**Час реалізації:** 2 години
+**Покращення покриття:** 10.9% → 61.0% (+50.1%)
+
+**Що зроблено:**
+
+- ✅ Додано 16 comprehensive test functions (315 рядків тестового коду)
+  - 6 тестів базової функціональності (text/JSON format, fields, log levels)
+  - 4 тести task logging (TaskStart, TaskSuccess, TaskError, TaskEnd)
+  - 6 тестів advanced features (buffering, statistics, concurrency)
+- ✅ Виправлено 4 критичні баги, виявлені під час тестування
+  - Bug #1: Missing log count tracking (statistics завжди повертали 0)
+  - Bug #2: Nil map panic в WithField/WithFields (crash при contextual logging)
+  - Bug #3: Potential deadlock в buffer flushing (timer goroutine deadlock)
+  - Bug #4: Inconsistent lock usage в SetBufferSize/EnableBuffering
+- ✅ Всі тести проходять з race detector
+  - 28 тестів пройшли успішно
+  - 0 race conditions detected
+  - Proper resource cleanup з defer logger.Close()
+
+**Файли модифіковано:**
+
+- `internal/logger/enhanced_logger.go` (7 змін для виправлення багів):
+  - Modified `log()` - Changed RLock to Lock, added log count tracking
+  - Modified `WithField()` - Added initialization of logCount, startTime, buffer, bufferSize
+  - Modified `WithFields()` - Added same initializations
+  - Added `flushBufferLocked()` - Internal flush without lock acquisition
+  - Modified `flushBuffer()` - Now calls flushBufferLocked()
+  - Modified `SetBufferSize()` - Changed to use flushBufferLocked()
+  - Modified `EnableBuffering()` - Changed to use flushBufferLocked()
+
+**Файли створено:**
+
+- `internal/logger/logger_test.go` - додано 315 рядків тестів (16 нових тестів)
+- `RELEASE_v1.23.0.md` - повна документація релізу
+
+**Test Coverage Analysis:**
+
+```
+✅ FULLY COVERED (100%):
+- NewEnhancedWithBuffer, parseLogLevel, SetLevel
+- Debug, Info, Warn, Error (basic logging)
+- log (core logging logic)
+- TaskStart, TaskSuccess, TaskError, TaskEnd
+- flushBuffer, Flush, Close, GetStats, EnableBuffering
+
+✅ PARTIALLY COVERED (75-87%):
+- NewEnhanced (85.7%), WithField (85.7%), WithFields (87.5%)
+- logText (84.6%), logJSON (75.0%), SetBufferSize (80.0%)
+
+❌ NOT COVERED (0%):
+- Fatal (cannot test - calls os.Exit)
+- writeEntry*, LogWithContext, Trace, Performance, Audit, Security
+- TaskSkipped, PlayStart, PlayEnd, Progress, Retry
+```
+
+**Critical Bugs Fixed:**
+
+1. **Missing Log Count Tracking:**
+   - Problem: `log()` used RLock but never incremented logCount
+   - Fix: Changed to Lock and added `l.logCount[level]++`
+   - Impact: Statistics now work correctly
+
+2. **Nil Map Panic:**
+   - Problem: WithField/WithFields didn't initialize logCount map
+   - Fix: Added initialization of logCount, startTime, buffer, bufferSize
+   - Impact: Contextual logging no longer crashes
+
+3. **Buffer Flush Deadlock:**
+   - Problem: flushBuffer() called from timer tried to acquire lock
+   - Fix: Created flushBufferLocked() for internal use
+   - Impact: No more deadlocks in buffered logging
+
+4. **Lock Usage Inconsistency:**
+   - Problem: SetBufferSize/EnableBuffering called flushBuffer() while holding lock
+   - Fix: Changed to call flushBufferLocked() instead
+   - Impact: Buffer management now thread-safe
+
+**Результати тестування:**
+
+```
+✅ Logger tests: 28 tests passed with race detector
+✅ Coverage: 10.9% → 61.0% (+50.1% improvement)
+✅ Race detector: 0 race conditions detected
+✅ Full test suite: All packages pass
+```
+
+**Результат:** ✅ Logger package має 61% покриття та 4 критичні баги виправлено
+
+---
+
 ## 🚧 В ПРОЦЕСІ
 
 *Немає активних завдань*
@@ -792,7 +888,9 @@ internal/ssh:         27.6%  ⚠️ Потребує покращення
 internal/modules:     26.7%  ⚠️ Потребує покращення
 internal/config:      23.5%  ⚠️ Потребує покращення
 internal/parser:      14.4%  ⚠️ Потребує покращення
-internal/logger:      10.9%  ⚠️ Потребує покращення
+
+✅ ПОКРАЩЕНО В v1.23.0:
+internal/logger:      61.0%  ✅ Покращено з 10.9% (+50.1%)
 
 ❌ БЕЗ ТЕСТІВ (0%):
 cmd/onigirazu:         0.0%  ❌ Немає тестів

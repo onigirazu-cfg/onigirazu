@@ -143,12 +143,16 @@ func (l *EnhancedLogger) WithField(key string, value interface{}) *EnhancedLogge
 	defer l.mutex.Unlock()
 
 	newLogger := &EnhancedLogger{
-		level:     l.level,
-		format:    l.format,
-		output:    l.output,
-		logger:    l.logger,
-		useColors: l.useColors,
-		fields:    make(map[string]interface{}),
+		level:      l.level,
+		format:     l.format,
+		output:     l.output,
+		logger:     l.logger,
+		useColors:  l.useColors,
+		fields:     make(map[string]interface{}),
+		logCount:   make(map[LogLevel]int64),
+		startTime:  l.startTime,
+		buffer:     make([]LogEntry, 0),
+		bufferSize: l.bufferSize,
 	}
 
 	// Copy existing fields
@@ -168,12 +172,16 @@ func (l *EnhancedLogger) WithFields(fields map[string]interface{}) *EnhancedLogg
 	defer l.mutex.Unlock()
 
 	newLogger := &EnhancedLogger{
-		level:     l.level,
-		format:    l.format,
-		output:    l.output,
-		logger:    l.logger,
-		useColors: l.useColors,
-		fields:    make(map[string]interface{}),
+		level:      l.level,
+		format:     l.format,
+		output:     l.output,
+		logger:     l.logger,
+		useColors:  l.useColors,
+		fields:     make(map[string]interface{}),
+		logCount:   make(map[LogLevel]int64),
+		startTime:  l.startTime,
+		buffer:     make([]LogEntry, 0),
+		bufferSize: l.bufferSize,
 	}
 
 	// Copy existing fields
@@ -224,12 +232,15 @@ func (l *EnhancedLogger) Fatal(format string, args ...interface{}) {
 
 // log is the internal logging method
 func (l *EnhancedLogger) log(level LogLevel, format string, args ...interface{}) {
-	l.mutex.RLock()
-	defer l.mutex.RUnlock()
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
 
 	if level < l.level {
 		return
 	}
+
+	// Increment log count
+	l.logCount[level]++
 
 	message := fmt.Sprintf(format, args...)
 
@@ -401,11 +412,8 @@ func (l *EnhancedLogger) TaskEnd(taskName, hostName string, changed, success boo
 	}).Info("Task '%s' on host '%s': %s%s", taskName, hostName, status, changeStatus)
 }
 
-// flushBuffer flushes the log buffer to output
-func (l *EnhancedLogger) flushBuffer() {
-	l.mutex.Lock()
-	defer l.mutex.Unlock()
-
+// flushBuffer flushes the log buffer to output (must be called with lock held)
+func (l *EnhancedLogger) flushBufferLocked() {
 	if len(l.buffer) == 0 {
 		return
 	}
@@ -417,6 +425,14 @@ func (l *EnhancedLogger) flushBuffer() {
 
 	// Clear buffer
 	l.buffer = l.buffer[:0]
+}
+
+// flushBuffer flushes the log buffer to output
+func (l *EnhancedLogger) flushBuffer() {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	l.flushBufferLocked()
 
 	// Reset timer
 	if l.flushTimer != nil {
@@ -476,7 +492,7 @@ func (l *EnhancedLogger) SetBufferSize(size int) {
 
 	// If current buffer is larger than new size, flush it
 	if len(l.buffer) >= size {
-		l.flushBuffer()
+		l.flushBufferLocked()
 	}
 }
 
@@ -487,7 +503,7 @@ func (l *EnhancedLogger) EnableBuffering(enabled bool) {
 
 	if !enabled {
 		// Flush current buffer and set size to 0
-		l.flushBuffer()
+		l.flushBufferLocked()
 		l.bufferSize = 0
 	} else if l.bufferSize == 0 {
 		// Re-enable with default size
