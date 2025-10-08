@@ -579,6 +579,77 @@ make docs
 - 🚀 **Auto-generated** - Always up-to-date with code
 - 🌐 **Interactive server** - Browse with `pkgsite`
 
+## 🧪 Testing & Quality
+
+Onigirazu maintains high code quality through comprehensive testing and continuous integration.
+
+### Test Coverage
+
+- **Overall Coverage:** 36.5%
+- **Critical Packages:** >80% coverage
+- **Race Conditions:** Zero detected
+- **CI/CD:** Automated testing on every commit
+
+#### Coverage by Category
+
+| Category | Packages | Coverage |
+|----------|----------|----------|
+| ✅ Excellent (>80%) | 5 packages | 94.4% - 85.3% |
+| ✅ Good (60-80%) | 4 packages | 77.0% - 64.3% |
+| ⚠️ Medium (40-60%) | 3 packages | 59.0% - 42.1% |
+| ⚠️ Low (<40%) | 6 packages | 33.3% - 10.9% |
+| ❌ No Tests | 11 packages | 0.0% |
+
+**Critical packages with excellent coverage:**
+
+- `internal/workflow` - 89.8%
+- `internal/execution` - 87.8%
+- `internal/inventory` - 85.3%
+- `internal/cache` - 94.2%
+- `internal/bufferpool` - 94.4%
+
+📊 **For detailed coverage report, see [TEST_COVERAGE_REPORT.md](TEST_COVERAGE_REPORT.md)**
+
+### Running Tests
+
+```bash
+# Run all tests
+make test
+
+# Run tests with race detector
+make test-race
+
+# Run tests with coverage
+make test-coverage
+
+# Generate HTML coverage report
+go test -race -coverprofile=coverage.out -covermode=atomic ./...
+go tool cover -html=coverage.out -o coverage.html
+```
+
+### Quality Checks
+
+```bash
+# Run all quality checks
+make lint
+
+# Run specific checks
+make vet          # go vet
+make staticcheck  # staticcheck
+make golangci     # golangci-lint
+```
+
+### CI/CD Pipeline
+
+Every commit is automatically tested with:
+
+- ✅ Unit tests with race detector
+- ✅ Integration tests
+- ✅ Code linting (golangci-lint)
+- ✅ Static analysis (staticcheck)
+- ✅ Code formatting (gofmt)
+- ✅ Coverage reporting
+
 ## Contributing
 
 1. Fork the repository
