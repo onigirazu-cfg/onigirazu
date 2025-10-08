@@ -2,9 +2,9 @@
 
 ## 📋 Загальний статус
 
-**Останнє оновлення:** 2025-01-XX
-**Поточна версія:** 1.20.0 (Plugin System in Main Application)
-**Загальний прогрес:** 60% (12/20 завершено повністю, 1/20 частково завершено)
+**Останнє оновлення:** 2025-01-28
+**Поточна версія:** 1.21.0 (Inventory Plugins Examples)
+**Загальний прогрес:** 65% (13/20 завершено повністю, 1/20 частково завершено)
 
 **Статус тестування:**
 
@@ -489,9 +489,149 @@ coreEngine := core.NewCoreEngineWithPlugins(manager, logger, executor, templateE
 
 ---
 
+### 12. ✅ Inventory Plugins Examples (COMPLETED)
+
+**Пріоритет:** HIGH
+**Статус:** ✅ DONE
+**Дата завершення:** 2025-01-28
+**Час реалізації:** 2 години
+
+**Що зроблено:**
+
+- ✅ Створено приклади inventory plugins для трьох cloud providers
+  - AWS EC2 Inventory Plugin - динамічний інвентар з AWS EC2
+  - Azure VM Inventory Plugin - динамічний інвентар з Azure Virtual Machines
+  - GCP Compute Inventory Plugin - динамічний інвентар з Google Cloud Compute Engine
+- ✅ Реалізовано повний функціонал для кожного плагіна
+  - Ініціалізація з конфігурацією (credentials, region/zone, filters)
+  - GetHosts() - отримання списку хостів з фільтрацією
+  - GetGroups() - отримання груп хостів (по ролях, environment, зонах)
+  - Refresh() - оновлення кешу інвентаря
+  - Mock data для тестування без реальних API викликів
+- ✅ Організовано структуру плагінів
+  - Кожен плагін в окремій директорії: `examples/plugins/{aws_ec2,azure_vm,gcp_compute}/`
+  - Уникнення конфліктів символів між плагінами
+  - Можливість незалежної компіляції кожного плагіна
+- ✅ Виправлено всі помилки компіляції
+  - Виправлено використання `Host.Vars` замість `Host.Variables`
+  - Виправлено тип `Group.Hosts` з `[]Host` на `map[string]*Host`
+  - Додано порожню функцію `main()` для Go plugins
+  - Виправлено логіку присвоєння хостів до груп (використання покажчиків)
+- ✅ Створено повну документацію
+  - `docs/INVENTORY_PLUGINS.md` (400+ рядків) - повний гайд з inventory plugins
+  - Опис архітектури та інтерфейсів
+  - Детальна документація для кожного плагіна
+  - Інструкції по збірці та використанню
+  - Гайд по створенню власних inventory plugins
+  - Best practices та troubleshooting
+
+**Файли створено:**
+
+- `examples/plugins/aws_ec2/plugin.go` (276 рядків) - AWS EC2 inventory plugin
+- `examples/plugins/azure_vm/plugin.go` (293 рядки) - Azure VM inventory plugin
+- `examples/plugins/gcp_compute/plugin.go` (324 рядки) - GCP Compute inventory plugin
+- `docs/INVENTORY_PLUGINS.md` (400+ рядків) - документація
+
+**Файли видалено:**
+
+- `examples/plugins/inventory_aws_ec2.go` - переміщено в aws_ec2/plugin.go
+- `examples/plugins/inventory_azure_vm.go` - переміщено в azure_vm/plugin.go
+- `examples/plugins/inventory_gcp_compute.go` - переміщено в gcp_compute/plugin.go
+
+**Можливості кожного плагіна:**
+
+**AWS EC2 Plugin:**
+
+- Групування по тегам (tag_Name_*, tag_Environment_*)
+- Групування по типу інстансу (type_t2_micro, type_t3_large)
+- Групування по availability zone
+- Групування по security groups
+- Host variables: instance_id, instance_type, availability_zone, private_ip, public_ip, tags
+
+**Azure VM Plugin:**
+
+- Групування по тегам (tag_role_*, tag_environment_*)
+- Групування по resource group
+- Групування по location (Azure region)
+- Групування по VM size
+- Host variables: vm_id, vm_size, location, resource_group, private_ip, public_ip, tags
+
+**GCP Compute Plugin:**
+
+- Групування по labels (label_role_*, label_environment_*)
+- Групування по zone
+- Групування по machine type
+- Групування по network tags
+- Host variables: instance_id, machine_type, zone, project_id, private_ip, public_ip, labels
+
+**Mock Data (для тестування):**
+
+Кожен плагін включає mock data з 4 sample hosts:
+
+- 2 frontend hosts (web/frontend role)
+- 1 backend host (api/backend role)
+- 1 database host (database role)
+
+**Збірка плагінів:**
+
+```bash
+# AWS EC2
+go build -buildmode=plugin -o aws_ec2.so examples/plugins/aws_ec2/plugin.go
+
+# Azure VM
+go build -buildmode=plugin -o azure_vm.so examples/plugins/azure_vm/plugin.go
+
+# GCP Compute
+go build -buildmode=plugin -o gcp_compute.so examples/plugins/gcp_compute/plugin.go
+```
+
+**Конфігурація:**
+
+```yaml
+plugins:
+  inventory:
+    - name: aws_ec2
+      type: inventory
+      path: ./plugins/aws_ec2.so
+      enabled: true
+      config:
+        region: us-east-1
+        filters:
+          instance-state-name: running
+```
+
+**Результати тестування:**
+
+```
+✅ Build: go build ./... - SUCCESS
+✅ Tests: go test ./... -race - ALL PASSED
+✅ Race detector: 0 race conditions detected
+✅ All 3 plugins compile successfully
+```
+
+**Технічні виправлення:**
+
+1. **Package Structure:** Кожен плагін в окремій директорії для уникнення конфліктів
+2. **Host Structure:** Використання `Host.Vars` замість `Host.Variables`
+3. **Group Structure:** `Group.Hosts` як `map[string]*Host` замість `[]Host`
+4. **Pointer Handling:** Використання `for i := range hosts { host := &hosts[i] }` для отримання покажчиків
+5. **Plugin Export:** Додано порожню `main()` функцію для Go plugins
+
+**Архітектурні рішення:**
+
+1. **Separation of Concerns:** Кожен плагін в окремому пакеті
+2. **Mock Data:** Включено mock data для тестування без реальних API
+3. **Caching:** Підтримка кешування з TTL для зменшення API викликів
+4. **Filtering:** Підтримка pattern matching для хостів та груп
+5. **Error Handling:** Graceful error handling з інформативними повідомленнями
+
+**Результат:** ✅ Створено 3 повнофункціональні приклади inventory plugins для AWS, Azure та GCP
+
+---
+
 ## 🚧 В ПРОЦЕСІ
 
-_Немає активних завдань_
+*Немає активних завдань*
 
 ---
 
