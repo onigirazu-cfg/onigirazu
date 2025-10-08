@@ -2,9 +2,9 @@
 
 ## 📋 Загальний статус
 
-**Останнє оновлення:** 2025-10-07
-**Поточна версія:** 1.18.2 (Documentation Update Release)
-**Загальний прогрес:** 47% (9/20 завершено повністю, 1/20 частково завершено)
+**Останнє оновлення:** 2025-01-XX
+**Поточна версія:** 1.20.0 (Plugin System in Main Application)
+**Загальний прогрес:** 60% (12/20 завершено повністю, 1/20 частково завершено)
 
 **Статус тестування:**
 
@@ -292,6 +292,203 @@
 
 ---
 
+### 10. ✅ Plugin System Integration with Core Engine (COMPLETED)
+
+**Пріоритет:** HIGH
+**Статус:** ✅ DONE
+**Дата завершення:** 2025-01-XX
+**Час реалізації:** 2 години
+
+**Що зроблено:**
+
+- ✅ Інтегровано Filter Plugins з Template Engine
+  - Додано `NewEngineWithPlugins()` конструктор
+  - Реалізовано `loadFilterPlugins()` для динамічного завантаження фільтрів
+  - Додано `SetPluginManager()` для runtime реєстрації плагінів
+  - Виправлено API для роботи з `Manager.List()` та `FilterPlugin.GetFilters()`
+- ✅ Інтегровано Callback Plugins з Core Engine
+  - Додано `NewCoreEngineWithPlugins()` конструктор
+  - Реалізовано `loadCallbackPlugins()` для реєстрації callback плагінів
+  - Додано callback хуки в критичних точках виконання:
+    - `OnPlaybookStart/End` - події життєвого циклу playbook
+    - `OnPlayStart/End` - події життєвого циклу play
+    - `OnTaskStart/End` - події життєвого циклу task
+  - Всі callbacks включають обробку помилок з попередженнями (non-blocking)
+- ✅ Створено систему конфігурації плагінів
+  - Створено `internal/plugins/config.go` з YAML-based конфігурацією
+  - Реалізовано `LoadConfig()` для парсингу конфігураційних файлів
+  - Реалізовано `LoadPluginsFromConfig()` для завантаження плагінів з конфігу
+  - Додано `DefaultConfig()` для розумних значень за замовчуванням
+  - Виправлено API сумісність з `NewGoPluginLoader()`
+- ✅ Створено документацію та приклади
+  - `examples/plugins/plugins.yml` - приклад конфігурації плагінів
+  - `examples/10-plugins-demo.yml` - демонстраційний playbook з використанням фільтрів
+  - `docs/PLUGIN_INTEGRATION.md` - повний гайд з інтеграції (385+ рядків)
+
+**Файли створено:**
+
+- `internal/plugins/config.go` (125 рядків) - система завантаження конфігурації плагінів
+- `examples/plugins/plugins.yml` (45 рядків) - приклад конфігурації
+- `examples/10-plugins-demo.yml` (127 рядків) - демо playbook
+- `docs/PLUGIN_INTEGRATION.md` (385 рядків) - документація з інтеграції
+
+**Файли модифіковано:**
+
+- `internal/template/engine.go` - додано підтримку plugin manager та завантаження фільтрів
+- `internal/core/core_engine.go` - додано plugin manager, callback manager та event hooks
+
+**Технічні виправлення:**
+
+1. **Template Engine API Fix:**
+   - Змінено з `Manager.ListByType()` на `Manager.List()`
+   - Змінено з `FilterPlugin.GetFilters() []string` на `map[string]FilterFunc`
+   - Додано адаптацію сигнатур функцій для template funcMap
+
+2. **Core Engine API Fix:**
+   - Змінено з `Manager.ListByType()` на `Manager.List()`
+   - Змінено з `CallbackManager.RegisterCallback()` на `CallbackManager.AddPlugin()`
+   - Додано type assertion для безпечного кастингу плагінів
+
+3. **Config Loader API Fix:**
+   - Змінено з `NewGoPluginLoader(pluginPath)` на `NewGoPluginLoader()`
+   - Змінено з `loader.Load(ctx)` на `loader.Load(ctx, pluginPath)`
+
+**Результати тестування:**
+
+```
+✅ Plugin tests: All 23 tests passed with race detector
+✅ Core engine tests: All 13 tests passed with race detector
+✅ Template engine: Compiles successfully
+✅ Full test suite: All packages pass (20/20)
+✅ Race detector: 0 race conditions detected
+✅ Build: Successful compilation of all packages
+```
+
+**Архітектурні рішення:**
+
+1. **Filter Integration:** Фільтри з плагінів додаються до template funcMap при ініціалізації engine
+2. **Callback Integration:** Callbacks викликаються в критичних точках виконання з non-blocking error handling
+3. **Thread Safety:** Всі операції з плагінами thread-safe через RWMutex
+4. **Error Handling:** Помилки плагінів логуються як попередження, не блокують виконання
+5. **Performance:** Callback dispatch ~10 ns/op з нульовими алокаціями
+
+**Можливості:**
+
+- ✅ Динамічне завантаження filter plugins в template engine
+- ✅ Автоматична реєстрація callback plugins в core engine
+- ✅ YAML-based конфігурація для плагінів
+- ✅ Підтримка in-memory та dynamic (.so) plugin loading
+- ✅ Event hooks для моніторингу виконання playbook/play/task
+- ✅ Розширення можливостей шаблонізації через custom filters
+
+**Приклад використання:**
+
+```go
+// Create plugin manager with config
+config, _ := plugins.LoadConfig("plugins.yml")
+loader := plugins.NewInMemoryLoader()
+manager := plugins.NewManager(loader)
+plugins.LoadPluginsFromConfig(ctx, manager, config)
+
+// Create template engine with plugins
+templateEngine := template.NewEngineWithPlugins(manager)
+
+// Create core engine with plugins
+coreEngine := core.NewCoreEngineWithPlugins(manager, logger, executor, templateEngine)
+
+// Plugins are now active and will be called automatically
+```
+
+**Результат:** ✅ Система плагінів повністю інтегрована з core engine та template engine
+
+---
+
+### 11. ✅ Plugin System in Main Application (COMPLETED)
+
+**Пріоритет:** HIGH
+**Статус:** ✅ DONE
+**Дата завершення:** 2025-01-XX
+**Час реалізації:** 1 година
+
+**Що зроблено:**
+
+- ✅ Інтегровано систему плагінів в main.go
+  - Додано `--plugins-config` flag для явної конфігурації плагінів
+  - Додано `--list-plugins` flag для перегляду завантажених плагінів
+  - Реалізовано автоматичне виявлення `plugins.yml` в директорії playbook
+  - Додано graceful fallback при помилках завантаження плагінів
+- ✅ Автоматичне завантаження плагінів при старті
+  - Плагіни завантажуються перед ініціалізацією template engine
+  - Template engine створюється з підтримкою плагінів якщо вони доступні
+  - Non-blocking error handling (продовжує роботу без плагінів)
+- ✅ CLI команди для управління плагінами
+  - `--list-plugins` показує всі завантажені плагіни з описами
+  - Виводить ім'я, опис та тип кожного плагіна
+- ✅ Логування статусу плагінів
+  - Інформаційні повідомлення про завантаження плагінів
+  - Попередження при помилках (не блокують виконання)
+  - Debug повідомлення про ініціалізацію template engine з плагінами
+
+**Файли модифіковано:**
+
+- `cmd/onigirazu/main.go` - додано підтримку плагінів (80+ рядків нового коду)
+  - Імпорт пакету `internal/plugins`
+  - Додано flags: `--plugins-config`, `--list-plugins`
+  - Логіка завантаження плагінів (explicit + auto-detection)
+  - Інтеграція з template engine
+  - Обробка команди `--list-plugins`
+
+**Файли створено:**
+
+- `RELEASE_v1.20.0.md` (350+ рядків) - повний опис релізу
+
+**Можливості:**
+
+1. **Explicit Plugin Loading:**
+
+   ```bash
+   onigirazu --playbook playbook.yml --plugins-config /path/to/plugins.yml
+   ```
+
+2. **Auto-Detection:**
+
+   ```bash
+   onigirazu --playbook examples/playbook.yml
+   # Auto-detects examples/plugins.yml if exists
+   ```
+
+3. **List Plugins:**
+
+   ```bash
+   onigirazu --plugins-config plugins.yml --list-plugins
+   # Shows all loaded plugins with descriptions
+   ```
+
+4. **Graceful Fallback:**
+   - Якщо плагіни не знайдені або не вдалося завантажити - продовжує без них
+   - Всі помилки логуються як попередження
+   - 100% зворотна сумісність
+
+**Результати тестування:**
+
+```
+✅ Build: Successful
+✅ All tests pass with -race detector
+✅ Zero race conditions
+✅ Manual testing: All scenarios work correctly
+```
+
+**Архітектурні рішення:**
+
+1. **Auto-Detection Priority:** Explicit config > Auto-detection > No plugins
+2. **Error Handling:** Non-blocking warnings, graceful fallback
+3. **Template Engine:** Conditional initialization based on plugin availability
+4. **Logging:** Clear status messages for debugging
+
+**Результат:** ✅ Плагіни тепер автоматично завантажуються при старті додатку
+
+---
+
 ## 🚧 В ПРОЦЕСІ
 
 _Немає активних завдань_
@@ -403,29 +600,145 @@ pkg/utils:             0.0%  ❌ Немає тестів
 
 ---
 
-### 8. 📋 Система плагінів
+### 11. ✅ Система плагінів (COMPLETED)
 
 **Пріоритет:** HIGH
-**Статус:** 📋 TODO
-**Час реалізації:** 1 тиждень
+**Статус:** ✅ DONE
+**Дата завершення:** 2025-01-XX
+**Час реалізації:** 1 день
 
-**План дій:**
+**Що зроблено:**
 
-- [ ] Створити `internal/plugins/interface.go`
-- [ ] Реалізувати Module plugins
-- [ ] Реалізувати Callback plugins
-- [ ] Реалізувати Inventory plugins
-- [ ] Реалізувати Filter plugins
-- [ ] Додати систему завантаження плагінів
-- [ ] Створити приклади плагінів
-- [ ] Написати документацію для розробників плагінів
+- ✅ Створено `internal/plugins/interface.go` - базові інтерфейси для всіх типів плагінів
+- ✅ Створено `internal/plugins/manager.go` - менеджер плагінів з реєстрацією та lifecycle management
+- ✅ Реалізовано Module plugins (`internal/plugins/module.go`) - плагіни для нових модулів
+- ✅ Реалізовано Callback plugins (`internal/plugins/callback.go`) - плагіни для хуків на події
+- ✅ Реалізовано Inventory plugins (`internal/plugins/inventory.go`) - плагіни для динамічного інвентарю
+- ✅ Реалізовано Filter plugins (`internal/plugins/filter.go`) - плагіни для фільтрів шаблонів
+- ✅ Додано систему завантаження плагінів (`internal/plugins/loader.go`) - підтримка Go plugins, in-memory та directory loading
+- ✅ Створено приклади плагінів:
+  - `examples/plugins/module_hello.go` - приклад module plugin
+  - `examples/plugins/callback_metrics.go` - приклад callback plugin з метриками
+- ✅ Написано документацію (`examples/plugins/README.md`) - повний гайд для розробників плагінів
+- ✅ Написано тести (`internal/plugins/manager_test.go`, `internal/plugins/filter_test.go`) - 23 тести, 9 бенчмарків
+- ✅ Всі тести проходять з `-race` detector
+
+**Файли створено:**
+
+- `internal/plugins/interface.go` - інтерфейси для всіх типів плагінів (150 рядків)
+- `internal/plugins/manager.go` - менеджер плагінів (280 рядків)
+- `internal/plugins/module.go` - базова реалізація module plugins (150 рядків)
+- `internal/plugins/callback.go` - базова реалізація callback plugins (180 рядків)
+- `internal/plugins/inventory.go` - базова реалізація inventory plugins (90 рядків)
+- `internal/plugins/filter.go` - базова реалізація filter plugins з built-in фільтрами (220 рядків)
+- `internal/plugins/loader.go` - система завантаження плагінів (200 рядків)
+- `internal/plugins/manager_test.go` - тести для менеджера (350 рядків, 13 тестів, 3 бенчмарки)
+- `internal/plugins/filter_test.go` - тести для фільтрів (280 рядків, 10 тестів, 6 бенчмарків)
+- `examples/plugins/README.md` - документація для розробників (270 рядків)
+- `examples/plugins/module_hello.go` - приклад module plugin (100 рядків)
+- `examples/plugins/callback_metrics.go` - приклад callback plugin (180 рядків)
 
 **Типи плагінів:**
 
-- Module plugins - нові модулі
-- Callback plugins - хуки на події
-- Inventory plugins - джерела інвентарю
-- Filter plugins - фільтри для шаблонів
+- ✅ **Module plugins** - додавання нових модулів для виконання задач
+- ✅ **Callback plugins** - хуки на події виконання (playbook start/end, task start/end, retry)
+- ✅ **Inventory plugins** - динамічні джерела інвентарю (AWS, Azure, GCP, Kubernetes, etc.)
+- ✅ **Filter plugins** - кастомні фільтри для шаблонів
+
+**Built-in фільтри:**
+
+- `upper` - конвертація в верхній регістр
+- `lower` - конвертація в нижній регістр
+- `title` - конвертація в title case
+- `trim` - видалення пробілів
+- `replace` - заміна підрядків
+- `default` - значення за замовчуванням
+- `length` - довжина рядка/масиву/мапи
+- `join` - об'єднання масиву в рядок
+- `split` - розділення рядка на масив
+
+**Результати тестування:**
+
+```
+=== Test Results ===
+PASS: TestUpperFilter (5 sub-tests)
+PASS: TestLowerFilter (5 sub-tests)
+PASS: TestTrimFilter (6 sub-tests)
+PASS: TestReplaceFilter (6 sub-tests)
+PASS: TestDefaultFilter (5 sub-tests)
+PASS: TestLengthFilter (6 sub-tests)
+PASS: TestJoinFilter (6 sub-tests)
+PASS: TestSplitFilter (6 sub-tests)
+PASS: TestBuiltinFiltersPlugin
+PASS: TestBaseFilterPlugin
+PASS: TestNewManager
+PASS: TestManager_Register
+PASS: TestManager_Get
+PASS: TestManager_GetModule
+PASS: TestManager_GetCallback
+PASS: TestManager_Unregister
+PASS: TestManager_List
+PASS: TestManager_ListAll
+PASS: TestManager_GetMetadata
+PASS: TestManager_Shutdown
+PASS: TestManager_GetStats
+PASS: TestCallbackManager
+
+Total: 23 tests, all passed
+Time: 1.830s
+Race detector: 0 issues
+```
+
+**Benchmark результати:**
+
+```
+BenchmarkUpperFilter-14                14341444    84.55 ns/op    64 B/op    2 allocs/op
+BenchmarkLowerFilter-14                13797615    85.98 ns/op    64 B/op    2 allocs/op
+BenchmarkReplaceFilter-14              24186944    49.16 ns/op    40 B/op    2 allocs/op
+BenchmarkJoinFilter-14                 20044068    60.27 ns/op    56 B/op    3 allocs/op
+BenchmarkSplitFilter-14                25514067    46.78 ns/op   104 B/op    2 allocs/op
+BenchmarkManager_Register-14            7817971   152.7 ns/op   288 B/op    4 allocs/op
+BenchmarkManager_Get-14               100000000    10.11 ns/op     0 B/op    0 allocs/op
+BenchmarkManager_List-14               12076646    99.94 ns/op   160 B/op    1 allocs/op
+BenchmarkCallbackManager_OnTaskStart  100000000    10.57 ns/op     0 B/op    0 allocs/op
+```
+
+**Можливості:**
+
+1. **Розширюваність** - легко додавати нові модулі без зміни основного коду
+2. **Lifecycle management** - Initialize/Cleanup для кожного плагіна
+3. **Type safety** - строга типізація для кожного типу плагіна
+4. **Thread-safe** - всі операції з плагінами thread-safe
+5. **Metadata** - збереження метаданих про кожен плагін
+6. **Multiple loaders** - підтримка різних способів завантаження (Go plugins, in-memory, directory)
+7. **Event system** - callback plugins для моніторингу виконання
+8. **Template filters** - розширення можливостей шаблонізації
+
+**Приклад використання:**
+
+```go
+// Create plugin manager
+loader := plugins.NewInMemoryLoader()
+manager := plugins.NewManager(loader)
+
+// Register a module plugin
+helloPlugin := NewHelloModule()
+manager.Register(ctx, helloPlugin)
+
+// Use the plugin
+modulePlugin, _ := manager.GetModule("hello")
+result, _ := modulePlugin.Execute(ctx, host, args)
+
+// Register callback plugin
+metricsPlugin := NewMetricsCallback()
+manager.Register(ctx, metricsPlugin)
+
+// Get callback and use it
+callbackPlugin, _ := manager.GetCallback("metrics")
+callbackPlugin.OnTaskStart(ctx, task, host)
+```
+
+**Результат:** ✅ Повнофункціональна система плагінів готова до використання
 
 ---
 

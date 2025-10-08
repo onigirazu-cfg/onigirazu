@@ -10,11 +10,13 @@ import (
 	"unicode"
 
 	"github.com/onigirazu-cfg/onigirazu/internal/bufferpool"
+	"github.com/onigirazu-cfg/onigirazu/internal/plugins"
 )
 
 // Engine provides template rendering capabilities similar to Jinja2
 type Engine struct {
-	funcMap template.FuncMap
+	funcMap       template.FuncMap
+	pluginManager *plugins.Manager
 }
 
 // NewEngine creates a new template engine
@@ -56,6 +58,64 @@ func NewEngine() *Engine {
 	}
 
 	return engine
+}
+
+// NewEngineWithPlugins creates a new template engine with plugin support
+func NewEngineWithPlugins(pluginManager *plugins.Manager) *Engine {
+	engine := NewEngine()
+	engine.pluginManager = pluginManager
+
+	// Register built-in filter plugin
+	ctx := context.Background()
+	builtinFilters := plugins.NewBuiltinFiltersPlugin()
+	if err := pluginManager.Register(ctx, builtinFilters); err != nil {
+		// Log error but continue - built-in filters are already in funcMap
+	}
+
+	// Load custom filter plugins and add them to funcMap
+	engine.loadFilterPlugins(ctx)
+
+	return engine
+}
+
+// loadFilterPlugins loads all registered filter plugins into the funcMap
+func (e *Engine) loadFilterPlugins(ctx context.Context) {
+	if e.pluginManager == nil {
+		return
+	}
+
+	// Get all filter plugins
+	filterPlugins := e.pluginManager.List(plugins.PluginTypeFilter)
+
+	for _, plugin := range filterPlugins {
+		filterPlugin, ok := plugin.(plugins.FilterPlugin)
+		if !ok {
+			continue
+		}
+
+		// Get all filters from the plugin
+		filters := filterPlugin.GetFilters()
+
+		// Add each filter to funcMap
+		for filterName, filterFunc := range filters {
+			// Create a closure to capture the filter function
+			fn := filterFunc
+
+			e.funcMap[filterName] = func(args ...interface{}) (interface{}, error) {
+				if len(args) == 0 {
+					return fn(nil)
+				}
+				return fn(args[0], args[1:]...)
+			}
+		}
+	}
+}
+
+// SetPluginManager sets the plugin manager for the engine
+func (e *Engine) SetPluginManager(pluginManager *plugins.Manager) {
+	e.pluginManager = pluginManager
+	ctx := context.Background()
+	e.loadFilterPlugins(ctx)
 }
 
 // Render renders a template string with variables

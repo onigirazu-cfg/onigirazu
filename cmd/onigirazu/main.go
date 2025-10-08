@@ -18,6 +18,7 @@ import (
 	"github.com/onigirazu-cfg/onigirazu/internal/logger"
 	"github.com/onigirazu-cfg/onigirazu/internal/modules"
 	"github.com/onigirazu-cfg/onigirazu/internal/parser"
+	"github.com/onigirazu-cfg/onigirazu/internal/plugins"
 	"github.com/onigirazu-cfg/onigirazu/internal/progress"
 	"github.com/onigirazu-cfg/onigirazu/internal/state"
 	"github.com/onigirazu-cfg/onigirazu/internal/template"
@@ -31,6 +32,7 @@ func main() {
 		playbookPath  = flag.String("playbook", "", "Path to playbook file")
 		inventoryPath = flag.String("inventory", "", "Path to inventory file")
 		configPath    = flag.String("config", "", "Path to configuration file")
+		pluginsConfig = flag.String("plugins-config", "", "Path to plugins configuration file")
 		verbose       = flag.Bool("verbose", false, "Verbose output")
 		check         = flag.Bool("check", false, "Check mode (dry-run)")
 		diff          = flag.Bool("diff", false, "Show differences when changing files")
@@ -44,6 +46,7 @@ func main() {
 		noColor       = flag.Bool("no-color", false, "Disable colored output")
 		interactive   = flag.Bool("interactive", false, "Interactive mode")
 		listModules   = flag.Bool("list-modules", false, "List available modules and exit")
+		listPlugins   = flag.Bool("list-plugins", false, "List loaded plugins and exit")
 		showVersion   = flag.Bool("version", false, "Show version and exit")
 	)
 	flag.Parse()
@@ -147,9 +150,80 @@ func main() {
 	log.Info("Starting Onigirazu configuration management tool")
 	log.Debug("Configuration loaded: max_concurrency=%d, log_level=%s", cfg.MaxConcurrency, cfg.LogLevel)
 
+	// Initialize plugin system
+	var pluginManager *plugins.Manager
+	if *pluginsConfig != "" {
+		log.Info("Loading plugins from configuration: %s", *pluginsConfig)
+		pluginConfig, err := plugins.LoadConfig(*pluginsConfig)
+		if err != nil {
+			log.Warn("Failed to load plugins configuration: %v", err)
+			log.Info("Continuing without plugins")
+		} else {
+			// Create plugin manager with in-memory loader
+			loader := plugins.NewInMemoryLoader()
+			pluginManager = plugins.NewManager(loader)
+
+			// Load plugins from configuration
+			if err := plugins.LoadPluginsFromConfig(ctx, pluginManager, pluginConfig); err != nil {
+				log.Warn("Failed to load plugins: %v", err)
+				log.Info("Continuing without plugins")
+				pluginManager = nil
+			} else {
+				log.Info("Plugins loaded successfully: %d plugins registered", len(pluginManager.List("")))
+			}
+		}
+	} else {
+		// Try to auto-detect plugins.yml in playbook directory
+		if *playbookPath != "" {
+			playbookDir := filepath.Dir(*playbookPath)
+			autoPluginsPath := filepath.Join(playbookDir, "plugins.yml")
+			if _, err := os.Stat(autoPluginsPath); err == nil {
+				log.Info("Auto-detected plugins configuration: %s", autoPluginsPath)
+				pluginConfig, err := plugins.LoadConfig(autoPluginsPath)
+				if err == nil {
+					loader := plugins.NewInMemoryLoader()
+					pluginManager = plugins.NewManager(loader)
+					if err := plugins.LoadPluginsFromConfig(ctx, pluginManager, pluginConfig); err != nil {
+						log.Warn("Failed to load auto-detected plugins: %v", err)
+						pluginManager = nil
+					} else {
+						log.Info("Auto-detected plugins loaded: %d plugins registered", len(pluginManager.List("")))
+					}
+				}
+			}
+		}
+	}
+
+	// Handle list-plugins flag
+	if *listPlugins {
+		if pluginManager == nil {
+			fmt.Println("No plugins loaded")
+			os.Exit(0)
+		}
+		fmt.Println("Loaded plugins:")
+		allPlugins := pluginManager.List("")
+		if len(allPlugins) == 0 {
+			fmt.Println("  (none)")
+		} else {
+			for _, plugin := range allPlugins {
+				fmt.Printf("  %-20s - %s (type: %s)\n", plugin.GetName(), plugin.GetDescription(), plugin.GetType())
+			}
+		}
+		os.Exit(0)
+	}
+
 	// Initialize components
 	cacheManager := cache.NewManager(5 * time.Minute) // Default TTL of 5 minutes
-	templateEngine := template.NewEngine()
+
+	// Create template engine with plugin support
+	var templateEngine *template.Engine
+	if pluginManager != nil {
+		templateEngine = template.NewEngineWithPlugins(pluginManager)
+		log.Debug("Template engine initialized with plugin support")
+	} else {
+		templateEngine = template.NewEngine()
+	}
+
 	stateManager := state.NewEnhancedManager(cfg.StateFile, log)
 	executionPool := execution.NewPool(cfg.MaxConcurrency, log)
 	progressTracker := progress.NewTracker()
