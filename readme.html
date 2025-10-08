@@ -585,6 +585,96 @@ make docs
 <li>🚀 <strong>Auto-generated</strong> - Always up-to-date with code</li>
 <li>🌐 <strong>Interactive server</strong> - Browse with <code>pkgsite</code></li>
 </ul>
+<h2>🧪 Testing &amp; Quality</h2>
+<p>Onigirazu maintains high code quality through comprehensive testing and continuous integration.</p>
+<h3>Test Coverage</h3>
+<ul>
+<li><strong>Overall Coverage:</strong> 36.5%</li>
+<li><strong>Critical Packages:</strong> &gt;80% coverage</li>
+<li><strong>Race Conditions:</strong> Zero detected</li>
+<li><strong>CI/CD:</strong> Automated testing on every commit</li>
+</ul>
+<h4>Coverage by Category</h4>
+<table>
+<thead>
+<tr>
+<th>Category</th>
+<th>Packages</th>
+<th>Coverage</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>✅ Excellent (&gt;80%)</td>
+<td>5 packages</td>
+<td>94.4% - 85.3%</td>
+</tr>
+<tr>
+<td>✅ Good (60-80%)</td>
+<td>4 packages</td>
+<td>77.0% - 64.3%</td>
+</tr>
+<tr>
+<td>⚠️ Medium (40-60%)</td>
+<td>3 packages</td>
+<td>59.0% - 42.1%</td>
+</tr>
+<tr>
+<td>⚠️ Low (&lt;40%)</td>
+<td>6 packages</td>
+<td>33.3% - 10.9%</td>
+</tr>
+<tr>
+<td>❌ No Tests</td>
+<td>11 packages</td>
+<td>0.0%</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Critical packages with excellent coverage:</strong></p>
+<ul>
+<li><code>internal/workflow</code> - 89.8%</li>
+<li><code>internal/execution</code> - 87.8%</li>
+<li><code>internal/inventory</code> - 85.3%</li>
+<li><code>internal/cache</code> - 94.2%</li>
+<li><code>internal/bufferpool</code> - 94.4%</li>
+</ul>
+<p>📊 <strong>For detailed coverage report, see <a href="TEST_COVERAGE_REPORT.md">TEST_COVERAGE_REPORT.md</a></strong></p>
+<h3>Running Tests</h3>
+<pre class="codehilite"><code class="language-bash"># Run all tests
+make test
+
+# Run tests with race detector
+make test-race
+
+# Run tests with coverage
+make test-coverage
+
+# Generate HTML coverage report
+go test -race -coverprofile=coverage.out -covermode=atomic ./...
+go tool cover -html=coverage.out -o coverage.html
+</code></pre>
+
+<h3>Quality Checks</h3>
+<pre class="codehilite"><code class="language-bash"># Run all quality checks
+make lint
+
+# Run specific checks
+make vet          # go vet
+make staticcheck  # staticcheck
+make golangci     # golangci-lint
+</code></pre>
+
+<h3>CI/CD Pipeline</h3>
+<p>Every commit is automatically tested with:</p>
+<ul>
+<li>✅ Unit tests with race detector</li>
+<li>✅ Integration tests</li>
+<li>✅ Code linting (golangci-lint)</li>
+<li>✅ Static analysis (staticcheck)</li>
+<li>✅ Code formatting (gofmt)</li>
+<li>✅ Coverage reporting</li>
+</ul>
 <h2>Contributing</h2>
 <ol>
 <li>Fork the repository</li>
