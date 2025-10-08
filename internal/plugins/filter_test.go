@@ -60,6 +60,35 @@ func TestLowerFilter(t *testing.T) {
 	}
 }
 
+func TestTitleFilter(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    interface{}
+		expected interface{}
+		wantErr  bool
+	}{
+		{"lowercase", "hello world", "Hello World", false},
+		{"uppercase", "HELLO WORLD", "Hello World", false},
+		{"mixed", "hELLo WoRLd", "Hello World", false},
+		{"single word", "hello", "Hello", false},
+		{"empty", "", "", false},
+		{"invalid type", 123, nil, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := TitleFilter(tt.input)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("TitleFilter() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !tt.wantErr && result != tt.expected {
+				t.Errorf("TitleFilter() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
+
 func TestTrimFilter(t *testing.T) {
 	tests := []struct {
 		name     string

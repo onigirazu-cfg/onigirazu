@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 	"strings"
+
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 // BaseFilterPlugin provides a base implementation for filter plugins
@@ -120,7 +123,8 @@ func TitleFilter(input interface{}, args ...interface{}) (interface{}, error) {
 	if !ok {
 		return nil, fmt.Errorf("title filter expects string input, got %T", input)
 	}
-	return strings.Title(str), nil
+	caser := cases.Title(language.English)
+	return caser.String(str), nil
 }
 
 // TrimFilter trims whitespace from string
