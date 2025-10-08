@@ -316,7 +316,10 @@ func (m *LineinfileModule) writeLines(path string, lines []string) error {
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() {
+		// Best-effort cleanup in case of panic
+		_ = file.Close()
+	}()
 
 	writer := bufio.NewWriter(file)
 	for _, line := range lines {
@@ -324,5 +327,16 @@ func (m *LineinfileModule) writeLines(path string, lines []string) error {
 			return err
 		}
 	}
-	return writer.Flush()
+
+	if err := writer.Flush(); err != nil {
+		return err
+	}
+
+	// Ensure data is flushed to disk before closing
+	if err := file.Sync(); err != nil {
+		return err
+	}
+
+	// Explicitly close and handle any errors
+	return file.Close()
 }

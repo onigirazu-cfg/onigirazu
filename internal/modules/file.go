@@ -225,7 +225,14 @@ func (m *FileModule) touchFile(path string, result types.TaskResult, startTime t
 			result.Duration = time.Since(startTime)
 			return result, nil
 		}
-		_ = file.Close()
+
+		// Ensure file is properly closed (no data to sync for empty file)
+		if err := file.Close(); err != nil {
+			result.Success = false
+			result.Error = fmt.Sprintf("error closing file: %v", err)
+			result.Duration = time.Since(startTime)
+			return result, nil
+		}
 
 		result.Success = true
 		result.Changed = true

@@ -219,11 +219,26 @@ func main() {
 		fmt.Printf("Error creating output file: %v\n", err)
 		os.Exit(1)
 	}
-	defer file.Close()
+	defer func() {
+		// Best-effort cleanup in case of panic
+		_ = file.Close()
+	}()
 
 	err = tmpl.Execute(file, doc)
 	if err != nil {
 		fmt.Printf("Error executing template: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Ensure data is flushed to disk before closing
+	if err = file.Sync(); err != nil {
+		fmt.Printf("Error syncing file: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Explicitly close and handle any errors
+	if err = file.Close(); err != nil {
+		fmt.Printf("Error closing file: %v\n", err)
 		os.Exit(1)
 	}
 

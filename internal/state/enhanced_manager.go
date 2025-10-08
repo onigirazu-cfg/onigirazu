@@ -339,10 +339,22 @@ func (m *EnhancedManager) createBackup() error {
 	if err != nil {
 		return err
 	}
-	defer dst.Close()
+	defer func() {
+		// Best-effort cleanup in case of panic
+		_ = dst.Close()
+	}()
 
-	_, err = io.Copy(dst, src)
-	return err
+	if _, err = io.Copy(dst, src); err != nil {
+		return err
+	}
+
+	// Ensure data is flushed to disk before closing
+	if err = dst.Sync(); err != nil {
+		return err
+	}
+
+	// Explicitly close and handle any errors
+	return dst.Close()
 }
 
 // cleanupOldBackups removes old backup files, keeping only the specified number
@@ -419,10 +431,22 @@ func (m *EnhancedManager) Restore(backupFile string) error {
 	if err != nil {
 		return err
 	}
-	defer dst.Close()
+	defer func() {
+		// Best-effort cleanup in case of panic
+		_ = dst.Close()
+	}()
 
-	_, err = io.Copy(dst, src)
-	if err != nil {
+	if _, err = io.Copy(dst, src); err != nil {
+		return err
+	}
+
+	// Ensure data is flushed to disk before closing
+	if err = dst.Sync(); err != nil {
+		return err
+	}
+
+	// Explicitly close and handle any errors
+	if err = dst.Close(); err != nil {
 		return err
 	}
 

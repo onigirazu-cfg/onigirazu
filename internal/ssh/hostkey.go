@@ -138,13 +138,25 @@ func (hkm *HostKeyManager) addHostKey(hostname string, key ssh.PublicKey) error 
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() {
+		// Best-effort cleanup in case of panic
+		_ = file.Close()
+	}()
 
 	keyLine := fmt.Sprintf("%s %s %s\n", hostname, key.Type(),
 		strings.TrimSpace(string(ssh.MarshalAuthorizedKey(key))))
 
-	_, err = file.WriteString(keyLine)
-	return err
+	if _, err = file.WriteString(keyLine); err != nil {
+		return err
+	}
+
+	// Ensure data is flushed to disk before closing
+	if err = file.Sync(); err != nil {
+		return err
+	}
+
+	// Explicitly close and handle any errors
+	return file.Close()
 }
 
 func (hkm *HostKeyManager) GetFingerprint(key ssh.PublicKey) string {

@@ -212,7 +212,19 @@ func (m *GetURLModule) Execute(ctx context.Context, host types.Host, args map[st
 		return result, err
 	}
 
-	_ = localTmpFile.Close()
+	// Ensure data is flushed to disk before closing
+	if err := localTmpFile.Sync(); err != nil {
+		result.Failed = true
+		result.Error = fmt.Sprintf("Failed to sync file: %v", err)
+		return result, err
+	}
+
+	// Explicitly close and handle any errors
+	if err := localTmpFile.Close(); err != nil {
+		result.Failed = true
+		result.Error = fmt.Sprintf("Failed to close file: %v", err)
+		return result, err
+	}
 
 	// Verify checksum if provided
 	if checksum != "" && hasher != nil {

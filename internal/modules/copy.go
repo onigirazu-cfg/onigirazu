@@ -229,10 +229,22 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer destFile.Close()
+	defer func() {
+		// Best-effort cleanup in case of panic
+		_ = destFile.Close()
+	}()
 
-	_, err = io.Copy(destFile, sourceFile)
-	if err != nil {
+	if _, err = io.Copy(destFile, sourceFile); err != nil {
+		return err
+	}
+
+	// Ensure data is flushed to disk before closing
+	if err = destFile.Sync(); err != nil {
+		return err
+	}
+
+	// Explicitly close and handle any errors
+	if err = destFile.Close(); err != nil {
 		return err
 	}
 
