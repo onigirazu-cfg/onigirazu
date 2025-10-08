@@ -557,7 +557,8 @@ func (m *Manager) getGroupStats() map[string]interface{} {
 
 // testHostConnectivity tests connectivity to a host
 func (m *Manager) testHostConnectivity(ctx context.Context, host *types.Host, timeout time.Duration) error {
-	address := fmt.Sprintf("%s:%d", host.Address, host.Port)
+	// Use net.JoinHostPort to properly handle both IPv4 and IPv6 addresses
+	address := net.JoinHostPort(host.Address, fmt.Sprintf("%d", host.Port))
 
 	conn, err := net.DialTimeout("tcp", address, timeout)
 	if err != nil {
