@@ -303,7 +303,8 @@ func (m *ShellModuleFixed) Execute(ctx context.Context, host types.Host, args ma
 	}
 
 	// Execute the command using remote executor
-	output, err := m.executor.Execute("sh", "-c", fullCommand)
+	// Note: executor.Execute will automatically use shell if needed
+	output, err := m.executor.Execute(fullCommand)
 
 	if err != nil {
 		result.Output = map[string]interface{}{
