@@ -155,14 +155,6 @@ ansible_become_user: root
 ansible_become_method: sudo
 ```
 
-#### Проблемы с Python
-
-Если на удаленном хосте нет Python:
-
-```yaml
-ansible_python_interpreter: /usr/bin/python3
-```
-
 ## Примеры для разных сценариев
 
 ### Локальное тестирование

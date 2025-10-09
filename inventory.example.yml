@@ -7,8 +7,6 @@ hosts:
   localhost:
     address: 127.0.0.1
     connection: local
-    vars:
-      onigirazu_python_interpreter: /usr/bin/python3
 
   # Remote server example
   web-server-01:
