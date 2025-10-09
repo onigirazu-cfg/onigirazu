@@ -30,7 +30,7 @@ plays:
 
       - name: "Display hostname"
         debug:
-          msg: "Hostname: {{ ansible_hostname }}"
+          msg: "Hostname: {{ onigirazu_hostname }}"
 
       - name: "Check disk space"
         command:
@@ -115,7 +115,7 @@ plays:
         apt:
           update_cache: true
           cache_valid_time: 3600
-        when: "ansible_os_family == 'Debian'"
+        when: "onigirazu_os_family == 'Debian'"
 
       - name: "Install essential packages"
         package:
@@ -140,9 +140,9 @@ plays:
           state: "present"
         vars:
           db_client_package: >-
-            {%- if ansible_os_family == 'Debian' -%}
+            {%- if onigirazu_os_family == 'Debian' -%}
             mysql-client
-            {%- elif ansible_os_family == 'RedHat' -%}
+            {%- elif onigirazu_os_family == 'RedHat' -%}
             mysql
             {%- else -%}
             mysql-client
@@ -196,7 +196,7 @@ plays:
     tasks:
       - name: "Create backup directory"
         file:
-          path: "/backup/{{ ansible_date_time.date }}"
+          path: "/backup/{{ onigirazu_date_time.date }}"
           state: "directory"
           mode: "0755"
 
@@ -205,12 +205,12 @@ plays:
           cmd: >
             mysqldump -u {{ db_user }} -p{{ db_password }}
             --single-transaction --routines --triggers
-            {{ db_name }} > /backup/{{ ansible_date_time.date }}/{{ db_name }}.sql
+            {{ db_name }} > /backup/{{ onigirazu_date_time.date }}/{{ db_name }}.sql
         no_log: true
 
       - name: "Compress backup"
         command:
-          cmd: "gzip /backup/{{ ansible_date_time.date }}/{{ db_name }}.sql"
+          cmd: "gzip /backup/{{ onigirazu_date_time.date }}/{{ db_name }}.sql"
 
   - name: "Application Deployment"
     hosts: "webservers"
@@ -440,14 +440,14 @@ plays:
         package:
           name: "*"
           state: "latest"
-        when: "ansible_os_family == 'RedHat'"
+        when: "onigirazu_os_family == 'RedHat'"
 
       - name: "Update system packages (Debian)"
         apt:
           upgrade: "dist"
           update_cache: true
           autoremove: true
-        when: "ansible_os_family == 'Debian'"
+        when: "onigirazu_os_family == 'Debian'"
 
       - name: "Install security packages"
         package:
@@ -498,7 +498,7 @@ plays:
           src: "./templates/50unattended-upgrades.j2"
           dest: "/etc/apt/apt.conf.d/50unattended-upgrades"
           mode: "0644"
-        when: "ansible_os_family == 'Debian'"
+        when: "onigirazu_os_family == 'Debian'"
 
       - name: "Configure fail2ban"
         template:
@@ -692,7 +692,7 @@ plays:
           regexp: "pam_pwquality.so"
           line: "password requisite pam_pwquality.so retry=3 minlen=8 difok=3 ucredit=-1 lcredit=-1 dcredit=-1 ocredit=-1"
           backup: true
-        when: "ansible_os_family == 'Debian'"
+        when: "onigirazu_os_family == 'Debian'"
 
       - name: "Set kernel parameters"
         sysctl:
@@ -742,8 +742,8 @@ plays:
           name: "{{ item }}"
           state: "absent"
           remove: true
-        loop: "{{ ansible_all_ipv4_addresses | default([]) }}"
-        when: "item not in allowed_users"
+        loop: "{{ unauthorized_users | default([]) }}"
+        when: "unauthorized_users is defined"
 
       - name: "Set file permissions on sensitive files"
         file:
@@ -764,7 +764,7 @@ plays:
           src: "./templates/auto-upgrades.j2"
           dest: "/etc/apt/apt.conf.d/20auto-upgrades"
           mode: "0644"
-        when: "ansible_os_family == 'Debian'"
+        when: "onigirazu_os_family == 'Debian'"
 
       - name: "Install and configure AIDE"
         block:
@@ -1033,13 +1033,13 @@ plays:
         apt_key:
           url: "https://packages.grafana.com/gpg.key"
           state: "present"
-        when: "ansible_os_family == 'Debian'"
+        when: "onigirazu_os_family == 'Debian'"
 
       - name: "Add Grafana repository"
         apt_repository:
           repo: "deb https://packages.grafana.com/oss/deb stable main"
           state: "present"
-        when: "ansible_os_family == 'Debian'"
+        when: "onigirazu_os_family == 'Debian'"
 
       - name: "Install Grafana"
         package:

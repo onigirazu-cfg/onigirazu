@@ -379,7 +379,7 @@ Options:
   package:
     name: docker.io
     state: present
-  when: &quot;{{ ansible_facts.os_family == 'Debian' }}&quot;
+  when: &quot;{{ onigirazu_os_family == 'Debian' }}&quot;
 </code></pre>
 
 <h3>Variables</h3>
@@ -683,6 +683,22 @@ make golangci     # golangci-lint
 <li>✅ Code formatting (gofmt)</li>
 <li>✅ Coverage reporting</li>
 </ul>
+<h2>Documentation</h2>
+<h3>User Documentation</h3>
+<ul>
+<li><strong><a href="docs/quick-start.md">Quick Start Guide</a></strong> - Get started in 5 minutes</li>
+<li><strong><a href="INSTALLATION.md">Installation Guide</a></strong> - Detailed installation instructions</li>
+<li><strong><a href="docs/examples/README.md">Examples</a></strong> - Real-world usage examples</li>
+<li><strong><a href="docs/api/index.html">API Documentation</a></strong> - Complete API reference</li>
+</ul>
+<h3>Development Documentation</h3>
+<p>All development-related documentation (optimization reports, release notes, implementation guides, etc.) is located in the <strong><a href="../onigirazu_docs/">onigirazu_docs</a></strong> directory:</p>
+<ul>
+<li><strong><a href="../onigirazu_docs/README.md">Development Documentation Index</a></strong> - Complete index of all development docs</li>
+<li><strong><a href="../onigirazu_docs/PROJECT_STATUS.md">Project Status</a></strong> - Current project status</li>
+<li><strong><a href="../onigirazu_docs/OPTIMIZATION_AND_FEATURES_ANALYSIS.md">Optimization Analysis</a></strong> - Performance optimization details</li>
+<li><strong><a href="../onigirazu_docs/RELEASE_GUIDE.md">Release Guide</a></strong> - How to create releases</li>
+</ul>
 <h2>Contributing</h2>
 <ol>
 <li>Fork the repository</li>
@@ -692,6 +708,7 @@ make golangci     # golangci-lint
 <li>Run tests and linting</li>
 <li>Submit a pull request</li>
 </ol>
+<p>See <a href="CONTRIBUTING.md">CONTRIBUTING.md</a> for detailed guidelines.</p>
 <h2>License</h2>
 <p>This project is licensed under the MIT License - see the <a href="LICENSE">LICENSE</a> file for details.</p>
 <h2>Acknowledgments</h2>

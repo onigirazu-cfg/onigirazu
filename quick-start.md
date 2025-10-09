@@ -116,15 +116,15 @@ plays:
 
       - name: "Display hostname"
         debug:
-          msg: "Hello from {{ ansible_hostname }}!"
+          msg: "Hello from {{ onigirazu_hostname }}!"
 
       - name: "Show system information"
         debug:
           msg: |
-            System: {{ ansible_distribution }} {{ ansible_distribution_version }}
-            Architecture: {{ ansible_architecture }}
-            Memory: {{ ansible_memtotal_mb }}MB
-            CPU Cores: {{ ansible_processor_count }}
+            System: {{ onigirazu_distribution }} {{ onigirazu_distribution_version }}
+            Architecture: {{ onigirazu_architecture }}
+            Memory: {{ onigirazu_memtotal_mb }}MB
+            CPU Cores: {{ onigirazu_processor_cores }}
 ```
 
 ### 2. Run the Playbook
@@ -371,13 +371,13 @@ plays:
         apt:
           name: "apache2"
           state: "present"
-        when: "ansible_os_family == 'Debian'"
+        when: "onigirazu_os_family == 'Debian'"
 
       - name: "Install package (CentOS/RHEL)"
         yum:
           name: "httpd"
           state: "present"
-        when: "ansible_os_family == 'RedHat'"
+        when: "onigirazu_os_family == 'RedHat'"
 
       - name: "Configure firewall (if enabled)"
         ufw:
