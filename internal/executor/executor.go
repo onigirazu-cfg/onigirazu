@@ -224,6 +224,7 @@ func (e *CommandExecutor) executeLocal(command string, args ...string) (string, 
 			fullCmd = command + " " + strings.Join(args, " ")
 		}
 		// Execute through shell
+		// #nosec G204 - This is intentional: we need shell execution for complex commands with pipes, redirects, etc.
 		cmd := exec.Command("sh", "-c", fullCmd)
 		output, err := cmd.CombinedOutput()
 		return string(output), err

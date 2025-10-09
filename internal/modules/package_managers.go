@@ -1681,6 +1681,7 @@ func (b *UnifiedBrewManager) executeWithContext(ctx context.Context, args ...str
 	}
 
 	// Brew commands should run locally, not through SSH
+	// #nosec G204 - args are validated and come from trusted package manager operations
 	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
 	output, err := cmd.CombinedOutput()
 	return string(output), err

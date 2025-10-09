@@ -226,6 +226,7 @@ func (c *Client) StatFile(remotePath string) (os.FileInfo, error) {
 // CopyFile copies a file from local to remote host using SFTP
 func (c *Client) CopyFile(localPath, remotePath string, mode os.FileMode) error {
 	// Read local file
+	// #nosec G304 - localPath is provided by user configuration and is intentional
 	data, err := os.ReadFile(localPath)
 	if err != nil {
 		return fmt.Errorf("failed to read local file %s: %v", localPath, err)

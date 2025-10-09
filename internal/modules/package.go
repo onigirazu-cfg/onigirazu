@@ -344,6 +344,7 @@ type PackageLockEntry struct {
 
 // LoadLockFile loads a package lock file
 func LoadLockFile(path string) (*PackageLockFile, error) {
+	// #nosec G304 - path is provided by user configuration and is intentional
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -370,7 +371,7 @@ func (l *PackageLockFile) Save(path string) error {
 
 	// Ensure directory exists
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0750); err != nil {
 		return fmt.Errorf("failed to create directory: %w", err)
 	}
 
@@ -379,7 +380,7 @@ func (l *PackageLockFile) Save(path string) error {
 		return fmt.Errorf("failed to marshal lock file: %w", err)
 	}
 
-	if err := os.WriteFile(path, data, 0644); err != nil {
+	if err := os.WriteFile(path, data, 0600); err != nil {
 		return fmt.Errorf("failed to write lock file: %w", err)
 	}
 
