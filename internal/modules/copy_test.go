@@ -89,7 +89,10 @@ func TestCopyModuleExecuteWithContent(t *testing.T) {
 	destPath := filepath.Join(tmpDir, "test.txt")
 	testContent := "Hello, World!"
 
-	host := types.Host{Name: "localhost"}
+	host := types.Host{
+		Name:    "localhost",
+		Address: "localhost",
+	}
 	args := map[string]interface{}{
 		"dest":    destPath,
 		"content": testContent,
@@ -132,7 +135,10 @@ func TestCopyModuleExecuteIdempotency(t *testing.T) {
 	destPath := filepath.Join(tmpDir, "test.txt")
 	testContent := "Hello, World!"
 
-	host := types.Host{Name: "localhost"}
+	host := types.Host{
+		Name:    "localhost",
+		Address: "localhost",
+	}
 	args := map[string]interface{}{
 		"dest":    destPath,
 		"content": testContent,
@@ -182,7 +188,10 @@ func TestCopyModuleExecuteWithSrc(t *testing.T) {
 
 	destPath := filepath.Join(tmpDir, "dest.txt")
 
-	host := types.Host{Name: "localhost"}
+	host := types.Host{
+		Name:    "localhost",
+		Address: "localhost",
+	}
 	args := map[string]interface{}{
 		"src":  srcPath,
 		"dest": destPath,
@@ -231,7 +240,10 @@ func TestCopyModuleExecuteWithBackup(t *testing.T) {
 		t.Fatalf("Failed to create original file: %v", err)
 	}
 
-	host := types.Host{Name: "localhost"}
+	host := types.Host{
+		Name:    "localhost",
+		Address: "localhost",
+	}
 	args := map[string]interface{}{
 		"dest":    destPath,
 		"content": newContent,

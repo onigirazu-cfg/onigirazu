@@ -131,12 +131,16 @@ func TestServiceModule_Execute_StartService(t *testing.T) {
 	mockManager.runningState["nginx"] = false
 	mockManager.enabledState["nginx"] = false
 
+	// Create a mock executor to prevent real executor creation
+	mockExec := &executor.CommandExecutor{}
+
 	module := &ServiceModuleFixed{
 		BaseModule: BaseModule{
 			name:        "service",
 			description: "Manage system services",
 		},
 		serviceManager: mockManager,
+		executor:       mockExec, // Set executor to prevent detectServiceManager call
 	}
 
 	host := types.Host{
@@ -180,12 +184,15 @@ func TestServiceModule_Execute_StopService(t *testing.T) {
 	mockManager.runningState["nginx"] = true
 	mockManager.enabledState["nginx"] = true
 
+	mockExec := &executor.CommandExecutor{}
+
 	module := &ServiceModuleFixed{
 		BaseModule: BaseModule{
 			name:        "service",
 			description: "Manage system services",
 		},
 		serviceManager: mockManager,
+		executor:       mockExec,
 	}
 
 	host := types.Host{
@@ -228,12 +235,15 @@ func TestServiceModule_Execute_RestartService(t *testing.T) {
 	mockManager := NewMockServiceManager()
 	mockManager.runningState["nginx"] = true
 
+	mockExec := &executor.CommandExecutor{}
+
 	module := &ServiceModuleFixed{
 		BaseModule: BaseModule{
 			name:        "service",
 			description: "Manage system services",
 		},
 		serviceManager: mockManager,
+		executor:       mockExec,
 	}
 
 	host := types.Host{
@@ -272,12 +282,15 @@ func TestServiceModule_Execute_ReloadService(t *testing.T) {
 	mockManager := NewMockServiceManager()
 	mockManager.runningState["nginx"] = true
 
+	mockExec := &executor.CommandExecutor{}
+
 	module := &ServiceModuleFixed{
 		BaseModule: BaseModule{
 			name:        "service",
 			description: "Manage system services",
 		},
 		serviceManager: mockManager,
+		executor:       mockExec,
 	}
 
 	host := types.Host{
@@ -317,12 +330,15 @@ func TestServiceModule_Execute_EnableService(t *testing.T) {
 	mockManager.runningState["nginx"] = true
 	mockManager.enabledState["nginx"] = false
 
+	mockExec := &executor.CommandExecutor{}
+
 	module := &ServiceModuleFixed{
 		BaseModule: BaseModule{
 			name:        "service",
 			description: "Manage system services",
 		},
 		serviceManager: mockManager,
+		executor:       mockExec,
 	}
 
 	host := types.Host{
@@ -367,12 +383,15 @@ func TestServiceModule_Execute_DisableService(t *testing.T) {
 	mockManager.runningState["nginx"] = false
 	mockManager.enabledState["nginx"] = true
 
+	mockExec := &executor.CommandExecutor{}
+
 	module := &ServiceModuleFixed{
 		BaseModule: BaseModule{
 			name:        "service",
 			description: "Manage system services",
 		},
 		serviceManager: mockManager,
+		executor:       mockExec,
 	}
 
 	host := types.Host{
@@ -417,12 +436,15 @@ func TestServiceModule_Execute_NoChange(t *testing.T) {
 	mockManager.runningState["nginx"] = true
 	mockManager.enabledState["nginx"] = true
 
+	mockExec := &executor.CommandExecutor{}
+
 	module := &ServiceModuleFixed{
 		BaseModule: BaseModule{
 			name:        "service",
 			description: "Manage system services",
 		},
 		serviceManager: mockManager,
+		executor:       mockExec,
 	}
 
 	host := types.Host{
@@ -465,12 +487,15 @@ func TestServiceModule_Execute_NoChange(t *testing.T) {
 func TestServiceModule_Execute_MissingName(t *testing.T) {
 	mockManager := NewMockServiceManager()
 
+	mockExec := &executor.CommandExecutor{}
+
 	module := &ServiceModuleFixed{
 		BaseModule: BaseModule{
 			name:        "service",
 			description: "Manage system services",
 		},
 		serviceManager: mockManager,
+		executor:       mockExec,
 	}
 
 	host := types.Host{
@@ -505,12 +530,15 @@ func TestServiceModule_Execute_StartFailure(t *testing.T) {
 	mockManager.runningState["nginx"] = false
 	mockManager.shouldFailOn = "start"
 
+	mockExec := &executor.CommandExecutor{}
+
 	module := &ServiceModuleFixed{
 		BaseModule: BaseModule{
 			name:        "service",
 			description: "Manage system services",
 		},
 		serviceManager: mockManager,
+		executor:       mockExec,
 	}
 
 	host := types.Host{
@@ -545,12 +573,15 @@ func TestServiceModule_Execute_GetStatusFailure(t *testing.T) {
 	mockManager := NewMockServiceManager()
 	mockManager.shouldFailOn = "get_status"
 
+	mockExec := &executor.CommandExecutor{}
+
 	module := &ServiceModuleFixed{
 		BaseModule: BaseModule{
 			name:        "service",
 			description: "Manage system services",
 		},
 		serviceManager: mockManager,
+		executor:       mockExec,
 	}
 
 	host := types.Host{
@@ -654,12 +685,15 @@ func TestServiceModule_Execute_WithTimeout(t *testing.T) {
 	mockManager := NewMockServiceManager()
 	mockManager.runningState["nginx"] = false
 
+	mockExec := &executor.CommandExecutor{}
+
 	module := &ServiceModuleFixed{
 		BaseModule: BaseModule{
 			name:        "service",
 			description: "Manage system services",
 		},
 		serviceManager: mockManager,
+		executor:       mockExec,
 	}
 
 	host := types.Host{

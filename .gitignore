@@ -57,3 +57,4 @@ SETUP_COMPLETE.md
 test_fail.txt
 TEST_FIXES_PROGRESS.md
 RELEASE_*.md
+*.DS_Store
