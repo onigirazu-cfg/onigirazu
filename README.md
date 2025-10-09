@@ -4,6 +4,14 @@ Welcome to the Onigirazu documentation directory! This contains comprehensive do
 
 ## 📚 Documentation Structure
 
+### User Documentation
+
+- **[Quick Start Guide](quick-start.md)** - Get started with Onigirazu in minutes
+- **[Variables Cheat Sheet](VARIABLES_CHEATSHEET.md)** - Quick reference for common variables ⚡
+- **[Variables and Configuration](VARIABLES_AND_CONFIGURATION.md)** - Complete reference for all configuration parameters and variables
+- **[Inventory Formats](inventory-formats.md)** - Supported inventory file formats
+- **[Modules Reference](modules/README.md)** - Built-in modules documentation
+
 ### API Documentation
 
 - **[api/](api/)** - Auto-generated API documentation
