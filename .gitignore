@@ -46,3 +46,14 @@ dist/
 *.tmp
 *.temp
 coverage.html
+
+# Private configuration and notes (not for public repo)
+.zencoder/
+.cursorrules
+.ai-rules.md
+PRIVATE_NOTES.md
+LOCAL_CONFIG.md
+SETUP_COMPLETE.md
+test_fail.txt
+TEST_FIXES_PROGRESS.md
+RELEASE_*.md
