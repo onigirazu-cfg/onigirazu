@@ -308,7 +308,8 @@ func (m *LineinfileModule) checkFileExists(path string) (bool, error) {
 	escapedPath := strings.ReplaceAll(path, "'", "'\\''")
 	cmd := fmt.Sprintf("test -e '%s' && echo exists || echo notexists", escapedPath)
 
-	output, err := m.executor.Execute("sh", "-c", cmd)
+	// Note: executor.Execute will automatically use shell if needed
+	output, err := m.executor.Execute(cmd)
 	if err != nil {
 		return false, err
 	}
@@ -321,7 +322,8 @@ func (m *LineinfileModule) readRemoteFile(path string) ([]string, error) {
 	escapedPath := strings.ReplaceAll(path, "'", "'\\''")
 	cmd := fmt.Sprintf("cat '%s'", escapedPath)
 
-	output, err := m.executor.Execute("sh", "-c", cmd)
+	// Note: executor.Execute will automatically use shell if needed
+	output, err := m.executor.Execute(cmd)
 	if err != nil {
 		return nil, err
 	}
@@ -352,7 +354,8 @@ func (m *LineinfileModule) writeRemoteFile(path string, lines []string) error {
 	// Write content to file using printf
 	cmd := fmt.Sprintf("printf '%%s' '%s' > '%s'", escapedContent, escapedPath)
 
-	_, err := m.executor.Execute("sh", "-c", cmd)
+	// Note: executor.Execute will automatically use shell if needed
+	_, err := m.executor.Execute(cmd)
 	return err
 }
 
@@ -362,6 +365,7 @@ func (m *LineinfileModule) copyFileRemote(src, dst string) error {
 	escapedDst := strings.ReplaceAll(dst, "'", "'\\''")
 	cmd := fmt.Sprintf("cp '%s' '%s'", escapedSrc, escapedDst)
 
-	_, err := m.executor.Execute("sh", "-c", cmd)
+	// Note: executor.Execute will automatically use shell if needed
+	_, err := m.executor.Execute(cmd)
 	return err
 }

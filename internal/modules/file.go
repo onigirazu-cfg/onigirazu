@@ -250,14 +250,15 @@ func (m *FileModule) ensureDirectory(path string, result types.TaskResult, start
 
 func (m *FileModule) touchFile(path string, result types.TaskResult, startTime time.Time) (types.TaskResult, error) {
 	// Check if file exists
+	// Note: executor.Execute will automatically use shell if needed
 	checkCmd := fmt.Sprintf(`test -e '%s' && echo exists || echo notexists`, path)
-	output, err := m.executor.Execute("sh", "-c", checkCmd)
+	output, err := m.executor.Execute(checkCmd)
 	fileExists := (err == nil && strings.TrimSpace(output) == "exists")
 
 	if !fileExists {
 		// Create the file
 		touchCmd := fmt.Sprintf(`touch '%s'`, path)
-		_, err := m.executor.Execute("sh", "-c", touchCmd)
+		_, err := m.executor.Execute(touchCmd)
 		if err != nil {
 			result.Success = false
 			result.Error = fmt.Sprintf("error creating file: %v", err)
@@ -273,7 +274,7 @@ func (m *FileModule) touchFile(path string, result types.TaskResult, startTime t
 	} else {
 		// Update the modification time
 		touchCmd := fmt.Sprintf(`touch '%s'`, path)
-		_, err := m.executor.Execute("sh", "-c", touchCmd)
+		_, err := m.executor.Execute(touchCmd)
 		if err != nil {
 			result.Success = false
 			result.Error = fmt.Sprintf("error updating file times: %v", err)
