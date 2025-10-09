@@ -2,11 +2,11 @@
 
 **Date:** October 9, 2025
 **Branch:** main
-**Commit:** dcceb1e
+**Commit:** 77e21bf
 
 ## Summary
 
-Fixed critical test failures in the modules package. Reduced failing tests from 27 to 21.
+Fixed critical test failures in the modules package. Reduced failing tests from 27 to 12.
 
 ## Fixed Issues ✅
 
@@ -15,6 +15,7 @@ Fixed critical test failures in the modules package. Reduced failing tests from 
 **Problem:** Shell command syntax error - "then" unexpected
 **Root Cause:** Double nesting of `sh -c` commands causing syntax errors
 **Solution:** Changed `executor.Execute("sh", "-c", cmd)` to `executor.Execute(cmd)`
+**Commit:** dcceb1e
 **Tests Fixed:**
 
 - ✅ TestStatModule_Execute_FileExists
@@ -29,11 +30,44 @@ Fixed critical test failures in the modules package. Reduced failing tests from 
 **Problem:** Command output was empty (expected "2", got "0")
 **Root Cause:** Same double nesting issue - `sh -c sh -c` was breaking pipe commands
 **Solution:** Changed `m.executor.Execute("sh", "-c", fullCommand)` to `m.executor.Execute(fullCommand)`
+**Commit:** dcceb1e
 **Tests Fixed:**
 
 - ✅ TestShellModuleExecute
 
-## Remaining Issues (21 tests)
+### 3. File Module (1 test fixed)
+
+**Problem:** Touch operation failing with exit status 1
+**Root Cause:** Double nesting of `sh -c` commands in touchFile method
+**Solution:** Changed `executor.Execute("sh", "-c", cmd)` to `executor.Execute(cmd)` in touchFile method
+**Commit:** 77e21bf
+**Tests Fixed:**
+
+- ✅ TestFileModuleTouchFile
+
+### 4. Lineinfile Module (8 tests fixed)
+
+**Problem:** File operations failing with "file does not exist" or exit status 2
+**Root Cause:** Double nesting of `sh -c` commands in multiple helper methods
+**Solution:** Fixed all four helper methods:
+
+- checkFileExists()
+- readRemoteFile()
+- writeRemoteFile()
+- copyFileRemote()
+**Commit:** 77e21bf
+**Tests Fixed:**
+
+- ✅ TestLineinfileModule_Execute_AddLine
+- ✅ TestLineinfileModule_Execute_LineExists
+- ✅ TestLineinfileModule_Execute_RemoveLine
+- ✅ TestLineinfileModule_Execute_WithRegexp
+- ✅ TestLineinfileModule_Execute_CreateFile
+- ✅ TestLineinfileModule_Execute_InsertAfter
+- ✅ TestLineinfileModule_Execute_InsertBefore
+- ✅ TestLineinfileModule_Execute_WithTimeout
+
+## Remaining Issues (12 tests)
 
 ### 1. Copy Module (4 tests) - SSH Authentication
 
@@ -51,36 +85,7 @@ Fixed critical test failures in the modules package. Reduced failing tests from 
 - Skip SSH tests when credentials are not available
 - Use local file operations instead of SSH for localhost
 
-### 2. File Module (1 test) - Touch Operation
-
-**Error:** `error creating file: exit status 1`
-**Test:**
-
-- ❌ TestFileModuleTouchFile
-
-**Analysis:** The touch operation is failing. Need to investigate the file module's touch implementation.
-
-### 3. Lineinfile Module (8 tests) - File Operations
-
-**Error:** `file does not exist` or `exit status 2`
-**Tests:**
-
-- ❌ TestLineinfileModule_Execute_AddLine
-- ❌ TestLineinfileModule_Execute_LineExists
-- ❌ TestLineinfileModule_Execute_RemoveLine
-- ❌ TestLineinfileModule_Execute_WithRegexp
-- ❌ TestLineinfileModule_Execute_CreateFile
-- ❌ TestLineinfileModule_Execute_InsertAfter
-- ❌ TestLineinfileModule_Execute_InsertBefore
-- ❌ TestLineinfileModule_Execute_WithTimeout
-
-**Analysis:** Tests are failing because the module expects files to exist or cannot create them. Need to check:
-
-- File creation logic
-- Path handling
-- Permissions
-
-### 4. Service Module (8 tests) - Service Management
+### 2. Service Module (8 tests) - Service Management
 
 **Error:** `failed to start/stop/restart service: exit status 1`
 **Tests:**
@@ -112,15 +117,20 @@ Fixed critical test failures in the modules package. Reduced failing tests from 
 ### After Fixes
 
 - Total Tests: ~150
-- Failing: 21
-- Passing: ~129
-- Success Rate: ~86%
+- Failing: 12
+- Passing: ~138
+- Success Rate: ~92%
 
 ### Improvement
 
-- Fixed: 6 tests (stat module) + 1 test (shell module) = **7 tests fixed**
-- Remaining: 21 tests
-- Progress: **25% of failing tests fixed**
+- Fixed: **16 tests total**
+  - 6 tests (stat module)
+  - 1 test (shell module)
+  - 1 test (file module)
+  - 8 tests (lineinfile module)
+- Remaining: 12 tests
+- Progress: **59% of failing tests fixed**
+- Success rate improvement: **+10 percentage points** (82% → 92%)
 
 ## Technical Details
 
@@ -145,8 +155,10 @@ The `executor.Execute()` method already handles shell execution automatically wh
 
 ### Files Modified
 
-1. `internal/modules/stat.go` - Fixed getRemoteFileStat() method
-2. `internal/modules/command.go` - Fixed ShellModuleFixed.Execute() method
+1. `internal/modules/stat.go` - Fixed getRemoteFileStat() method (Commit: dcceb1e)
+2. `internal/modules/command.go` - Fixed ShellModuleFixed.Execute() method (Commit: dcceb1e)
+3. `internal/modules/file.go` - Fixed touchFile() method (Commit: 77e21bf)
+4. `internal/modules/lineinfile.go` - Fixed 4 helper methods (Commit: 77e21bf)
 
 ## Next Steps
 
@@ -156,19 +168,7 @@ The `executor.Execute()` method already handles shell execution automatically wh
 - Or skip SSH tests when authentication is not available
 - Or use local file operations for localhost tests
 
-### Priority 2: File Module Touch Test
-
-- Debug the touch operation
-- Check file creation permissions
-- Verify path handling
-
-### Priority 3: Lineinfile Module Tests
-
-- Ensure test files are created properly
-- Check file existence before operations
-- Verify create=yes parameter handling
-
-### Priority 4: Service Module Tests
+### Priority 2: Service Module Tests
 
 - Add service manager mocking
 - Or skip service tests in CI environment
@@ -183,14 +183,27 @@ The `executor.Execute()` method already handles shell execution automatically wh
 
 ## Conclusion
 
-Successfully fixed 7 critical tests related to command execution. The remaining 21 tests require either:
+Successfully fixed **16 critical tests** (59% of failures) related to command execution across 4 modules:
+
+- Stat module (6 tests)
+- Shell module (1 test)
+- File module (1 test)
+- Lineinfile module (8 tests)
+
+The remaining 12 tests require either:
 
 - Environment setup (SSH, services)
 - Mocking infrastructure
 - Test refactoring to work without external dependencies
 
-The fixes improve code quality and test reliability by removing the double shell nesting bug that was causing syntax errors and command execution failures.
+The fixes improve code quality and test reliability by removing the double shell nesting bug that was causing syntax errors and command execution failures across multiple modules.
+
+**Impact:**
+
+- Test success rate improved from 82% to 92% (+10 percentage points)
+- Fixed a critical bug affecting command execution in 4 different modules
+- Improved code maintainability by ensuring consistent use of executor.Execute()
 
 ---
 
-**Next Action:** Continue fixing remaining test failures, starting with Copy Module SSH authentication issues.
+**Next Action:** Address remaining Copy Module SSH authentication issues and Service Module test failures.
