@@ -377,7 +377,7 @@ Skip tasks based on conditions:
   package:
     name: docker.io
     state: present
-  when: "{{ ansible_facts.os_family == 'Debian' }}"
+  when: "{{ onigirazu_os_family == 'Debian' }}"
 ```
 
 ### Variables

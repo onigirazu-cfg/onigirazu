@@ -51,7 +51,7 @@ onigirazu -playbook play.yml -inventory file.yml -verbose
 all:
   hosts:
     server:
-      ansible_host: 172.16.246.128
+      onigirazu_host: 172.16.246.128
 ```
 
 **Стало (правильно):**
@@ -62,7 +62,7 @@ groups:
   all:
     hosts:
       server:
-        ansible_host: 172.16.246.128
+        onigirazu_host: 172.16.246.128
 ```
 
 ## Виправлені файли

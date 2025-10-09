@@ -12,7 +12,7 @@
 - name: Display system information
   module: debug
   args:
-    msg: "Testing on {{ ansible_distribution }}"
+    msg: "Testing on {{ onigirazu_distribution }}"
 ```
 
 ### ✅ Стало (правильно)
@@ -20,7 +20,7 @@
 ```yaml
 - name: Display system information
   debug:
-    msg: "Testing on {{ ansible_distribution }}"
+    msg: "Testing on {{ onigirazu_distribution }}"
 ```
 
 ## Виправлені модулі
@@ -104,7 +104,7 @@ groups:
   all:
     hosts:
       hostname:
-        ansible_host: IP
+        onigirazu_host: IP
 ```
 
 ### 3. CLI - одинарний дефіс, без subcommand

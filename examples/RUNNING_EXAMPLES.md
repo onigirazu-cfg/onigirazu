@@ -115,7 +115,7 @@ groups:
   remote_servers:
     hosts:
       cs_server:
-        ansible_host: cs-server  # использует SSH config
+        onigirazu_host: cs-server  # использует SSH config
 ```
 
 ## Отладка подключения
@@ -147,12 +147,18 @@ ssh-add ~/.ssh/id_rsa
 
 #### Проблемы с sudo
 
-Если нужны права sudo, добавьте в inventory:
+Если нужны права sudo, используйте параметр `become` в playbook:
 
 ```yaml
-ansible_become: true
-ansible_become_user: root
-ansible_become_method: sudo
+plays:
+  - name: "Task with sudo"
+    hosts: all
+    become: true
+    tasks:
+      - name: "Install package"
+        package:
+          name: nginx
+          state: present
 ```
 
 ## Примеры для разных сценариев

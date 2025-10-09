@@ -59,7 +59,7 @@
 ✅ **Test scenarios:**
 
 - Facts gathering
-- Variables (ansible_*)
+- Variables (onigirazu_*)
 - Register
 - Become/sudo
 - Templates (Jinja2)

@@ -71,7 +71,7 @@ ssh-copy-id usx@172.16.246.128
 ### Функціональність
 
 ✅ Facts gathering (збір системної інформації)
-✅ Variables (ansible_* змінні)
+✅ Variables (onigirazu_* змінні)
 ✅ Register (збереження результатів)
 ✅ Become/sudo (підвищені права)
 ✅ Templates (Jinja2 рендеринг)

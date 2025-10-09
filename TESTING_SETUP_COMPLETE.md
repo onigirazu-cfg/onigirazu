@@ -16,9 +16,9 @@
 all:
   hosts:
     ubuntu-test:
-      ansible_host: 172.16.246.128
-      ansible_user: usx
-      ansible_port: 22
+      onigirazu_host: 172.16.246.128
+      onigirazu_user: usx
+      onigirazu_port: 22
 ```
 
 ### 2. Тестовий Playbook
@@ -83,7 +83,7 @@ ssh usx@172.16.246.128 "echo 'usx ALL=(ALL) NOPASSWD:ALL' | sudo tee /etc/sudoer
 ### Функціональність
 
 - ✅ **Facts gathering** - збір системної інформації
-- ✅ **Variables** - використання ansible_* змінних
+- ✅ **Variables** - використання onigirazu_* змінних
 - ✅ **Register** - збереження результатів тасків
 - ✅ **Become (sudo)** - виконання з підвищеними правами
 - ✅ **Templates** - Jinja2 рендеринг
@@ -121,7 +121,7 @@ ssh usx@172.16.246.128 "echo 'usx ALL=(ALL) NOPASSWD:ALL' | sudo tee /etc/sudoer
 ### 5. Template Module
 
 - Рендеринг Jinja2 шаблонів
-- Використання фактів (ansible_*)
+- Використання фактів (onigirazu_*)
 - Створення конфігураційних файлів
 
 ### 6. Package Module (APT)
@@ -293,8 +293,8 @@ Log saved to: /tmp/onigirazu-test-output.log
 Відредагуйте `test-inventory-ubuntu.yml`:
 
 ```yaml
-ansible_host: 192.168.1.XXX  # Ваш IP
-ansible_user: your_user       # Ваш користувач
+onigirazu_host: 192.168.1.XXX  # Ваш IP
+onigirazu_user: your_user       # Ваш користувач
 ```
 
 ### Вимкнення певних тестів

@@ -232,7 +232,7 @@ groups:
   all:
     hosts:
       server:
-        ansible_host: 172.16.246.128
+        onigirazu_host: 172.16.246.128
 ```
 
 ### 3. CLI Commands

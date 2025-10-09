@@ -163,8 +163,8 @@ groups:
   all:
     hosts:
       server:
-        ansible_host: 172.16.246.128
-        ansible_user: usx
+        onigirazu_host: 172.16.246.128
+        onigirazu_user: usx
 ```
 
 ### CLI
