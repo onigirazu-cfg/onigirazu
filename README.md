@@ -658,6 +658,24 @@ Every commit is automatically tested with:
 - ✅ Code formatting (gofmt)
 - ✅ Coverage reporting
 
+## Documentation
+
+### User Documentation
+
+- **[Quick Start Guide](docs/quick-start.md)** - Get started in 5 minutes
+- **[Installation Guide](INSTALLATION.md)** - Detailed installation instructions
+- **[Examples](docs/examples/README.md)** - Real-world usage examples
+- **[API Documentation](docs/api/index.html)** - Complete API reference
+
+### Development Documentation
+
+All development-related documentation (optimization reports, release notes, implementation guides, etc.) is located in the **[onigirazu_docs](../onigirazu_docs/)** directory:
+
+- **[Development Documentation Index](../onigirazu_docs/README.md)** - Complete index of all development docs
+- **[Project Status](../onigirazu_docs/PROJECT_STATUS.md)** - Current project status
+- **[Optimization Analysis](../onigirazu_docs/OPTIMIZATION_AND_FEATURES_ANALYSIS.md)** - Performance optimization details
+- **[Release Guide](../onigirazu_docs/RELEASE_GUIDE.md)** - How to create releases
+
 ## Contributing
 
 1. Fork the repository
@@ -666,6 +684,8 @@ Every commit is automatically tested with:
 4. Add tests
 5. Run tests and linting
 6. Submit a pull request
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 
 ## License
 
