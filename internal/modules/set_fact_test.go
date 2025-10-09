@@ -42,10 +42,10 @@ func TestSetFactModule_Execute_SingleFact(t *testing.T) {
 		t.Errorf("Expected my_fact='my_value', got %v", result.Output["my_fact"])
 	}
 
-	if facts, ok := result.Output["ansible_facts"].(map[string]interface{}); !ok {
-		t.Errorf("Expected ansible_facts to be map, got %T", result.Output["ansible_facts"])
+	if facts, ok := result.Output["onigirazu_facts"].(map[string]interface{}); !ok {
+		t.Errorf("Expected onigirazu_facts to be map, got %T", result.Output["onigirazu_facts"])
 	} else if val, ok := facts["my_fact"].(string); !ok || val != "my_value" {
-		t.Errorf("Expected ansible_facts[my_fact]='my_value', got %v", facts["my_fact"])
+		t.Errorf("Expected onigirazu_facts[my_fact]='my_value', got %v", facts["my_fact"])
 	}
 }
 
@@ -99,12 +99,12 @@ func TestSetFactModule_Execute_MultipleFacts(t *testing.T) {
 		t.Errorf("Expected fact4 to be []string with 3 elements, got %v", result.Output["fact4"])
 	}
 
-	// Check ansible_facts
-	if facts, ok := result.Output["ansible_facts"].(map[string]interface{}); !ok {
-		t.Errorf("Expected ansible_facts to be map, got %T", result.Output["ansible_facts"])
+	// Check onigirazu_facts
+	if facts, ok := result.Output["onigirazu_facts"].(map[string]interface{}); !ok {
+		t.Errorf("Expected onigirazu_facts to be map, got %T", result.Output["onigirazu_facts"])
 	} else {
 		if len(facts) != 4 {
-			t.Errorf("Expected 4 facts in ansible_facts, got %d", len(facts))
+			t.Errorf("Expected 4 facts in onigirazu_facts, got %d", len(facts))
 		}
 	}
 }

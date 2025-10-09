@@ -156,7 +156,7 @@ func (e *CoreEngine) executePlaybook(playbook *types.Playbook, checkMode bool, c
 
 		// Execute play on each host
 		for _, host := range hosts {
-			playResult, err := e.executePlay(play, host, checkMode, currentState)
+			playResult, err := e.executePlay(&play, host, checkMode, currentState)
 			if err != nil {
 				e.logger.Error("Error executing play '%s' on host '%s': %v", play.Name, host.Name, err)
 				playbookErr = fmt.Errorf("play '%s' failed on host '%s': %w", play.Name, host.Name, err)
@@ -185,7 +185,7 @@ func (e *CoreEngine) executePlaybook(playbook *types.Playbook, checkMode bool, c
 }
 
 // executePlay executes play on specific host
-func (e *CoreEngine) executePlay(play types.Play, host types.Host, checkMode bool, currentState *types.State) (types.PlayResult, error) {
+func (e *CoreEngine) executePlay(play *types.Play, host types.Host, checkMode bool, currentState *types.State) (types.PlayResult, error) {
 	startTime := time.Now()
 	ctx := context.Background()
 
@@ -200,19 +200,24 @@ func (e *CoreEngine) executePlay(play types.Play, host types.Host, checkMode boo
 
 	// Trigger OnPlayStart callback
 	if e.callbackManager != nil {
-		if err := e.callbackManager.OnPlayStart(ctx, &play); err != nil {
+		if err := e.callbackManager.OnPlayStart(ctx, play); err != nil {
 			e.logger.Warn("Callback OnPlayStart failed: %v", err)
 		}
 	}
 
 	// Execute tasks
 	var playErr error
-	for _, task := range play.Tasks {
-		taskResult, err := e.executeTask(task, host, checkMode, currentState)
+	fmt.Printf("[DEBUG CORE] Play has %d tasks\n", len(play.Tasks))
+	for i := range play.Tasks {
+		fmt.Printf("[DEBUG CORE] Task %d in play.Tasks: '%s' with Become=%v, BecomeUser=%s, BecomeMethod=%s\n",
+			i, play.Tasks[i].Name, play.Tasks[i].Become, play.Tasks[i].BecomeUser, play.Tasks[i].BecomeMethod)
+		fmt.Printf("[DEBUG CORE] About to execute task '%s' with Become=%v, BecomeUser=%s, BecomeMethod=%s\n",
+			play.Tasks[i].Name, play.Tasks[i].Become, play.Tasks[i].BecomeUser, play.Tasks[i].BecomeMethod)
+		taskResult, err := e.executeTask(play.Tasks[i], host, checkMode, currentState)
 		if err != nil {
-			e.logger.Error("Task '%s' on host '%s' failed: %v", task.Name, host.Name, err)
+			e.logger.Error("Task '%s' on host '%s' failed: %v", play.Tasks[i].Name, host.Name, err)
 			result.Tasks = append(result.Tasks, taskResult)
-			if !task.IgnoreErrors {
+			if !play.Tasks[i].IgnoreErrors {
 				result.Success = false
 				result.EndTime = time.Now()
 				result.Duration = result.EndTime.Sub(result.StartTime)
@@ -220,7 +225,7 @@ func (e *CoreEngine) executePlay(play types.Play, host types.Host, checkMode boo
 
 				// Trigger OnPlayEnd callback
 				if e.callbackManager != nil {
-					if err := e.callbackManager.OnPlayEnd(ctx, &play, false, result.Duration); err != nil {
+					if err := e.callbackManager.OnPlayEnd(ctx, play, false, result.Duration); err != nil {
 						e.logger.Warn("Callback OnPlayEnd failed: %v", err)
 					}
 				}
@@ -234,16 +239,16 @@ func (e *CoreEngine) executePlay(play types.Play, host types.Host, checkMode boo
 				if taskResult.Changed {
 					changeStatus = " (changed)"
 				}
-				e.logger.Info("Task '%s' on host '%s': SUCCESS%s", task.Name, host.Name, changeStatus)
+				e.logger.Info("Task '%s' on host '%s': SUCCESS%s", play.Tasks[i].Name, host.Name, changeStatus)
 
 				// Print debug output if this is a debug module
-				if task.Module == "debug" {
+				if play.Tasks[i].Module == "debug" {
 					if msg, ok := taskResult.Output["msg"]; ok {
 						e.logger.Info("  %v", msg)
 					}
 				}
 			} else {
-				e.logger.Error("Task '%s' on host '%s' failed: %s", task.Name, host.Name, taskResult.Error)
+				e.logger.Error("Task '%s' on host '%s' failed: %s", play.Tasks[i].Name, host.Name, taskResult.Error)
 			}
 			result.Tasks = append(result.Tasks, taskResult)
 		}
@@ -258,7 +263,7 @@ func (e *CoreEngine) executePlay(play types.Play, host types.Host, checkMode boo
 
 	// Trigger OnPlayEnd callback
 	if e.callbackManager != nil {
-		if err := e.callbackManager.OnPlayEnd(ctx, &play, result.Success, result.Duration); err != nil {
+		if err := e.callbackManager.OnPlayEnd(ctx, play, result.Success, result.Duration); err != nil {
 			e.logger.Warn("Callback OnPlayEnd failed: %v", err)
 		}
 	}

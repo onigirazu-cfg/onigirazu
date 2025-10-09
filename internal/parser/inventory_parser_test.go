@@ -88,7 +88,7 @@ func TestInventoryParser_ParseInventoryFile_YAML(t *testing.T) {
 	inventoryContent := `all:
   hosts:
     host1:
-      ansible_host: 192.168.1.1
+      onigirazu_host: 192.168.1.1
 groups:
   webservers:
     hosts:
@@ -313,7 +313,7 @@ func TestInventoryParser_ParseYamlInventory_Valid(t *testing.T) {
 	yamlContent := `all:
   hosts:
     host1:
-      ansible_host: 192.168.1.1
+      onigirazu_host: 192.168.1.1
 groups:
   webservers:
     hosts:
@@ -557,7 +557,7 @@ func TestInventoryParser_AutoDetectAndParse_YAML(t *testing.T) {
 	yamlContent := `all:
   hosts:
     host1:
-      ansible_host: 192.168.1.1
+      onigirazu_host: 192.168.1.1
 `
 
 	inventory, err := parser.autoDetectAndParse([]byte(yamlContent), "test.yml")

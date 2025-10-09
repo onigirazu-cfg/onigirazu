@@ -19,20 +19,20 @@ plays:
         package:
           name: "nginx"
           state: "present"
-        when: "ansible_os_family != 'Darwin'"
+        when: "onigirazu_os_family != 'Darwin'"
 
       - name: "Install SSL tools"
         package:
           name: ["openssl", "certbot"]
           state: "present"
-        when: "ansible_os_family != 'Darwin'"
+        when: "onigirazu_os_family != 'Darwin'"
 
       # macOS alternative
       - name: "Install Nginx on macOS"
         command:
           cmd: "brew"
           args: ["install", "nginx"]
-        when: "ansible_os_family == 'Darwin'"
+        when: "onigirazu_os_family == 'Darwin'"
         ignore_errors: true
 
       # Create application directory
@@ -69,9 +69,9 @@ plays:
                     <div class="content">
                         <h2>Deployment Successful!</h2>
                         <p>This web application was deployed using Onigirazu.</p>
-                        <p>Server: {{ ansible_hostname }}</p>
-                        <p>OS: {{ ansible_os_family }}</p>
-                        <p>Deployed at: {{ ansible_date_time.iso8601 }}</p>
+                        <p>Server: {{ onigirazu_hostname }}</p>
+                        <p>OS: {{ onigirazu_os_family }}</p>
+                        <p>Deployed at: {{ onigirazu_date_time.iso8601 }}</p>
                     </div>
                 </div>
             </body>
@@ -127,7 +127,7 @@ plays:
                 error_log /var/log/nginx/{{ app_name }}_error.log;
             }
           mode: "0644"
-        when: "ansible_os_family != 'Darwin'"
+        when: "onigirazu_os_family != 'Darwin'"
 
       # Enable site
       - name: "Enable Nginx site"
@@ -135,21 +135,21 @@ plays:
           src: "{{ nginx_conf_dir }}/sites-available/{{ app_name }}"
           dest: "{{ nginx_conf_dir }}/sites-enabled/{{ app_name }}"
           state: "link"
-        when: "ansible_os_family != 'Darwin'"
+        when: "onigirazu_os_family != 'Darwin'"
 
       # Remove default site
       - name: "Remove default Nginx site"
         file:
           path: "{{ nginx_conf_dir }}/sites-enabled/default"
           state: "absent"
-        when: "ansible_os_family != 'Darwin'"
+        when: "onigirazu_os_family != 'Darwin'"
 
       # Test Nginx configuration
       - name: "Test Nginx configuration"
         command:
           cmd: "nginx"
           args: ["-t"]
-        when: "ansible_os_family != 'Darwin'"
+        when: "onigirazu_os_family != 'Darwin'"
 
       # Start and enable Nginx
       - name: "Start and enable Nginx"
@@ -157,21 +157,21 @@ plays:
           name: "nginx"
           state: "started"
           enabled: true
-        when: "ansible_os_family != 'Darwin'"
+        when: "onigirazu_os_family != 'Darwin'"
 
       # Firewall configuration
       - name: "Allow HTTP traffic"
         command:
           cmd: "ufw"
           args: ["allow", "80/tcp"]
-        when: "ansible_os_family != 'Darwin'"
+        when: "onigirazu_os_family != 'Darwin'"
         ignore_errors: true
 
       - name: "Allow HTTPS traffic"
         command:
           cmd: "ufw"
           args: ["allow", "443/tcp"]
-        when: "ansible_os_family != 'Darwin'"
+        when: "onigirazu_os_family != 'Darwin'"
         ignore_errors: true
 
       # SSL certificate (self-signed for demo)
@@ -186,7 +186,7 @@ plays:
             "-subj", "/C=US/ST=State/L=City/O=Organization/CN={{ domain_name }}"
           ]
           creates: "{{ ssl_cert_dir }}/{{ app_name }}.crt"
-        when: "ansible_os_family != 'Darwin'"
+        when: "onigirazu_os_family != 'Darwin'"
 
       # Health check
       - name: "Wait for Nginx to start"

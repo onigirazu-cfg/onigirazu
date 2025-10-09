@@ -24,8 +24,7 @@ func NewRegistry() *Registry {
 	registry.RegisterModule(NewFetchModule())
 	registry.RegisterModule(NewGetURLModule())
 	registry.RegisterModule(NewServiceModule())
-	registry.RegisterModule(NewPackageModule())
-	registry.RegisterModule(NewEnhancedPackageModule()) // Enhanced package module
+	registry.RegisterModule(NewUnifiedPackageModule()) // Unified package module with all features
 	registry.RegisterModule(NewCommandModule())
 	registry.RegisterModule(NewShellModule())
 	registry.RegisterModule(NewUserModule())
@@ -39,6 +38,7 @@ func NewRegistry() *Registry {
 	registry.RegisterModule(NewSystemdModule())
 	registry.RegisterModule(NewCronModule())
 	registry.RegisterModule(NewFirewallModule())
+	registry.RegisterModule(NewConfigModule())
 
 	return registry
 }
@@ -104,6 +104,12 @@ func (r *Registry) Unregister(name string) error {
 
 // ExecuteTask executes task using appropriate module
 func (r *Registry) ExecuteTask(ctx context.Context, task *types.Task, host types.Host, variables map[string]interface{}) (types.TaskResult, error) {
+	// Debug: log host configuration
+	fmt.Printf("[DEBUG] ExecuteTask for '%s': Host=%s, Address=%s, User=%s, Port=%d, KeyFile=%s\n",
+		task.Name, host.Name, host.Address, host.User, host.Port, host.KeyFile)
+	fmt.Printf("[DEBUG] ExecuteTask received task with Become=%v, BecomeUser=%s, BecomeMethod=%s\n",
+		task.Become, task.BecomeUser, task.BecomeMethod)
+
 	module, err := r.GetModule(task.Module)
 	if err != nil {
 		return types.TaskResult{}, err
@@ -127,6 +133,17 @@ func (r *Registry) ExecuteTask(ctx context.Context, task *types.Task, host types
 		if _, exists := args[key]; !exists {
 			args[key] = value
 		}
+	}
+
+	// Add become parameters to args (with special prefix to avoid conflicts)
+	if task.Become {
+		args["_become"] = true
+		args["_become_user"] = task.BecomeUser
+		args["_become_method"] = task.BecomeMethod
+		fmt.Printf("[DEBUG REGISTRY] Task '%s' has become=true, user=%s, method=%s\n",
+			task.Name, task.BecomeUser, task.BecomeMethod)
+	} else {
+		fmt.Printf("[DEBUG REGISTRY] Task '%s' has become=false\n", task.Name)
 	}
 
 	return module.Execute(ctx, host, args)

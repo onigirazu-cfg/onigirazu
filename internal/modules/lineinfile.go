@@ -1,20 +1,20 @@
 package modules
 
 import (
-	"bufio"
 	"context"
 	"fmt"
-	"os"
 	"regexp"
 	"strings"
 	"time"
 
+	"github.com/onigirazu-cfg/onigirazu/internal/executor"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
 // LineinfileModule manages lines in files
 type LineinfileModule struct {
 	*BaseModule
+	executor *executor.CommandExecutor
 }
 
 func NewLineinfileModule() *LineinfileModule {
@@ -41,6 +41,16 @@ func (m *LineinfileModule) Execute(ctx context.Context, host types.Host, args ma
 	if err := m.Validate(args); err != nil {
 		result.Success = false
 		result.Error = err.Error()
+		result.Duration = time.Since(startTime)
+		return result, err
+	}
+
+	// Initialize executor for remote execution
+	var err error
+	m.executor, err = executor.NewCommandExecutor(host)
+	if err != nil {
+		result.Success = false
+		result.Error = fmt.Sprintf("failed to create executor: %v", err)
 		result.Duration = time.Since(startTime)
 		return result, err
 	}
@@ -87,22 +97,26 @@ func (m *LineinfileModule) Execute(ctx context.Context, host types.Host, args ma
 		}
 	}
 
-	// Check if file exists
-	fileExists := true
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		fileExists = false
-		if !create {
-			result.Success = false
-			result.Error = fmt.Sprintf("file %s does not exist and create=false", path)
-			result.Duration = time.Since(startTime)
-			return result, fmt.Errorf("file does not exist")
-		}
+	// Check if file exists on remote host
+	fileExists, err := m.checkFileExists(path)
+	if err != nil {
+		result.Success = false
+		result.Error = fmt.Sprintf("failed to check file existence: %v", err)
+		result.Duration = time.Since(startTime)
+		return result, err
+	}
+
+	if !fileExists && !create {
+		result.Success = false
+		result.Error = fmt.Sprintf("file %s does not exist and create=false", path)
+		result.Duration = time.Since(startTime)
+		return result, fmt.Errorf("file does not exist")
 	}
 
 	// Backup if requested
 	if backup && fileExists {
 		backupPath := fmt.Sprintf("%s.%d.backup", path, time.Now().Unix())
-		if err := m.copyFile(path, backupPath); err != nil {
+		if err := m.copyFileRemote(path, backupPath); err != nil {
 			result.Success = false
 			result.Error = fmt.Sprintf("failed to create backup: %v", err)
 			result.Duration = time.Since(startTime)
@@ -113,23 +127,11 @@ func (m *LineinfileModule) Execute(ctx context.Context, host types.Host, args ma
 		}
 	}
 
-	// Read existing lines
+	// Read existing lines from remote file
 	var lines []string
 	if fileExists {
-		file, err := os.Open(path) // #nosec G304 -- path is validated by security validator
+		lines, err = m.readRemoteFile(path)
 		if err != nil {
-			result.Success = false
-			result.Error = fmt.Sprintf("failed to open file: %v", err)
-			result.Duration = time.Since(startTime)
-			return result, err
-		}
-		defer file.Close()
-
-		scanner := bufio.NewScanner(file)
-		for scanner.Scan() {
-			lines = append(lines, scanner.Text())
-		}
-		if err := scanner.Err(); err != nil {
 			result.Success = false
 			result.Error = fmt.Sprintf("failed to read file: %v", err)
 			result.Duration = time.Since(startTime)
@@ -151,7 +153,7 @@ func (m *LineinfileModule) Execute(ctx context.Context, host types.Host, args ma
 
 	// Write back if changed
 	if changed {
-		if err := m.writeLines(path, newLines); err != nil {
+		if err := m.writeRemoteFile(path, newLines); err != nil {
 			result.Success = false
 			result.Error = fmt.Sprintf("failed to write file: %v", err)
 			result.Duration = time.Since(startTime)
@@ -301,42 +303,65 @@ func (m *LineinfileModule) ensureLine(lines []string, line string, pattern *rege
 	return newLines, true
 }
 
-// copyFile creates a backup copy of a file
-func (m *LineinfileModule) copyFile(src, dst string) error {
-	input, err := os.ReadFile(src) // #nosec G304 -- src is validated by security validator
+// checkFileExists checks if a file exists on the remote host
+func (m *LineinfileModule) checkFileExists(path string) (bool, error) {
+	escapedPath := strings.ReplaceAll(path, "'", "'\\''")
+	cmd := fmt.Sprintf("test -e '%s' && echo exists || echo notexists", escapedPath)
+
+	output, err := m.executor.Execute("sh", "-c", cmd)
 	if err != nil {
-		return err
+		return false, err
 	}
-	return os.WriteFile(dst, input, 0600)
+
+	return strings.TrimSpace(output) == "exists", nil
 }
 
-// writeLines writes lines to a file
-func (m *LineinfileModule) writeLines(path string, lines []string) error {
-	file, err := os.Create(path) // #nosec G304 -- path is validated by security validator
+// readRemoteFile reads a file from the remote host and returns lines
+func (m *LineinfileModule) readRemoteFile(path string) ([]string, error) {
+	escapedPath := strings.ReplaceAll(path, "'", "'\\''")
+	cmd := fmt.Sprintf("cat '%s'", escapedPath)
+
+	output, err := m.executor.Execute("sh", "-c", cmd)
 	if err != nil {
-		return err
-	}
-	defer func() {
-		// Best-effort cleanup in case of panic
-		_ = file.Close()
-	}()
-
-	writer := bufio.NewWriter(file)
-	for _, line := range lines {
-		if _, err := writer.WriteString(line + "\n"); err != nil {
-			return err
-		}
+		return nil, err
 	}
 
-	if err := writer.Flush(); err != nil {
-		return err
+	// Split output into lines
+	lines := strings.Split(output, "\n")
+	// Remove the last empty line if present (cat adds trailing newline)
+	if len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
 	}
 
-	// Ensure data is flushed to disk before closing
-	if err := file.Sync(); err != nil {
-		return err
+	return lines, nil
+}
+
+// writeRemoteFile writes lines to a file on the remote host
+func (m *LineinfileModule) writeRemoteFile(path string, lines []string) error {
+	escapedPath := strings.ReplaceAll(path, "'", "'\\''")
+
+	// Join lines with newline
+	content := strings.Join(lines, "\n")
+	if len(lines) > 0 {
+		content += "\n" // Add trailing newline
 	}
 
-	// Explicitly close and handle any errors
-	return file.Close()
+	// Escape content for shell
+	escapedContent := strings.ReplaceAll(content, "'", "'\\''")
+
+	// Write content to file using printf
+	cmd := fmt.Sprintf("printf '%%s' '%s' > '%s'", escapedContent, escapedPath)
+
+	_, err := m.executor.Execute("sh", "-c", cmd)
+	return err
+}
+
+// copyFileRemote creates a backup copy of a file on the remote host
+func (m *LineinfileModule) copyFileRemote(src, dst string) error {
+	escapedSrc := strings.ReplaceAll(src, "'", "'\\''")
+	escapedDst := strings.ReplaceAll(dst, "'", "'\\''")
+	cmd := fmt.Sprintf("cp '%s' '%s'", escapedSrc, escapedDst)
+
+	_, err := m.executor.Execute("sh", "-c", cmd)
+	return err
 }

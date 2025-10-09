@@ -28,7 +28,7 @@ plays:
         package:
           name: ["fail2ban", "ufw"]
           state: "present"
-        when: "ansible_os_family != 'Darwin'"
+        when: "onigirazu_os_family != 'Darwin'"
 
       # User and group management
       - name: "Create application group"
@@ -115,7 +115,7 @@ plays:
             [Install]
             WantedBy=multi-user.target
           mode: "0644"
-        when: "ansible_os_family != 'Darwin'"
+        when: "onigirazu_os_family != 'Darwin'"
 
       # Log rotation
       - name: "Configure log rotation"
@@ -135,14 +135,14 @@ plays:
                 endscript
             }
           mode: "0644"
-        when: "ansible_os_family != 'Darwin'"
+        when: "onigirazu_os_family != 'Darwin'"
 
       # Firewall configuration
       - name: "Configure firewall"
         command:
           cmd: "ufw"
           args: ["allow", "8080/tcp"]
-        when: "ansible_os_family != 'Darwin'"
+        when: "onigirazu_os_family != 'Darwin'"
         ignore_errors: true
 
       # Service management
@@ -150,14 +150,14 @@ plays:
         command:
           cmd: "systemctl"
           args: ["daemon-reload"]
-        when: "ansible_os_family != 'Darwin'"
+        when: "onigirazu_os_family != 'Darwin'"
 
       - name: "Enable and start webapp service"
         service:
           name: "webapp"
           state: "started"
           enabled: true
-        when: "ansible_os_family != 'Darwin'"
+        when: "onigirazu_os_family != 'Darwin'"
         ignore_errors: true
 
       # Health check

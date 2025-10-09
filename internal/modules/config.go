@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -12,12 +11,14 @@ import (
 
 	"gopkg.in/yaml.v2"
 
+	"github.com/onigirazu-cfg/onigirazu/internal/executor"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
 // ConfigModule implements configuration file management
 type ConfigModule struct {
 	BaseModule
+	executor *executor.CommandExecutor
 }
 
 // NewConfigModule creates a new config module
@@ -67,6 +68,13 @@ func (m *ConfigModule) Execute(ctx context.Context, host types.Host, args map[st
 		Timestamp: startTime,
 	}
 
+	// Initialize executor
+	var err error
+	m.executor, err = executor.NewCommandExecutor(host)
+	if err != nil {
+		return m.failResult(result, fmt.Sprintf("failed to create executor: %v", err))
+	}
+
 	// Get required parameters
 	path, ok := args["path"].(string)
 	if !ok {
@@ -113,7 +121,7 @@ func (m *ConfigModule) executeSet(ctx context.Context, result types.TaskResult, 
 
 	// Load existing config or create new
 	config := make(map[string]interface{})
-	if _, err := os.Stat(path); err == nil {
+	if m.checkFileExists(path) {
 		existingConfig, err := m.loadConfig(path, format)
 		if err != nil {
 			return m.failResult(result, fmt.Sprintf("failed to load existing config: %v", err))
@@ -121,10 +129,21 @@ func (m *ConfigModule) executeSet(ctx context.Context, result types.TaskResult, 
 		config = existingConfig
 	}
 
-	// Apply new values
-	values, ok := args["values"].(map[string]interface{})
-	if !ok {
-		return m.failResult(result, "values parameter is required for set action")
+	// Apply new values - support both "values" map and "key"+"value" pair
+	var values map[string]interface{}
+
+	if valuesMap, ok := args["values"].(map[string]interface{}); ok {
+		// Use values map directly
+		values = valuesMap
+	} else if key, keyOk := args["key"].(string); keyOk {
+		// Use key+value pair
+		if value, valueOk := args["value"]; valueOk {
+			values = map[string]interface{}{key: value}
+		} else {
+			return m.failResult(result, "value parameter is required when using key parameter")
+		}
+	} else {
+		return m.failResult(result, "either 'values' map or 'key'+'value' parameters are required for set action")
 	}
 
 	originalConfig := m.deepCopy(config)
@@ -211,7 +230,7 @@ func (m *ConfigModule) executeDelete(ctx context.Context, result types.TaskResul
 			result.Output["backup_created"] = true
 		}
 
-		if err := os.Remove(path); err != nil {
+		if err := m.removeRemoteFile(path); err != nil {
 			return m.failResult(result, fmt.Sprintf("failed to delete file: %v", err))
 		}
 		result.Changed = true
@@ -273,12 +292,12 @@ func (m *ConfigModule) executeRestore(ctx context.Context, result types.TaskResu
 	}
 
 	// Copy backup to original location
-	data, err := os.ReadFile(backupPath) // #nosec G304 -- backupPath is validated by security validator
+	data, err := m.readRemoteFile(backupPath)
 	if err != nil {
 		return m.failResult(result, fmt.Sprintf("failed to read backup: %v", err))
 	}
 
-	if err := os.WriteFile(path, data, 0600); err != nil {
+	if err := m.writeRemoteFile(path, data); err != nil {
 		return m.failResult(result, fmt.Sprintf("failed to restore config: %v", err))
 	}
 
@@ -339,7 +358,7 @@ func (m *ConfigModule) Validate(args map[string]interface{}) error {
 
 // loadConfig loads configuration from file
 func (m *ConfigModule) loadConfig(path string, format ConfigFormat) (map[string]interface{}, error) {
-	data, err := os.ReadFile(path) // #nosec G304 -- path is validated by security validator
+	data, err := m.readRemoteFile(path)
 	if err != nil {
 		return nil, err
 	}
@@ -348,9 +367,9 @@ func (m *ConfigModule) loadConfig(path string, format ConfigFormat) (map[string]
 
 	switch format {
 	case FormatJSON:
-		err = json.Unmarshal(data, &config)
+		err = json.Unmarshal([]byte(data), &config)
 	case FormatYAML:
-		err = yaml.Unmarshal(data, &config)
+		err = yaml.Unmarshal([]byte(data), &config)
 	default:
 		return nil, fmt.Errorf("unsupported format: %s", format)
 	}
@@ -360,12 +379,6 @@ func (m *ConfigModule) loadConfig(path string, format ConfigFormat) (map[string]
 
 // saveConfig saves configuration to file
 func (m *ConfigModule) saveConfig(path string, format ConfigFormat, config map[string]interface{}) error {
-	// Ensure directory exists
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0750); err != nil {
-		return err
-	}
-
 	var data []byte
 	var err error
 
@@ -382,25 +395,77 @@ func (m *ConfigModule) saveConfig(path string, format ConfigFormat, config map[s
 		return err
 	}
 
-	return os.WriteFile(path, data, 0600)
+	return m.writeRemoteFile(path, string(data))
 }
 
 // createBackup creates a backup of the file
 func (m *ConfigModule) createBackup(path string) (string, error) {
-	if _, err := os.Stat(path); os.IsNotExist(err) {
+	if !m.checkFileExists(path) {
 		return "", nil // No file to backup
 	}
 
 	timestamp := time.Now().Format("20060102_150405")
 	backupPath := fmt.Sprintf("%s.backup.%s", path, timestamp)
 
-	data, err := os.ReadFile(path) // #nosec G304 -- path is validated by security validator
+	data, err := m.readRemoteFile(path)
 	if err != nil {
 		return "", err
 	}
 
-	err = os.WriteFile(backupPath, data, 0600)
+	err = m.writeRemoteFile(backupPath, data)
 	return backupPath, err
+}
+
+// Helper methods for remote file operations
+
+// checkFileExists checks if a file exists on the remote host
+func (m *ConfigModule) checkFileExists(path string) bool {
+	escapedPath := strings.ReplaceAll(path, "'", "'\\''")
+	cmd := fmt.Sprintf(`test -e '%s' && echo exists || echo notexists`, escapedPath)
+	output, err := m.executor.Execute(cmd)
+	return err == nil && strings.TrimSpace(output) == "exists"
+}
+
+// readRemoteFile reads a file from the remote host
+func (m *ConfigModule) readRemoteFile(path string) (string, error) {
+	escapedPath := strings.ReplaceAll(path, "'", "'\\''")
+	cmd := fmt.Sprintf(`cat '%s'`, escapedPath)
+	output, err := m.executor.Execute(cmd)
+	if err != nil {
+		return "", fmt.Errorf("failed to read file: %v", err)
+	}
+	return output, nil
+}
+
+// writeRemoteFile writes content to a file on the remote host
+func (m *ConfigModule) writeRemoteFile(path string, content string) error {
+	escapedPath := strings.ReplaceAll(path, "'", "'\\''")
+	escapedContent := strings.ReplaceAll(content, "'", "'\\''")
+
+	// Create directory if needed
+	dir := filepath.Dir(path)
+	escapedDir := strings.ReplaceAll(dir, "'", "'\\''")
+	mkdirCmd := fmt.Sprintf(`mkdir -p '%s'`, escapedDir)
+	if _, err := m.executor.Execute(mkdirCmd); err != nil {
+		return fmt.Errorf("failed to create directory: %v", err)
+	}
+
+	// Write file
+	cmd := fmt.Sprintf(`printf '%%s' '%s' > '%s'`, escapedContent, escapedPath)
+	if _, err := m.executor.Execute(cmd); err != nil {
+		return fmt.Errorf("failed to write file: %v", err)
+	}
+	return nil
+}
+
+// removeRemoteFile removes a file from the remote host
+func (m *ConfigModule) removeRemoteFile(path string) error {
+	escapedPath := strings.ReplaceAll(path, "'", "'\\''")
+	cmd := fmt.Sprintf(`rm -f '%s'`, escapedPath)
+	if _, err := m.executor.Execute(cmd); err != nil {
+		return fmt.Errorf("failed to remove file: %v", err)
+	}
+	return nil
 }
 
 // mergeConfig merges source into target

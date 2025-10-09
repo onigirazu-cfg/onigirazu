@@ -52,6 +52,16 @@ func (m *UserModuleFixed) Execute(ctx context.Context, host types.Host, args map
 		m.executor = exec
 	}
 
+	// Configure become (privilege escalation) - always reset to ensure correct state
+	if become, ok := args["_become"].(bool); ok && become {
+		becomeUser, _ := args["_become_user"].(string)
+		becomeMethod, _ := args["_become_method"].(string)
+		m.executor.SetBecome(true, becomeUser, becomeMethod)
+	} else {
+		// Reset become if not requested
+		m.executor.SetBecome(false, "", "")
+	}
+
 	// Validate arguments
 	if err := m.Validate(args); err != nil {
 		result.Success = false

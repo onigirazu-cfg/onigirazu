@@ -24,6 +24,11 @@ type SystemFacts struct {
 	FQDN        string `json:"fqdn"`
 	DefaultIPv4 string `json:"default_ipv4"`
 
+	// User and Environment
+	Username string `json:"username"`
+	HomeDir  string `json:"home_dir"`
+	Path     string `json:"path"`
+
 	// Timestamps
 	CachedAt  time.Time `json:"cached_at"`
 	ExpiresAt time.Time `json:"expires_at"`

@@ -12,14 +12,14 @@ plays:
           name: "ssh"
           state: "started"
           enabled: true
-        when: "ansible_os_family != 'Darwin'"
+        when: "onigirazu_os_family != 'Darwin'"
 
       # macOS service management
       - name: "Start macOS service"
         service:
           name: "com.apple.ssh"
           state: "started"
-        when: "ansible_os_family == 'Darwin'"
+        when: "onigirazu_os_family == 'Darwin'"
 
       # Stop service
       - name: "Stop unnecessary service"
@@ -33,7 +33,7 @@ plays:
         service:
           name: "networking"
           state: "restarted"
-        when: "ansible_os_family == 'Debian'"
+        when: "onigirazu_os_family == 'Debian'"
 
       # Reload service configuration
       - name: "Reload service configuration"
@@ -55,4 +55,4 @@ plays:
           cmd: "systemctl is-active ssh"
         register: service_status
         ignore_errors: true
-        when: "ansible_os_family != 'Darwin'"
+        when: "onigirazu_os_family != 'Darwin'"

@@ -3,15 +3,18 @@ package modules
 import (
 	"context"
 	"fmt"
-	"os"
+	"strconv"
+	"strings"
 	"time"
 
+	"github.com/onigirazu-cfg/onigirazu/internal/executor"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
 // StatModule retrieves file or directory status
 type StatModule struct {
 	*BaseModule
+	executor *executor.CommandExecutor
 }
 
 func NewStatModule() *StatModule {
@@ -42,19 +45,34 @@ func (m *StatModule) Execute(ctx context.Context, host types.Host, args map[stri
 		return result, err
 	}
 
+	// Initialize executor if not already done
+	if m.executor == nil {
+		exec, err := executor.NewCommandExecutor(host)
+		if err != nil {
+			result.Success = false
+			result.Error = fmt.Sprintf("failed to create executor: %v", err)
+			result.Duration = time.Since(startTime)
+			return result, err
+		}
+		m.executor = exec
+	}
+
 	path := args["path"].(string)
 
-	// Get file info
-	fileInfo, err := os.Stat(path)
-
-	// Prepare stat output
-	statOutput := make(map[string]interface{})
+	// Get file info using remote stat command
+	statOutput, err := m.getRemoteFileStat(path)
 
 	if err != nil {
-		if os.IsNotExist(err) {
+		// Check if file doesn't exist
+		if strings.Contains(err.Error(), "No such file") || strings.Contains(err.Error(), "cannot stat") {
 			// File doesn't exist
+			statOutput = make(map[string]interface{})
 			statOutput["exists"] = false
 			statOutput["path"] = path
+			statOutput["stat"] = map[string]interface{}{
+				"exists": false,
+				"path":   path,
+			}
 			result.Success = true
 			result.Changed = false
 			result.Output = statOutput
@@ -68,45 +86,95 @@ func (m *StatModule) Execute(ctx context.Context, host types.Host, args map[stri
 		return result, err
 	}
 
-	// File exists - populate all information
-	statOutput["exists"] = true
-	statOutput["path"] = path
-	statOutput["isdir"] = fileInfo.IsDir()
-	statOutput["isreg"] = fileInfo.Mode().IsRegular()
-	statOutput["islnk"] = fileInfo.Mode()&os.ModeSymlink != 0
-	statOutput["size"] = fileInfo.Size()
-	statOutput["mode"] = fmt.Sprintf("%04o", fileInfo.Mode().Perm())
-	statOutput["mtime"] = fileInfo.ModTime().Unix()
-	statOutput["atime"] = fileInfo.ModTime().Unix() // Go doesn't provide atime easily
-	statOutput["ctime"] = fileInfo.ModTime().Unix() // Go doesn't provide ctime easily
-
-	// Readable/writable/executable checks (simplified)
-	mode := fileInfo.Mode()
-	statOutput["readable"] = mode&0400 != 0
-	statOutput["writable"] = mode&0200 != 0
-	statOutput["executable"] = mode&0100 != 0
-
-	// For Ansible compatibility
-	statOutput["stat"] = map[string]interface{}{
-		"exists":     true,
-		"path":       path,
-		"isdir":      fileInfo.IsDir(),
-		"isreg":      fileInfo.Mode().IsRegular(),
-		"islnk":      fileInfo.Mode()&os.ModeSymlink != 0,
-		"size":       fileInfo.Size(),
-		"mode":       fmt.Sprintf("%04o", fileInfo.Mode().Perm()),
-		"mtime":      fileInfo.ModTime().Unix(),
-		"readable":   mode&0400 != 0,
-		"writable":   mode&0200 != 0,
-		"executable": mode&0100 != 0,
-	}
-
 	result.Success = true
 	result.Changed = false // stat never changes anything
 	result.Output = statOutput
 	result.Duration = time.Since(startTime)
 
 	return result, nil
+}
+
+// getRemoteFileStat retrieves file information from remote host using stat command
+func (m *StatModule) getRemoteFileStat(path string) (map[string]interface{}, error) {
+	// Use stat command with JSON-like output format
+	// Format: exists|type|size|mode|mtime
+	// Build command with proper escaping - escape pipes in echo to avoid shell interpretation
+	cmd := fmt.Sprintf(`if [ -e '%s' ]; then if [ -d '%s' ]; then TYPE=directory; elif [ -L '%s' ]; then TYPE=link; elif [ -f '%s' ]; then TYPE=file; else TYPE=other; fi; SIZE=$(stat -c %%s '%s' 2>/dev/null || stat -f %%z '%s' 2>/dev/null); MODE=$(stat -c %%a '%s' 2>/dev/null || stat -f %%A '%s' 2>/dev/null); MTIME=$(stat -c %%Y '%s' 2>/dev/null || stat -f %%m '%s' 2>/dev/null); echo exists=true\|type=$TYPE\|size=$SIZE\|mode=$MODE\|mtime=$MTIME; else echo exists=false; fi`,
+		path, path, path, path, path, path, path, path, path, path)
+
+	output, err := m.executor.Execute("sh", "-c", cmd)
+	if err != nil {
+		return nil, fmt.Errorf("stat command failed: %v, output: %s", err, output)
+	}
+
+	output = strings.TrimSpace(output)
+	statOutput := make(map[string]interface{})
+
+	// Parse output
+	if strings.HasPrefix(output, "exists=false") {
+		return nil, fmt.Errorf("No such file or directory")
+	}
+
+	// Parse key=value pairs
+	pairs := strings.Split(output, "|")
+	data := make(map[string]string)
+	for _, pair := range pairs {
+		kv := strings.SplitN(pair, "=", 2)
+		if len(kv) == 2 {
+			data[kv[0]] = kv[1]
+		}
+	}
+
+	// Build output structure
+	exists := data["exists"] == "true"
+	statOutput["exists"] = exists
+	statOutput["path"] = path
+
+	if exists {
+		fileType := data["type"]
+		statOutput["isdir"] = fileType == "directory"
+		statOutput["isreg"] = fileType == "file"
+		statOutput["islnk"] = fileType == "link"
+
+		if size, err := strconv.ParseInt(data["size"], 10, 64); err == nil {
+			statOutput["size"] = size
+		} else {
+			statOutput["size"] = 0
+		}
+
+		mode := data["mode"]
+		statOutput["mode"] = mode
+
+		if mtime, err := strconv.ParseInt(data["mtime"], 10, 64); err == nil {
+			statOutput["mtime"] = mtime
+			statOutput["atime"] = mtime // Simplified
+			statOutput["ctime"] = mtime // Simplified
+		}
+
+		// Parse mode for permissions
+		if modeInt, err := strconv.ParseInt(mode, 8, 32); err == nil {
+			statOutput["readable"] = (modeInt & 0400) != 0
+			statOutput["writable"] = (modeInt & 0200) != 0
+			statOutput["executable"] = (modeInt & 0100) != 0
+		}
+
+		// For Ansible compatibility
+		statOutput["stat"] = map[string]interface{}{
+			"exists":     exists,
+			"path":       path,
+			"isdir":      statOutput["isdir"],
+			"isreg":      statOutput["isreg"],
+			"islnk":      statOutput["islnk"],
+			"size":       statOutput["size"],
+			"mode":       mode,
+			"mtime":      statOutput["mtime"],
+			"readable":   statOutput["readable"],
+			"writable":   statOutput["writable"],
+			"executable": statOutput["executable"],
+		}
+	}
+
+	return statOutput, nil
 }
 
 func (m *StatModule) Validate(args map[string]interface{}) error {

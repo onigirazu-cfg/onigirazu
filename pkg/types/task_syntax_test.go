@@ -57,14 +57,14 @@ mode: "0755"
 recurse: true
 owner: "root"
 group: "root"
-when: "ansible_os_family == 'RedHat'"
+when: "onigirazu_os_family == 'RedHat'"
 tags:
   - "filesystem"
   - "setup"`,
 			expected: Task{
 				Name:   "File operations",
 				Module: "file",
-				When:   "ansible_os_family == 'RedHat'",
+				When:   "onigirazu_os_family == 'RedHat'",
 				Tags:   []string{"filesystem", "setup"},
 				Args: map[string]interface{}{
 					"path":    "/tmp/test",
@@ -380,7 +380,7 @@ file:
   state: "directory"
   mode: "0755"
   owner: "root"
-when: "ansible_os_family == 'Debian'"`,
+when: "onigirazu_os_family == 'Debian'"`,
 			expected: Task{
 				Name:   "Create directory",
 				Module: "file",
@@ -390,7 +390,7 @@ when: "ansible_os_family == 'Debian'"`,
 					"mode":  "0755",
 					"owner": "root",
 				},
-				When: "ansible_os_family == 'Debian'",
+				When: "onigirazu_os_family == 'Debian'",
 			},
 		},
 		{

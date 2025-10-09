@@ -446,7 +446,7 @@ func TestTemplateModule_Execute_WithHostVars(t *testing.T) {
 	templatePath := filepath.Join(tmpDir, "template.j2")
 	outputPath := filepath.Join(tmpDir, "output.txt")
 
-	templateContent := "Host: {{ ansible_hostname }}, Port: {{ ansible_port }}"
+	templateContent := "Host: {{ onigirazu_hostname }}, Port: {{ onigirazu_port }}"
 	if err := os.WriteFile(templatePath, []byte(templateContent), 0644); err != nil {
 		t.Fatalf("Failed to create template file: %v", err)
 	}

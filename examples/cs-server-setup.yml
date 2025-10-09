@@ -63,7 +63,7 @@ plays:
             # CS Server Configuration
             SERVER_NAME=cs.rastiegaiev.com
             USER=usx
-            SETUP_DATE={{ ansible_date_time.iso8601 }}
+            SETUP_DATE={{ onigirazu_date_time.iso8601 }}
             ONIGIRAZU_VERSION=latest
           mode: "0644"
       # Check disk space

@@ -39,7 +39,7 @@ func TestYAMLFormatter_FormatTask(t *testing.T) {
 			task: &types.Task{
 				Name:     "Install package with conditions",
 				Module:   "package_enhanced",
-				When:     "ansible_os_family == 'Debian'",
+				When:     "onigirazu_os_family == 'Debian'",
 				Register: "install_result",
 				Tags:     []string{"packages", "essential"},
 				Args: map[string]interface{}{
@@ -55,7 +55,7 @@ func TestYAMLFormatter_FormatTask(t *testing.T) {
   state: "present"
   version: "latest"
   # Task parameters
-  when: "ansible_os_family == 'Debian'"
+  when: "onigirazu_os_family == 'Debian'"
   register: "install_result"
   tags:
     - "packages"

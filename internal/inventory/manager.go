@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -340,6 +342,45 @@ func (m *Manager) resolveGroupInheritance(inventory *types.Inventory) error {
 func (m *Manager) validateHosts(inventory *types.Inventory) error {
 	for groupName, group := range inventory.Groups {
 		for hostName, host := range group.Hosts {
+			// Initialize Vars if nil
+			if host.Vars == nil {
+				host.Vars = make(map[string]interface{})
+			}
+
+			// Debug: log what we have in Vars
+			m.logger.Debug("Host '%s' in group '%s': Vars=%+v, User=%s, Address=%s",
+				hostName, groupName, host.Vars, host.User, host.Address)
+
+			// Process Onigirazu-style variables from host.Vars
+			if onigirazuHost, ok := host.Vars["onigirazu_host"].(string); ok && onigirazuHost != "" {
+				m.logger.Debug("Setting host.Address from onigirazu_host: %s", onigirazuHost)
+				host.Address = onigirazuHost
+			}
+			if onigirazuUser, ok := host.Vars["onigirazu_user"].(string); ok && onigirazuUser != "" {
+				m.logger.Debug("Setting host.User from onigirazu_user: %s", onigirazuUser)
+				host.User = onigirazuUser
+			}
+			if onigirazuPort, ok := host.Vars["onigirazu_port"].(int); ok && onigirazuPort > 0 {
+				host.Port = onigirazuPort
+			}
+			if keyFile, ok := host.Vars["onigirazu_ssh_private_key_file"].(string); ok && keyFile != "" {
+				m.logger.Debug("Found onigirazu_ssh_private_key_file: %s", keyFile)
+				// Expand ~ to home directory
+				if strings.HasPrefix(keyFile, "~/") {
+					if homeDir, err := os.UserHomeDir(); err == nil {
+						keyFile = filepath.Join(homeDir, keyFile[2:])
+						m.logger.Debug("Expanded key file path to: %s", keyFile)
+					}
+				}
+				host.KeyFile = keyFile
+				m.logger.Debug("Set host.KeyFile to: %s", host.KeyFile)
+			} else {
+				m.logger.Debug("No onigirazu_ssh_private_key_file found in Vars for host %s", hostName)
+			}
+			if password, ok := host.Vars["onigirazu_password"].(string); ok && password != "" {
+				host.Password = password
+			}
+
 			// Set default values
 			if host.Name == "" {
 				host.Name = hostName
@@ -353,6 +394,10 @@ func (m *Manager) validateHosts(inventory *types.Inventory) error {
 			if host.User == "" {
 				host.User = "root"
 			}
+
+			// Log final host configuration
+			m.logger.Debug("Final host configuration for '%s': Name=%s, Address=%s, Port=%d, User=%s, KeyFile=%s",
+				hostName, host.Name, host.Address, host.Port, host.User, host.KeyFile)
 
 			// Validate address format
 			if net.ParseIP(host.Address) == nil {
@@ -406,7 +451,7 @@ func (m *Manager) getLocalhostHost() types.Host {
 		Address: "127.0.0.1",
 		Port:    22,
 		User:    "root",
-		Vars:    map[string]interface{}{"ansible_connection": "local"},
+		Vars:    map[string]interface{}{"onigirazu_connection": "local"},
 	}
 }
 

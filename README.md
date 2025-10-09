@@ -537,6 +537,14 @@ registry.Register(NewMyModule())
 
 Onigirazu provides comprehensive documentation to help you get started and master the tool.
 
+### User Documentation
+
+- **[Quick Start Guide](docs/quick-start.md)** - Get started with Onigirazu in minutes
+- **[Variables Cheat Sheet](docs/VARIABLES_CHEATSHEET.md)** - Quick reference for common variables ⚡
+- **[Variables and Configuration Reference](docs/VARIABLES_AND_CONFIGURATION.md)** - Complete guide to all configuration parameters and system variables
+- **[Inventory Formats](docs/inventory-formats.md)** - Supported inventory file formats (YAML, TOML, simple list)
+- **[Modules Reference](docs/modules/README.md)** - Built-in modules documentation
+
 ### API Documentation
 
 - **[HTML Documentation](docs/api/index.html)** - Beautiful, interactive API documentation

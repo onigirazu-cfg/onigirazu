@@ -55,6 +55,11 @@ func (g *Gatherer) GatherFacts(ctx context.Context, host types.Host) (*cache.Sys
 		return nil, fmt.Errorf("failed to gather network info: %w", err)
 	}
 
+	// Gather user and environment information
+	if err := g.gatherUserInfo(client, facts); err != nil {
+		return nil, fmt.Errorf("failed to gather user info: %w", err)
+	}
+
 	// Cache the facts
 	g.cache.Set(host.Name, facts)
 
@@ -325,6 +330,29 @@ func (g *Gatherer) isValidIPv4(ip string) bool {
 	}
 
 	return true
+}
+
+// gatherUserInfo collects user and environment information
+func (g *Gatherer) gatherUserInfo(client *ssh.Client, facts *cache.SystemFacts) error {
+	// Get current username
+	username, err := client.ExecuteCommand("whoami")
+	if err == nil {
+		facts.Username = strings.TrimSpace(username)
+	}
+
+	// Get home directory
+	homeDir, err := client.ExecuteCommand("echo $HOME")
+	if err == nil {
+		facts.HomeDir = strings.TrimSpace(homeDir)
+	}
+
+	// Get PATH
+	path, err := client.ExecuteCommand("echo $PATH")
+	if err == nil {
+		facts.Path = strings.TrimSpace(path)
+	}
+
+	return nil
 }
 
 // InvalidateCache invalidates cached facts for a host

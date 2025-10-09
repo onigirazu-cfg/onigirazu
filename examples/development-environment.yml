@@ -6,8 +6,8 @@ plays:
   - name: "Development Environment Setup"
     hosts: all
     vars:
-      dev_user: "{{ ansible_user }}"
-      dev_home: "{{ ansible_env.HOME }}"
+      dev_user: "{{ onigirazu_user }}"
+      dev_home: "{{ onigirazu_env.HOME }}"
       projects_dir: "{{ dev_home }}/projects"
 
     tasks:
@@ -21,20 +21,20 @@ plays:
         package:
           name: "nodejs"
           state: "present"
-        when: "ansible_os_family != 'Darwin'"
+        when: "onigirazu_os_family != 'Darwin'"
 
       - name: "Install Python development tools"
         package:
           name: ["python3", "python3-pip", "python3-venv"]
           state: "present"
-        when: "ansible_os_family != 'Darwin'"
+        when: "onigirazu_os_family != 'Darwin'"
 
       # macOS specific installations
       - name: "Install Homebrew packages on macOS"
         command:
           cmd: "brew"
           args: ["install", "node", "python3", "go"]
-        when: "ansible_os_family == 'Darwin'"
+        when: "onigirazu_os_family == 'Darwin'"
         ignore_errors: true
 
       # Directory structure

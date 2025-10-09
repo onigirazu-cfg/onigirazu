@@ -5,7 +5,7 @@
 **Phase**: 2 - SSH Connection Pooling
 **Status**: ✅ COMPLETED
 **Date**: 2025
-**Priority**: Высокий (Немедленно)
+**Priority**: High (Immediate)
 
 ---
 
@@ -520,26 +520,26 @@ Potential improvements for future versions:
 
 ### High Priority Optimizations
 
-1. **sync.Pool для буферов** - Memory optimization
+1. **sync.Pool for buffers** - Memory optimization
    - Reduce GC pressure
    - Reuse byte buffers
    - Expected: 30-40% reduction in allocations
 
-2. **Расширение кеширования** - Extended caching
+2. **Extended caching** - Extended caching
    - Cache package info
    - Cache system facts
    - Expected: 20-30% faster repeated operations
 
-3. **Параллельное выполнение задач** - Parallel task execution
+3. **Parallel task execution** - Parallel task execution
    - Execute independent tasks concurrently
    - Better CPU utilization
    - Expected: 30-50% faster for parallel-safe playbooks
 
 ### Medium Priority
 
-4. **Оптимизация YAML парсинга** - YAML parsing optimization
-5. **Batch операции для пакетов** - Batch package operations
-6. **Кеширование SSH соединений** - Already done! ✅
+4. **YAML parsing optimization** - YAML parsing optimization
+5. **Batch package operations** - Batch package operations
+6. **SSH connection caching** - Already done! ✅
 
 ---
 

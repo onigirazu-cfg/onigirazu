@@ -57,7 +57,7 @@ func (m *SetFactModule) Execute(ctx context.Context, host types.Host, args map[s
 	}
 
 	// Store all facts in the output
-	result.Output["ansible_facts"] = facts
+	result.Output["onigirazu_facts"] = facts
 
 	// Also store individual facts at the root level for easier access
 	for key, value := range facts {

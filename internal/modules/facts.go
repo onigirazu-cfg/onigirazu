@@ -134,7 +134,7 @@ func (m *FactsModule) Execute(ctx context.Context, host types.Host, args map[str
 	facts["fact_timestamp"] = time.Now().Unix()
 	facts["fact_time"] = time.Now().Format(time.RFC3339)
 
-	result.Output["ansible_facts"] = facts
+	result.Output["onigirazu_facts"] = facts
 	result.Output["facts"] = facts
 	result.Duration = time.Since(startTime)
 

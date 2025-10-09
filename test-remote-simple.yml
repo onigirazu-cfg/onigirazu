@@ -1,0 +1,57 @@
+---
+# Simple remote test to verify onigirazu_* variables work correctly
+plays:
+  - name: "Test Onigirazu Variables on Remote Host"
+    hosts: all
+    gather_facts: true
+
+    tasks:
+      - name: "Display system information"
+        debug:
+          msg: |
+            === System Information ===
+            Hostname: {{ onigirazu_hostname }}
+            OS Family: {{ onigirazu_os_family }}
+            Distribution: {{ onigirazu_distribution }} {{ onigirazu_distribution_version }}
+            Architecture: {{ onigirazu_architecture }}
+            Kernel: {{ onigirazu_kernel }}
+
+      - name: "Create test directory"
+        file:
+          path: "/tmp/onigirazu-remote-test"
+          state: "directory"
+          mode: "0755"
+
+      - name: "Create test file with facts"
+        file:
+          path: "/tmp/onigirazu-remote-test/system-info.txt"
+          state: "present"
+          content: |
+            Onigirazu Remote Test
+            =====================
+            Hostname: {{ onigirazu_hostname }}
+            OS: {{ onigirazu_distribution }} {{ onigirazu_distribution_version }}
+            Architecture: {{ onigirazu_architecture }}
+            Kernel: {{ onigirazu_kernel }}
+            User: {{ onigirazu_user_id }}
+            Date: {{ onigirazu_date_time.iso8601 }}
+          mode: "0644"
+
+      - name: "Verify file was created"
+        command:
+          cmd: "cat"
+          args: ["/tmp/onigirazu-remote-test/system-info.txt"]
+        register: file_content
+
+      - name: "Display file content"
+        debug:
+          msg: "{{ file_content.stdout }}"
+
+      - name: "Cleanup test directory"
+        file:
+          path: "/tmp/onigirazu-remote-test"
+          state: "absent"
+
+      - name: "Test completed successfully"
+        debug:
+          msg: "✅ All onigirazu_* variables are working correctly!"

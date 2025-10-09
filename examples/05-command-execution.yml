@@ -40,12 +40,12 @@ plays:
           cmd: "env"
           environment:
             CUSTOM_VAR: "hello_world"
-            PATH: "{{ ansible_env.PATH }}"
+            PATH: "{{ onigirazu_env.PATH }}"
       # Conditional command execution
       - name: "Install Homebrew on macOS"
         shell:
           cmd: '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"'
-        when: "ansible_os_family == 'Darwin' and not homebrew_installed"
+        when: "onigirazu_os_family == 'Darwin' and not homebrew_installed"
 
       # Command with timeout
       - name: "Run command with timeout"

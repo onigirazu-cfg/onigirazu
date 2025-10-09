@@ -29,7 +29,7 @@ plays:
           name: "appuser"
           groups: ["sudo", "docker"]
           append: true
-        when: "ansible_os_family != 'Darwin'"
+        when: "onigirazu_os_family != 'Darwin'"
 
       # Create system user
       - name: "Create system user"

@@ -2,114 +2,418 @@ package modules
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
-	"os/exec"
+	"os"
+	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
-	"github.com/onigirazu-cfg/onigirazu/internal/cache"
 	"github.com/onigirazu-cfg/onigirazu/internal/executor"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
-// PackageModule implements package management
-type PackageModule struct {
+// ============================================================================
+// CORE STRUCTURES
+// ============================================================================
+
+// UnifiedPackageModule implements comprehensive package management
+type UnifiedPackageModule struct {
 	BaseModule
-	packageManager PackageManager
+	packageManager UnifiedPackageManager
+	stateCache     *PackageStateCache
+	operationLock  sync.RWMutex
+	metrics        *PackageMetrics
 }
 
-// PackageManager interface for different package management systems
-type PackageManager interface {
-	Install(name, version string) error
-	Remove(name string) error
-	Update(name string) error
-	UpdateAll() error
-	IsInstalled(name string) (bool, string, error)
-	Search(query string) ([]PackageInfo, error)
-	ListInstalled() ([]PackageInfo, error)
-	GetInfo(name string) (PackageInfo, error)
-	Clean() error
+// UnifiedPackageManager interface combining all package management capabilities
+type UnifiedPackageManager interface {
+	// Basic operations
+	Install(ctx context.Context, name, version string) (*PackageOperation, error)
+	Remove(ctx context.Context, name string) (*PackageOperation, error)
+	Update(ctx context.Context, name string) (*PackageOperation, error)
+	UpdateAll(ctx context.Context) (*PackageOperation, error)
+
+	// State checking
+	IsInstalled(ctx context.Context, name string) (*PackageState, error)
+	GetPackageInfo(ctx context.Context, name string) (*PackageInfo, error)
+
+	// Batch operations
+	InstallMultiple(ctx context.Context, packages []PackageSpec) (*BatchOperation, error)
+	RemoveMultiple(ctx context.Context, packages []string) (*BatchOperation, error)
+
+	// Cache management
+	RefreshCache(ctx context.Context) error
+	ValidateState(ctx context.Context) error
+
+	// Advanced features
+	DryRun(ctx context.Context, operation string, args ...string) (*OperationPreview, error)
+	GetDependencies(ctx context.Context, name string) ([]string, error)
+	VerifyChecksum(ctx context.Context, name, version string) (bool, error)
+
+	// Discovery and search
+	Search(ctx context.Context, query string) ([]PackageInfo, error)
+	ListInstalled(ctx context.Context) ([]PackageInfo, error)
+	ListUpgradable(ctx context.Context) ([]PackageInfo, error)
+
+	// Maintenance
+	Clean(ctx context.Context) error
+	AutoRemove(ctx context.Context) ([]string, error)
+	VerifyIntegrity(ctx context.Context) error
 }
 
-// PackageInfo represents package information
+// ============================================================================
+// DATA STRUCTURES
+// ============================================================================
+
+// PackageSpec defines a package specification
+type PackageSpec struct {
+	Name    string `json:"name"`
+	Version string `json:"version,omitempty"`
+	State   string `json:"state"`
+}
+
+// PackageState represents the current state of a package
+type PackageState struct {
+	Name             string    `json:"name"`
+	Installed        bool      `json:"installed"`
+	Version          string    `json:"version"`
+	AvailableVersion string    `json:"available_version"`
+	Repository       string    `json:"repository"`
+	LastChecked      time.Time `json:"last_checked"`
+	Hash             string    `json:"hash"`
+	Dependencies     []string  `json:"dependencies,omitempty"`
+}
+
+// PackageInfo represents detailed package information
 type PackageInfo struct {
-	Name         string `json:"name"`
-	Version      string `json:"version"`
-	Description  string `json:"description"`
-	Architecture string `json:"architecture"`
-	Repository   string `json:"repository"`
-	Size         string `json:"size"`
-	Installed    bool   `json:"installed"`
-	Upgradable   bool   `json:"upgradable"`
-	NewVersion   string `json:"new_version,omitempty"`
+	Name         string    `json:"name"`
+	Version      string    `json:"version"`
+	Description  string    `json:"description"`
+	Architecture string    `json:"architecture"`
+	Repository   string    `json:"repository"`
+	Size         string    `json:"size"`
+	Installed    bool      `json:"installed"`
+	Upgradable   bool      `json:"upgradable"`
+	NewVersion   string    `json:"new_version,omitempty"`
+	Dependencies []string  `json:"dependencies,omitempty"`
+	ReverseDeps  []string  `json:"reverse_dependencies,omitempty"`
+	InstallDate  time.Time `json:"install_date,omitempty"`
+	LastUpdate   time.Time `json:"last_update,omitempty"`
+	Checksum     string    `json:"checksum,omitempty"`
+	Source       string    `json:"source,omitempty"`
 }
 
-// PackageState represents the desired package state
-type PackageState string
+// PackageOperation represents the result of a package operation
+type PackageOperation struct {
+	Package      string        `json:"package"`
+	Operation    string        `json:"operation"`
+	Success      bool          `json:"success"`
+	Changed      bool          `json:"changed"`
+	OldVersion   string        `json:"old_version,omitempty"`
+	NewVersion   string        `json:"new_version,omitempty"`
+	Duration     time.Duration `json:"duration"`
+	Output       string        `json:"output"`
+	Error        string        `json:"error,omitempty"`
+	RetryCount   int           `json:"retry_count,omitempty"`
+	Dependencies []string      `json:"dependencies,omitempty"`
+}
 
-const (
-	PackageStatePresent PackageState = "present"
-	PackageStateAbsent  PackageState = "absent"
-	PackageStateLatest  PackageState = "latest"
-)
+// BatchOperation represents the result of a batch operation
+type BatchOperation struct {
+	Operations   []PackageOperation `json:"operations"`
+	Success      bool               `json:"success"`
+	Changed      bool               `json:"changed"`
+	Duration     time.Duration      `json:"duration"`
+	Summary      string             `json:"summary"`
+	TotalCount   int                `json:"total_count"`
+	SuccessCount int                `json:"success_count"`
+	FailedCount  int                `json:"failed_count"`
+	ChangedCount int                `json:"changed_count"`
+}
 
-// NewPackageModule creates a new package module
-func NewPackageModule() *PackageModule {
-	return &PackageModule{
+// OperationPreview represents a dry run result
+type OperationPreview struct {
+	WillChange    bool     `json:"will_change"`
+	Actions       []string `json:"actions"`
+	Dependencies  []string `json:"dependencies"`
+	Conflicts     []string `json:"conflicts"`
+	Size          string   `json:"size"`
+	EstimatedTime string   `json:"estimated_time"`
+}
+
+// RollbackInfo stores information needed for rollback
+type RollbackInfo struct {
+	Timestamp   time.Time                `json:"timestamp"`
+	Operations  []PackageOperation       `json:"operations"`
+	PrevStates  map[string]*PackageState `json:"prev_states"`
+	CanRollback bool                     `json:"can_rollback"`
+}
+
+// SystemSnapshot represents a snapshot of the package system state
+type SystemSnapshot struct {
+	ID          string                   `json:"id"`
+	Timestamp   time.Time                `json:"timestamp"`
+	Description string                   `json:"description"`
+	Packages    map[string]*PackageState `json:"packages"`
+	Checksum    string                   `json:"checksum"`
+}
+
+// PackageGroup represents a group of related packages
+type PackageGroup struct {
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	Packages    []string `json:"packages"`
+	Optional    []string `json:"optional,omitempty"`
+}
+
+// AuditEntry represents an audit log entry
+type AuditEntry struct {
+	Timestamp time.Time         `json:"timestamp"`
+	User      string            `json:"user"`
+	Host      string            `json:"host"`
+	Operation string            `json:"operation"`
+	Package   string            `json:"package"`
+	Success   bool              `json:"success"`
+	Details   map[string]string `json:"details,omitempty"`
+}
+
+// HealthCheckResult represents system health check result
+type HealthCheckResult struct {
+	Healthy         bool      `json:"healthy"`
+	Issues          []string  `json:"issues,omitempty"`
+	Warnings        []string  `json:"warnings,omitempty"`
+	BrokenPackages  []string  `json:"broken_packages,omitempty"`
+	OrphanPackages  []string  `json:"orphan_packages,omitempty"`
+	Recommendations []string  `json:"recommendations,omitempty"`
+	CheckedAt       time.Time `json:"checked_at"`
+}
+
+// ============================================================================
+// CACHE IMPLEMENTATION
+// ============================================================================
+
+// PackageStateCache provides thread-safe caching of package states
+type PackageStateCache struct {
+	cache  sync.Map
+	ttl    time.Duration
+	hits   int64
+	misses int64
+}
+
+// NewPackageStateCache creates a new package state cache
+func NewPackageStateCache(ttl time.Duration) *PackageStateCache {
+	return &PackageStateCache{
+		ttl: ttl,
+	}
+}
+
+// Get retrieves a package state from cache
+func (c *PackageStateCache) Get(name string) (*PackageState, bool) {
+	if value, ok := c.cache.Load(name); ok {
+		state := value.(*PackageState)
+		if time.Since(state.LastChecked) < c.ttl {
+			atomic.AddInt64(&c.hits, 1)
+			return state, true
+		}
+		// Expired, remove from cache
+		c.cache.Delete(name)
+	}
+	atomic.AddInt64(&c.misses, 1)
+	return nil, false
+}
+
+// Set stores a package state in cache
+func (c *PackageStateCache) Set(name string, state *PackageState) {
+	state.LastChecked = time.Now()
+	c.cache.Store(name, state)
+}
+
+// Delete removes a specific entry from cache
+func (c *PackageStateCache) Delete(name string) {
+	c.cache.Delete(name)
+}
+
+// Clear removes all entries from cache
+func (c *PackageStateCache) Clear() {
+	c.cache.Range(func(key, value interface{}) bool {
+		c.cache.Delete(key)
+		return true
+	})
+}
+
+// Stats returns cache statistics
+func (c *PackageStateCache) Stats() (hits, misses int64) {
+	return atomic.LoadInt64(&c.hits), atomic.LoadInt64(&c.misses)
+}
+
+// ============================================================================
+// METRICS COLLECTION
+// ============================================================================
+
+// PackageMetrics collects metrics about package operations
+type PackageMetrics struct {
+	mu                sync.RWMutex
+	TotalOperations   int64         `json:"total_operations"`
+	SuccessfulOps     int64         `json:"successful_ops"`
+	FailedOps         int64         `json:"failed_ops"`
+	TotalDuration     time.Duration `json:"total_duration"`
+	AverageDuration   time.Duration `json:"average_duration"`
+	PackagesInstalled int64         `json:"packages_installed"`
+	PackagesRemoved   int64         `json:"packages_removed"`
+	PackagesUpdated   int64         `json:"packages_updated"`
+	CacheHitRate      float64       `json:"cache_hit_rate"`
+	RetryCount        int64         `json:"retry_count"`
+}
+
+// RecordOperation records a package operation in metrics
+func (m *PackageMetrics) RecordOperation(op *PackageOperation) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.TotalOperations++
+	m.TotalDuration += op.Duration
+
+	if op.Success {
+		m.SuccessfulOps++
+	} else {
+		m.FailedOps++
+	}
+
+	if op.Changed {
+		switch op.Operation {
+		case "install":
+			m.PackagesInstalled++
+		case "remove":
+			m.PackagesRemoved++
+		case "update":
+			m.PackagesUpdated++
+		}
+	}
+
+	m.RetryCount += int64(op.RetryCount)
+
+	if m.TotalOperations > 0 {
+		m.AverageDuration = m.TotalDuration / time.Duration(m.TotalOperations)
+	}
+}
+
+// GetMetrics returns a copy of current metrics
+func (m *PackageMetrics) GetMetrics() PackageMetrics {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	// Return a copy without the mutex
+	return PackageMetrics{
+		TotalOperations:   m.TotalOperations,
+		SuccessfulOps:     m.SuccessfulOps,
+		FailedOps:         m.FailedOps,
+		TotalDuration:     m.TotalDuration,
+		AverageDuration:   m.AverageDuration,
+		PackagesInstalled: m.PackagesInstalled,
+		PackagesRemoved:   m.PackagesRemoved,
+		PackagesUpdated:   m.PackagesUpdated,
+		CacheHitRate:      m.CacheHitRate,
+		RetryCount:        m.RetryCount,
+	}
+}
+
+// ============================================================================
+// LOCK FILE SUPPORT
+// ============================================================================
+
+// PackageLockFile represents a lock file for package versions
+type PackageLockFile struct {
+	Version  string                      `json:"version"`
+	Created  time.Time                   `json:"created"`
+	Updated  time.Time                   `json:"updated"`
+	Packages map[string]PackageLockEntry `json:"packages"`
+}
+
+// PackageLockEntry represents a single package entry in lock file
+type PackageLockEntry struct {
+	Version      string   `json:"version"`
+	Resolved     string   `json:"resolved"`
+	Integrity    string   `json:"integrity"`
+	Dependencies []string `json:"dependencies,omitempty"`
+}
+
+// LoadLockFile loads a package lock file
+func LoadLockFile(path string) (*PackageLockFile, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return &PackageLockFile{
+				Version:  "1.0",
+				Created:  time.Now(),
+				Packages: make(map[string]PackageLockEntry),
+			}, nil
+		}
+		return nil, fmt.Errorf("failed to read lock file: %w", err)
+	}
+
+	var lockFile PackageLockFile
+	if err := json.Unmarshal(data, &lockFile); err != nil {
+		return nil, fmt.Errorf("failed to parse lock file: %w", err)
+	}
+
+	return &lockFile, nil
+}
+
+// SaveLockFile saves a package lock file
+func (l *PackageLockFile) Save(path string) error {
+	l.Updated = time.Now()
+
+	// Ensure directory exists
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("failed to create directory: %w", err)
+	}
+
+	data, err := json.MarshalIndent(l, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal lock file: %w", err)
+	}
+
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		return fmt.Errorf("failed to write lock file: %w", err)
+	}
+
+	return nil
+}
+
+// UpdatePackage updates a package entry in lock file
+func (l *PackageLockFile) UpdatePackage(name, version, checksum string, deps []string) {
+	l.Packages[name] = PackageLockEntry{
+		Version:      version,
+		Resolved:     fmt.Sprintf("%s@%s", name, version),
+		Integrity:    checksum,
+		Dependencies: deps,
+	}
+}
+
+// ============================================================================
+// MODULE IMPLEMENTATION
+// ============================================================================
+
+// NewUnifiedPackageModule creates a new unified package module
+func NewUnifiedPackageModule() *UnifiedPackageModule {
+	return &UnifiedPackageModule{
 		BaseModule: BaseModule{
 			name:        "package",
-			description: "Manage system packages",
+			description: "Unified package management with advanced features",
 		},
-		packageManager: nil, // Will be created in Execute method
+		stateCache: NewPackageStateCache(5 * time.Minute),
+		metrics:    &PackageMetrics{},
 	}
 }
 
-// createPackageManager creates appropriate package manager with executor
-func createPackageManager(exec *executor.CommandExecutor, hostname string) PackageManager {
-	// Detect package management system on the REMOTE host, not local
-	// Try to detect by executing commands on the remote host
-
-	// Try apt (Debian/Ubuntu)
-	if _, err := exec.Execute("which", "apt-get"); err == nil {
-		return &AptManager{executor: exec, hostname: hostname}
-	}
-
-	// Try yum (RHEL/CentOS)
-	if _, err := exec.Execute("which", "yum"); err == nil {
-		return &YumManager{executor: exec}
-	}
-
-	// Try dnf (Fedora/RHEL 8+)
-	if _, err := exec.Execute("which", "dnf"); err == nil {
-		return &DnfManager{YumManager{executor: exec}}
-	}
-
-	// Try pacman (Arch)
-	if _, err := exec.Execute("which", "pacman"); err == nil {
-		return &PacmanManager{GenericPackageManager{executor: exec}}
-	}
-
-	// Try zypper (openSUSE)
-	if _, err := exec.Execute("which", "zypper"); err == nil {
-		return &ZypperManager{GenericPackageManager{executor: exec}}
-	}
-
-	// Try brew (macOS)
-	if _, err := exec.Execute("which", "brew"); err == nil {
-		return &BrewManager{executor: exec}
-	}
-
-	// Try choco (Windows)
-	if _, err := exec.Execute("which", "choco"); err == nil {
-		return &ChocolateyManager{GenericPackageManager{executor: exec}}
-	}
-
-	// Fallback to generic
-	return &GenericPackageManager{executor: exec}
-}
-
-// Execute manages system packages
-func (m *PackageModule) Execute(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
+// Execute manages system packages with all features
+func (m *UnifiedPackageModule) Execute(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
 	startTime := time.Now()
 	result := types.TaskResult{
 		TaskName:  "package",
@@ -128,34 +432,143 @@ func (m *PackageModule) Execute(ctx context.Context, host types.Host, args map[s
 	}
 	defer exec.Close()
 
-	// Create package manager with executor
-	m.packageManager = createPackageManager(exec, host.Name)
-
-	// PackageSpec represents a package with optional version
-	type PackageSpec struct {
-		Name    string
-		Version string
+	// Configure become (privilege escalation) if requested
+	if become, ok := args["_become"].(bool); ok && become {
+		becomeUser, _ := args["_become_user"].(string)
+		becomeMethod, _ := args["_become_method"].(string)
+		exec.SetBecome(true, becomeUser, becomeMethod)
 	}
 
-	// Get required parameters - support multiple formats
-	var packageSpecs []PackageSpec
+	// Create package manager with executor
+	m.packageManager = createUnifiedPackageManager(ctx, exec, host.Name)
 
+	// Parse arguments
+	packageSpecs, err := m.parsePackageSpecs(args)
+	if err != nil {
+		return m.failResult(result, err.Error())
+	}
+
+	state := getStringArg(args, "state", "present")
+	updateCache := getBoolArg(args, "update_cache", false)
+	dryRun := getBoolArg(args, "dry_run", false)
+	enableRollback := getBoolArg(args, "enable_rollback", false)
+	parallel := getBoolArg(args, "parallel", false)
+	maxRetries := getIntArg(args, "max_retries", 3)
+	lockFile := getStringArg(args, "lock_file", "")
+
+	// Update cache if requested
+	if updateCache {
+		if err := m.packageManager.RefreshCache(ctx); err != nil {
+			result.Output["cache_update_warning"] = err.Error()
+		}
+	}
+
+	// Load lock file if specified
+	var lock *PackageLockFile
+	if lockFile != "" {
+		lock, err = LoadLockFile(lockFile)
+		if err != nil {
+			result.Output["lock_file_warning"] = err.Error()
+		}
+	}
+
+	// Perform dry run if requested
+	if dryRun {
+		previews := make(map[string]*OperationPreview)
+		for _, pkg := range packageSpecs {
+			preview, err := m.packageManager.DryRun(ctx, state, pkg.Name, pkg.Version)
+			if err != nil {
+				result.Output[fmt.Sprintf("preview_error_%s", pkg.Name)] = err.Error()
+				continue
+			}
+			previews[pkg.Name] = preview
+		}
+		result.Output["previews"] = previews
+		result.Output["dry_run"] = true
+		result.Duration = time.Since(startTime)
+		return result, nil
+	}
+
+	// Prepare rollback info if enabled
+	var rollback *RollbackInfo
+	if enableRollback {
+		rollback = &RollbackInfo{
+			Timestamp:   time.Now(),
+			Operations:  make([]PackageOperation, 0),
+			PrevStates:  make(map[string]*PackageState),
+			CanRollback: true,
+		}
+	}
+
+	// Execute operations
+	var batchOp *BatchOperation
+	if parallel && len(packageSpecs) > 1 {
+		batchOp, err = m.executeParallel(ctx, packageSpecs, state, maxRetries, rollback)
+	} else {
+		batchOp, err = m.executeSequential(ctx, packageSpecs, state, maxRetries, rollback)
+	}
+
+	if err != nil {
+		// Attempt rollback if enabled and error occurred
+		if enableRollback && rollback != nil && rollback.CanRollback {
+			if rollbackErr := m.performRollback(ctx, rollback); rollbackErr != nil {
+				result.Output["rollback_error"] = rollbackErr.Error()
+			} else {
+				result.Output["rollback"] = "successful"
+			}
+		}
+		return m.failResult(result, fmt.Sprintf("operation failed: %v", err))
+	}
+
+	// Update lock file if specified
+	if lock != nil && lockFile != "" {
+		for _, op := range batchOp.Operations {
+			if op.Success && op.Changed {
+				deps, _ := m.packageManager.GetDependencies(ctx, op.Package)
+				lock.UpdatePackage(op.Package, op.NewVersion, "", deps)
+			}
+		}
+		if err := lock.Save(lockFile); err != nil {
+			result.Output["lock_file_save_error"] = err.Error()
+		}
+	}
+
+	// Update result
+	result.Changed = batchOp.Changed
+	result.Output["batch_operation"] = batchOp
+	result.Output["summary"] = batchOp.Summary
+
+	// Add cache statistics
+	hits, misses := m.stateCache.Stats()
+	result.Output["cache_stats"] = map[string]interface{}{
+		"hits":   hits,
+		"misses": misses,
+		"rate":   float64(hits) / float64(hits+misses),
+	}
+
+	// Add metrics
+	result.Output["metrics"] = m.metrics.GetMetrics()
+
+	result.Duration = time.Since(startTime)
+	return result, nil
+}
+
+// parsePackageSpecs parses package specifications from arguments
+func (m *UnifiedPackageModule) parsePackageSpecs(args map[string]interface{}) ([]PackageSpec, error) {
 	nameArg, exists := args["name"]
 	if !exists {
-		return m.failResult(result, "name parameter is required")
+		return nil, fmt.Errorf("name parameter is required")
 	}
 
-	// Global version (applies to all packages if not specified individually)
 	globalVersion := getStringArg(args, "version", "")
+	globalState := getStringArg(args, "state", "present")
 
-	// Handle multiple formats:
-	// 1. Single string: "git"
-	// 2. List of strings: ["git", "curl"]
-	// 3. List of objects: [{name: "git", version: "1.2.3"}, {name: "curl"}]
+	var packageSpecs []PackageSpec
+
 	switch v := nameArg.(type) {
 	case string:
 		// Single package name
-		packageSpecs = []PackageSpec{{Name: v, Version: globalVersion}}
+		packageSpecs = []PackageSpec{{Name: v, Version: globalVersion, State: globalState}}
 
 	case []interface{}:
 		for i, item := range v {
@@ -165,27 +578,25 @@ func (m *PackageModule) Execute(ctx context.Context, host types.Host, args map[s
 				packageSpecs = append(packageSpecs, PackageSpec{
 					Name:    itemVal,
 					Version: globalVersion,
+					State:   globalState,
 				})
 
 			case map[string]interface{}:
-				// Object with name and optional version
+				// Object with name and optional version/state
 				pkgName, ok := itemVal["name"].(string)
 				if !ok {
-					return m.failResult(result, fmt.Sprintf("name[%d].name must be a string", i))
+					return nil, fmt.Errorf("name[%d].name must be a string", i)
 				}
-				pkgVersion := ""
-				if v, ok := itemVal["version"].(string); ok {
-					pkgVersion = v
-				} else if globalVersion != "" {
-					pkgVersion = globalVersion
-				}
+				pkgVersion := getStringArg(itemVal, "version", globalVersion)
+				pkgState := getStringArg(itemVal, "state", globalState)
 				packageSpecs = append(packageSpecs, PackageSpec{
 					Name:    pkgName,
 					Version: pkgVersion,
+					State:   pkgState,
 				})
 
 			default:
-				return m.failResult(result, fmt.Sprintf("name[%d] must be a string or object with 'name' field", i))
+				return nil, fmt.Errorf("name[%d] must be a string or object with 'name' field", i)
 			}
 		}
 
@@ -195,133 +606,287 @@ func (m *PackageModule) Execute(ctx context.Context, host types.Host, args map[s
 			packageSpecs = append(packageSpecs, PackageSpec{
 				Name:    name,
 				Version: globalVersion,
+				State:   globalState,
 			})
 		}
 
 	default:
-		return m.failResult(result, "name parameter must be a string, list of strings, or list of objects")
+		return nil, fmt.Errorf("name parameter must be a string, list of strings, or list of objects")
 	}
 
 	if len(packageSpecs) == 0 {
-		return m.failResult(result, "at least one package name is required")
+		return nil, fmt.Errorf("at least one package name is required")
 	}
 
-	state := PackageState(getStringArg(args, "state", "present"))
-	updateCache := getBoolArg(args, "update_cache", false)
+	return packageSpecs, nil
+}
 
-	// Update cache if requested
-	if updateCache {
-		if err := m.packageManager.Clean(); err != nil {
-			// Don't fail on cache update errors, just log
-			result.Output["cache_update_warning"] = err.Error()
+// executeSequential executes package operations sequentially
+func (m *UnifiedPackageModule) executeSequential(ctx context.Context, packages []PackageSpec, state string, maxRetries int, rollback *RollbackInfo) (*BatchOperation, error) {
+	startTime := time.Now()
+	batchOp := &BatchOperation{
+		Operations: make([]PackageOperation, 0, len(packages)),
+		TotalCount: len(packages),
+	}
+
+	for _, pkg := range packages {
+		// Save current state for rollback
+		if rollback != nil {
+			currentState, _ := m.packageManager.IsInstalled(ctx, pkg.Name)
+			if currentState != nil {
+				rollback.PrevStates[pkg.Name] = currentState
+			}
+		}
+
+		// Execute operation with retry
+		var op *PackageOperation
+		var err error
+		for retry := 0; retry <= maxRetries; retry++ {
+			op, err = m.executePackageOperation(ctx, pkg, state)
+			if err == nil {
+				break
+			}
+			if retry < maxRetries {
+				time.Sleep(time.Second * time.Duration(retry+1))
+				op.RetryCount = retry + 1
+			}
+		}
+
+		if op != nil {
+			batchOp.Operations = append(batchOp.Operations, *op)
+			m.metrics.RecordOperation(op)
+
+			if rollback != nil {
+				rollback.Operations = append(rollback.Operations, *op)
+			}
+
+			if op.Success {
+				batchOp.SuccessCount++
+				if op.Changed {
+					batchOp.ChangedCount++
+				}
+			} else {
+				batchOp.FailedCount++
+			}
 		}
 	}
 
-	// Process each package
-	packagesInfo := make(map[string]interface{})
-	overallChanged := false
+	batchOp.Duration = time.Since(startTime)
+	batchOp.Success = batchOp.FailedCount == 0
+	batchOp.Changed = batchOp.ChangedCount > 0
+	batchOp.Summary = fmt.Sprintf("Total: %d, Success: %d, Failed: %d, Changed: %d",
+		batchOp.TotalCount, batchOp.SuccessCount, batchOp.FailedCount, batchOp.ChangedCount)
 
-	for _, pkg := range packageSpecs {
-		packageResult := make(map[string]interface{})
+	return batchOp, nil
+}
 
-		// Store requested version if specified
-		if pkg.Version != "" {
-			packageResult["requested_version"] = pkg.Version
-		}
+// executeParallel executes package operations in parallel
+func (m *UnifiedPackageModule) executeParallel(ctx context.Context, packages []PackageSpec, state string, maxRetries int, rollback *RollbackInfo) (*BatchOperation, error) {
+	startTime := time.Now()
+	batchOp := &BatchOperation{
+		Operations: make([]PackageOperation, len(packages)),
+		TotalCount: len(packages),
+	}
 
-		// Check current installation status
-		installed, currentVersion, err := m.packageManager.IsInstalled(pkg.Name)
-		if err != nil {
-			packageResult["error"] = fmt.Sprintf("failed to check package status: %v", err)
-			packagesInfo[pkg.Name] = packageResult
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+
+	for i, pkg := range packages {
+		wg.Add(1)
+		go func(idx int, p PackageSpec) {
+			defer wg.Done()
+
+			// Save current state for rollback
+			if rollback != nil {
+				currentState, _ := m.packageManager.IsInstalled(ctx, p.Name)
+				if currentState != nil {
+					mu.Lock()
+					rollback.PrevStates[p.Name] = currentState
+					mu.Unlock()
+				}
+			}
+
+			// Execute operation with retry
+			var op *PackageOperation
+			var err error
+			for retry := 0; retry <= maxRetries; retry++ {
+				op, err = m.executePackageOperation(ctx, p, state)
+				if err == nil {
+					break
+				}
+				if retry < maxRetries {
+					time.Sleep(time.Second * time.Duration(retry+1))
+					op.RetryCount = retry + 1
+				}
+			}
+
+			if op != nil {
+				mu.Lock()
+				batchOp.Operations[idx] = *op
+				m.metrics.RecordOperation(op)
+
+				if rollback != nil {
+					rollback.Operations = append(rollback.Operations, *op)
+				}
+
+				if op.Success {
+					batchOp.SuccessCount++
+					if op.Changed {
+						batchOp.ChangedCount++
+					}
+				} else {
+					batchOp.FailedCount++
+				}
+				mu.Unlock()
+			}
+		}(i, pkg)
+	}
+
+	wg.Wait()
+
+	batchOp.Duration = time.Since(startTime)
+	batchOp.Success = batchOp.FailedCount == 0
+	batchOp.Changed = batchOp.ChangedCount > 0
+	batchOp.Summary = fmt.Sprintf("Total: %d, Success: %d, Failed: %d, Changed: %d (parallel)",
+		batchOp.TotalCount, batchOp.SuccessCount, batchOp.FailedCount, batchOp.ChangedCount)
+
+	return batchOp, nil
+}
+
+// executePackageOperation executes a single package operation
+func (m *UnifiedPackageModule) executePackageOperation(ctx context.Context, pkg PackageSpec, state string) (*PackageOperation, error) {
+	// Get current state with caching
+	currentState, err := m.packageManager.IsInstalled(ctx, pkg.Name)
+	if err != nil {
+		return &PackageOperation{
+			Package:   pkg.Name,
+			Operation: state,
+			Success:   false,
+			Error:     fmt.Sprintf("failed to check package state: %v", err),
+		}, err
+	}
+
+	// Execute operation based on desired state
+	switch state {
+	case "present":
+		return m.handlePresentState(ctx, pkg, currentState)
+	case "absent":
+		return m.handleAbsentState(ctx, pkg, currentState)
+	case "latest":
+		return m.handleLatestState(ctx, pkg, currentState)
+	default:
+		return &PackageOperation{
+			Package:   pkg.Name,
+			Operation: state,
+			Success:   false,
+			Error:     fmt.Sprintf("invalid state: %s", state),
+		}, fmt.Errorf("invalid state: %s", state)
+	}
+}
+
+// handlePresentState handles the "present" state
+func (m *UnifiedPackageModule) handlePresentState(ctx context.Context, pkg PackageSpec, currentState *PackageState) (*PackageOperation, error) {
+	if !currentState.Installed {
+		// Package not installed, install it
+		return m.packageManager.Install(ctx, pkg.Name, pkg.Version)
+	}
+
+	if pkg.Version != "" && currentState.Version != pkg.Version {
+		// Specific version requested and current version differs
+		return m.packageManager.Install(ctx, pkg.Name, pkg.Version)
+	}
+
+	// Package already in desired state
+	return &PackageOperation{
+		Package:   pkg.Name,
+		Operation: "present",
+		Success:   true,
+		Changed:   false,
+		Duration:  0,
+		Output:    "Package already in desired state",
+	}, nil
+}
+
+// handleAbsentState handles the "absent" state
+func (m *UnifiedPackageModule) handleAbsentState(ctx context.Context, pkg PackageSpec, currentState *PackageState) (*PackageOperation, error) {
+	if currentState.Installed {
+		// Package installed, remove it
+		return m.packageManager.Remove(ctx, pkg.Name)
+	}
+
+	// Package already absent
+	return &PackageOperation{
+		Package:   pkg.Name,
+		Operation: "absent",
+		Success:   true,
+		Changed:   false,
+		Duration:  0,
+		Output:    "Package already absent",
+	}, nil
+}
+
+// handleLatestState handles the "latest" state
+func (m *UnifiedPackageModule) handleLatestState(ctx context.Context, pkg PackageSpec, currentState *PackageState) (*PackageOperation, error) {
+	if !currentState.Installed {
+		// Package not installed, install latest
+		return m.packageManager.Install(ctx, pkg.Name, "")
+	}
+
+	if currentState.AvailableVersion != "" && currentState.Version != currentState.AvailableVersion {
+		// Update available
+		return m.packageManager.Update(ctx, pkg.Name)
+	}
+
+	// Package already at latest version
+	return &PackageOperation{
+		Package:   pkg.Name,
+		Operation: "latest",
+		Success:   true,
+		Changed:   false,
+		Duration:  0,
+		Output:    "Package already at latest version",
+	}, nil
+}
+
+// performRollback performs rollback of package operations
+func (m *UnifiedPackageModule) performRollback(ctx context.Context, rollback *RollbackInfo) error {
+	if !rollback.CanRollback {
+		return fmt.Errorf("rollback not available")
+	}
+
+	// Reverse the operations
+	for i := len(rollback.Operations) - 1; i >= 0; i-- {
+		op := rollback.Operations[i]
+		prevState, exists := rollback.PrevStates[op.Package]
+		if !exists {
 			continue
 		}
 
-		packageResult["installed"] = installed
-		packageResult["current_version"] = currentVersion
-
-		// Handle different states
-		changed := false
-		switch state {
-		case PackageStatePresent:
-			if !installed {
-				if err := m.packageManager.Install(pkg.Name, pkg.Version); err != nil {
-					packageResult["error"] = fmt.Sprintf("failed to install: %v", err)
-				} else {
-					changed = true
-					packageResult["action"] = "installed"
-				}
-			} else if pkg.Version != "" && currentVersion != pkg.Version {
-				if err := m.packageManager.Install(pkg.Name, pkg.Version); err != nil {
-					packageResult["error"] = fmt.Sprintf("failed to install specific version: %v", err)
-				} else {
-					changed = true
-					packageResult["action"] = "version_changed"
-				}
-			} else {
-				packageResult["action"] = "already_installed"
-			}
-
-		case PackageStateAbsent:
-			if installed {
-				if err := m.packageManager.Remove(pkg.Name); err != nil {
-					packageResult["error"] = fmt.Sprintf("failed to remove: %v", err)
-				} else {
-					changed = true
-					packageResult["action"] = "removed"
-				}
-			} else {
-				packageResult["action"] = "already_absent"
-			}
-
-		case PackageStateLatest:
-			if !installed {
-				if err := m.packageManager.Install(pkg.Name, ""); err != nil {
-					packageResult["error"] = fmt.Sprintf("failed to install: %v", err)
-				} else {
-					changed = true
-					packageResult["action"] = "installed"
-				}
-			} else {
-				if err := m.packageManager.Update(pkg.Name); err != nil {
-					packageResult["error"] = fmt.Sprintf("failed to update: %v", err)
-				} else {
-					// Check if version actually changed
-					newInstalled, newVersion, err := m.packageManager.IsInstalled(pkg.Name)
-					if err == nil && newInstalled && newVersion != currentVersion {
-						changed = true
-						packageResult["action"] = "updated"
-						packageResult["new_version"] = newVersion
-					} else {
-						packageResult["action"] = "already_latest"
-					}
-				}
-			}
+		// Restore previous state
+		if prevState.Installed && !op.Changed {
+			continue // No change needed
 		}
 
-		packageResult["changed"] = changed
-		if changed {
-			overallChanged = true
+		if prevState.Installed {
+			// Reinstall with previous version
+			_, err := m.packageManager.Install(ctx, op.Package, prevState.Version)
+			if err != nil {
+				return fmt.Errorf("failed to rollback %s: %w", op.Package, err)
+			}
+		} else {
+			// Remove package
+			_, err := m.packageManager.Remove(ctx, op.Package)
+			if err != nil {
+				return fmt.Errorf("failed to rollback %s: %w", op.Package, err)
+			}
 		}
-
-		// Get final package info
-		if info, err := m.packageManager.GetInfo(pkg.Name); err == nil {
-			packageResult["package_info"] = info
-		}
-
-		packagesInfo[pkg.Name] = packageResult
 	}
 
-	result.Output["packages"] = packagesInfo
-	result.Output["package_count"] = len(packageSpecs)
-	result.Changed = overallChanged
-	result.Duration = time.Since(startTime)
-
-	return result, nil
+	return nil
 }
 
 // Validate validates package module arguments
-func (m *PackageModule) Validate(args map[string]interface{}) error {
+func (m *UnifiedPackageModule) Validate(args map[string]interface{}) error {
 	if _, exists := args["name"]; !exists {
 		return fmt.Errorf("name parameter is required")
 	}
@@ -337,495 +902,16 @@ func (m *PackageModule) Validate(args map[string]interface{}) error {
 				}
 			}
 			if !valid {
-				return fmt.Errorf("invalid state: %s", stateStr)
+				return fmt.Errorf("invalid state: %s (must be one of: present, absent, latest)", stateStr)
 			}
 		}
 	}
 
 	return nil
-}
-
-// AptManager implements package management for APT (Debian/Ubuntu)
-type AptManager struct {
-	executor *executor.CommandExecutor
-	hostname string
-}
-
-func (a *AptManager) Install(name, version string) error {
-	packageSpec := name
-	if version != "" {
-		packageSpec = fmt.Sprintf("%s=%s", name, version)
-	}
-
-	output, err := a.executor.Execute("sudo", "apt-get", "install", "-y", packageSpec)
-	if err != nil {
-		return fmt.Errorf("failed to install package %s: %v (output: %s)", packageSpec, err, output)
-	}
-
-	// Invalidate cache after installation
-	cache.GetGlobalPackageCache().Invalidate(a.hostname, name)
-
-	return nil
-}
-
-func (a *AptManager) Remove(name string) error {
-	output, err := a.executor.Execute("sudo", "apt-get", "remove", "-y", name)
-	if err != nil {
-		return fmt.Errorf("failed to remove package %s: %v (output: %s)", name, err, output)
-	}
-
-	// Invalidate cache after removal
-	cache.GetGlobalPackageCache().Invalidate(a.hostname, name)
-
-	return nil
-}
-
-func (a *AptManager) Update(name string) error {
-	output, err := a.executor.Execute("sudo", "apt-get", "install", "-y", "--only-upgrade", name)
-	if err != nil {
-		return fmt.Errorf("failed to update package %s: %v (output: %s)", name, err, output)
-	}
-
-	// Invalidate cache after update
-	cache.GetGlobalPackageCache().Invalidate(a.hostname, name)
-
-	return nil
-}
-
-func (a *AptManager) UpdateAll() error {
-	if output, err := a.executor.Execute("sudo", "apt-get", "update"); err != nil {
-		return fmt.Errorf("failed to update package cache: %v (output: %s)", err, output)
-	}
-
-	output, err := a.executor.Execute("sudo", "apt-get", "upgrade", "-y")
-	if err != nil {
-		return fmt.Errorf("failed to upgrade packages: %v (output: %s)", err, output)
-	}
-	return nil
-}
-
-func (a *AptManager) IsInstalled(name string) (bool, string, error) {
-	// Try to get from cache first
-	pkgCache := cache.GetGlobalPackageCache()
-	if cached, found := pkgCache.Get(a.hostname, name); found {
-		return cached.Installed, cached.Version, nil
-	}
-
-	// Use dpkg -l instead of dpkg-query to avoid shell variable expansion issues
-	output, err := a.executor.Execute("dpkg", "-l", name)
-
-	installed := false
-	version := ""
-
-	if err != nil {
-		// Package not installed or dpkg failed
-		installed = false
-		version = ""
-	} else {
-		// Parse dpkg -l output
-		// Format: ii  package-name  version  architecture  description
-		lines := strings.Split(output, "\n")
-		for _, line := range lines {
-			if strings.HasPrefix(line, "ii ") {
-				// Package is installed
-				parts := strings.Fields(line)
-				if len(parts) >= 3 && parts[1] == name {
-					installed = true
-					version = parts[2]
-					break
-				}
-			}
-		}
-	}
-
-	// Cache the result
-	pkgCache.Set(a.hostname, name, installed, version)
-
-	return installed, version, nil
-}
-
-func (a *AptManager) Search(query string) ([]PackageInfo, error) {
-	output, err := a.executor.Execute("apt-cache", "search", query)
-	if err != nil {
-		return nil, fmt.Errorf("failed to search packages: %v", err)
-	}
-
-	var packages []PackageInfo
-	lines := strings.Split(output, "\n")
-	for _, line := range lines {
-		if line == "" {
-			continue
-		}
-		parts := strings.SplitN(line, " - ", 2)
-		if len(parts) == 2 {
-			packages = append(packages, PackageInfo{
-				Name:        parts[0],
-				Description: parts[1],
-			})
-		}
-	}
-
-	return packages, nil
-}
-
-func (a *AptManager) ListInstalled() ([]PackageInfo, error) {
-	output, err := a.executor.Execute("dpkg-query", "-W", "-f=${Package} ${Version} ${Architecture}\n")
-	if err != nil {
-		return nil, fmt.Errorf("failed to list installed packages: %v", err)
-	}
-
-	var packages []PackageInfo
-	lines := strings.Split(output, "\n")
-	for _, line := range lines {
-		if line == "" {
-			continue
-		}
-		parts := strings.Fields(line)
-		if len(parts) >= 3 {
-			packages = append(packages, PackageInfo{
-				Name:         parts[0],
-				Version:      parts[1],
-				Architecture: parts[2],
-				Installed:    true,
-			})
-		}
-	}
-
-	return packages, nil
-}
-
-func (a *AptManager) GetInfo(name string) (PackageInfo, error) {
-	info := PackageInfo{Name: name}
-
-	// Check if installed
-	installed, version, _ := a.IsInstalled(name)
-	info.Installed = installed
-	info.Version = version
-
-	// Get package information
-	output, err := a.executor.Execute("apt-cache", "show", name)
-	if err != nil {
-		return info, fmt.Errorf("failed to get package info for %s: %v", name, err)
-	}
-
-	lines := strings.Split(output, "\n")
-	for _, line := range lines {
-		if strings.HasPrefix(line, "Description: ") {
-			info.Description = strings.TrimPrefix(line, "Description: ")
-		} else if strings.HasPrefix(line, "Architecture: ") {
-			info.Architecture = strings.TrimPrefix(line, "Architecture: ")
-		} else if strings.HasPrefix(line, "Size: ") {
-			info.Size = strings.TrimPrefix(line, "Size: ")
-		}
-	}
-
-	return info, nil
-}
-
-func (a *AptManager) Clean() error {
-	output, err := a.executor.Execute("sudo", "apt-get", "update")
-	if err != nil {
-		return fmt.Errorf("failed to update package cache: %v (output: %s)", err, output)
-	}
-	return nil
-}
-
-// YumManager implements package management for YUM (RHEL/CentOS)
-type YumManager struct {
-	executor *executor.CommandExecutor
-}
-
-func (y *YumManager) Install(name, version string) error {
-	packageSpec := name
-	if version != "" {
-		packageSpec = fmt.Sprintf("%s-%s", name, version)
-	}
-
-	output, err := y.executor.Execute("sudo", "yum", "install", "-y", packageSpec)
-	if err != nil {
-		return fmt.Errorf("failed to install package %s: %v (output: %s)", packageSpec, err, output)
-	}
-	return nil
-}
-
-func (y *YumManager) Remove(name string) error {
-	output, err := y.executor.Execute("sudo", "yum", "remove", "-y", name)
-	if err != nil {
-		return fmt.Errorf("failed to remove package %s: %v (output: %s)", name, err, output)
-	}
-	return nil
-}
-
-func (y *YumManager) Update(name string) error {
-	output, err := y.executor.Execute("sudo", "yum", "update", "-y", name)
-	if err != nil {
-		return fmt.Errorf("failed to update package %s: %v (output: %s)", name, err, output)
-	}
-	return nil
-}
-
-func (y *YumManager) UpdateAll() error {
-	output, err := y.executor.Execute("sudo", "yum", "update", "-y")
-	if err != nil {
-		return fmt.Errorf("failed to update all packages: %v (output: %s)", err, output)
-	}
-	return nil
-}
-
-func (y *YumManager) IsInstalled(name string) (bool, string, error) {
-	output, err := y.executor.Execute("rpm", "-q", name)
-	if err != nil {
-		return false, "", nil // Package not installed
-	}
-
-	outputStr := strings.TrimSpace(output)
-	if strings.Contains(outputStr, "not installed") {
-		return false, "", nil
-	}
-
-	// Extract version from output like "package-1.2.3-4.el7.x86_64"
-	parts := strings.Split(outputStr, "-")
-	if len(parts) >= 2 {
-		version := strings.Join(parts[1:], "-")
-		return true, version, nil
-	}
-
-	return true, "", nil
-}
-
-func (y *YumManager) Search(query string) ([]PackageInfo, error) {
-	output, err := y.executor.Execute("yum", "search", query)
-	if err != nil {
-		return nil, fmt.Errorf("failed to search packages: %v", err)
-	}
-
-	var packages []PackageInfo
-	lines := strings.Split(output, "\n")
-	for _, line := range lines {
-		if strings.Contains(line, ".") && strings.Contains(line, ":") {
-			parts := strings.SplitN(line, ":", 2)
-			if len(parts) == 2 {
-				nameParts := strings.Fields(parts[0])
-				if len(nameParts) > 0 {
-					packages = append(packages, PackageInfo{
-						Name:        nameParts[0],
-						Description: strings.TrimSpace(parts[1]),
-					})
-				}
-			}
-		}
-	}
-
-	return packages, nil
-}
-
-func (y *YumManager) ListInstalled() ([]PackageInfo, error) {
-	output, err := y.executor.Execute("rpm", "-qa", "--queryformat", "%{NAME} %{VERSION}-%{RELEASE} %{ARCH}\n")
-	if err != nil {
-		return nil, fmt.Errorf("failed to list installed packages: %v", err)
-	}
-
-	var packages []PackageInfo
-	lines := strings.Split(output, "\n")
-	for _, line := range lines {
-		if line == "" {
-			continue
-		}
-		parts := strings.Fields(line)
-		if len(parts) >= 3 {
-			packages = append(packages, PackageInfo{
-				Name:         parts[0],
-				Version:      parts[1],
-				Architecture: parts[2],
-				Installed:    true,
-			})
-		}
-	}
-
-	return packages, nil
-}
-
-func (y *YumManager) GetInfo(name string) (PackageInfo, error) {
-	info := PackageInfo{Name: name}
-
-	installed, version, _ := y.IsInstalled(name)
-	info.Installed = installed
-	info.Version = version
-
-	return info, nil
-}
-
-func (y *YumManager) Clean() error {
-	output, err := y.executor.Execute("sudo", "yum", "clean", "all")
-	if err != nil {
-		return fmt.Errorf("failed to clean package cache: %v (output: %s)", err, output)
-	}
-	return nil
-}
-
-// BrewManager implements package management for Homebrew (macOS)
-type BrewManager struct {
-	executor *executor.CommandExecutor
-}
-
-func (b *BrewManager) Install(name, version string) error {
-	if version != "" {
-		// Homebrew doesn't support specific versions easily
-		return fmt.Errorf("specific version installation not supported with Homebrew")
-	}
-	cmd := exec.Command("brew", "install", name)
-	return cmd.Run()
-}
-
-func (b *BrewManager) Remove(name string) error {
-	cmd := exec.Command("brew", "uninstall", name)
-	return cmd.Run()
-}
-
-func (b *BrewManager) Update(name string) error {
-	cmd := exec.Command("brew", "upgrade", name)
-	return cmd.Run()
-}
-
-func (b *BrewManager) UpdateAll() error {
-	if err := exec.Command("brew", "update").Run(); err != nil {
-		return err
-	}
-	return exec.Command("brew", "upgrade").Run()
-}
-
-func (b *BrewManager) IsInstalled(name string) (bool, string, error) {
-	cmd := exec.Command("brew", "list", "--versions", name)
-	output, err := cmd.Output()
-	if err != nil {
-		return false, "", nil // Package not installed
-	}
-
-	outputStr := strings.TrimSpace(string(output))
-	if outputStr == "" {
-		return false, "", nil
-	}
-
-	parts := strings.Fields(outputStr)
-	if len(parts) >= 2 {
-		return true, parts[1], nil
-	}
-
-	return true, "", nil
-}
-
-func (b *BrewManager) Search(query string) ([]PackageInfo, error) {
-	cmd := exec.Command("brew", "search", query)
-	output, err := cmd.Output()
-	if err != nil {
-		return nil, err
-	}
-
-	var packages []PackageInfo
-	lines := strings.Split(string(output), "\n")
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line != "" && !strings.HasPrefix(line, "=") {
-			packages = append(packages, PackageInfo{
-				Name: line,
-			})
-		}
-	}
-
-	return packages, nil
-}
-
-func (b *BrewManager) ListInstalled() ([]PackageInfo, error) {
-	cmd := exec.Command("brew", "list", "--versions")
-	output, err := cmd.Output()
-	if err != nil {
-		return nil, err
-	}
-
-	var packages []PackageInfo
-	lines := strings.Split(string(output), "\n")
-	for _, line := range lines {
-		if line == "" {
-			continue
-		}
-		parts := strings.Fields(line)
-		if len(parts) >= 2 {
-			packages = append(packages, PackageInfo{
-				Name:      parts[0],
-				Version:   parts[1],
-				Installed: true,
-			})
-		}
-	}
-
-	return packages, nil
-}
-
-func (b *BrewManager) GetInfo(name string) (PackageInfo, error) {
-	info := PackageInfo{Name: name}
-
-	installed, version, _ := b.IsInstalled(name)
-	info.Installed = installed
-	info.Version = version
-
-	return info, nil
-}
-
-func (b *BrewManager) Clean() error {
-	return exec.Command("brew", "update").Run()
-}
-
-// Additional package managers (DnfManager, PacmanManager, etc.) would follow similar patterns...
-
-// GenericPackageManager provides a fallback implementation
-type GenericPackageManager struct {
-	executor *executor.CommandExecutor
-}
-
-func (g *GenericPackageManager) Install(name, version string) error {
-	return fmt.Errorf("package management not supported on this platform")
-}
-
-func (g *GenericPackageManager) Remove(name string) error {
-	return fmt.Errorf("package management not supported on this platform")
-}
-
-func (g *GenericPackageManager) Update(name string) error {
-	return fmt.Errorf("package management not supported on this platform")
-}
-
-func (g *GenericPackageManager) UpdateAll() error {
-	return fmt.Errorf("package management not supported on this platform")
-}
-
-func (g *GenericPackageManager) IsInstalled(name string) (bool, string, error) {
-	return false, "", fmt.Errorf("package management not supported on this platform")
-}
-
-func (g *GenericPackageManager) Search(query string) ([]PackageInfo, error) {
-	return nil, fmt.Errorf("package management not supported on this platform")
-}
-
-func (g *GenericPackageManager) ListInstalled() ([]PackageInfo, error) {
-	return nil, fmt.Errorf("package management not supported on this platform")
-}
-
-func (g *GenericPackageManager) GetInfo(name string) (PackageInfo, error) {
-	return PackageInfo{}, fmt.Errorf("package management not supported on this platform")
-}
-
-func (g *GenericPackageManager) Clean() error {
-	return fmt.Errorf("package management not supported on this platform")
-}
-
-// Helper functions
-func hasCommand(command string) bool {
-	_, err := exec.LookPath(command)
-	return err == nil
 }
 
 // failResult creates a failed result
-func (m *PackageModule) failResult(result types.TaskResult, message string) (types.TaskResult, error) {
+func (m *UnifiedPackageModule) failResult(result types.TaskResult, message string) (types.TaskResult, error) {
 	result.Success = false
 	result.Failed = true
 	result.Error = message
@@ -833,8 +919,192 @@ func (m *PackageModule) failResult(result types.TaskResult, message string) (typ
 	return result, fmt.Errorf("%s", message)
 }
 
-// Placeholder implementations for other package managers
-type DnfManager struct{ YumManager }
-type PacmanManager struct{ GenericPackageManager }
-type ZypperManager struct{ GenericPackageManager }
-type ChocolateyManager struct{ GenericPackageManager }
+// ============================================================================
+// SNAPSHOT MANAGEMENT
+// ============================================================================
+
+// CreateSnapshot creates a snapshot of current package system state
+func (m *UnifiedPackageModule) CreateSnapshot(ctx context.Context, description string) (*SystemSnapshot, error) {
+	packages, err := m.packageManager.ListInstalled(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list installed packages: %w", err)
+	}
+
+	snapshot := &SystemSnapshot{
+		ID:          fmt.Sprintf("snapshot-%d", time.Now().Unix()),
+		Timestamp:   time.Now(),
+		Description: description,
+		Packages:    make(map[string]*PackageState),
+	}
+
+	// Convert PackageInfo to PackageState
+	for _, pkg := range packages {
+		snapshot.Packages[pkg.Name] = &PackageState{
+			Name:        pkg.Name,
+			Installed:   pkg.Installed,
+			Version:     pkg.Version,
+			Repository:  pkg.Repository,
+			LastChecked: time.Now(),
+		}
+	}
+
+	// Calculate checksum
+	data, _ := json.Marshal(snapshot.Packages)
+	hash := sha256.Sum256(data)
+	snapshot.Checksum = hex.EncodeToString(hash[:])
+
+	return snapshot, nil
+}
+
+// RestoreSnapshot restores system to a previous snapshot
+func (m *UnifiedPackageModule) RestoreSnapshot(ctx context.Context, snapshot *SystemSnapshot) error {
+	currentPackages, err := m.packageManager.ListInstalled(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to list current packages: %w", err)
+	}
+
+	// Build current state map
+	currentMap := make(map[string]bool)
+	for _, pkg := range currentPackages {
+		currentMap[pkg.Name] = true
+	}
+
+	// Remove packages not in snapshot
+	for name := range currentMap {
+		if _, exists := snapshot.Packages[name]; !exists {
+			if _, err := m.packageManager.Remove(ctx, name); err != nil {
+				return fmt.Errorf("failed to remove %s: %w", name, err)
+			}
+		}
+	}
+
+	// Install/update packages from snapshot
+	for name, state := range snapshot.Packages {
+		if _, err := m.packageManager.Install(ctx, name, state.Version); err != nil {
+			return fmt.Errorf("failed to install %s: %w", name, err)
+		}
+	}
+
+	return nil
+}
+
+// ============================================================================
+// PACKAGE GROUP MANAGEMENT
+// ============================================================================
+
+// InstallGroup installs a package group
+func (m *UnifiedPackageModule) InstallGroup(ctx context.Context, group *PackageGroup, includeOptional bool) (*BatchOperation, error) {
+	packages := make([]PackageSpec, 0, len(group.Packages))
+
+	for _, name := range group.Packages {
+		packages = append(packages, PackageSpec{
+			Name:  name,
+			State: "present",
+		})
+	}
+
+	if includeOptional {
+		for _, name := range group.Optional {
+			packages = append(packages, PackageSpec{
+				Name:  name,
+				State: "present",
+			})
+		}
+	}
+
+	return m.packageManager.InstallMultiple(ctx, packages)
+}
+
+// RemoveGroup removes a package group
+func (m *UnifiedPackageModule) RemoveGroup(ctx context.Context, group *PackageGroup) (*BatchOperation, error) {
+	packageNames := append([]string{}, group.Packages...)
+	packageNames = append(packageNames, group.Optional...)
+
+	return m.packageManager.RemoveMultiple(ctx, packageNames)
+}
+
+// ============================================================================
+// HEALTH CHECK
+// ============================================================================
+
+// PerformHealthCheck performs a comprehensive health check
+func (m *UnifiedPackageModule) PerformHealthCheck(ctx context.Context) (*HealthCheckResult, error) {
+	result := &HealthCheckResult{
+		Healthy:   true,
+		CheckedAt: time.Now(),
+	}
+
+	// Verify package system integrity
+	if err := m.packageManager.VerifyIntegrity(ctx); err != nil {
+		result.Healthy = false
+		result.Issues = append(result.Issues, fmt.Sprintf("Integrity check failed: %v", err))
+	}
+
+	// Check for broken packages
+	if _, err := m.packageManager.ListInstalled(ctx); err != nil {
+		result.Healthy = false
+		result.Issues = append(result.Issues, fmt.Sprintf("Failed to list packages: %v", err))
+		return result, nil
+	}
+
+	// Check for upgradable packages
+	upgradable, err := m.packageManager.ListUpgradable(ctx)
+	if err == nil && len(upgradable) > 0 {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("%d packages can be upgraded", len(upgradable)))
+		result.Recommendations = append(result.Recommendations, "Consider upgrading packages to latest versions")
+	}
+
+	// Check cache statistics
+	hits, misses := m.stateCache.Stats()
+	if hits+misses > 0 {
+		hitRate := float64(hits) / float64(hits+misses) * 100
+		if hitRate < 50 {
+			result.Warnings = append(result.Warnings, fmt.Sprintf("Low cache hit rate: %.1f%%", hitRate))
+			result.Recommendations = append(result.Recommendations, "Consider increasing cache TTL")
+		}
+	}
+
+	// Check for orphan packages (packages with no dependencies)
+	orphans, err := m.packageManager.AutoRemove(ctx)
+	if err == nil && len(orphans) > 0 {
+		result.OrphanPackages = orphans
+		result.Recommendations = append(result.Recommendations, fmt.Sprintf("Remove %d orphan packages to free space", len(orphans)))
+	}
+
+	return result, nil
+}
+
+// ============================================================================
+// AUDIT LOGGING
+// ============================================================================
+
+// LogAuditEntry logs an audit entry (to be implemented with actual logging backend)
+func (m *UnifiedPackageModule) LogAuditEntry(entry *AuditEntry) error {
+	// This is a placeholder - in production, this would write to a proper audit log
+	// For now, we'll just format it as JSON
+	data, err := json.MarshalIndent(entry, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal audit entry: %w", err)
+	}
+
+	// In production, write to audit log file or send to logging service
+	_ = data // Placeholder to avoid unused variable error
+
+	return nil
+}
+
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+// generateStateHash generates a hash for package state to detect changes
+func generateStateHash(name, version, repository string) string {
+	data := fmt.Sprintf("%s:%s:%s", name, version, repository)
+	hash := sha256.Sum256([]byte(data))
+	return hex.EncodeToString(hash[:])
+}
+
+// contains checks if a string contains a substring
+func contains(s, substr string) bool {
+	return strings.Contains(s, substr)
+}

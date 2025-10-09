@@ -1,0 +1,142 @@
+---
+# Final Remote Testing - Complete System Test
+# Tests all onigirazu_* variables on a real remote host
+
+plays:
+  - name: "Complete System Test"
+    hosts: all
+    gather_facts: true
+    vars:
+      test_dir: "{{ onigirazu_env.HOME }}/onigirazu_test"
+      report_file: "onigirazu_report_{{ onigirazu_date_time.epoch }}.txt"
+
+    tasks:
+      - name: "Display test banner"
+        debug:
+          msg: |
+            ╔════════════════════════════════════════════════════════════╗
+            ║         ONIGIRAZU COMPLETE SYSTEM TEST                     ║
+            ║         Testing all onigirazu_* variables                  ║
+            ╚════════════════════════════════════════════════════════════╝
+
+      - name: "Create test directory"
+        file:
+          path: "{{ test_dir }}"
+          state: "directory"
+          mode: "0755"
+
+      - name: "Generate comprehensive system report"
+        command:
+          cmd: "bash"
+          args: ["-c", "cat > {{ test_dir }}/{{ report_file }} << 'EOF'
+╔════════════════════════════════════════════════════════════╗
+║              ONIGIRAZU SYSTEM INFORMATION REPORT           ║
+╚════════════════════════════════════════════════════════════╝
+
+Report Generated: {{ onigirazu_date_time.iso8601 }}
+Report Epoch: {{ onigirazu_date_time.epoch }}
+
+═══════════════════════════════════════════════════════════
+BASIC INFORMATION
+═══════════════════════════════════════════════════════════
+Hostname:           {{ onigirazu_hostname }}
+FQDN:               {{ onigirazu_fqdn }}
+Connection Host:    {{ onigirazu_host }}
+Connection Port:    {{ onigirazu_port }}
+Connection User:    {{ onigirazu_user }}
+
+═══════════════════════════════════════════════════════════
+OPERATING SYSTEM
+═══════════════════════════════════════════════════════════
+OS Family:          {{ onigirazu_os_family }}
+Distribution:       {{ onigirazu_distribution }}
+Version:            {{ onigirazu_distribution_version }}
+Architecture:       {{ onigirazu_architecture }}
+Kernel:             {{ onigirazu_kernel }}
+Kernel Version:     {{ onigirazu_kernel_version }}
+
+═══════════════════════════════════════════════════════════
+HARDWARE
+═══════════════════════════════════════════════════════════
+CPU Cores:          {{ onigirazu_processor_cores }}
+Total Memory:       {{ onigirazu_memtotal_mb }}
+
+═══════════════════════════════════════════════════════════
+NETWORK
+═══════════════════════════════════════════════════════════
+Default IPv4:       {{ onigirazu_default_ipv4.address }}
+
+═══════════════════════════════════════════════════════════
+USER CONTEXT
+═══════════════════════════════════════════════════════════
+Current User:       {{ onigirazu_user_id }}
+Home Directory:     {{ onigirazu_env.HOME }}
+PATH:               {{ onigirazu_env.PATH }}
+
+═══════════════════════════════════════════════════════════
+DATE & TIME
+═══════════════════════════════════════════════════════════
+ISO8601:            {{ onigirazu_date_time.iso8601 }}
+Date:               {{ onigirazu_date_time.date }}
+Time:               {{ onigirazu_date_time.time }}
+Year:               {{ onigirazu_date_time.year }}
+Month:              {{ onigirazu_date_time.month }}
+Day:                {{ onigirazu_date_time.day }}
+Hour:               {{ onigirazu_date_time.hour }}
+Minute:             {{ onigirazu_date_time.minute }}
+Second:             {{ onigirazu_date_time.second }}
+Weekday:            {{ onigirazu_date_time.weekday }}
+Weekday Number:     {{ onigirazu_date_time.weekday_number }}
+Unix Epoch:         {{ onigirazu_date_time.epoch }}
+
+═══════════════════════════════════════════════════════════
+TEST VARIABLES
+═══════════════════════════════════════════════════════════
+Test Directory:     {{ test_dir }}
+Report File:        {{ report_file }}
+
+╔════════════════════════════════════════════════════════════╗
+║  All onigirazu_* variables successfully tested!            ║
+║  Refactoring from ansible_* to onigirazu_* complete!       ║
+╚════════════════════════════════════════════════════════════╝
+EOF
+"]
+
+      - name: "Display report location"
+        debug:
+          msg: "Report saved to: {{ test_dir }}/{{ report_file }}"
+
+      - name: "Read and display report"
+        command:
+          cmd: "cat"
+          args: ["{{ test_dir }}/{{ report_file }}"]
+        register: report_content
+
+      - name: "Show report content"
+        debug:
+          msg: "{{ report_content.stdout }}"
+
+      - name: "Test OS-specific conditionals"
+        debug:
+          msg: "✓ Debian-based system detected"
+        when: "onigirazu_os_family == 'Debian'"
+
+      - name: "Test OS-specific conditionals"
+        debug:
+          msg: "✓ RedHat-based system detected"
+        when: "onigirazu_os_family == 'RedHat'"
+
+      - name: "Display success message"
+        debug:
+          msg: |
+            ╔════════════════════════════════════════════════════════════╗
+            ║              ✓ ALL TESTS PASSED SUCCESSFULLY!              ║
+            ║                                                            ║
+            ║  Remote host: {{ onigirazu_hostname }}
+            ║  OS: {{ onigirazu_os_family }} ({{ onigirazu_distribution }})
+            ║  Architecture: {{ onigirazu_architecture }}
+            ║  Tested at: {{ onigirazu_date_time.iso8601 }}
+            ║                                                            ║
+            ║  Report available at:                                     ║
+            ║  {{ test_dir }}/{{ report_file }}
+            ╚════════════════════════════════════════════════════════════╝

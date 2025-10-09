@@ -3,7 +3,7 @@
 ## 📋 Overview
 
 **Status:** ✅ COMPLETE
-**Priority:** В ближайшее время (Near-term)
+**Priority:** Near-term
 **Expected Impact:** 20-30% reduction in memory allocations, reduced GC pressure
 **Actual Impact:** 30% faster with zero allocations for buffer operations
 
@@ -320,7 +320,7 @@ result, err := bufferpool.BytesBufferFunc(func(buf *bytes.Buffer) error {
 
 ## 🎯 Next Steps
 
-### Phase 4: Extended Caching (Долгосрочные задачи)
+### Phase 4: Extended Caching (Long-term tasks)
 
 Now that immediate and near-term optimizations are complete, we can move to long-term improvements:
 

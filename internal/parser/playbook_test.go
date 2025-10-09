@@ -274,11 +274,11 @@ func TestParseInventory_ValidInventory(t *testing.T) {
 	inventoryContent := `all:
   hosts:
     host1:
-      ansible_host: 192.168.1.1
+      onigirazu_host: 192.168.1.1
     host2:
-      ansible_host: 192.168.1.2
+      onigirazu_host: 192.168.1.2
   vars:
-    ansible_user: admin
+    onigirazu_user: admin
 `
 
 	err := os.WriteFile(inventoryPath, []byte(inventoryContent), 0644)

@@ -85,7 +85,7 @@
           name: "{{ app_name }}"
           env: "{{ environment }}"
           version: "{{ version }}"
-          deployed_at: "{{ ansible_date_time.iso8601 | default('unknown') }}"
+          deployed_at: "{{ onigirazu_date_time.iso8601 | default('unknown') }}"
 
     - name: Display application info
       debug:

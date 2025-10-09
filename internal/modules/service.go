@@ -103,6 +103,20 @@ func (m *ServiceModuleFixed) Execute(ctx context.Context, host types.Host, args 
 			return m.failResult(result, fmt.Sprintf("failed to create executor: %v", err))
 		}
 		m.executor = exec
+
+		// Configure become (privilege escalation) if requested
+		if become, ok := args["_become"].(bool); ok && become {
+			becomeUser, _ := args["_become_user"].(string)
+			becomeMethod, _ := args["_become_method"].(string)
+			exec.SetBecome(true, becomeUser, becomeMethod)
+		}
+
+		// Detect service manager for the remote host
+		manager, err := m.detectServiceManager(exec)
+		if err != nil {
+			return m.failResult(result, fmt.Sprintf("failed to detect service manager: %v", err))
+		}
+		m.serviceManager = manager
 		m.serviceManager.SetExecutor(exec)
 	}
 
@@ -616,6 +630,30 @@ func (g *GenericManagerFixed) GetStatus(name string) (ServiceStatus, error) {
 
 func (g *GenericManagerFixed) SetExecutor(executor *executor.CommandExecutor) {
 	g.executor = executor
+}
+
+// detectServiceManager detects the service manager on the remote host
+func (m *ServiceModuleFixed) detectServiceManager(exec *executor.CommandExecutor) (ServiceManagerFixed, error) {
+	// Check for systemd
+	_, err := exec.Execute("test", "-d", "/run/systemd/system")
+	if err == nil {
+		return &SystemdManagerFixed{}, nil
+	}
+
+	// Check for SysV init
+	_, err = exec.Execute("test", "-d", "/etc/init.d")
+	if err == nil {
+		return &SysVInitManagerFixed{}, nil
+	}
+
+	// Check for launchd (macOS)
+	_, err = exec.Execute("test", "-d", "/Library/LaunchDaemons")
+	if err == nil {
+		return &LaunchdManagerFixed{}, nil
+	}
+
+	// Fallback to generic manager
+	return &GenericManagerFixed{}, nil
 }
 
 // failResult creates a failed result

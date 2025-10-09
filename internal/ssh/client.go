@@ -2,10 +2,13 @@ package ssh
 
 import (
 	"fmt"
+	"io"
 	"net"
 	"os"
+	"path/filepath"
 	"time"
 
+	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
@@ -24,31 +27,43 @@ func NewClient(host types.Host) (*Client, error) {
 
 // NewClientWithHostKeyManager creates a new SSH client with custom host key manager
 func NewClientWithHostKeyManager(host types.Host, hostKeyManager *HostKeyManager) (*Client, error) {
+	fmt.Printf("[DEBUG SSH] NewClientWithHostKeyManager called for host: %s, Address: %s, User: %s, KeyFile: %s\n",
+		host.Name, host.Address, host.User, host.KeyFile)
+
 	var auth []ssh.AuthMethod
 
 	// Try key-based authentication first
 	if host.KeyFile != "" {
+		fmt.Printf("[DEBUG SSH] Reading key file: %s\n", host.KeyFile)
 		key, err := os.ReadFile(host.KeyFile)
 		if err != nil {
 			return nil, fmt.Errorf("unable to read private key: %v", err)
 		}
+		fmt.Printf("[DEBUG SSH] Key file read successfully, size: %d bytes\n", len(key))
 
 		signer, err := ssh.ParsePrivateKey(key)
 		if err != nil {
 			return nil, fmt.Errorf("unable to parse private key: %v", err)
 		}
+		fmt.Printf("[DEBUG SSH] Private key parsed successfully\n")
 
 		auth = append(auth, ssh.PublicKeys(signer))
+	} else {
+		fmt.Printf("[DEBUG SSH] No KeyFile specified for host %s\n", host.Name)
 	}
 
 	// Add password authentication if available
 	if host.Password != "" {
 		auth = append(auth, ssh.Password(host.Password))
+		fmt.Printf("[DEBUG SSH] Password authentication added\n")
 	}
 
 	if len(auth) == 0 {
+		fmt.Printf("[DEBUG SSH] ERROR: No authentication methods available for host %s\n", host.Name)
 		return nil, fmt.Errorf("no authentication method available for host %s", host.Name)
 	}
+
+	fmt.Printf("[DEBUG SSH] Total authentication methods: %d\n", len(auth))
 
 	config := &ssh.ClientConfig{
 		User:            host.User,
@@ -64,10 +79,13 @@ func NewClientWithHostKeyManager(host types.Host, hostKeyManager *HostKeyManager
 	}
 
 	address := fmt.Sprintf("%s:%d", host.Address, port)
+	fmt.Printf("[DEBUG SSH] Attempting to connect to %s as user %s\n", address, host.User)
 	client, err := ssh.Dial("tcp", address, config)
 	if err != nil {
+		fmt.Printf("[DEBUG SSH] Connection failed: %v\n", err)
 		return nil, fmt.Errorf("failed to connect to %s: %v", address, err)
 	}
+	fmt.Printf("[DEBUG SSH] Connection established successfully to %s\n", address)
 
 	return &Client{
 		client: client,
@@ -125,4 +143,94 @@ func IsLocal(host types.Host) bool {
 	}
 
 	return false
+}
+
+// WriteFile writes data to a file on the remote host using SFTP
+func (c *Client) WriteFile(remotePath string, data []byte, mode os.FileMode) error {
+	// Create SFTP client
+	sftpClient, err := sftp.NewClient(c.client)
+	if err != nil {
+		return fmt.Errorf("failed to create SFTP client: %v", err)
+	}
+	defer sftpClient.Close()
+
+	// Ensure parent directory exists
+	remoteDir := filepath.Dir(remotePath)
+	if err := sftpClient.MkdirAll(remoteDir); err != nil {
+		return fmt.Errorf("failed to create remote directory %s: %v", remoteDir, err)
+	}
+
+	// Create remote file
+	remoteFile, err := sftpClient.Create(remotePath)
+	if err != nil {
+		return fmt.Errorf("failed to create remote file %s: %v", remotePath, err)
+	}
+	defer remoteFile.Close()
+
+	// Write data
+	if _, err := remoteFile.Write(data); err != nil {
+		return fmt.Errorf("failed to write to remote file %s: %v", remotePath, err)
+	}
+
+	// Set file permissions
+	if err := sftpClient.Chmod(remotePath, mode); err != nil {
+		return fmt.Errorf("failed to set permissions on %s: %v", remotePath, err)
+	}
+
+	return nil
+}
+
+// ReadFile reads a file from the remote host using SFTP
+func (c *Client) ReadFile(remotePath string) ([]byte, error) {
+	// Create SFTP client
+	sftpClient, err := sftp.NewClient(c.client)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create SFTP client: %v", err)
+	}
+	defer sftpClient.Close()
+
+	// Open remote file
+	remoteFile, err := sftpClient.Open(remotePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open remote file %s: %v", remotePath, err)
+	}
+	defer remoteFile.Close()
+
+	// Read file contents
+	data, err := io.ReadAll(remoteFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read remote file %s: %v", remotePath, err)
+	}
+
+	return data, nil
+}
+
+// StatFile gets file info from the remote host using SFTP
+func (c *Client) StatFile(remotePath string) (os.FileInfo, error) {
+	// Create SFTP client
+	sftpClient, err := sftp.NewClient(c.client)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create SFTP client: %v", err)
+	}
+	defer sftpClient.Close()
+
+	// Get file info
+	fileInfo, err := sftpClient.Stat(remotePath)
+	if err != nil {
+		return nil, err
+	}
+
+	return fileInfo, nil
+}
+
+// CopyFile copies a file from local to remote host using SFTP
+func (c *Client) CopyFile(localPath, remotePath string, mode os.FileMode) error {
+	// Read local file
+	data, err := os.ReadFile(localPath)
+	if err != nil {
+		return fmt.Errorf("failed to read local file %s: %v", localPath, err)
+	}
+
+	// Write to remote
+	return c.WriteFile(remotePath, data, mode)
 }

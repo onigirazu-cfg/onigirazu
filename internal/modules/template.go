@@ -2,13 +2,16 @@ package modules
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
 
+	sshpkg "github.com/onigirazu-cfg/onigirazu/internal/ssh"
 	"github.com/onigirazu-cfg/onigirazu/internal/template"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
@@ -16,7 +19,8 @@ import (
 // TemplateModule handles template file processing
 type TemplateModule struct {
 	*BaseModule
-	engine *template.Engine
+	engine   *template.Engine
+	executor *sshpkg.Client
 }
 
 // TemplateOptions holds template processing options
@@ -61,17 +65,42 @@ func (m *TemplateModule) Execute(ctx context.Context, host types.Host, args map[
 		Timestamp: startTime,
 	}
 
-	// Validate required arguments
-	src, ok := args["src"].(string)
-	if !ok || src == "" {
-		result.Error = "src parameter is required and must be a string"
+	// Check if we need to get/cache SSH executor for this host
+	if m.executor == nil {
+		if !sshpkg.IsLocal(host) {
+			pool := sshpkg.GetGlobalPool()
+			executor, err := pool.GetConnection(host)
+			if err != nil {
+				result.Error = fmt.Sprintf("failed to get SSH connection: %v", err)
+				result.Duration = time.Since(startTime)
+				return result, fmt.Errorf("%s", result.Error)
+			}
+			m.executor = executor
+		}
+	}
+
+	// Determine if this is a local or remote operation
+	if sshpkg.IsLocal(host) {
+		return m.executeLocal(ctx, host, args, result, startTime)
+	}
+	return m.executeRemote(ctx, host, args, result, startTime)
+}
+
+// executeLocal handles template operations on localhost
+func (m *TemplateModule) executeLocal(ctx context.Context, host types.Host, args map[string]interface{}, result types.TaskResult, startTime time.Time) (types.TaskResult, error) {
+	// Get parameters
+	src := getStringArg(args, "src", "")
+	content := getStringArg(args, "content", "")
+	dest, ok := args["dest"].(string)
+	if !ok || dest == "" {
+		result.Error = "dest parameter is required and must be a string"
 		result.Duration = time.Since(startTime)
 		return result, fmt.Errorf("%s", result.Error)
 	}
 
-	dest, ok := args["dest"].(string)
-	if !ok || dest == "" {
-		result.Error = "dest parameter is required and must be a string"
+	// Either src or content must be provided
+	if src == "" && content == "" {
+		result.Error = "either src or content parameter is required"
 		result.Duration = time.Since(startTime)
 		return result, fmt.Errorf("%s", result.Error)
 	}
@@ -82,11 +111,7 @@ func (m *TemplateModule) Execute(ctx context.Context, host types.Host, args map[
 	owner := getStringArg(args, "owner", "")
 	group := getStringArg(args, "group", "")
 	variables := getMapArg(args, "vars", make(map[string]interface{}))
-	_ = getBoolArg(args, "force", false)   // force - not used in this implementation
-	_ = getStringArg(args, "validate", "") // validate - not used in this implementation
-
-	// Template options
-	_ = m.parseTemplateOptions(args) // options - not used in this implementation
+	force := getBoolArg(args, "force", false)
 
 	// Merge host variables
 	allVars := make(map[string]interface{})
@@ -98,32 +123,47 @@ func (m *TemplateModule) Execute(ctx context.Context, host types.Host, args map[
 	}
 
 	// Add host information to variables
-	allVars["ansible_host"] = host.Address
-	allVars["ansible_hostname"] = host.Name
-	allVars["ansible_user"] = host.User
-	allVars["ansible_port"] = host.Port
-
-	// Add template functions
-	allVars["template_functions"] = m.getTemplateFunctions()
-
-	// Check if source template exists
-	if _, err := os.Stat(src); os.IsNotExist(err) {
-		result.Error = fmt.Sprintf("source template file does not exist: %s", src)
-		result.Duration = time.Since(startTime)
-		return result, fmt.Errorf("%s", result.Error)
-	}
+	allVars["onigirazu_host"] = host.Address
+	allVars["onigirazu_hostname"] = host.Name
+	allVars["onigirazu_user"] = host.User
+	allVars["onigirazu_port"] = host.Port
 
 	// Render template
-	renderedContent, err := m.engine.RenderFile(ctx, src, allVars)
-	if err != nil {
-		result.Error = fmt.Sprintf("failed to render template: %v", err)
-		result.Duration = time.Since(startTime)
-		return result, fmt.Errorf("%s", result.Error)
+	var renderedContent string
+	var err error
+
+	if content != "" {
+		// Render inline content
+		renderedContent, err = m.engine.Render(ctx, content, allVars)
+		if err != nil {
+			result.Error = fmt.Sprintf("failed to render template content: %v", err)
+			result.Duration = time.Since(startTime)
+			return result, fmt.Errorf("%s", result.Error)
+		}
+	} else {
+		// Check if source template exists
+		if _, err := os.Stat(src); os.IsNotExist(err) {
+			result.Error = fmt.Sprintf("source template file does not exist: %s", src)
+			result.Duration = time.Since(startTime)
+			return result, fmt.Errorf("%s", result.Error)
+		}
+
+		// Render template file
+		renderedContent, err = m.engine.RenderFile(ctx, src, allVars)
+		if err != nil {
+			result.Error = fmt.Sprintf("failed to render template: %v", err)
+			result.Duration = time.Since(startTime)
+			return result, fmt.Errorf("%s", result.Error)
+		}
 	}
+
+	// Calculate checksum of rendered content
+	newChecksum := fmt.Sprintf("%x", sha256.Sum256([]byte(renderedContent)))
 
 	// Check if destination file exists and compare content
 	var needsUpdate bool
 	var originalContent []byte
+	var oldChecksum string
 
 	if _, err := os.Stat(dest); err == nil {
 		// File exists, read current content
@@ -134,7 +174,8 @@ func (m *TemplateModule) Execute(ctx context.Context, host types.Host, args map[
 			return result, fmt.Errorf("%s", result.Error)
 		}
 
-		needsUpdate = string(originalContent) != renderedContent
+		oldChecksum = fmt.Sprintf("%x", sha256.Sum256(originalContent))
+		needsUpdate = oldChecksum != newChecksum || force
 	} else {
 		// File doesn't exist, needs to be created
 		needsUpdate = true
@@ -146,6 +187,7 @@ func (m *TemplateModule) Execute(ctx context.Context, host types.Host, args map[
 		result.Changed = false
 		result.Output["message"] = "Template is already up to date"
 		result.Output["dest"] = dest
+		result.Output["checksum"] = oldChecksum
 		result.Duration = time.Since(startTime)
 		return result, nil
 	}
@@ -169,20 +211,19 @@ func (m *TemplateModule) Execute(ctx context.Context, host types.Host, args map[
 		return result, fmt.Errorf("%s", result.Error)
 	}
 
-	// Write rendered content to destination
-	if err := os.WriteFile(dest, []byte(renderedContent), 0600); err != nil {
-		result.Error = fmt.Sprintf("failed to write template to destination: %v", err)
+	// Parse file mode
+	fileMode, err := parseFileMode(mode)
+	if err != nil {
+		result.Error = fmt.Sprintf("invalid file mode: %v", err)
 		result.Duration = time.Since(startTime)
 		return result, fmt.Errorf("%s", result.Error)
 	}
 
-	// Set file permissions
-	if mode != "" {
-		if err := m.setFileMode(dest, mode); err != nil {
-			result.Error = fmt.Sprintf("failed to set file mode: %v", err)
-			result.Duration = time.Since(startTime)
-			return result, fmt.Errorf("%s", result.Error)
-		}
+	// Write rendered content to destination
+	if err := os.WriteFile(dest, []byte(renderedContent), fileMode); err != nil {
+		result.Error = fmt.Sprintf("failed to write template to destination: %v", err)
+		result.Duration = time.Since(startTime)
+		return result, fmt.Errorf("%s", result.Error)
 	}
 
 	// Set file ownership (if specified and running as root)
@@ -196,9 +237,156 @@ func (m *TemplateModule) Execute(ctx context.Context, host types.Host, args map[
 	result.Success = true
 	result.Changed = true
 	result.Output["message"] = "Template processed successfully"
-	result.Output["src"] = src
+	if src != "" {
+		result.Output["src"] = src
+	}
 	result.Output["dest"] = dest
 	result.Output["size"] = len(renderedContent)
+	result.Output["checksum"] = newChecksum
+	result.Duration = time.Since(startTime)
+
+	return result, nil
+}
+
+// executeRemote handles template operations on remote hosts via SFTP
+func (m *TemplateModule) executeRemote(ctx context.Context, host types.Host, args map[string]interface{}, result types.TaskResult, startTime time.Time) (types.TaskResult, error) {
+	// Get parameters
+	src := getStringArg(args, "src", "")
+	content := getStringArg(args, "content", "")
+	dest, ok := args["dest"].(string)
+	if !ok || dest == "" {
+		result.Error = "dest parameter is required and must be a string"
+		result.Duration = time.Since(startTime)
+		return result, fmt.Errorf("%s", result.Error)
+	}
+
+	// Either src or content must be provided
+	if src == "" && content == "" {
+		result.Error = "either src or content parameter is required"
+		result.Duration = time.Since(startTime)
+		return result, fmt.Errorf("%s", result.Error)
+	}
+
+	// Get optional parameters
+	backup := getBoolArg(args, "backup", false)
+	mode := getStringArg(args, "mode", "0644")
+	variables := getMapArg(args, "vars", make(map[string]interface{}))
+	force := getBoolArg(args, "force", false)
+
+	// Merge host variables
+	allVars := make(map[string]interface{})
+	for k, v := range host.Vars {
+		allVars[k] = v
+	}
+	for k, v := range variables {
+		allVars[k] = v
+	}
+
+	// Add host information to variables
+	allVars["onigirazu_host"] = host.Address
+	allVars["onigirazu_hostname"] = host.Name
+	allVars["onigirazu_user"] = host.User
+	allVars["onigirazu_port"] = host.Port
+
+	// Render template
+	var renderedContent string
+	var err error
+
+	if content != "" {
+		// Render inline content
+		renderedContent, err = m.engine.Render(ctx, content, allVars)
+		if err != nil {
+			result.Error = fmt.Sprintf("failed to render template content: %v", err)
+			result.Duration = time.Since(startTime)
+			return result, fmt.Errorf("%s", result.Error)
+		}
+	} else {
+		// Check if source template exists locally
+		if _, err := os.Stat(src); os.IsNotExist(err) {
+			result.Error = fmt.Sprintf("source template file does not exist: %s", src)
+			result.Duration = time.Since(startTime)
+			return result, fmt.Errorf("%s", result.Error)
+		}
+
+		// Render template file
+		renderedContent, err = m.engine.RenderFile(ctx, src, allVars)
+		if err != nil {
+			result.Error = fmt.Sprintf("failed to render template: %v", err)
+			result.Duration = time.Since(startTime)
+			return result, fmt.Errorf("%s", result.Error)
+		}
+	}
+
+	// Calculate checksum of rendered content
+	newChecksum := fmt.Sprintf("%x", sha256.Sum256([]byte(renderedContent)))
+
+	// Check if destination file exists on remote host
+	var needsUpdate bool
+	var oldChecksum string
+
+	remoteFileInfo, err := m.executor.StatFile(dest)
+	if err == nil {
+		// File exists on remote host, read and compare
+		remoteContent, err := m.executor.ReadFile(dest)
+		if err != nil {
+			result.Error = fmt.Sprintf("failed to read remote file: %v", err)
+			result.Duration = time.Since(startTime)
+			return result, fmt.Errorf("%s", result.Error)
+		}
+
+		oldChecksum = fmt.Sprintf("%x", sha256.Sum256(remoteContent))
+		needsUpdate = oldChecksum != newChecksum || force
+
+		// Create backup if requested
+		if backup && needsUpdate {
+			backupPath := dest + ".backup." + time.Now().Format("20060102-150405")
+			if err := m.executor.WriteFile(backupPath, remoteContent, remoteFileInfo.Mode()); err != nil {
+				result.Error = fmt.Sprintf("failed to create backup on remote host: %v", err)
+				result.Duration = time.Since(startTime)
+				return result, fmt.Errorf("%s", result.Error)
+			}
+			result.Output["backup_file"] = backupPath
+		}
+	} else {
+		// File doesn't exist on remote host
+		needsUpdate = true
+	}
+
+	if !needsUpdate {
+		// File is already up to date
+		result.Success = true
+		result.Changed = false
+		result.Output["message"] = "Template is already up to date"
+		result.Output["dest"] = dest
+		result.Output["checksum"] = oldChecksum
+		result.Duration = time.Since(startTime)
+		return result, nil
+	}
+
+	// Parse file mode
+	fileMode, err := parseFileMode(mode)
+	if err != nil {
+		result.Error = fmt.Sprintf("invalid file mode: %v", err)
+		result.Duration = time.Since(startTime)
+		return result, fmt.Errorf("%s", result.Error)
+	}
+
+	// Write rendered content to remote destination
+	if err := m.executor.WriteFile(dest, []byte(renderedContent), fileMode); err != nil {
+		result.Error = fmt.Sprintf("failed to write template to remote destination: %v", err)
+		result.Duration = time.Since(startTime)
+		return result, fmt.Errorf("%s", result.Error)
+	}
+
+	result.Success = true
+	result.Changed = true
+	result.Output["message"] = "Template processed successfully on remote host"
+	if src != "" {
+		result.Output["src"] = src
+	}
+	result.Output["dest"] = dest
+	result.Output["size"] = len(renderedContent)
+	result.Output["checksum"] = newChecksum
 	result.Duration = time.Since(startTime)
 
 	return result, nil
@@ -206,18 +394,31 @@ func (m *TemplateModule) Execute(ctx context.Context, host types.Host, args map[
 
 // Validate validates template module arguments
 func (m *TemplateModule) Validate(args map[string]interface{}) error {
-	// Check required arguments
-	if _, ok := args["src"]; !ok {
-		return fmt.Errorf("src parameter is required")
+	// Check that either src or content is provided
+	src, hasSrc := args["src"]
+	content, hasContent := args["content"]
+
+	if !hasSrc && !hasContent {
+		return fmt.Errorf("either src or content parameter is required")
 	}
 
+	// Validate src if provided
+	if hasSrc {
+		if srcStr, ok := src.(string); !ok || srcStr == "" {
+			return fmt.Errorf("src must be a non-empty string")
+		}
+	}
+
+	// Validate content if provided
+	if hasContent {
+		if contentStr, ok := content.(string); !ok || contentStr == "" {
+			return fmt.Errorf("content must be a non-empty string")
+		}
+	}
+
+	// Check required dest argument
 	if _, ok := args["dest"]; !ok {
 		return fmt.Errorf("dest parameter is required")
-	}
-
-	// Validate src is a string
-	if src, ok := args["src"].(string); !ok || src == "" {
-		return fmt.Errorf("src must be a non-empty string")
 	}
 
 	// Validate dest is a string
@@ -259,41 +460,18 @@ func (m *TemplateModule) Validate(args map[string]interface{}) error {
 	return nil
 }
 
-// setFileMode sets file permissions
-func (m *TemplateModule) setFileMode(path, mode string) error {
-	// Parse octal mode
-	var perm os.FileMode
-	switch mode {
-	case "0644":
-		perm = 0644
-	case "0755":
-		perm = 0755
-	case "0600":
-		perm = 0600
-	case "0700":
-		perm = 0700
-	default:
-		// Try to parse as octal
-		if len(mode) == 4 && mode[0] == '0' {
-			// Simple octal parsing for common cases
-			switch mode {
-			case "0644":
-				perm = 0644
-			case "0755":
-				perm = 0755
-			case "0600":
-				perm = 0600
-			case "0700":
-				perm = 0700
-			default:
-				return fmt.Errorf("unsupported file mode: %s", mode)
-			}
-		} else {
-			return fmt.Errorf("invalid file mode format: %s", mode)
-		}
+// parseFileMode parses file mode string to os.FileMode
+func parseFileMode(mode string) (os.FileMode, error) {
+	if mode == "" {
+		return 0644, nil
 	}
 
-	return os.Chmod(path, perm)
+	modeInt, err := strconv.ParseUint(mode, 8, 32)
+	if err != nil {
+		return 0644, fmt.Errorf("invalid mode %s: %v", mode, err)
+	}
+
+	return os.FileMode(modeInt), nil
 }
 
 // setFileOwnership sets file ownership (simplified implementation)

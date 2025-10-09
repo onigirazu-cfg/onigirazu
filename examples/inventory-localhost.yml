@@ -3,5 +3,5 @@ groups:
   localhost:
     hosts:
       localhost:
-        ansible_connection: local
-        ansible_host: 127.0.0.1
+        onigirazu_connection: local
+        onigirazu_host: 127.0.0.1

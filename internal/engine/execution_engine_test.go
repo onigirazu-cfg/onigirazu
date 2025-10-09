@@ -817,7 +817,7 @@ func TestExecuteTask_SetFact(t *testing.T) {
 			Success:  true,
 			Changed:  false,
 			Output: map[string]interface{}{
-				"ansible_facts": map[string]interface{}{
+				"onigirazu_facts": map[string]interface{}{
 					"my_fact": "my_value",
 				},
 			},

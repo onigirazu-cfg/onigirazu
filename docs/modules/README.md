@@ -72,23 +72,23 @@ Gather system information and facts about target hosts.
     gather_subset:
       - "hardware"
       - "network"
-    filter: "ansible_*"
+    filter: "onigirazu_*"
 ```
 
 #### Return Values
 
 ```json
 {
-  "ansible_facts": {
-    "ansible_hostname": "webserver01",
-    "ansible_os_family": "RedHat",
-    "ansible_distribution": "CentOS",
-    "ansible_distribution_version": "8.4",
-    "ansible_architecture": "x86_64",
-    "ansible_processor_count": 4,
-    "ansible_memtotal_mb": 8192,
-    "ansible_interfaces": ["eth0", "lo"],
-    "ansible_default_ipv4": {
+  "onigirazu_facts": {
+    "onigirazu_hostname": "webserver01",
+    "onigirazu_os_family": "RedHat",
+    "onigirazu_distribution": "CentOS",
+    "onigirazu_distribution_version": "8.4",
+    "onigirazu_architecture": "x86_64",
+    "onigirazu_processor_count": 4,
+    "onigirazu_memtotal_mb": 8192,
+    "onigirazu_interfaces": ["eth0", "lo"],
+    "onigirazu_default_ipv4": {
       "address": "192.168.1.100",
       "gateway": "192.168.1.1",
       "interface": "eth0"
@@ -121,8 +121,8 @@ Execute commands on target hosts.
 
 - name: "Create backup directory"
   command:
-    cmd: "mkdir -p /backup/{{ ansible_date_time.date }}"
-    creates: "/backup/{{ ansible_date_time.date }}"
+    cmd: "mkdir -p /backup/{{ onigirazu_date_time.date }}"
+    creates: "/backup/{{ onigirazu_date_time.date }}"
 ```
 
 #### Return Values
@@ -833,11 +833,11 @@ Print debug information.
 ```yaml
 - name: "Debug variable"
   debug:
-    var: "ansible_facts"
+    var: "onigirazu_facts"
 
 - name: "Debug message"
   debug:
-    msg: "Current user is {{ ansible_user_id }}"
+    msg: "Current user is {{ onigirazu_user_id }}"
 ```
 
 ### set_fact
@@ -856,7 +856,7 @@ Set variables for use in subsequent tasks.
 ```yaml
 - name: "Set deployment facts"
   set_fact:
-    deployment_time: "{{ ansible_date_time.iso8601 }}"
+    deployment_time: "{{ onigirazu_date_time.iso8601 }}"
     app_version: "v1.2.3"
     environment: "production"
     cacheable: true

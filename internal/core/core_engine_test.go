@@ -94,7 +94,7 @@ plays:
 
 	// Create minimal inventory
 	inventoryContent := `[localhost]
-127.0.0.1 ansible_connection=local
+127.0.0.1 onigirazu_connection=local
 `
 	err = os.WriteFile(inventoryPath, []byte(inventoryContent), 0644)
 	require.NoError(t, err, "Failed to create test inventory")
@@ -181,7 +181,7 @@ func TestCoreEngine_executePlay(t *testing.T) {
 	}
 
 	// Execute play
-	result, err := engine.executePlay(play, host, false, state)
+	result, err := engine.executePlay(&play, host, false, state)
 
 	// The execution might fail due to SSH connection, but we test the structure
 	assert.NotEmpty(t, result.PlayName, "Play name should be set")
@@ -234,7 +234,7 @@ func TestCoreEngine_executePlay_WithIgnoreErrors(t *testing.T) {
 	}
 
 	// Execute play
-	result, err := engine.executePlay(play, host, false, state)
+	result, err := engine.executePlay(&play, host, false, state)
 
 	// Should continue despite first task failure
 	assert.NotEmpty(t, result.Tasks, "Should have task results")

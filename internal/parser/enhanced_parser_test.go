@@ -20,9 +20,23 @@ type mockLogger struct {
 	warnMessages  []string
 }
 
-func (m *mockLogger) Debug(format string, args ...interface{})                                {}
-func (m *mockLogger) Info(format string, args ...interface{})                                 {}
-func (m *mockLogger) Warn(format string, args ...interface{})                                 {}
+func (m *mockLogger) Debug(format string, args ...interface{}) {
+	if m.debugMessages != nil {
+		m.debugMessages = append(m.debugMessages, format)
+	}
+}
+
+func (m *mockLogger) Info(format string, args ...interface{}) {
+	if m.infoMessages != nil {
+		m.infoMessages = append(m.infoMessages, format)
+	}
+}
+
+func (m *mockLogger) Warn(format string, args ...interface{}) {
+	if m.warnMessages != nil {
+		m.warnMessages = append(m.warnMessages, format)
+	}
+}
 func (m *mockLogger) Error(format string, args ...interface{})                                {}
 func (m *mockLogger) Fatal(format string, args ...interface{})                                {}
 func (m *mockLogger) SetLevel(level string)                                                   {}
@@ -356,7 +370,7 @@ func TestEnhancedParser_ValidateTask_WithCondition(t *testing.T) {
 	task := &types.Task{
 		Name:   "Test Task",
 		Module: "debug",
-		When:   "ansible_os_family == 'Debian'",
+		When:   "onigirazu_os_family == 'Debian'",
 	}
 
 	err := parser.validateTask(task, "test")

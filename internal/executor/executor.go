@@ -19,6 +19,9 @@ type CommandExecutor struct {
 	sshClient    *sshpkg.Client
 	usePool      bool
 	poolReleased bool
+	become       bool
+	becomeUser   string
+	becomeMethod string
 }
 
 // NewCommandExecutor creates a new command executor for the given host
@@ -66,11 +69,64 @@ func NewCommandExecutorWithoutPool(host types.Host) (*CommandExecutor, error) {
 	return executor, nil
 }
 
+// SetBecome enables privilege escalation for command execution
+func (e *CommandExecutor) SetBecome(become bool, becomeUser, becomeMethod string) {
+	e.become = become
+	e.becomeUser = becomeUser
+	if becomeMethod == "" {
+		e.becomeMethod = "sudo" // Default to sudo
+	} else {
+		e.becomeMethod = becomeMethod
+	}
+	if e.becomeUser == "" {
+		e.becomeUser = "root" // Default to root
+	}
+}
+
+// wrapWithBecome wraps a command with privilege escalation if enabled
+func (e *CommandExecutor) wrapWithBecome(command string) string {
+	if !e.become {
+		return command
+	}
+
+	switch e.becomeMethod {
+	case "sudo":
+		if e.becomeUser == "root" {
+			return fmt.Sprintf("sudo -n %s", command)
+		}
+		return fmt.Sprintf("sudo -n -u %s %s", e.becomeUser, command)
+	case "su":
+		if e.becomeUser == "root" {
+			return fmt.Sprintf("su -c '%s'", strings.ReplaceAll(command, "'", "'\\''"))
+		}
+		return fmt.Sprintf("su %s -c '%s'", e.becomeUser, strings.ReplaceAll(command, "'", "'\\''"))
+	case "doas":
+		if e.becomeUser == "root" {
+			return fmt.Sprintf("doas %s", command)
+		}
+		return fmt.Sprintf("doas -u %s %s", e.becomeUser, command)
+	default:
+		// Default to sudo
+		if e.becomeUser == "root" {
+			return fmt.Sprintf("sudo -n %s", command)
+		}
+		return fmt.Sprintf("sudo -n -u %s %s", e.becomeUser, command)
+	}
+}
+
 // Execute runs a command on the appropriate host (local or remote)
 func (e *CommandExecutor) Execute(command string, args ...string) (string, error) {
 	fullCommand := command
 	if len(args) > 0 {
 		fullCommand = command + " " + strings.Join(args, " ")
+	}
+
+	// Wrap with become if enabled
+	originalCommand := fullCommand
+	fullCommand = e.wrapWithBecome(fullCommand)
+	if e.become {
+		fmt.Printf("[DEBUG BECOME] Original: %s\n[DEBUG BECOME] Wrapped: %s\n[DEBUG BECOME] Method: %s, User: %s\n",
+			originalCommand, fullCommand, e.becomeMethod, e.becomeUser)
 	}
 
 	if e.sshClient != nil {
@@ -88,6 +144,9 @@ func (e *CommandExecutor) ExecuteWithContext(ctx context.Context, command string
 	if len(args) > 0 {
 		fullCommand = command + " " + strings.Join(args, " ")
 	}
+
+	// Wrap with become if enabled
+	fullCommand = e.wrapWithBecome(fullCommand)
 
 	if e.sshClient != nil {
 		// Execute on remote host via SSH with context support
@@ -157,7 +216,21 @@ func (e *CommandExecutor) executeSSHWithContext(ctx context.Context, command str
 
 // executeLocal executes a command locally
 func (e *CommandExecutor) executeLocal(command string, args ...string) (string, error) {
-	cmd := exec.Command(command, args...)
+	// If args are provided or command contains shell operators, execute through shell
+	if len(args) > 0 || strings.ContainsAny(command, "|&;<>()$`\\\"' \t\n*?[]{}") {
+		// Build full command
+		fullCmd := command
+		if len(args) > 0 {
+			fullCmd = command + " " + strings.Join(args, " ")
+		}
+		// Execute through shell
+		cmd := exec.Command("sh", "-c", fullCmd)
+		output, err := cmd.CombinedOutput()
+		return string(output), err
+	}
+
+	// Simple command without args - execute directly
+	cmd := exec.Command(command)
 	output, err := cmd.CombinedOutput()
 	return string(output), err
 }

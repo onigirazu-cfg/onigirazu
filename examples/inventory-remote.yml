@@ -6,22 +6,22 @@ groups:
   remote_servers:
     hosts:
       cs_server:
-        ansible_host: cs.rastiegaiev.com
-        ansible_user: usx
-        ansible_ssh_private_key_file: /Users/denys.rastiegaiev/.ssh/id_rsa
-        ansible_ssh_port: 22
-        ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
-        # ansible_become: true  # uncomment if sudo is needed
-        # ansible_become_user: root  # uncomment if sudo is needed
+        onigirazu_host: cs.rastiegaiev.com
+        onigirazu_user: usx
+        onigirazu_ssh_private_key_file: /Users/denys.rastiegaiev/.ssh/id_rsa
+        onigirazu_ssh_port: 22
+        onigirazu_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+        # onigirazu_become: true  # uncomment if sudo is needed
+        # onigirazu_become_user: root  # uncomment if sudo is needed
 
   all:
     hosts:
       cs_server:
-        ansible_host: cs.rastiegaiev.com
-        ansible_user: usx
-        ansible_ssh_private_key_file: /Users/denys.rastiegaiev/.ssh/id_rsa
-        ansible_ssh_port: 22
-        ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+        onigirazu_host: cs.rastiegaiev.com
+        onigirazu_user: usx
+        onigirazu_ssh_private_key_file: /Users/denys.rastiegaiev/.ssh/id_rsa
+        onigirazu_ssh_port: 22
+        onigirazu_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
 
 # Alternative configuration with password authentication
 # (not recommended for production)
@@ -29,7 +29,7 @@ groups:
 #   remote_servers:
 #     hosts:
 #       cs_server:
-#         ansible_host: cs.rastiegaiev.com
-#         ansible_user: usx
-#         ansible_ssh_pass: "your_password"
-#         ansible_become_pass: "sudo_password"
+#         onigirazu_host: cs.rastiegaiev.com
+#         onigirazu_user: usx
+#         onigirazu_ssh_pass: "your_password"
+#         onigirazu_become_pass: "sudo_password"

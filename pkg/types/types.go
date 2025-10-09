@@ -2,6 +2,7 @@ package types
 
 import (
 	"context"
+	"fmt"
 	"time"
 )
 
@@ -14,6 +15,66 @@ type Host struct {
 	Password string                 `yaml:"password,omitempty"`
 	KeyFile  string                 `yaml:"key_file,omitempty"`
 	Vars     map[string]interface{} `yaml:"vars,omitempty"`
+}
+
+// UnmarshalYAML implements custom YAML unmarshaling for Host
+// This allows capturing both standard fields and Onigirazu-style variables (onigirazu_host, onigirazu_user, etc.)
+func (h *Host) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	// First unmarshal as a map to get all fields
+	var hostMap map[string]interface{}
+	if err := unmarshal(&hostMap); err != nil {
+		return err
+	}
+
+	// Define reserved field names that map to struct fields
+	reservedFields := map[string]bool{
+		"name":     true,
+		"address":  true,
+		"port":     true,
+		"user":     true,
+		"password": true,
+		"key_file": true,
+		"vars":     true,
+	}
+
+	// Initialize Vars map
+	h.Vars = make(map[string]interface{})
+
+	// Extract known fields
+	if name, ok := hostMap["name"].(string); ok {
+		h.Name = name
+	}
+	if address, ok := hostMap["address"].(string); ok {
+		h.Address = address
+	}
+	if port, ok := hostMap["port"].(int); ok {
+		h.Port = port
+	}
+	if user, ok := hostMap["user"].(string); ok {
+		h.User = user
+	}
+	if password, ok := hostMap["password"].(string); ok {
+		h.Password = password
+	}
+	if keyFile, ok := hostMap["key_file"].(string); ok {
+		h.KeyFile = keyFile
+	}
+
+	// Handle vars field if it exists (nested vars)
+	if vars, ok := hostMap["vars"].(map[string]interface{}); ok {
+		for k, v := range vars {
+			h.Vars[k] = v
+		}
+	}
+
+	// Collect all other fields (including onigirazu_* variables) into Vars
+	for key, value := range hostMap {
+		if !reservedFields[key] {
+			h.Vars[key] = value
+		}
+	}
+
+	return nil
 }
 
 // Inventory represents a host inventory
@@ -42,6 +103,9 @@ type Task struct {
 	Include      string                 `yaml:"include,omitempty"`
 	Serial       bool                   `yaml:"serial,omitempty"`
 	RetryDelay   time.Duration          `yaml:"retry_delay,omitempty"`
+	Become       bool                   `yaml:"become,omitempty"`
+	BecomeUser   string                 `yaml:"become_user,omitempty"`
+	BecomeMethod string                 `yaml:"become_method,omitempty"`
 }
 
 // UnmarshalYAML implements custom YAML unmarshaling for Task
@@ -73,6 +137,9 @@ func (t *Task) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		"include":       true,
 		"serial":        true,
 		"retry_delay":   true,
+		"become":        true,
+		"become_user":   true,
+		"become_method": true,
 	}
 
 	// Extract basic fields
@@ -100,6 +167,18 @@ func (t *Task) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	}
 	if retries, ok := taskMap["retries"].(int); ok {
 		t.Retries = retries
+	}
+	if become, ok := taskMap["become"].(bool); ok {
+		t.Become = become
+		fmt.Printf("[DEBUG YAML] Task '%s' parsed become=%v\n", t.Name, become)
+	} else if becomeVal, exists := taskMap["become"]; exists {
+		fmt.Printf("[DEBUG YAML] Task '%s' has become field but wrong type: %T = %v\n", t.Name, becomeVal, becomeVal)
+	}
+	if becomeUser, ok := taskMap["become_user"].(string); ok {
+		t.BecomeUser = becomeUser
+	}
+	if becomeMethod, ok := taskMap["become_method"].(string); ok {
+		t.BecomeMethod = becomeMethod
 	}
 
 	// Handle tags

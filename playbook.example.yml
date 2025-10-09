@@ -25,7 +25,7 @@ plays:
       - name: Update package cache
         package:
           update_cache: yes
-        when: ansible_os_family == "Debian"
+        when: onigirazu_os_family == "Debian"
 
       - name: Install essential packages
         package:
@@ -36,7 +36,7 @@ plays:
       - name: Set timezone
         command:
           cmd: timedatectl set-timezone {{ timezone | default('UTC') }}
-        when: ansible_service_mgr == "systemd"
+        when: onigirazu_service_mgr == "systemd"
 
   # Play 2: User management
   - name: Setup application user
@@ -132,22 +132,22 @@ plays:
       - name: Configure firewall - allow SSH
         command:
           cmd: ufw allow 22/tcp
-        when: ansible_os_family == "Debian"
+        when: onigirazu_os_family == "Debian"
 
       - name: Configure firewall - allow HTTP
         command:
           cmd: ufw allow 80/tcp
-        when: ansible_os_family == "Debian" and inventory_hostname in groups['webservers']
+        when: onigirazu_os_family == "Debian" and inventory_hostname in groups['webservers']
 
       - name: Configure firewall - allow HTTPS
         command:
           cmd: ufw allow 443/tcp
-        when: ansible_os_family == "Debian" and inventory_hostname in groups['webservers']
+        when: onigirazu_os_family == "Debian" and inventory_hostname in groups['webservers']
 
       - name: Enable firewall
         command:
           cmd: ufw --force enable
-        when: ansible_os_family == "Debian"
+        when: onigirazu_os_family == "Debian"
 
   # Play 6: Gather and display system information
   - name: Display system information
@@ -160,12 +160,12 @@ plays:
       - name: Display OS information
         debug:
           msg: |
-            Hostname: {{ ansible_hostname }}
-            OS: {{ ansible_distribution }} {{ ansible_distribution_version }}
-            Kernel: {{ ansible_kernel }}
-            Architecture: {{ ansible_architecture }}
-            CPU Cores: {{ ansible_processor_cores }}
-            Memory: {{ ansible_memtotal_mb }} MB
+            Hostname: {{ onigirazu_hostname }}
+            OS: {{ onigirazu_distribution }} {{ onigirazu_distribution_version }}
+            Kernel: {{ onigirazu_kernel }}
+            Architecture: {{ onigirazu_architecture }}
+            CPU Cores: {{ onigirazu_processor_cores }}
+            Memory: {{ onigirazu_memtotal_mb }} MB
 
       - name: Check disk space
         command:
