@@ -1,0 +1,76 @@
+---
+# CS Server Setup Example
+# Specific playbook for cs.rastiegaiev.com
+
+plays:
+  - name: "CS Server Configuration"
+    hosts: cs_server
+    tasks:
+      # System information
+      - name: "Get system information"
+        command:
+          cmd: "uname -a"
+        register: system_info
+
+      - name: "Display system info"
+        shell:
+          cmd: "echo 'System: {{ system_info.stdout }}'"
+      # Install essential packages
+      - name: "Install essential tools"
+        package:
+          name: ["git", "curl", "wget", "tree", "htop"]
+          state: "present"
+      # Create user directory structure
+      - name: "Create projects directory"
+        file:
+          path: "/home/usx/projects"
+          state: "directory"
+          mode: "0755"
+      - name: "Create scripts directory"
+        file:
+          path: "/home/usx/scripts"
+          state: "directory"
+          mode: "0755"
+      # Create a welcome script
+      - name: "Create welcome script"
+        file:
+          path: "/home/usx/scripts/welcome.sh"
+          state: "present"
+          mode: "0755"
+          content: |
+            #!/bin/bash
+            echo "Welcome to CS Server!"
+            echo "User: $(whoami)"
+            echo "Date: $(date)"
+            echo "System: $(uname -a)"
+            echo "Uptime: $(uptime)"
+      # Test the script
+      - name: "Run welcome script"
+        shell:
+          cmd: "/home/usx/scripts/welcome.sh"
+        register: welcome_output
+
+      - name: "Display welcome output"
+        shell:
+          cmd: "echo '{{ welcome_output.stdout }}'"
+      # Create a simple config file
+      - name: "Create server config"
+        file:
+          path: "/home/usx/.server_config"
+          state: "present"
+          content: |
+            # CS Server Configuration
+            SERVER_NAME=cs.rastiegaiev.com
+            USER=usx
+            SETUP_DATE={{ onigirazu_date_time.iso8601 }}
+            ONIGIRAZU_VERSION=latest
+          mode: "0644"
+      # Check disk space
+      - name: "Check disk space"
+        shell:
+          cmd: "df -h /"
+        register: disk_space
+
+      - name: "Display disk space"
+        shell:
+          cmd: "echo 'Disk space: {{ disk_space.stdout }}'"

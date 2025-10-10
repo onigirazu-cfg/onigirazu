@@ -8,7 +8,7 @@
 # Test binary, built with `go test -c`
 *.test
 
-# Output of the go coverage tool, specifically when used with LiteIDE
+# Output of the go coverage tool
 *.out
 
 # Dependency directories (remove the comment below to include it)
@@ -16,6 +16,14 @@
 
 # Go workspace file
 go.work
+
+# Build artifacts
+/onigirazu-bin
+/onigirazu.exe
+/dist/
+/build/
+bin/
+/onigirazu
 
 # IDE files
 .vscode/
@@ -33,11 +41,6 @@ go.work
 ehthumbs.db
 Thumbs.db
 
-# Build output
-bin/
-dist/
-/onigirazu
-
 # State files and backups
 .onigirazu-state*
 .ansible/
@@ -45,6 +48,7 @@ dist/
 # Temporary files
 *.tmp
 *.temp
+*.log
 coverage.html
 
 # Private configuration and notes (not for public repo)
@@ -57,4 +61,6 @@ SETUP_COMPLETE.md
 test_fail.txt
 TEST_FIXES_PROGRESS.md
 RELEASE_*.md
-*.DS_Store
+
+# Subprojects (managed separately)
+onigirazu_docs/

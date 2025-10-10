@@ -1,0 +1,62 @@
+---
+# File Operations Examples
+# Demonstrates file creation, copying, and templating
+
+plays:
+  - name: "File Operations Demo"
+    hosts: all
+    vars:
+      app_name: "myapp"
+      app_version: "1.0.0"
+      config_dir: "/tmp/onigirazu-demo"
+
+    tasks:
+      # Create directory structure
+      - name: "Create application directory"
+        file:
+          path: "{{ config_dir }}"
+          state: "directory"
+          mode: "0755"
+      - name: "Create configuration file"
+        file:
+          path: "{{ config_dir }}/app.conf"
+          state: "file"
+          content: |
+            # Application Configuration
+            app_name={{ app_name }}
+            app_version={{ app_version }}
+            debug=false
+          mode: "0644"
+      # Copy files
+      - name: "Copy README file"
+        copy:
+          src: "/Users/denys.rastiegaiev/work/go_teransible/README.md"
+          dest: "{{ config_dir }}/README.md"
+          mode: "0644"
+          backup: true
+      # Template processing
+      - name: "Create configuration from template"
+        template:
+          src: "config.j2"
+          dest: "{{ config_dir }}/config.yml"
+          variables:
+            app_name: "{{ app_name }}"
+            app_version: "{{ app_version }}"
+            environment: "development"
+          mode: "0600"
+      # Create symbolic link
+      - name: "Create symbolic link"
+        file:
+          src: "{{ config_dir }}/app.conf"
+          dest: "{{ config_dir }}/current.conf"
+          state: "link"
+      # Set file permissions
+      - name: "Set executable permissions"
+        file:
+          path: "{{ config_dir }}/app.conf"
+          mode: "0755"
+      # Remove file
+      - name: "Remove temporary file"
+        file:
+          path: "{{ config_dir }}/temp.txt"
+          state: "absent"

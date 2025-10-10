@@ -1,0 +1,193 @@
+---
+# Web Server Deployment Example
+# Demonstrates deploying a web application with Nginx
+
+plays:
+  - name: "Web Server Deployment"
+    hosts: all
+    vars:
+      app_name: "mywebapp"
+      app_user: "www-data"
+      app_dir: "/var/www/{{ app_name }}"
+      nginx_conf_dir: "/etc/nginx"
+      ssl_cert_dir: "/etc/ssl/certs"
+      domain_name: "example.com"
+
+    tasks:
+      # Install web server and dependencies
+      - name: "Install Nginx"
+        package:
+          name: "nginx"
+          state: "present"
+        when: "onigirazu_os_family != 'Darwin'"
+
+      - name: "Install SSL tools"
+        package:
+          name: ["openssl", "certbot"]
+          state: "present"
+        when: "onigirazu_os_family != 'Darwin'"
+
+      # macOS alternative
+      - name: "Install Nginx on macOS"
+        command:
+          cmd: "brew install nginx"
+        when: "onigirazu_os_family == 'Darwin'"
+        ignore_errors: true
+
+      # Create application directory
+      - name: "Create web application directory"
+        file:
+          path: "{{ app_dir }}"
+          state: "directory"
+          owner: "{{ app_user }}"
+          group: "{{ app_user }}"
+          mode: "0755"
+      # Deploy application files
+      - name: "Create index.html"
+        file:
+          path: "{{ app_dir }}/index.html"
+          content: |
+            <!DOCTYPE html>
+            <html lang="en">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>{{ app_name }}</title>
+                <style>
+                    body { font-family: Arial, sans-serif; margin: 40px; }
+                    .container { max-width: 800px; margin: 0 auto; }
+                    .header { background: #333; color: white; padding: 20px; border-radius: 5px; }
+                    .content { padding: 20px; background: #f5f5f5; border-radius: 5px; margin-top: 20px; }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <div class="header">
+                        <h1>Welcome to {{ app_name }}</h1>
+                    </div>
+                    <div class="content">
+                        <h2>Deployment Successful!</h2>
+                        <p>This web application was deployed using Onigirazu.</p>
+                        <p>Server: {{ onigirazu_hostname }}</p>
+                        <p>OS: {{ onigirazu_os_family }}</p>
+                        <p>Deployed at: {{ onigirazu_date_time.iso8601 }}</p>
+                    </div>
+                </div>
+            </body>
+            </html>
+          owner: "{{ app_user }}"
+          group: "{{ app_user }}"
+          mode: "0644"
+      - name: "Create CSS file"
+        file:
+          path: "{{ app_dir }}/style.css"
+          content: |
+            /* Additional styles */
+            .footer {
+                text-align: center;
+                margin-top: 40px;
+                padding: 20px;
+                border-top: 1px solid #ddd;
+                color: #666;
+            }
+          owner: "{{ app_user }}"
+          group: "{{ app_user }}"
+          mode: "0644"
+      # Nginx configuration
+      - name: "Create Nginx site configuration"
+        file:
+          path: "{{ nginx_conf_dir }}/sites-available/{{ app_name }}"
+          content: |
+            server {
+                listen 80;
+                listen [::]:80;
+                server_name {{ domain_name }} www.{{ domain_name }};
+                root {{ app_dir }};
+                index index.html index.htm;
+                location / {
+                    try_files $uri $uri/ =404;
+                }
+                location ~* \.(css|js|png|jpg|jpeg|gif|ico|svg)$ {
+                    expires 1y;
+                    add_header Cache-Control "public, immutable";
+                }
+                # Security headers
+                add_header X-Frame-Options "SAMEORIGIN" always;
+                add_header X-XSS-Protection "1; mode=block" always;
+                add_header X-Content-Type-Options "nosniff" always;
+                add_header Referrer-Policy "no-referrer-when-downgrade" always;
+                # Gzip compression
+                gzip on;
+                gzip_vary on;
+                gzip_min_length 1024;
+                gzip_types text/plain text/css text/xml text/javascript application/javascript application/xml+rss application/json;
+                # Logs
+                access_log /var/log/nginx/{{ app_name }}_access.log;
+                error_log /var/log/nginx/{{ app_name }}_error.log;
+            }
+          mode: "0644"
+        when: "onigirazu_os_family != 'Darwin'"
+
+      # Enable site
+      - name: "Enable Nginx site"
+        file:
+          src: "{{ nginx_conf_dir }}/sites-available/{{ app_name }}"
+          dest: "{{ nginx_conf_dir }}/sites-enabled/{{ app_name }}"
+          state: "link"
+        when: "onigirazu_os_family != 'Darwin'"
+
+      # Remove default site
+      - name: "Remove default Nginx site"
+        file:
+          path: "{{ nginx_conf_dir }}/sites-enabled/default"
+          state: "absent"
+        when: "onigirazu_os_family != 'Darwin'"
+
+      # Test Nginx configuration
+      - name: "Test Nginx configuration"
+        command:
+          cmd: "nginx -t"
+        when: "onigirazu_os_family != 'Darwin'"
+
+      # Start and enable Nginx
+      - name: "Start and enable Nginx"
+        service:
+          name: "nginx"
+          state: "started"
+          enabled: true
+        when: "onigirazu_os_family != 'Darwin'"
+
+      # Firewall configuration
+      - name: "Allow HTTP traffic"
+        command:
+          cmd: "ufw allow 80/tcp"
+        when: "onigirazu_os_family != 'Darwin'"
+        ignore_errors: true
+
+      - name: "Allow HTTPS traffic"
+        command:
+          cmd: "ufw allow 443/tcp"
+        when: "onigirazu_os_family != 'Darwin'"
+        ignore_errors: true
+
+      # SSL certificate (self-signed for demo)
+      - name: "Generate self-signed SSL certificate"
+        command:
+          cmd: "openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout {{ ssl_cert_dir }}/{{ app_name }}.key -out {{ ssl_cert_dir }}/{{ app_name }}.crt -subj '/C=US/ST=State/L=City/O=Organization/CN={{ domain_name }}'"
+          creates: "{{ ssl_cert_dir }}/{{ app_name }}.crt"
+        when: "onigirazu_os_family != 'Darwin'"
+
+      # Health check
+      - name: "Wait for Nginx to start"
+        command:
+          cmd: "sleep 3"
+      - name: "Check web server response"
+        command:
+          cmd: "curl -f -s http://localhost/"
+        register: health_check
+        ignore_errors: true
+
+      - name: "Display deployment status"
+        command:
+          cmd: "echo 'Web server deployment completed successfully!'"
+        when: "health_check.rc == 0"

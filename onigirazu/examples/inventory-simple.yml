@@ -1,0 +1,20 @@
+---
+# Simplified remote server inventory
+# Basic configuration for cs.rastiegaiev.com
+
+groups:
+  remote_servers:
+    hosts:
+      cs_server:
+        host: cs.rastiegaiev.com
+        user: usx
+        ssh_key: /Users/denys.rastiegaiev/.ssh/id_rsa
+        port: 22
+
+  all:
+    hosts:
+      cs_server:
+        host: cs.rastiegaiev.com
+        user: usx
+        ssh_key: /Users/denys.rastiegaiev/.ssh/id_rsa
+        port: 22

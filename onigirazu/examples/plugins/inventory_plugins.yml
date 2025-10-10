@@ -1,0 +1,152 @@
+# Inventory Plugins Configuration Example
+# This file demonstrates how to configure cloud inventory plugins
+
+plugins_dir: ./plugins
+
+plugins:
+  # ============================================================================
+  # AWS EC2 Dynamic Inventory
+  # ============================================================================
+  - name: aws_ec2
+    type: inventory
+    path: inventory_aws_ec2.so
+    enabled: false  # Set to true to enable
+    config:
+      # AWS Region
+      region: us-east-1
+
+      # AWS Credentials (optional - uses default credential chain if not specified)
+      # access_key_id: YOUR_ACCESS_KEY_ID
+      # secret_access_key: YOUR_SECRET_ACCESS_KEY
+
+      # Cache TTL in seconds (default: 300 = 5 minutes)
+      cache_ttl: 300
+
+      # Filters for EC2 instances (optional)
+      filters:
+        # Only running instances
+        instance-state-name: running
+        # Only production environment
+        tag:Environment: production
+        # Specific instance types
+        # instance-type: t3.micro
+
+  # ============================================================================
+  # Azure VM Dynamic Inventory
+  # ============================================================================
+  - name: azure_vm
+    type: inventory
+    path: inventory_azure_vm.so
+    enabled: false  # Set to true to enable
+    config:
+      # Azure Subscription ID (required)
+      subscription_id: YOUR_SUBSCRIPTION_ID
+
+      # Azure AD Tenant ID (required)
+      tenant_id: YOUR_TENANT_ID
+
+      # Service Principal credentials (optional - uses default auth if not specified)
+      # client_id: YOUR_CLIENT_ID
+      # client_secret: YOUR_CLIENT_SECRET
+
+      # Resource Group (optional - queries all if not specified)
+      resource_group: my-resource-group
+
+      # Cache TTL in seconds (default: 300 = 5 minutes)
+      cache_ttl: 300
+
+  # ============================================================================
+  # GCP Compute Engine Dynamic Inventory
+  # ============================================================================
+  - name: gcp_compute
+    type: inventory
+    path: inventory_gcp_compute.so
+    enabled: false  # Set to true to enable
+    config:
+      # GCP Project ID (required)
+      project_id: my-gcp-project
+
+      # GCP Zone (optional - queries all zones if not specified)
+      zone: us-central1-a
+
+      # Service Account credentials file (optional - uses default auth if not specified)
+      # credentials_file: /path/to/service-account.json
+
+      # Cache TTL in seconds (default: 300 = 5 minutes)
+      cache_ttl: 300
+
+      # Filters for Compute instances (optional)
+      filters:
+        # Only running instances
+        status: RUNNING
+        # Only production environment
+        labels.environment: production
+
+  # ============================================================================
+  # Multiple Region Example - AWS
+  # ============================================================================
+  - name: aws_ec2_us_west
+    type: inventory
+    path: inventory_aws_ec2.so
+    enabled: false
+    config:
+      region: us-west-2
+      cache_ttl: 300
+      filters:
+        instance-state-name: running
+
+  - name: aws_ec2_eu_west
+    type: inventory
+    path: inventory_aws_ec2.so
+    enabled: false
+    config:
+      region: eu-west-1
+      cache_ttl: 300
+      filters:
+        instance-state-name: running
+
+  # ============================================================================
+  # Multiple Environment Example - Azure
+  # ============================================================================
+  - name: azure_vm_production
+    type: inventory
+    path: inventory_azure_vm.so
+    enabled: false
+    config:
+      subscription_id: YOUR_SUBSCRIPTION_ID
+      tenant_id: YOUR_TENANT_ID
+      resource_group: production-rg
+      cache_ttl: 300
+
+  - name: azure_vm_staging
+    type: inventory
+    path: inventory_azure_vm.so
+    enabled: false
+    config:
+      subscription_id: YOUR_SUBSCRIPTION_ID
+      tenant_id: YOUR_TENANT_ID
+      resource_group: staging-rg
+      cache_ttl: 600  # Longer cache for staging
+
+  # ============================================================================
+  # Multiple Project Example - GCP
+  # ============================================================================
+  - name: gcp_compute_prod
+    type: inventory
+    path: inventory_gcp_compute.so
+    enabled: false
+    config:
+      project_id: my-prod-project
+      cache_ttl: 300
+      filters:
+        labels.environment: production
+
+  - name: gcp_compute_dev
+    type: inventory
+    path: inventory_gcp_compute.so
+    enabled: false
+    config:
+      project_id: my-dev-project
+      cache_ttl: 600
+      filters:
+        labels.environment: development

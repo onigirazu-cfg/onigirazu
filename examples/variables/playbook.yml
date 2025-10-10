@@ -1,0 +1,27 @@
+---
+name: Variable Priority Example
+vars:
+  app_name: myapp
+  version: 1.0.0
+  environment: development
+  debug_mode: false
+
+plays:
+  - name: Show variable priority
+    hosts: localhost
+    tasks:
+      - name: Display application info
+        debug:
+          msg: "Deploying {{ app_name }} version {{ version }} to {{ environment }} (debug: {{ debug_mode }})"
+
+      - name: Show version
+        debug:
+          msg: "Version is {{ version }}"
+
+      - name: Show environment
+        debug:
+          msg: "Environment is {{ environment }}"
+
+      - name: Show debug mode
+        debug:
+          msg: "Debug mode is {{ debug_mode }}"

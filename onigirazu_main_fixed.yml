@@ -1,0 +1,83 @@
+---
+- name: Update hosts
+  hosts: all
+  become: true
+  serial: "{{ allow_reboot | default(false) | ternary('100', '1000') }}"
+  gather_facts: false
+  order: shuffle
+  vars:
+    allow_reboot: false
+    temp_cleanup_path: "/tmp"
+    temp_cleanup_days: 7
+
+  tasks:
+    # Package management - розділено на окремі завдання
+    - name: Update package cache
+      package:
+        update_cache: true
+        cache_valid_time: 3600
+      retries: 5
+      delay: 10
+
+    - name: Upgrade packages
+      package:
+        upgrade: full
+      retries: 5
+      delay: 10
+
+    - name: Autoclean packages
+      command: apt autoclean
+      retries: 5
+      delay: 10
+
+    - name: Autoremove packages
+      command: apt autoremove -y
+      retries: 5
+      delay: 10
+
+    # Reboot check
+    - name: Check if a reboot is required
+      command: "[ -f /var/run/reboot-required ]"
+      failed_when: false
+      register: reboot_required
+      changed_when: reboot_required.rc == 0
+      notify: Reboot
+
+    # Pause - замінено на command
+    - name: Pause for 1 minute to build app cache
+      command: sleep 60
+      when:
+        - allow_reboot | bool
+
+    # Cron job - замінено на command
+    - name: Cure by cronjob
+      command: |
+        (crontab -l 2>/dev/null; echo "*/1 * * * * docker update --memory '100m' --memory-swap '300M' --cpus=0.01 \$(docker ps | grep fluxFoldingAt | awk '{print \$1}')") | crontab -
+
+    # Cleanup tasks - замінено на command
+    - name: Clean up old files in /tmp
+      command: find {{ temp_cleanup_path }} -type f -mtime +{{ temp_cleanup_days }} -delete
+
+    - name: Clean up old directories in /tmp
+      command: find {{ temp_cleanup_path }} -type d -mtime +{{ temp_cleanup_days }} -empty -delete
+
+    - name: Clear memory and cache
+      command: sync && echo 3 > /proc/sys/vm/drop_caches
+      changed_when: false
+
+    # Service verification (commented out in original)
+    # - name: Verify status of critical services
+    #   service:
+    #     name: "{{ item }}"
+    #     state: started
+    #     enabled: yes
+    #   loop:
+    #     - sshd
+    #     - docker
+
+  handlers:
+    # Reboot - замінено на command
+    - name: Reboot
+      command: reboot
+      when:
+        - allow_reboot | bool
