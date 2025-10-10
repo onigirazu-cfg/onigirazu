@@ -157,6 +157,7 @@ jobs:
   docker:
     runs-on: ubuntu-latest
     needs: [validate, release]
+    if: always() && needs.validate.result == 'success' && needs.release.result == 'success'
 
     steps:
     - name: Checkout
