@@ -75,7 +75,6 @@ jobs:
     - name: Run full test suite
       run: |
         go test -race -coverprofile=coverage.out -covermode=atomic -timeout=10m ./...
-        go test -bench=. -benchmem ./...
 
     - name: Run security scan
       run: |
