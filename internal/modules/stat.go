@@ -64,7 +64,7 @@ func (m *StatModule) Execute(ctx context.Context, host types.Host, args map[stri
 
 	if err != nil {
 		// Check if file doesn't exist
-		if strings.Contains(err.Error(), "No such file") || strings.Contains(err.Error(), "cannot stat") {
+		if strings.Contains(err.Error(), "no such file") || strings.Contains(err.Error(), "cannot stat") {
 			// File doesn't exist
 			statOutput = make(map[string]interface{})
 			statOutput["exists"] = false
@@ -112,7 +112,7 @@ func (m *StatModule) getRemoteFileStat(path string) (map[string]interface{}, err
 
 	// Parse output
 	if strings.HasPrefix(output, "exists=false") {
-		return nil, fmt.Errorf("No such file or directory")
+		return nil, fmt.Errorf("no such file or directory")
 	}
 
 	// Parse key=value pairs

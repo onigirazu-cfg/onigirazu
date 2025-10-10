@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -26,7 +25,6 @@ type UnifiedPackageModule struct {
 	BaseModule
 	packageManager UnifiedPackageManager
 	stateCache     *PackageStateCache
-	operationLock  sync.RWMutex
 	metrics        *PackageMetrics
 }
 
@@ -1103,9 +1101,4 @@ func generateStateHash(name, version, repository string) string {
 	data := fmt.Sprintf("%s:%s:%s", name, version, repository)
 	hash := sha256.Sum256([]byte(data))
 	return hex.EncodeToString(hash[:])
-}
-
-// contains checks if a string contains a substring
-func contains(s, substr string) bool {
-	return strings.Contains(s, substr)
 }
