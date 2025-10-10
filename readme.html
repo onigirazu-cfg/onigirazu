@@ -235,32 +235,145 @@ cache_ttl: 300s
 <pre class="codehilite"><code class="language-bash">onigirazu -config onigirazu.yaml -playbook playbook.yaml -inventory inventory.yaml
 </code></pre>
 
-<h2>Command Line Options</h2>
-<pre class="codehilite"><code class="language-bash">Usage: onigirazu -playbook &lt;path&gt; [options]
+<h2>CLI Commands</h2>
+<p>Onigirazu provides a modern CLI with subcommands for different operations:</p>
+<h3>Core Commands</h3>
+<h4><code>apply</code> - Execute playbooks</h4>
+<pre class="codehilite"><code class="language-bash"># Run a playbook
+onigirazu apply playbook.yml -i inventory.yml
 
-Options:
-  -playbook string
-        Path to playbook file
-  -inventory string
-        Path to inventory file
-  -config string
-        Path to configuration file
-  -verbose
-        Verbose output (sets log level to debug)
-  -check
-        Check mode (dry-run)
-  -state string
-        State file for saving state (default &quot;.onigirazu-state&quot;)
-  -log-level string
-        Log level (debug, info, warn, error) (default &quot;info&quot;)
-  -log-format string
-        Log format (text, json) (default &quot;text&quot;)
-  -max-workers int
-        Maximum number of worker threads (default 10)
-  -timeout duration
-        Execution timeout (default 30m0s)
+# Check mode (dry-run)
+onigirazu apply playbook.yml --check
+
+# With tags
+onigirazu apply playbook.yml --tags=setup,config
 </code></pre>
 
+<h4><code>validate</code> - Validate playbook syntax</h4>
+<pre class="codehilite"><code class="language-bash"># Validate a single playbook
+onigirazu validate playbook.yml
+
+# Validate with inventory
+onigirazu validate playbook.yml -i inventory.yml
+</code></pre>
+
+<h4><code>plan</code> - Preview changes without execution</h4>
+<pre class="codehilite"><code class="language-bash"># Show what would change
+onigirazu plan playbook.yml -i inventory.yml
+
+# Detailed output
+onigirazu plan playbook.yml --verbose
+</code></pre>
+
+<h3>Development Tools</h3>
+<h4><code>diff</code> - Compare playbook versions</h4>
+<pre class="codehilite"><code class="language-bash"># Compare two playbooks
+onigirazu diff old-playbook.yml new-playbook.yml
+
+# Show only changes
+onigirazu diff --changes-only playbook-v1.yml playbook-v2.yml
+
+# Unified diff format
+onigirazu diff --format=unified old.yml new.yml
+</code></pre>
+
+<h4><code>fmt</code> - Format playbook files</h4>
+<pre class="codehilite"><code class="language-bash"># Format a playbook (in-place)
+onigirazu fmt playbook.yml
+
+# Check formatting without changes
+onigirazu fmt --check playbook.yml
+
+# Show diff of changes
+onigirazu fmt --diff playbook.yml
+
+# Format all YAML files recursively
+onigirazu fmt --recursive playbooks/
+
+# Custom indentation
+onigirazu fmt --indent 4 playbook.yml
+</code></pre>
+
+<h4><code>lint</code> - Check for errors and best practices</h4>
+<pre class="codehilite"><code class="language-bash"># Lint a playbook
+onigirazu lint playbook.yml
+
+# Strict mode (warnings as errors)
+onigirazu lint --strict playbook.yml
+
+# Only show errors
+onigirazu lint --no-warnings playbook.yml
+
+# Run specific rules
+onigirazu lint --rules=syntax,security playbook.yml
+
+# Skip specific rules
+onigirazu lint --skip-rules=task-name playbook.yml
+
+# Lint all files in directory
+onigirazu lint --recursive playbooks/
+</code></pre>
+
+<p><strong>Linting Rules:</strong></p>
+<ul>
+<li><code>syntax</code> - YAML syntax validation</li>
+<li><code>required-fields</code> - Check for required fields</li>
+<li><code>task-name</code> - Ensure tasks have names</li>
+<li><code>module-args</code> - Validate module arguments</li>
+<li><code>deprecated</code> - Detect deprecated features</li>
+<li><code>security</code> - Security best practices</li>
+<li><code>best-practices</code> - General best practices</li>
+</ul>
+<h4><code>graph</code> - Visualize playbook structure</h4>
+<pre class="codehilite"><code class="language-bash"># Generate ASCII graph
+onigirazu graph playbook.yml
+
+# Show variables and handlers
+onigirazu graph --show-vars --show-handlers playbook.yml
+
+# Compact view
+onigirazu graph --compact playbook.yml
+
+# Generate GraphViz DOT format
+onigirazu graph --format=dot playbook.yml &gt; graph.dot
+dot -Tpng graph.dot -o graph.png
+
+# Generate Mermaid diagram
+onigirazu graph --format=mermaid playbook.yml
+</code></pre>
+
+<p><strong>Output Formats:</strong></p>
+<ul>
+<li><code>ascii</code> - Simple ASCII art (default)</li>
+<li><code>dot</code> - GraphViz DOT format</li>
+<li><code>mermaid</code> - Mermaid diagram format</li>
+</ul>
+<h3>State Management</h3>
+<h4><code>state</code> - Manage execution state</h4>
+<pre class="codehilite"><code class="language-bash"># Show current state
+onigirazu state show
+
+# Clear state
+onigirazu state clear
+
+# Export state
+onigirazu state export &gt; state-backup.json
+</code></pre>
+
+<h3>Global Flags</h3>
+<pre class="codehilite"><code class="language-bash">  -c, --config string      Path to configuration file
+  -i, --inventory string   Path to inventory file
+  -s, --state string       Path to state file (default &quot;.onigirazu-state&quot;)
+  -v, --verbose            Verbose output
+      --no-color           Disable colored output
+</code></pre>
+
+<h3>Legacy Mode</h3>
+<p>For backward compatibility, the old syntax is still supported:</p>
+<pre class="codehilite"><code class="language-bash">onigirazu -playbook playbook.yml -inventory inventory.yml
+</code></pre>
+
+<p><strong>Note:</strong> Legacy mode will show a deprecation warning. Use <code>onigirazu apply</code> instead.</p>
 <h2>Modules</h2>
 <p>Onigirazu includes several built-in modules:</p>
 <h3>Core Modules</h3>
