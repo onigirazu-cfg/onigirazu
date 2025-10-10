@@ -204,33 +204,171 @@ Use the configuration file:
 onigirazu -config onigirazu.yaml -playbook playbook.yaml -inventory inventory.yaml
 ```
 
-## Command Line Options
+## CLI Commands
+
+Onigirazu provides a modern CLI with subcommands for different operations:
+
+### Core Commands
+
+#### `apply` - Execute playbooks
 
 ```bash
-Usage: onigirazu -playbook <path> [options]
+# Run a playbook
+onigirazu apply playbook.yml -i inventory.yml
 
-Options:
-  -playbook string
-        Path to playbook file
-  -inventory string
-        Path to inventory file
-  -config string
-        Path to configuration file
-  -verbose
-        Verbose output (sets log level to debug)
-  -check
-        Check mode (dry-run)
-  -state string
-        State file for saving state (default ".onigirazu-state")
-  -log-level string
-        Log level (debug, info, warn, error) (default "info")
-  -log-format string
-        Log format (text, json) (default "text")
-  -max-workers int
-        Maximum number of worker threads (default 10)
-  -timeout duration
-        Execution timeout (default 30m0s)
+# Check mode (dry-run)
+onigirazu apply playbook.yml --check
+
+# With tags
+onigirazu apply playbook.yml --tags=setup,config
 ```
+
+#### `validate` - Validate playbook syntax
+
+```bash
+# Validate a single playbook
+onigirazu validate playbook.yml
+
+# Validate with inventory
+onigirazu validate playbook.yml -i inventory.yml
+```
+
+#### `plan` - Preview changes without execution
+
+```bash
+# Show what would change
+onigirazu plan playbook.yml -i inventory.yml
+
+# Detailed output
+onigirazu plan playbook.yml --verbose
+```
+
+### Development Tools
+
+#### `diff` - Compare playbook versions
+
+```bash
+# Compare two playbooks
+onigirazu diff old-playbook.yml new-playbook.yml
+
+# Show only changes
+onigirazu diff --changes-only playbook-v1.yml playbook-v2.yml
+
+# Unified diff format
+onigirazu diff --format=unified old.yml new.yml
+```
+
+#### `fmt` - Format playbook files
+
+```bash
+# Format a playbook (in-place)
+onigirazu fmt playbook.yml
+
+# Check formatting without changes
+onigirazu fmt --check playbook.yml
+
+# Show diff of changes
+onigirazu fmt --diff playbook.yml
+
+# Format all YAML files recursively
+onigirazu fmt --recursive playbooks/
+
+# Custom indentation
+onigirazu fmt --indent 4 playbook.yml
+```
+
+#### `lint` - Check for errors and best practices
+
+```bash
+# Lint a playbook
+onigirazu lint playbook.yml
+
+# Strict mode (warnings as errors)
+onigirazu lint --strict playbook.yml
+
+# Only show errors
+onigirazu lint --no-warnings playbook.yml
+
+# Run specific rules
+onigirazu lint --rules=syntax,security playbook.yml
+
+# Skip specific rules
+onigirazu lint --skip-rules=task-name playbook.yml
+
+# Lint all files in directory
+onigirazu lint --recursive playbooks/
+```
+
+**Linting Rules:**
+
+- `syntax` - YAML syntax validation
+- `required-fields` - Check for required fields
+- `task-name` - Ensure tasks have names
+- `module-args` - Validate module arguments
+- `deprecated` - Detect deprecated features
+- `security` - Security best practices
+- `best-practices` - General best practices
+
+#### `graph` - Visualize playbook structure
+
+```bash
+# Generate ASCII graph
+onigirazu graph playbook.yml
+
+# Show variables and handlers
+onigirazu graph --show-vars --show-handlers playbook.yml
+
+# Compact view
+onigirazu graph --compact playbook.yml
+
+# Generate GraphViz DOT format
+onigirazu graph --format=dot playbook.yml > graph.dot
+dot -Tpng graph.dot -o graph.png
+
+# Generate Mermaid diagram
+onigirazu graph --format=mermaid playbook.yml
+```
+
+**Output Formats:**
+
+- `ascii` - Simple ASCII art (default)
+- `dot` - GraphViz DOT format
+- `mermaid` - Mermaid diagram format
+
+### State Management
+
+#### `state` - Manage execution state
+
+```bash
+# Show current state
+onigirazu state show
+
+# Clear state
+onigirazu state clear
+
+# Export state
+onigirazu state export > state-backup.json
+```
+
+### Global Flags
+
+```bash
+  -c, --config string      Path to configuration file
+  -i, --inventory string   Path to inventory file
+  -s, --state string       Path to state file (default ".onigirazu-state")
+  -v, --verbose            Verbose output
+      --no-color           Disable colored output
+```
+
+### Legacy Mode
+
+For backward compatibility, the old syntax is still supported:
+
+```bash
+onigirazu -playbook playbook.yml -inventory inventory.yml
+```
+
+**Note:** Legacy mode will show a deprecation warning. Use `onigirazu apply` instead.
 
 ## Modules
 
