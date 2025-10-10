@@ -386,7 +386,8 @@ func TestGetMapArg(t *testing.T) {
 func TestBaseModule_FailResult(t *testing.T) {
 	module := NewBaseModule("test_module")
 
-	startTime := time.Now()
+	// Set timestamp slightly in the past to ensure non-zero duration
+	startTime := time.Now().Add(-10 * time.Millisecond)
 	result := types.TaskResult{
 		TaskName:  "Test Task",
 		Host:      "test-host",
@@ -417,8 +418,9 @@ func TestBaseModule_FailResult(t *testing.T) {
 		t.Errorf("Expected error in result '%s', got '%s'", errorMsg, failedResult.Error)
 	}
 
-	if failedResult.Duration == 0 {
-		t.Error("Expected non-zero duration")
+	// Duration should be at least 10ms since we set timestamp in the past
+	if failedResult.Duration < 10*time.Millisecond {
+		t.Errorf("Expected duration >= 10ms, got %v", failedResult.Duration)
 	}
 
 	if failedResult.TaskName != "Test Task" {
