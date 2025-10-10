@@ -39,8 +39,7 @@ plays:
 
       - name: "Verify file was created"
         command:
-          cmd: "cat"
-          args: ["/tmp/onigirazu-remote-test/system-info.txt"]
+          cmd: "cat /tmp/onigirazu-remote-test/system-info.txt"
         register: file_content
 
       - name: "Display file content"

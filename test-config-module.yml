@@ -35,8 +35,7 @@ plays:
 
       - name: Verify the change was made on remote host
         command:
-          cmd: cat
-          args: ["/tmp/config_test/app.json"]
+          cmd: "cat /tmp/config_test/app.json"
         register: config_content
 
       - name: Display config content
@@ -85,8 +84,7 @@ plays:
 
       - name: Verify YAML change on remote host
         command:
-          cmd: cat
-          args: ["/tmp/config_test/config.yaml"]
+          cmd: "cat /tmp/config_test/config.yaml"
         register: yaml_content
 
       - name: Display YAML content
@@ -102,8 +100,7 @@ plays:
 
       - name: Verify deletion on remote host
         command:
-          cmd: cat
-          args: ["/tmp/config_test/app.json"]
+          cmd: "cat /tmp/config_test/app.json"
         register: after_delete
 
       - name: Display content after deletion
@@ -118,8 +115,7 @@ plays:
 
       - name: Verify restore on remote host
         command:
-          cmd: cat
-          args: ["/tmp/config_test/app.json"]
+          cmd: "cat /tmp/config_test/app.json"
         register: after_restore
 
       - name: Display content after restore

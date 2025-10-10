@@ -9,8 +9,7 @@ plays:
       # System information
       - name: "Get system information"
         command:
-          cmd: "uname"
-          args: ["-a"]
+          cmd: "uname -a"
         register: system_info
 
       - name: "Display system info"

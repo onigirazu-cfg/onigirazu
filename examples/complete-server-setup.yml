@@ -140,16 +140,14 @@ plays:
       # Firewall configuration
       - name: "Configure firewall"
         command:
-          cmd: "ufw"
-          args: ["allow", "8080/tcp"]
+          cmd: "ufw allow 8080/tcp"
         when: "onigirazu_os_family != 'Darwin'"
         ignore_errors: true
 
       # Service management
       - name: "Reload systemd daemon"
         command:
-          cmd: "systemctl"
-          args: ["daemon-reload"]
+          cmd: "systemctl daemon-reload"
         when: "onigirazu_os_family != 'Darwin'"
 
       - name: "Enable and start webapp service"
@@ -163,11 +161,9 @@ plays:
       # Health check
       - name: "Wait for application to start"
         command:
-          cmd: "sleep"
-          args: ["5"]
+          cmd: "sleep 5"
 
       - name: "Check application health"
         command:
-          cmd: "curl"
-          args: ["-f", "http://localhost:8080/health"]
+          cmd: "curl -f http://localhost:8080/health"
         ignore_errors: true

@@ -18,8 +18,7 @@ plays:
       # Command with arguments
       - name: "List directory contents"
         command:
-          cmd: "ls"
-          args: ["-la", "/tmp"]
+          cmd: "ls -la /tmp"
         register: ls_result
 
       # Shell command with pipes
@@ -50,21 +49,18 @@ plays:
       # Command with timeout
       - name: "Run command with timeout"
         command:
-          cmd: "sleep"
-          args: ["2"]
+          cmd: "sleep 2"
           timeout: 5
       # Check command result
       - name: "Verify command success"
         command:
-          cmd: "echo"
-          args: ["Command executed successfully"]
+          cmd: "echo 'Command executed successfully'"
         when: "uptime_result.rc == 0"
 
       # Download file using curl
       - name: "Download file"
         command:
-          cmd: "curl"
-          args: ["-o", "/tmp/test.txt", "https://httpbin.org/get"]
+          cmd: "curl -o /tmp/test.txt https://httpbin.org/get"
           creates: "/tmp/test.txt"
       # Complex shell operation
       - name: "System information gathering"

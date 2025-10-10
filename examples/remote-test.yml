@@ -20,8 +20,7 @@ plays:
       # Test command module
       - name: "Check system information"
         command:
-          cmd: "uname"
-          args: ["-a"]
+          cmd: "uname -a"
         register: system_info
 
       # Test file creation

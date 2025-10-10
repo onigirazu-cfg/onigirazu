@@ -30,8 +30,7 @@ plays:
       # macOS alternative
       - name: "Install Nginx on macOS"
         command:
-          cmd: "brew"
-          args: ["install", "nginx"]
+          cmd: "brew install nginx"
         when: "onigirazu_os_family == 'Darwin'"
         ignore_errors: true
 
@@ -147,8 +146,7 @@ plays:
       # Test Nginx configuration
       - name: "Test Nginx configuration"
         command:
-          cmd: "nginx"
-          args: ["-t"]
+          cmd: "nginx -t"
         when: "onigirazu_os_family != 'Darwin'"
 
       # Start and enable Nginx
@@ -162,46 +160,34 @@ plays:
       # Firewall configuration
       - name: "Allow HTTP traffic"
         command:
-          cmd: "ufw"
-          args: ["allow", "80/tcp"]
+          cmd: "ufw allow 80/tcp"
         when: "onigirazu_os_family != 'Darwin'"
         ignore_errors: true
 
       - name: "Allow HTTPS traffic"
         command:
-          cmd: "ufw"
-          args: ["allow", "443/tcp"]
+          cmd: "ufw allow 443/tcp"
         when: "onigirazu_os_family != 'Darwin'"
         ignore_errors: true
 
       # SSL certificate (self-signed for demo)
       - name: "Generate self-signed SSL certificate"
         command:
-          cmd: "openssl"
-          args: [
-            "req", "-x509", "-nodes", "-days", "365",
-            "-newkey", "rsa:2048",
-            "-keyout", "{{ ssl_cert_dir }}/{{ app_name }}.key",
-            "-out", "{{ ssl_cert_dir }}/{{ app_name }}.crt",
-            "-subj", "/C=US/ST=State/L=City/O=Organization/CN={{ domain_name }}"
-          ]
+          cmd: "openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout {{ ssl_cert_dir }}/{{ app_name }}.key -out {{ ssl_cert_dir }}/{{ app_name }}.crt -subj '/C=US/ST=State/L=City/O=Organization/CN={{ domain_name }}'"
           creates: "{{ ssl_cert_dir }}/{{ app_name }}.crt"
         when: "onigirazu_os_family != 'Darwin'"
 
       # Health check
       - name: "Wait for Nginx to start"
         command:
-          cmd: "sleep"
-          args: ["3"]
+          cmd: "sleep 3"
       - name: "Check web server response"
         command:
-          cmd: "curl"
-          args: ["-f", "-s", "http://localhost/"]
+          cmd: "curl -f -s http://localhost/"
         register: health_check
         ignore_errors: true
 
       - name: "Display deployment status"
         command:
-          cmd: "echo"
-          args: ["Web server deployment completed successfully!"]
+          cmd: "echo 'Web server deployment completed successfully!'"
         when: "health_check.rc == 0"

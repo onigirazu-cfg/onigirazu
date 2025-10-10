@@ -108,8 +108,7 @@ EOF
 
       - name: "Read and display report"
         command:
-          cmd: "cat"
-          args: ["{{ test_dir }}/{{ report_file }}"]
+          cmd: "cat {{ test_dir }}/{{ report_file }}"
         register: report_content
 
       - name: "Show report content"

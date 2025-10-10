@@ -35,8 +35,7 @@ plays:
 
       - name: Verify the change was made on remote host
         command:
-          cmd: cat
-          args: ["/tmp/config_test/app.json"]
+          cmd: "cat /tmp/config_test/app.json"
         register: config_content
 
       - name: Display config content
@@ -45,8 +44,7 @@ plays:
 
       - name: Check if backup exists using command
         command:
-          cmd: ls
-          args: ["-la", "/tmp/config_test/"]
+          cmd: "ls -la /tmp/config_test/"
         register: backup_check
 
       - name: Display directory listing
@@ -74,8 +72,7 @@ plays:
 
       - name: Verify deletion on remote host
         command:
-          cmd: cat
-          args: ["/tmp/config_test/app.json"]
+          cmd: "cat /tmp/config_test/app.json"
         register: after_delete
 
       - name: Display content after deletion
@@ -90,8 +87,7 @@ plays:
 
       - name: Verify restore on remote host
         command:
-          cmd: cat
-          args: ["/tmp/config_test/app.json"]
+          cmd: "cat /tmp/config_test/app.json"
         register: after_restore
 
       - name: Display content after restore

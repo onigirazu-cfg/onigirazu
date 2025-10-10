@@ -62,15 +62,13 @@ plays:
       # Get repository information
       - name: "Get current commit hash"
         command:
-          cmd: "git"
-          args: ["rev-parse", "HEAD"]
+          cmd: "git rev-parse HEAD"
           chdir: "{{ projects_dir }}/hello-world"
         register: current_commit
 
       # Check repository status
       - name: "Check repository status"
         command:
-          cmd: "git"
-          args: ["status", "--porcelain"]
+          cmd: "git status --porcelain"
           chdir: "{{ projects_dir }}/hello-world"
         register: git_status

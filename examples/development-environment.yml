@@ -32,8 +32,7 @@ plays:
       # macOS specific installations
       - name: "Install Homebrew packages on macOS"
         command:
-          cmd: "brew"
-          args: ["install", "node", "python3", "go"]
+          cmd: "brew install node python3 go"
         when: "onigirazu_os_family == 'Darwin'"
         ignore_errors: true
 
@@ -130,14 +129,12 @@ plays:
       # Development tools setup
       - name: "Install global npm packages"
         command:
-          cmd: "npm"
-          args: ["install", "-g", "eslint", "prettier", "nodemon"]
+          cmd: "npm install -g eslint prettier nodemon"
         ignore_errors: true
 
       - name: "Install Python development packages"
         command:
-          cmd: "pip3"
-          args: ["install", "--user", "black", "flake8", "pytest", "requests"]
+          cmd: "pip3 install --user black flake8 pytest requests"
         ignore_errors: true
 
       # Clone useful repositories

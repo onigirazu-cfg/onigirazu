@@ -67,8 +67,7 @@ EOF
 
       - name: "Verify file was created"
         command:
-          cmd: "cat"
-          args: ["{{ test_dir }}/{{ test_file }}"]
+          cmd: "cat {{ test_dir }}/{{ test_file }}"
         register: file_content
 
       - name: "Display file content"
@@ -87,8 +86,7 @@ EOF
 
       - name: "Check disk usage"
         command:
-          cmd: "df"
-          args: ["-h", "{{ onigirazu_env.HOME }}"]
+          cmd: "df -h {{ onigirazu_env.HOME }}"
         register: disk_usage
 
       - name: "Display disk usage"

@@ -63,8 +63,7 @@ plays:
 
       - name: "Run system command"
         command:
-          cmd: "uname"
-          args: ["-a"]
+          cmd: "uname -a"
         register: uname_output
 
       - name: "Display command output"
