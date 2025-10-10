@@ -40,7 +40,7 @@ across your infrastructure with a focus on simplicity and reliability.`,
 			}
 
 			// Show help if no subcommand is provided
-			cmd.Help()
+			_ = cmd.Help()
 		},
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -55,16 +55,16 @@ across your infrastructure with a focus on simplicity and reliability.`,
 
 	// Legacy flags for backward compatibility (hidden from help)
 	rootCmd.PersistentFlags().StringVarP(&playbookPath, "playbook", "p", "", "Path to playbook file (legacy)")
-	rootCmd.PersistentFlags().MarkHidden("playbook")
+	_ = rootCmd.PersistentFlags().MarkHidden("playbook")
 
 	// Additional legacy flags
 	var legacyCheck, legacyDiff, legacyDryRun bool
 	rootCmd.PersistentFlags().BoolVarP(&legacyCheck, "check", "C", false, "Check mode (legacy)")
 	rootCmd.PersistentFlags().BoolVarP(&legacyDiff, "diff", "d", false, "Show differences (legacy)")
 	rootCmd.PersistentFlags().BoolVar(&legacyDryRun, "dry-run", false, "Dry run mode (legacy)")
-	rootCmd.PersistentFlags().MarkHidden("check")
-	rootCmd.PersistentFlags().MarkHidden("diff")
-	rootCmd.PersistentFlags().MarkHidden("dry-run")
+	_ = rootCmd.PersistentFlags().MarkHidden("check")
+	_ = rootCmd.PersistentFlags().MarkHidden("diff")
+	_ = rootCmd.PersistentFlags().MarkHidden("dry-run")
 
 	// Add subcommands
 	rootCmd.AddCommand(NewApplyCommand())

@@ -164,6 +164,7 @@ func lintFile(filename string, enabledRules, disabledRules map[string]bool) *Lin
 	result := &LintResult{}
 
 	// Read file
+	// #nosec G304 - Reading user-provided playbook files is the intended functionality of the lint command
 	data, err := os.ReadFile(filename)
 	if err != nil {
 		result.addError("file-read", fmt.Sprintf("Cannot read file: %v", err), filename, 0, "", "")

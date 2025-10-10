@@ -52,6 +52,7 @@ Output formats:
 			filename := args[0]
 
 			// Read and parse playbook
+			// #nosec G304 - Reading user-provided playbook files is the intended functionality of the graph command
 			data, err := os.ReadFile(filename)
 			if err != nil {
 				return fmt.Errorf("cannot read file: %w", err)

@@ -121,6 +121,7 @@ func isYAMLFile(path string) bool {
 // formatFile formats a single YAML file
 func formatFile(path string, indent int, check, showDiff, write bool) (bool, error) {
 	// Read original file
+	// #nosec G304 - path is provided by user as CLI argument, this is expected behavior for a formatting tool
 	originalData, err := os.ReadFile(path)
 	if err != nil {
 		return false, fmt.Errorf("failed to read file: %w", err)
@@ -181,6 +182,7 @@ func formatFile(path string, indent int, check, showDiff, write bool) (bool, err
 
 	// Write formatted file (default behavior)
 	if !isFormatted {
+		// #nosec G306 - 0644 is appropriate for YAML config files that need to be readable by other tools
 		if err := os.WriteFile(path, formattedData, 0644); err != nil {
 			return false, fmt.Errorf("failed to write file: %w", err)
 		}
