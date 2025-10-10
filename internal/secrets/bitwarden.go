@@ -194,6 +194,7 @@ func (bc *BitwardenClient) authenticate(config map[string]interface{}) error {
 
 	// Set server
 	if bc.server != "https://vault.bitwarden.com" {
+		// #nosec G204 -- server URL is from trusted configuration
 		cmd := exec.Command("bw", "config", "server", bc.server)
 		if err := cmd.Run(); err != nil {
 			return fmt.Errorf("failed to configure server: %w", err)
@@ -201,6 +202,7 @@ func (bc *BitwardenClient) authenticate(config map[string]interface{}) error {
 	}
 
 	// Login
+	// #nosec G204 -- credentials are from trusted configuration
 	cmd = exec.Command("bw", "login", bc.email, bc.password, "--raw")
 	output, err = cmd.Output()
 	if err != nil {
@@ -231,6 +233,7 @@ func (bc *BitwardenClient) GetSecret(ctx context.Context, itemName, field string
 	}
 
 	// Get item from Bitwarden
+	// #nosec G204 -- itemName is validated and sessionToken is from authentication
 	cmd := exec.CommandContext(ctx, "bw", "get", "item", itemName, "--session", sessionToken)
 	output, err := cmd.Output()
 	if err != nil {
@@ -311,6 +314,7 @@ func (bc *BitwardenClient) ListSecrets(ctx context.Context, filter string) ([]st
 	}
 
 	// List all items
+	// #nosec G204 -- sessionToken is from authentication
 	cmd := exec.CommandContext(ctx, "bw", "list", "items", "--session", sessionToken)
 	output, err := cmd.Output()
 	if err != nil {
