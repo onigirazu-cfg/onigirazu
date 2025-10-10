@@ -1,0 +1,215 @@
+name: Auto Release
+
+on:
+  push:
+    branches: [ main ]
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+      - '.github/**'
+      - 'examples/**'
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: 'Release type'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+          - prerelease
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  GO_VERSION: '1.24'
+
+jobs:
+  check-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      should_release: ${{ steps.check.outputs.should_release }}
+      release_type: ${{ steps.check.outputs.release_type }}
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v5
+      with:
+        fetch-depth: 0
+
+    - name: Check for release-worthy changes
+      id: check
+      run: |
+        # Get the latest tag
+        LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+        echo "Latest tag: $LATEST_TAG"
+
+        # Check commits since last tag
+        COMMITS_SINCE_TAG=$(git rev-list ${LATEST_TAG}..HEAD --count)
+        echo "Commits since tag: $COMMITS_SINCE_TAG"
+
+        # Check for conventional commit types
+        FEAT_COMMITS=$(git log ${LATEST_TAG}..HEAD --oneline --grep="^feat" --count)
+        FIX_COMMITS=$(git log ${LATEST_TAG}..HEAD --oneline --grep="^fix" --count)
+        BREAKING_COMMITS=$(git log ${LATEST_TAG}..HEAD --oneline --grep="BREAKING CHANGE" --count)
+
+        echo "Feature commits: $FEAT_COMMITS"
+        echo "Fix commits: $FIX_COMMITS"
+        echo "Breaking commits: $BREAKING_COMMITS"
+
+        # Determine release type and if we should release
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          echo "should_release=true" >> $GITHUB_OUTPUT
+          echo "release_type=${{ github.event.inputs.release_type }}" >> $GITHUB_OUTPUT
+        elif [ $COMMITS_SINCE_TAG -gt 0 ]; then
+          if [ $BREAKING_COMMITS -gt 0 ]; then
+            echo "should_release=true" >> $GITHUB_OUTPUT
+            echo "release_type=major" >> $GITHUB_OUTPUT
+          elif [ $FEAT_COMMITS -gt 0 ]; then
+            echo "should_release=true" >> $GITHUB_OUTPUT
+            echo "release_type=minor" >> $GITHUB_OUTPUT
+          elif [ $FIX_COMMITS -gt 0 ]; then
+            echo "should_release=true" >> $GITHUB_OUTPUT
+            echo "release_type=patch" >> $GITHUB_OUTPUT
+          else
+            echo "should_release=false" >> $GITHUB_OUTPUT
+            echo "release_type=none" >> $GITHUB_OUTPUT
+          fi
+        else
+          echo "should_release=false" >> $GITHUB_OUTPUT
+          echo "release_type=none" >> $GITHUB_OUTPUT
+        fi
+
+  create-release:
+    runs-on: ubuntu-latest
+    needs: check-changes
+    if: needs.check-changes.outputs.should_release == 'true'
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v5
+      with:
+        fetch-depth: 0
+        token: ${{ secrets.GH_TOKEN }}
+
+    - name: Set up Go
+      uses: actions/setup-go@v6
+      with:
+        go-version: ${{ env.GO_VERSION }}
+        cache: true
+
+    - name: Install semver tool
+      run: |
+        go install github.com/maykonlf/semver-cli/cmd/semver@latest
+
+    - name: Calculate next version
+      id: version
+      run: |
+        # Get the latest tag
+        LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+        echo "Current version: $LATEST_TAG"
+
+        # Remove 'v' prefix for semver calculation
+        CURRENT_VERSION=${LATEST_TAG#v}
+
+        # Calculate next version based on release type
+        case "${{ needs.check-changes.outputs.release_type }}" in
+          "major")
+            NEXT_VERSION=$(semver up major $CURRENT_VERSION)
+            ;;
+          "minor")
+            NEXT_VERSION=$(semver up minor $CURRENT_VERSION)
+            ;;
+          "patch")
+            NEXT_VERSION=$(semver up patch $CURRENT_VERSION)
+            ;;
+          "prerelease")
+            NEXT_VERSION=$(semver up prerelease $CURRENT_VERSION)
+            ;;
+          *)
+            echo "Invalid release type: ${{ needs.check-changes.outputs.release_type }}"
+            exit 1
+            ;;
+        esac
+
+        # Add 'v' prefix back
+        NEXT_TAG="v${NEXT_VERSION}"
+        echo "Next version: $NEXT_TAG"
+        echo "next_tag=$NEXT_TAG" >> $GITHUB_OUTPUT
+
+    - name: Run tests before release
+      run: |
+        go test -race -timeout=10m ./...
+
+    - name: Update version in code
+      run: |
+        # Update version in main.go if it exists
+        if [ -f cmd/onigirazu/main.go ]; then
+          sed -i 's/version = ".*"/version = "${{ steps.version.outputs.next_tag }}"/' cmd/onigirazu/main.go || true
+        fi
+
+    - name: Generate changelog
+      id: changelog
+      run: |
+        LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+
+        # Generate changelog
+        echo "## Changes since $LATEST_TAG" > CHANGELOG.tmp
+        echo "" >> CHANGELOG.tmp
+
+        # Add features
+        FEAT_COMMITS=$(git log ${LATEST_TAG}..HEAD --oneline --grep="^feat" --pretty=format:"- %s (%h)")
+        if [ -n "$FEAT_COMMITS" ]; then
+          echo "### ✨ New Features" >> CHANGELOG.tmp
+          echo "$FEAT_COMMITS" >> CHANGELOG.tmp
+          echo "" >> CHANGELOG.tmp
+        fi
+
+        # Add fixes
+        FIX_COMMITS=$(git log ${LATEST_TAG}..HEAD --oneline --grep="^fix" --pretty=format:"- %s (%h)")
+        if [ -n "$FIX_COMMITS" ]; then
+          echo "### 🐛 Bug Fixes" >> CHANGELOG.tmp
+          echo "$FIX_COMMITS" >> CHANGELOG.tmp
+          echo "" >> CHANGELOG.tmp
+        fi
+
+        # Add other changes
+        OTHER_COMMITS=$(git log ${LATEST_TAG}..HEAD --oneline --invert-grep --grep="^feat" --grep="^fix" --pretty=format:"- %s (%h)")
+        if [ -n "$OTHER_COMMITS" ]; then
+          echo "### 🔧 Other Changes" >> CHANGELOG.tmp
+          echo "$OTHER_COMMITS" >> CHANGELOG.tmp
+          echo "" >> CHANGELOG.tmp
+        fi
+
+        # Set output for GitHub release
+        echo "changelog<<EOF" >> $GITHUB_OUTPUT
+        cat CHANGELOG.tmp >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+
+    - name: Create and push tag
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+
+        git tag -a ${{ steps.version.outputs.next_tag }} -m "Release ${{ steps.version.outputs.next_tag }}"
+        git push origin ${{ steps.version.outputs.next_tag }}
+
+    - name: Create GitHub Release
+      uses: actions/create-release@v1
+      env:
+        GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      with:
+        tag_name: ${{ steps.version.outputs.next_tag }}
+        release_name: Release ${{ steps.version.outputs.next_tag }}
+        body: ${{ steps.changelog.outputs.changelog }}
+        draft: false
+        prerelease: ${{ contains(steps.version.outputs.next_tag, 'alpha') || contains(steps.version.outputs.next_tag, 'beta') || contains(steps.version.outputs.next_tag, 'rc') }}
+
+    - name: Trigger release workflow
+      run: |
+        echo "Release ${{ steps.version.outputs.next_tag }} created successfully!"
+        echo "The release workflow will be triggered automatically."

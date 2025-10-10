@@ -1,0 +1,58 @@
+---
+# Service Management Examples
+# Demonstrates service control and management
+
+plays:
+  - name: "Service Management Demo"
+    hosts: all
+    tasks:
+      # Start and enable service
+      - name: "Start and enable SSH service"
+        service:
+          name: "ssh"
+          state: "started"
+          enabled: true
+        when: "onigirazu_os_family != 'Darwin'"
+
+      # macOS service management
+      - name: "Start macOS service"
+        service:
+          name: "com.apple.ssh"
+          state: "started"
+        when: "onigirazu_os_family == 'Darwin'"
+
+      # Stop service
+      - name: "Stop unnecessary service"
+        service:
+          name: "bluetooth"
+          state: "stopped"
+        ignore_errors: true
+
+      # Restart service
+      - name: "Restart network service"
+        service:
+          name: "networking"
+          state: "restarted"
+        when: "onigirazu_os_family == 'Debian'"
+
+      # Reload service configuration
+      - name: "Reload service configuration"
+        service:
+          name: "nginx"
+          state: "reloaded"
+        ignore_errors: true
+
+      # Disable service
+      - name: "Disable service on boot"
+        service:
+          name: "apache2"
+          enabled: false
+        ignore_errors: true
+
+      # Check service status
+      - name: "Check service status"
+        command:
+          cmd: "systemctl is-active ssh"
+        register: service_status
+        ignore_errors: true
+        when: "onigirazu_os_family != 'Darwin'"

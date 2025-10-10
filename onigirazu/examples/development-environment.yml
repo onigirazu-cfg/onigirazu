@@ -1,0 +1,170 @@
+---
+# Development Environment Setup
+# Sets up a complete development environment
+
+plays:
+  - name: "Development Environment Setup"
+    hosts: all
+    vars:
+      dev_user: "{{ onigirazu_user }}"
+      dev_home: "{{ onigirazu_env.HOME }}"
+      projects_dir: "{{ dev_home }}/projects"
+
+    tasks:
+      # Development tools installation
+      - name: "Install development packages"
+        package:
+          name: ["git", "curl", "wget", "vim", "tmux", "tree", "jq"]
+          state: "present"
+      # Programming languages and tools
+      - name: "Install Node.js"
+        package:
+          name: "nodejs"
+          state: "present"
+        when: "onigirazu_os_family != 'Darwin'"
+
+      - name: "Install Python development tools"
+        package:
+          name: ["python3", "python3-pip", "python3-venv"]
+          state: "present"
+        when: "onigirazu_os_family != 'Darwin'"
+
+      # macOS specific installations
+      - name: "Install Homebrew packages on macOS"
+        command:
+          cmd: "brew install node python3 go"
+        when: "onigirazu_os_family == 'Darwin'"
+        ignore_errors: true
+
+      # Directory structure
+      - name: "Create projects directory"
+        file:
+          path: "{{ projects_dir }}"
+          state: "directory"
+          mode: "0755"
+      - name: "Create bin directory"
+        file:
+          path: "{{ dev_home }}/bin"
+          state: "directory"
+          mode: "0755"
+      # Configuration files
+      - name: "Create .gitconfig"
+        file:
+          path: "{{ dev_home }}/.gitconfig"
+          content: |
+            [user]
+                name = Developer
+                email = developer@example.com
+            [core]
+                editor = vim
+                autocrlf = input
+            [push]
+                default = simple
+            [pull]
+                rebase = false
+          mode: "0644"
+      - name: "Create .vimrc"
+        file:
+          path: "{{ dev_home }}/.vimrc"
+          content: |
+            " Basic vim configuration
+            set number
+            set tabstop=4
+            set shiftwidth=4
+            set expandtab
+            set autoindent
+            set smartindent
+            syntax on
+            set hlsearch
+            set incsearch
+            set ignorecase
+            set smartcase
+          mode: "0644"
+      # Shell configuration
+      - name: "Create .bashrc additions"
+        file:
+          path: "{{ dev_home }}/.bashrc_dev"
+          content: |
+            # Development environment additions
+            export PATH="$HOME/bin:$PATH"
+            export EDITOR=vim
+            # Aliases
+            alias ll='ls -la'
+            alias la='ls -A'
+            alias l='ls -CF'
+            alias grep='grep --color=auto'
+            alias ..='cd ..'
+            alias ...='cd ../..'
+            # Git aliases
+            alias gs='git status'
+            alias ga='git add'
+            alias gc='git commit'
+            alias gp='git push'
+            alias gl='git log --oneline'
+            # Python virtual environment
+            alias venv='python3 -m venv'
+            alias activate='source venv/bin/activate'
+          mode: "0644"
+      # SSH configuration
+      - name: "Create .ssh directory"
+        file:
+          path: "{{ dev_home }}/.ssh"
+          state: "directory"
+          mode: "0700"
+      - name: "Create SSH config"
+        file:
+          path: "{{ dev_home }}/.ssh/config"
+          content: |
+            # SSH Configuration
+            Host *
+                ServerAliveInterval 60
+                ServerAliveCountMax 3
+            # Example host configuration
+            # Host myserver
+            #     HostName server.example.com
+            #     User myuser
+            #     Port 22
+            #     IdentityFile ~/.ssh/id_rsa
+          mode: "0600"
+      # Development tools setup
+      - name: "Install global npm packages"
+        command:
+          cmd: "npm install -g eslint prettier nodemon"
+        ignore_errors: true
+
+      - name: "Install Python development packages"
+        command:
+          cmd: "pip3 install --user black flake8 pytest requests"
+        ignore_errors: true
+
+      # Clone useful repositories
+      - name: "Clone dotfiles repository"
+        git:
+          repo: "https://github.com/example/dotfiles.git"
+          dest: "{{ projects_dir }}/dotfiles"
+          clone: true
+        ignore_errors: true
+
+      # Create sample project
+      - name: "Create sample project directory"
+        file:
+          path: "{{ projects_dir }}/sample-project"
+          state: "directory"
+          mode: "0755"
+      - name: "Create sample README"
+        file:
+          path: "{{ projects_dir }}/sample-project/README.md"
+          content: |
+            # Sample Project
+            This is a sample project created by Onigirazu.
+            ## Getting Started
+            1. Navigate to this directory
+            2. Initialize your project
+            3. Start coding!
+            ## Tools Available
+            - Git
+            - Node.js
+            - Python 3
+            - Vim
+            - tmux
+          mode: "0644"

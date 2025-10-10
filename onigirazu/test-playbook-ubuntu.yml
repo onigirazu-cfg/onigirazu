@@ -1,0 +1,11 @@
+name: Test Ubuntu Connection
+description: Simple test to verify connection to Ubuntu host
+
+plays:
+  - name: Test connection
+    hosts: all
+    tasks:
+      - name: Check hostname
+        module: command
+        args:
+          cmd: hostname

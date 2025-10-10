@@ -1,0 +1,74 @@
+---
+# Git Operations Examples
+# Demonstrates git repository management
+
+plays:
+  - name: "Git Operations Demo"
+    hosts: all
+    vars:
+      projects_dir: "/tmp/onigirazu-projects"
+
+    tasks:
+      # Create projects directory
+      - name: "Create projects directory"
+        file:
+          path: "{{ projects_dir }}"
+          state: "directory"
+          mode: "0755"
+      # Clone repository
+      - name: "Clone public repository"
+        git:
+          repo: "https://github.com/octocat/Hello-World.git"
+          dest: "{{ projects_dir }}/hello-world"
+          clone: true
+      # Clone specific branch
+      - name: "Clone specific branch"
+        git:
+          repo: "https://github.com/octocat/Hello-World.git"
+          dest: "{{ projects_dir }}/hello-world-branch"
+          branch: "master"
+          clone: true
+      # Update existing repository
+      - name: "Update repository"
+        git:
+          dest: "{{ projects_dir }}/hello-world"
+          update: true
+      # Checkout specific commit
+      - name: "Checkout specific commit"
+        git:
+          dest: "{{ projects_dir }}/hello-world"
+          version: "HEAD~1"
+      # Clone with depth limit
+      - name: "Shallow clone"
+        git:
+          repo: "https://github.com/octocat/Hello-World.git"
+          dest: "{{ projects_dir }}/hello-world-shallow"
+          depth: 1
+          clone: true
+      # Clone private repository (requires SSH key)
+      - name: "Clone private repository"
+        git:
+          repo: "git@github.com:user/private-repo.git"
+          dest: "{{ projects_dir }}/private-repo"
+          key_file: "~/.ssh/id_rsa"
+          clone: true
+        ignore_errors: true  # May fail if SSH key not configured
+
+      # Reset repository to clean state
+      - name: "Reset repository"
+        git:
+          dest: "{{ projects_dir }}/hello-world"
+          force: true
+      # Get repository information
+      - name: "Get current commit hash"
+        command:
+          cmd: "git rev-parse HEAD"
+          chdir: "{{ projects_dir }}/hello-world"
+        register: current_commit
+
+      # Check repository status
+      - name: "Check repository status"
+        command:
+          cmd: "git status --porcelain"
+          chdir: "{{ projects_dir }}/hello-world"
+        register: git_status

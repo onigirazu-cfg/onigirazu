@@ -1,0 +1,51 @@
+# Onigirazu Plugin Configuration
+# This file defines which plugins to load and their configuration
+
+# Directory where plugin files are located
+plugins_dir: "./plugins"
+
+# List of plugins to load
+plugins:
+  # Built-in filter plugin (always enabled)
+  - name: builtin_filters
+    type: filter
+    enabled: true
+    config:
+      # No configuration needed for built-in filters
+
+  # Example: Custom hello module plugin
+  - name: hello
+    type: module
+    enabled: false  # Set to true to enable
+    path: module_hello.so  # Path to compiled Go plugin
+    config:
+      default_greeting: "Hello"
+
+  # Example: Metrics callback plugin
+  - name: metrics
+    type: callback
+    enabled: false  # Set to true to enable
+    path: callback_metrics.so  # Path to compiled Go plugin
+    config:
+      output_file: "/tmp/onigirazu_metrics.json"
+      collect_timing: true
+      collect_changes: true
+
+  # Example: AWS EC2 inventory plugin
+  - name: aws_ec2
+    type: inventory
+    enabled: false  # Set to true to enable
+    path: inventory_aws.so  # Path to compiled Go plugin
+    config:
+      region: us-east-1
+      filters:
+        - tag:Environment=production
+      cache_ttl: 300  # 5 minutes
+
+  # Example: Custom string filters plugin
+  - name: custom_filters
+    type: filter
+    enabled: false  # Set to true to enable
+    path: filter_custom.so  # Path to compiled Go plugin
+    config:
+      # Plugin-specific configuration

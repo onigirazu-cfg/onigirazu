@@ -1,0 +1,67 @@
+---
+plays:
+  - name: Test lineinfile module
+    hosts: localhost
+    gather_facts: false
+    tasks:
+      - name: Create test file
+        shell:
+          cmd: |
+            cat > /tmp/test-config.txt << 'EOF'
+            # Configuration file
+            server_name=localhost
+            port=8080
+            debug=false
+            EOF
+
+      - name: Ensure a line is present
+        lineinfile:
+          path: /tmp/test-config.txt
+          line: "timeout=30"
+          create: true
+
+      - name: Replace a line using regexp
+        lineinfile:
+          path: /tmp/test-config.txt
+          regexp: "^port="
+          line: "port=9090"
+
+      - name: Add line after specific pattern
+        lineinfile:
+          path: /tmp/test-config.txt
+          line: "max_connections=100"
+          insertafter: "^port="
+
+      - name: Add line before specific pattern
+        lineinfile:
+          path: /tmp/test-config.txt
+          line: "# Server settings"
+          insertbefore: "^server_name="
+
+      - name: Display modified file
+        shell:
+          cmd: cat /tmp/test-config.txt
+        register: file_content
+
+      - name: Debug file content
+        debug:
+          msg: "Modified file:\n{{ file_content.stdout }}"
+
+      - name: Remove a line
+        lineinfile:
+          path: /tmp/test-config.txt
+          line: "debug=false"
+          state: absent
+
+      - name: Display file after removal
+        shell:
+          cmd: cat /tmp/test-config.txt
+        register: file_after_removal
+
+      - name: Debug file after removal
+        debug:
+          msg: "After removal:\n{{ file_after_removal.stdout }}"
+
+      - name: Clean up test file
+        shell:
+          cmd: rm -f /tmp/test-config.txt

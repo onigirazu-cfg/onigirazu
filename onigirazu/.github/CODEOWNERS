@@ -1,0 +1,33 @@
+# Global owners - these users will be requested for review when someone opens a pull request
+* @onigirazu-cfg/maintainers
+
+# Go source code
+*.go @onigirazu-cfg/go-experts
+/internal/ @onigirazu-cfg/core-team
+/pkg/ @onigirazu-cfg/core-team
+/cmd/ @onigirazu-cfg/core-team
+
+# Configuration and modules
+/modules/ @onigirazu-cfg/module-experts
+*.yaml @onigirazu-cfg/config-experts
+*.yml @onigirazu-cfg/config-experts
+*.toml @onigirazu-cfg/config-experts
+
+# Documentation
+*.md @onigirazu-cfg/docs-team
+/docs/ @onigirazu-cfg/docs-team
+
+# CI/CD and DevOps
+/.github/ @onigirazu-cfg/devops-team
+/docker/ @onigirazu-cfg/devops-team
+Dockerfile* @onigirazu-cfg/devops-team
+.goreleaser.yml @onigirazu-cfg/devops-team
+
+# Security sensitive files
+/security/ @onigirazu-cfg/security-team
+go.mod @onigirazu-cfg/core-team
+go.sum @onigirazu-cfg/core-team
+
+# Tests
+*_test.go @onigirazu-cfg/qa-team
+/test/ @onigirazu-cfg/qa-team

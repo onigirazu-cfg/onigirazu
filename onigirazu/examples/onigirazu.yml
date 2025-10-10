@@ -1,0 +1,25 @@
+---
+# Onigirazu configuration with nested syntax enabled
+
+# Enable nested module syntax as default
+preferred_module_syntax: "nested"
+enforce_module_syntax: false  # Set to true to enforce only nested syntax
+
+# Logging configuration
+log_level: "info"
+log_format: "text"
+
+# Execution settings
+parallel_execution: true
+max_parallel_tasks: 5
+task_timeout: "300s"  # 5 minutes
+
+# Connection settings
+connection_timeout: "30s"
+retry_attempts: 3
+retry_delay: "5s"
+
+# Output settings
+show_task_details: true
+show_timing: true
+colored_output: true

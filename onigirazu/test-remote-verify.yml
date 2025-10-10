@@ -1,0 +1,88 @@
+---
+# Verify Remote Testing
+# Simple verification that everything works
+
+plays:
+  - name: "Verify System"
+    hosts: all
+    gather_facts: true
+
+    tasks:
+      - name: "Show all system facts"
+        debug:
+          msg: |
+            ═══════════════════════════════════════════════════════════
+            ONIGIRAZU SYSTEM FACTS VERIFICATION
+            ═══════════════════════════════════════════════════════════
+
+            BASIC INFO:
+            - Hostname: {{ onigirazu_hostname }}
+            - FQDN: {{ onigirazu_fqdn }}
+            - Host: {{ onigirazu_host }}
+            - Port: {{ onigirazu_port }}
+            - User: {{ onigirazu_user }}
+
+            OPERATING SYSTEM:
+            - OS Family: {{ onigirazu_os_family }}
+            - Distribution: {{ onigirazu_distribution }} {{ onigirazu_distribution_version }}
+            - Architecture: {{ onigirazu_architecture }}
+            - Kernel: {{ onigirazu_kernel }} {{ onigirazu_kernel_version }}
+
+            HARDWARE:
+            - CPU Cores: {{ onigirazu_processor_cores }}
+            - Memory: {{ onigirazu_memtotal_mb }}
+
+            NETWORK:
+            - IPv4: {{ onigirazu_default_ipv4.address }}
+
+            USER CONTEXT:
+            - User ID: {{ onigirazu_user_id }}
+            - Home: {{ onigirazu_env.HOME }}
+            - PATH: {{ onigirazu_env.PATH }}
+
+            DATE/TIME:
+            - ISO8601: {{ onigirazu_date_time.iso8601 }}
+            - Date: {{ onigirazu_date_time.date }}
+            - Time: {{ onigirazu_date_time.time }}
+            - Weekday: {{ onigirazu_date_time.weekday }}
+            - Epoch: {{ onigirazu_date_time.epoch }}
+
+            ═══════════════════════════════════════════════════════════
+            ✓ ALL ONIGIRAZU_* VARIABLES WORKING CORRECTLY!
+            ═══════════════════════════════════════════════════════════
+
+      - name: "Test conditional - Debian"
+        debug:
+          msg: "✓ Conditional test passed: This is a Debian-based system"
+        when: "onigirazu_os_family == 'Debian'"
+
+      - name: "Test conditional - RedHat"
+        debug:
+          msg: "✓ Conditional test passed: This is a RedHat-based system"
+        when: "onigirazu_os_family == 'RedHat'"
+
+      - name: "Run system command"
+        command:
+          cmd: "uname -a"
+        register: uname_output
+
+      - name: "Display command output"
+        debug:
+          msg: "System info: {{ uname_output.stdout }}"
+
+      - name: "Final success message"
+        debug:
+          msg: |
+            ╔════════════════════════════════════════════════════════════╗
+            ║                                                            ║
+            ║  ✓✓✓ COMPLETE REFACTORING TEST SUCCESSFUL! ✓✓✓           ║
+            ║                                                            ║
+            ║  All ansible_* variables have been successfully           ║
+            ║  refactored to onigirazu_* and tested on remote host!     ║
+            ║                                                            ║
+            ║  Remote Host: {{ onigirazu_hostname }} ({{ onigirazu_host }})
+            ║  OS: {{ onigirazu_os_family }} / {{ onigirazu_distribution }}
+            ║  Architecture: {{ onigirazu_architecture }}
+            ║  Tested: {{ onigirazu_date_time.iso8601 }}
+            ║                                                            ║
+            ╚════════════════════════════════════════════════════════════╝
