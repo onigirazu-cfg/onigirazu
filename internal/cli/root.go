@@ -93,21 +93,21 @@ func handleLegacyMode(cmd *cobra.Command, args []string) {
 	applyCmd := NewApplyCommand()
 
 	// Copy global flags to apply command
-	applyCmd.Flags().Set("config", configPath)
-	applyCmd.Flags().Set("inventory", inventoryPath)
-	applyCmd.Flags().Set("state", statePath)
-	applyCmd.Flags().Set("verbose", fmt.Sprintf("%t", verbose))
-	applyCmd.Flags().Set("no-color", fmt.Sprintf("%t", noColor))
+	_ = applyCmd.Flags().Set("config", configPath)
+	_ = applyCmd.Flags().Set("inventory", inventoryPath)
+	_ = applyCmd.Flags().Set("state", statePath)
+	_ = applyCmd.Flags().Set("verbose", fmt.Sprintf("%t", verbose))
+	_ = applyCmd.Flags().Set("no-color", fmt.Sprintf("%t", noColor))
 
 	// Copy other legacy flags if they exist
 	if check, _ := cmd.Flags().GetBool("check"); check {
-		applyCmd.Flags().Set("check", "true")
+		_ = applyCmd.Flags().Set("check", "true")
 	}
 	if diff, _ := cmd.Flags().GetBool("diff"); diff {
-		applyCmd.Flags().Set("diff", "true")
+		_ = applyCmd.Flags().Set("diff", "true")
 	}
 	if dryRun, _ := cmd.Flags().GetBool("dry-run"); dryRun {
-		applyCmd.Flags().Set("check", "true")
+		_ = applyCmd.Flags().Set("check", "true")
 	}
 
 	// Set playbook path as argument
