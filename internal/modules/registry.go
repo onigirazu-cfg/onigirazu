@@ -19,6 +19,7 @@ func NewRegistry() *Registry {
 	}
 
 	// Register built-in modules
+	registry.RegisterModule(NewPingModule())
 	registry.RegisterModule(NewFileModule())
 	registry.RegisterModule(NewCopyModule())
 	registry.RegisterModule(NewFetchModule())

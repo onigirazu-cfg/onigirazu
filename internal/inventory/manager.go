@@ -338,10 +338,49 @@ func (m *Manager) resolveGroupInheritance(inventory *types.Inventory) error {
 	return nil
 }
 
+// findHostInOtherGroups searches for a host with the given name in other groups
+func (m *Manager) findHostInOtherGroups(inventory *types.Inventory, hostName, excludeGroup string) *types.Host {
+	for groupName, group := range inventory.Groups {
+		if groupName == excludeGroup {
+			continue
+		}
+		if host, exists := group.Hosts[hostName]; exists && host != nil {
+			return host
+		}
+	}
+	return nil
+}
+
 // validateHosts validates host configuration
 func (m *Manager) validateHosts(inventory *types.Inventory) error {
 	for groupName, group := range inventory.Groups {
 		for hostName, host := range group.Hosts {
+			// Skip nil hosts (hosts with no configuration)
+			if host == nil {
+				// Try to find this host in other groups and copy its configuration
+				foundHost := m.findHostInOtherGroups(inventory, hostName, groupName)
+				if foundHost != nil {
+					// Create a copy of the found host
+					hostCopy := *foundHost
+					// Make a deep copy of Vars
+					hostCopy.Vars = make(map[string]interface{})
+					for k, v := range foundHost.Vars {
+						hostCopy.Vars[k] = v
+					}
+					host = &hostCopy
+					m.logger.Debug("Copied host '%s' configuration from another group to '%s'", hostName, groupName)
+				} else {
+					// Create a minimal host entry
+					host = &types.Host{
+						Name:    hostName,
+						Address: hostName,
+						Port:    22,
+						Vars:    make(map[string]interface{}),
+					}
+				}
+				group.Hosts[hostName] = host
+			}
+
 			// Initialize Vars if nil
 			if host.Vars == nil {
 				host.Vars = make(map[string]interface{})

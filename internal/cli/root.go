@@ -76,6 +76,7 @@ across your infrastructure with a focus on simplicity and reliability.`,
 	rootCmd.AddCommand(newFmtCmd())
 	rootCmd.AddCommand(newLintCmd())
 	rootCmd.AddCommand(newGraphCmd())
+	rootCmd.AddCommand(newRunCmd())
 
 	return rootCmd
 }

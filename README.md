@@ -370,6 +370,168 @@ onigirazu -playbook playbook.yml -inventory inventory.yml
 
 **Note:** Legacy mode will show a deprecation warning. Use `onigirazu apply` instead.
 
+## 🚀 Ad-hoc Commands
+
+Onigirazu features a **unique and powerful ad-hoc command system** that supports **5 different input formats** - making it the most flexible configuration management tool available!
+
+### Quick Start
+
+```bash
+# Simple ping test
+onigirazu run all -m ping -i inventory.yml
+
+# Execute a command
+onigirazu run webservers -m shell 'cmd="uptime"' -i inventory.yml
+
+# Natural language (unique to Onigirazu!)
+onigirazu run all "install nginx package" -i inventory.yml
+```
+
+### 🎯 5 Supported Input Formats
+
+#### 1. **Ansible-like Syntax** (Familiar)
+
+```bash
+# Module with arguments
+onigirazu run all -m package name=nginx state=present -i inventory.yml
+onigirazu run webservers -m service name=nginx state=started -i inventory.yml
+onigirazu run all -m command 'command="df -h"' -i inventory.yml
+```
+
+#### 2. **Natural Language** (Unique! 🌟)
+
+```bash
+# Package operations
+onigirazu run all "install nginx package" -i inventory.yml
+onigirazu run all "remove apache package" -i inventory.yml
+onigirazu run all "update mysql package" -i inventory.yml
+
+# Service operations
+onigirazu run webservers "start nginx service" -i inventory.yml
+onigirazu run all "restart apache service" -i inventory.yml
+onigirazu run dbservers "stop mysql service" -i inventory.yml
+
+# File operations
+onigirazu run all "create file /tmp/test.txt" -i inventory.yml
+onigirazu run all "delete file /tmp/old.log" -i inventory.yml
+```
+
+#### 3. **Module:Args Syntax** (Compact)
+
+```bash
+onigirazu run all "package:name=nginx,state=present" -i inventory.yml
+onigirazu run webservers "service:name=nginx,state=started" -i inventory.yml
+onigirazu run all "shell:cmd=uptime" -i inventory.yml
+```
+
+#### 4. **JSON Format** (Structured)
+
+```bash
+onigirazu run all '{"module":"package","args":{"name":"nginx","state":"present"}}' -i inventory.yml
+onigirazu run webservers '{"module":"service","args":{"name":"nginx","state":"started"}}' -i inventory.yml
+```
+
+#### 5. **YAML Format** (Readable)
+
+```bash
+onigirazu run all 'module: package
+args:
+  name: nginx
+  state: present' -i inventory.yml
+```
+
+### Output Formats
+
+Control how results are displayed:
+
+```bash
+# Default text output (colored, human-readable)
+onigirazu run all -m ping -i inventory.yml
+
+# JSON output (for scripting)
+onigirazu run all -m shell 'cmd="uptime"' -i inventory.yml -o json
+
+# YAML output (structured)
+onigirazu run all -m ping -i inventory.yml -o yaml
+
+# Table format (compact view)
+onigirazu run all -m ping -i inventory.yml -o table
+```
+
+### Advanced Options
+
+```bash
+# Parallel execution (default: 5)
+onigirazu run all -m shell 'cmd="uptime"' --parallel 10 -i inventory.yml
+
+# Check mode (dry-run)
+onigirazu run all -m package name=nginx state=present --check -i inventory.yml
+
+# Verbose output
+onigirazu run all -m command 'command="uptime"' -V -i inventory.yml
+
+# Custom timeout
+onigirazu run all -m shell 'cmd="long-running-task"' --timeout 120s -i inventory.yml
+
+# No color output
+onigirazu run all -m ping --no-color -i inventory.yml
+```
+
+### Real-World Examples
+
+```bash
+# System information gathering
+onigirazu run all -m shell 'cmd="df -h"' -i inventory.yml
+onigirazu run all -m shell 'cmd="free -h"' -i inventory.yml
+onigirazu run all -m shell 'cmd="uname -a"' -i inventory.yml
+
+# Quick deployments
+onigirazu run webservers "install nginx package" -i inventory.yml
+onigirazu run webservers "start nginx service" -i inventory.yml
+
+# Troubleshooting
+onigirazu run all -m shell 'cmd="systemctl status nginx"' -i inventory.yml
+onigirazu run all -m shell 'cmd="tail -n 50 /var/log/syslog"' -i inventory.yml
+
+# Batch operations
+onigirazu run all "update all package" --parallel 20 -i inventory.yml
+onigirazu run webservers "restart nginx service" -i inventory.yml
+```
+
+### Host Patterns
+
+Target specific hosts or groups:
+
+```bash
+# All hosts
+onigirazu run all -m ping -i inventory.yml
+
+# Specific group
+onigirazu run webservers -m ping -i inventory.yml
+onigirazu run dbservers -m ping -i inventory.yml
+
+# Single host
+onigirazu run web1 -m ping -i inventory.yml
+onigirazu run localhost -m shell 'cmd="whoami"' -i inventory.yml
+
+# Multiple groups (comma-separated)
+onigirazu run webservers,dbservers -m ping -i inventory.yml
+```
+
+### Why Onigirazu Ad-hoc Commands Are Better
+
+| Feature | Onigirazu | Ansible | Others |
+|---------|-----------|---------|--------|
+| **Input formats** | ✅ 5 formats | ❌ 1 format | ❌ 1-2 formats |
+| **Natural language** | ✅ Yes | ❌ No | ❌ No |
+| **JSON/YAML input** | ✅ Yes | ❌ No | ❌ No |
+| **Output formats** | ✅ 4 formats | ✅ 2 formats | ❌ 1-2 formats |
+| **Parallel execution** | ✅ Yes | ✅ Yes | ✅ Yes |
+| **Check mode** | ✅ Yes | ✅ Yes | ✅ Yes |
+| **Stdout display** | ✅ Formatted | ⚠️ Basic | ⚠️ Basic |
+
+📚 **For detailed documentation and more examples, see [docs/ADHOC_GUIDE.md](docs/ADHOC_GUIDE.md)**
+
 ## Modules
 
 Onigirazu includes several built-in modules:

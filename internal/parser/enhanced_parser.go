@@ -251,6 +251,11 @@ func (p *EnhancedParser) validateGroup(group *types.Group, name string) error {
 
 // validateHost validates a single host
 func (p *EnhancedParser) validateHost(host *types.Host, name string) error {
+	// Host can be nil if only name is specified in inventory
+	if host == nil {
+		return nil
+	}
+
 	if host.Address == "" {
 		host.Address = name // Use hostname as address if not specified
 	}
