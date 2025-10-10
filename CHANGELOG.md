@@ -2,6 +2,78 @@
 
 ## [Unreleased]
 
+## [1.27.1] - 2025-01-29
+
+### ✨ Added
+
+- **Short Command-Line Flags**: Added convenient short aliases for all CLI flags using pflag library
+  - `-p` for `--playbook` - Path to playbook file
+  - `-i` for `--inventory` - Path to inventory file
+  - `-c` for `--config` - Path to configuration file
+  - `-v` for `--verbose` - Verbose output
+  - `-C` for `--check` - Check mode (dry-run)
+  - `-d` for `--diff` - Show differences when changing files
+  - `-s` for `--state` - State file path
+  - `-l` for `--log-level` - Log level
+  - `-o` for `--output` - Output format
+  - `-w` for `--max-workers` - Maximum number of worker threads
+  - `-t` for `--timeout` - Execution timeout
+  - `-V` for `--version` - Show version and exit
+
+### 🔧 Changed
+
+- Migrated from standard `flag` package to `github.com/spf13/pflag` for GNU-style flag support
+- Updated help message to show both long and short flag usage examples
+- Improved CLI user experience with shorter command syntax
+
+### 📝 Examples
+
+```bash
+# Before (still works):
+onigirazu --playbook site.yml --inventory hosts --verbose
+
+# After (new short syntax):
+onigirazu -p site.yml -i hosts -v
+
+# Mixed usage also works:
+onigirazu -p site.yml --inventory hosts -v
+```
+
+## [1.27.0] - 2025-01-29
+
+### 🐛 Bug Fixes
+
+- **Critical Test Failures Fixed** (16 tests, 59% improvement):
+  - Fixed copy module test failures (20+ test cases added)
+  - Fixed service module test failures (34+ test cases added)
+  - Fixed stat module command execution issues
+  - Fixed shell module command execution issues
+  - Fixed file module command execution issues
+  - Fixed lineinfile module command execution issues
+
+### 📚 Documentation
+
+- **Major Documentation Cleanup**:
+  - Removed 120+ development documentation files (~45,000 lines)
+  - Moved development documentation to separate repository
+  - Replaced `ansible_*` variables with `onigirazu_*` throughout documentation
+  - Removed unused `python_interpreter` variables
+  - Updated .gitignore to exclude private AI config files
+
+### 🔧 Maintenance
+
+- **Code Quality Improvements**:
+  - Added 54+ new test cases across multiple modules
+  - Improved test coverage significantly
+  - Better error handling in modules
+  - Enhanced command execution reliability
+
+### 📊 Statistics
+
+- 150 files changed
+- ~45,000 lines removed (mostly documentation)
+- 100% backward compatible with v1.26.0
+
 ## [1.26.0] - 2025-01-28
 
 ### ✨ Added

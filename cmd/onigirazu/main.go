@@ -2,13 +2,14 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"syscall"
 	"time"
+
+	"github.com/spf13/pflag"
 
 	"github.com/onigirazu-cfg/onigirazu/internal/cache"
 	"github.com/onigirazu-cfg/onigirazu/internal/config"
@@ -29,36 +30,58 @@ import (
 
 func main() {
 	var (
-		playbookPath  = flag.String("playbook", "", "Path to playbook file")
-		inventoryPath = flag.String("inventory", "", "Path to inventory file")
-		configPath    = flag.String("config", "", "Path to configuration file")
-		pluginsConfig = flag.String("plugins-config", "", "Path to plugins configuration file")
-		verbose       = flag.Bool("verbose", false, "Verbose output")
-		check         = flag.Bool("check", false, "Check mode (dry-run)")
-		diff          = flag.Bool("diff", false, "Show differences when changing files")
-		dryRun        = flag.Bool("dry-run", false, "Dry run mode (alias for --check)")
-		stateFile     = flag.String("state", ".onigirazu-state", "State file for saving state")
-		logLevel      = flag.String("log-level", "info", "Log level (debug, info, warn, error)")
-		logFormat     = flag.String("log-format", "text", "Log format (text, json)")
-		outputFormat  = flag.String("output", "text", "Output format (text, json, yaml)")
-		maxWorkers    = flag.Int("max-workers", 10, "Maximum number of worker threads")
-		timeout       = flag.Duration("timeout", 30*time.Minute, "Execution timeout")
-		noColor       = flag.Bool("no-color", false, "Disable colored output")
-		interactive   = flag.Bool("interactive", false, "Interactive mode")
-		listModules   = flag.Bool("list-modules", false, "List available modules and exit")
-		listPlugins   = flag.Bool("list-plugins", false, "List loaded plugins and exit")
-		showVersion   = flag.Bool("version", false, "Show version and exit")
+		playbookPath  string
+		inventoryPath string
+		configPath    string
+		pluginsConfig string
+		verbose       bool
+		check         bool
+		diff          bool
+		dryRun        bool
+		stateFile     string
+		logLevel      string
+		logFormat     string
+		outputFormat  string
+		maxWorkers    int
+		timeout       time.Duration
+		noColor       bool
+		interactive   bool
+		listModules   bool
+		listPlugins   bool
+		showVersion   bool
 	)
-	flag.Parse()
+
+	// Define flags with short aliases
+	pflag.StringVarP(&playbookPath, "playbook", "p", "", "Path to playbook file")
+	pflag.StringVarP(&inventoryPath, "inventory", "i", "", "Path to inventory file")
+	pflag.StringVarP(&configPath, "config", "c", "", "Path to configuration file")
+	pflag.StringVar(&pluginsConfig, "plugins-config", "", "Path to plugins configuration file")
+	pflag.BoolVarP(&verbose, "verbose", "v", false, "Verbose output")
+	pflag.BoolVarP(&check, "check", "C", false, "Check mode (dry-run)")
+	pflag.BoolVarP(&diff, "diff", "d", false, "Show differences when changing files")
+	pflag.BoolVar(&dryRun, "dry-run", false, "Dry run mode (alias for --check)")
+	pflag.StringVarP(&stateFile, "state", "s", ".onigirazu-state", "State file for saving state")
+	pflag.StringVarP(&logLevel, "log-level", "l", "info", "Log level (debug, info, warn, error)")
+	pflag.StringVar(&logFormat, "log-format", "text", "Log format (text, json)")
+	pflag.StringVarP(&outputFormat, "output", "o", "text", "Output format (text, json, yaml)")
+	pflag.IntVarP(&maxWorkers, "max-workers", "w", 10, "Maximum number of worker threads")
+	pflag.DurationVarP(&timeout, "timeout", "t", 30*time.Minute, "Execution timeout")
+	pflag.BoolVar(&noColor, "no-color", false, "Disable colored output")
+	pflag.BoolVar(&interactive, "interactive", false, "Interactive mode")
+	pflag.BoolVar(&listModules, "list-modules", false, "List available modules and exit")
+	pflag.BoolVar(&listPlugins, "list-plugins", false, "List loaded plugins and exit")
+	pflag.BoolVarP(&showVersion, "version", "V", false, "Show version and exit")
+
+	pflag.Parse()
 
 	// Handle version flag
-	if *showVersion {
+	if showVersion {
 		fmt.Println(version.GetFullVersion())
 		os.Exit(0)
 	}
 
 	// Handle list-modules flag
-	if *listModules {
+	if listModules {
 		moduleRegistry := modules.NewRegistry()
 		fmt.Println("Available modules:")
 		for _, name := range moduleRegistry.ListModules() {
@@ -68,18 +91,19 @@ func main() {
 		os.Exit(0)
 	}
 
-	if *playbookPath == "" {
+	if playbookPath == "" {
 		fmt.Println(utils.Colors.Header("Onigirazu Configuration Management Tool"))
 		fmt.Println()
-		fmt.Println("Usage: onigirazu -playbook <path> [-inventory <path>] [-config <path>] [options]")
+		fmt.Println("Usage: onigirazu --playbook <path> [--inventory <path>] [--config <path>] [options]")
+		fmt.Println("   or: onigirazu -p <path> [-i <path>] [-c <path>] [options]")
 		fmt.Println()
 		fmt.Println(utils.Colors.Bold("Options:"))
-		flag.PrintDefaults()
+		pflag.PrintDefaults()
 		os.Exit(1)
 	}
 
 	// Configure colors
-	if *noColor {
+	if noColor {
 		utils.EnableColors(false)
 	}
 
@@ -97,43 +121,43 @@ func main() {
 	}()
 
 	// Load configuration
-	cfg, err := config.LoadConfig(*configPath)
+	cfg, err := config.LoadConfig(configPath)
 	if err != nil {
 		fmt.Printf("Failed to load configuration: %v\n", err)
 		os.Exit(1)
 	}
 
 	// Override config with command line flags
-	if *verbose {
+	if verbose {
 		cfg.LogLevel = "debug"
 		cfg.Verbose = true
 	}
-	if *logLevel != "info" {
-		cfg.LogLevel = *logLevel
+	if logLevel != "info" {
+		cfg.LogLevel = logLevel
 	}
-	if *logFormat != "text" {
-		cfg.LogFormat = *logFormat
+	if logFormat != "text" {
+		cfg.LogFormat = logFormat
 	}
-	if *outputFormat != "text" {
-		cfg.OutputFormat = *outputFormat
+	if outputFormat != "text" {
+		cfg.OutputFormat = outputFormat
 	}
-	if *maxWorkers != 10 {
-		cfg.MaxConcurrency = *maxWorkers
+	if maxWorkers != 10 {
+		cfg.MaxConcurrency = maxWorkers
 	}
-	if *stateFile != ".onigirazu-state" {
-		cfg.StateFile = *stateFile
+	if stateFile != ".onigirazu-state" {
+		cfg.StateFile = stateFile
 	}
-	if *check || *dryRun {
+	if check || dryRun {
 		cfg.CheckMode = true
 		cfg.DryRun = true
 	}
-	if *diff {
+	if diff {
 		cfg.ShowDiff = true
 	}
-	if *noColor {
+	if noColor {
 		cfg.ColorOutput = false
 	}
-	if *interactive {
+	if interactive {
 		cfg.InteractiveMode = true
 	}
 
@@ -152,9 +176,9 @@ func main() {
 
 	// Initialize plugin system
 	var pluginManager *plugins.Manager
-	if *pluginsConfig != "" {
-		log.Info("Loading plugins from configuration: %s", *pluginsConfig)
-		pluginConfig, err := plugins.LoadConfig(*pluginsConfig)
+	if pluginsConfig != "" {
+		log.Info("Loading plugins from configuration: %s", pluginsConfig)
+		pluginConfig, err := plugins.LoadConfig(pluginsConfig)
 		if err != nil {
 			log.Warn("Failed to load plugins configuration: %v", err)
 			log.Info("Continuing without plugins")
@@ -174,8 +198,8 @@ func main() {
 		}
 	} else {
 		// Try to auto-detect plugins.yml in playbook directory
-		if *playbookPath != "" {
-			playbookDir := filepath.Dir(*playbookPath)
+		if playbookPath != "" {
+			playbookDir := filepath.Dir(playbookPath)
 			autoPluginsPath := filepath.Join(playbookDir, "plugins.yml")
 			if _, err := os.Stat(autoPluginsPath); err == nil {
 				log.Info("Auto-detected plugins configuration: %s", autoPluginsPath)
@@ -195,7 +219,7 @@ func main() {
 	}
 
 	// Handle list-plugins flag
-	if *listPlugins {
+	if listPlugins {
 		if pluginManager == nil {
 			fmt.Println("No plugins loaded")
 			os.Exit(0)
@@ -247,20 +271,20 @@ func main() {
 	)
 
 	// Set execution timeout
-	if *timeout > 0 {
+	if timeout > 0 {
 		var timeoutCancel context.CancelFunc
-		ctx, timeoutCancel = context.WithTimeout(ctx, *timeout)
+		ctx, timeoutCancel = context.WithTimeout(ctx, timeout)
 		defer timeoutCancel()
 	}
 
 	// Load inventory
 	var finalInventoryPath string
-	if *inventoryPath != "" {
+	if inventoryPath != "" {
 		// Use specified inventory path
-		finalInventoryPath = *inventoryPath
+		finalInventoryPath = inventoryPath
 	} else {
 		// Try to find inventory file in playbook directory
-		playbookDir := filepath.Dir(*playbookPath)
+		playbookDir := filepath.Dir(playbookPath)
 		foundPath, err := enhancedParser.FindInventoryFile(playbookDir)
 		if err != nil {
 			log.Warn("No inventory file found in playbook directory: %v", err)
@@ -281,8 +305,8 @@ func main() {
 	}
 
 	// Parse playbook
-	log.Info("Parsing playbook: %s", *playbookPath)
-	playbook, err := enhancedParser.ParsePlaybook(ctx, *playbookPath)
+	log.Info("Parsing playbook: %s", playbookPath)
+	playbook, err := enhancedParser.ParsePlaybook(ctx, playbookPath)
 	if err != nil {
 		log.Error("Failed to parse playbook: %v", err)
 		os.Exit(1)

@@ -13,6 +13,7 @@ import (
 	"github.com/onigirazu-cfg/onigirazu/internal/bufferpool"
 	"github.com/onigirazu-cfg/onigirazu/internal/cache"
 	"github.com/onigirazu-cfg/onigirazu/internal/plugins"
+	"github.com/onigirazu-cfg/onigirazu/internal/secrets"
 )
 
 // Engine provides template rendering capabilities similar to Jinja2
@@ -20,6 +21,7 @@ type Engine struct {
 	funcMap       template.FuncMap
 	pluginManager *plugins.Manager
 	templateCache *cache.TemplateCache
+	secretManager *secrets.TemplateSecretManager
 }
 
 // NewEngine creates a new template engine
@@ -121,6 +123,23 @@ func (e *Engine) SetPluginManager(pluginManager *plugins.Manager) {
 	e.pluginManager = pluginManager
 	ctx := context.Background()
 	e.loadFilterPlugins(ctx)
+}
+
+// SetSecretManager sets the secret manager for the engine
+func (e *Engine) SetSecretManager(secretManager *secrets.TemplateSecretManager) {
+	e.secretManager = secretManager
+
+	// Add secret functions to funcMap
+	if secretManager != nil {
+		for name, fn := range secretManager.GetTemplateFunctions() {
+			e.funcMap[name] = fn
+		}
+	}
+}
+
+// GetSecretManager returns the secret manager
+func (e *Engine) GetSecretManager() *secrets.TemplateSecretManager {
+	return e.secretManager
 }
 
 // Render renders a template string with variables
