@@ -374,6 +374,185 @@ onigirazu state export &gt; state-backup.json
 </code></pre>
 
 <p><strong>Note:</strong> Legacy mode will show a deprecation warning. Use <code>onigirazu apply</code> instead.</p>
+<h2>🚀 Ad-hoc Commands</h2>
+<p>Onigirazu features a <strong>unique and powerful ad-hoc command system</strong> that supports <strong>5 different input formats</strong> - making it the most flexible configuration management tool available!</p>
+<h3>Quick Start</h3>
+<pre class="codehilite"><code class="language-bash"># Simple ping test
+onigirazu run all -m ping -i inventory.yml
+
+# Execute a command
+onigirazu run webservers -m shell 'cmd=&quot;uptime&quot;' -i inventory.yml
+
+# Natural language (unique to Onigirazu!)
+onigirazu run all &quot;install nginx package&quot; -i inventory.yml
+</code></pre>
+
+<h3>🎯 5 Supported Input Formats</h3>
+<h4>1. <strong>Ansible-like Syntax</strong> (Familiar)</h4>
+<pre class="codehilite"><code class="language-bash"># Module with arguments
+onigirazu run all -m package name=nginx state=present -i inventory.yml
+onigirazu run webservers -m service name=nginx state=started -i inventory.yml
+onigirazu run all -m command 'command=&quot;df -h&quot;' -i inventory.yml
+</code></pre>
+
+<h4>2. <strong>Natural Language</strong> (Unique! 🌟)</h4>
+<pre class="codehilite"><code class="language-bash"># Package operations
+onigirazu run all &quot;install nginx package&quot; -i inventory.yml
+onigirazu run all &quot;remove apache package&quot; -i inventory.yml
+onigirazu run all &quot;update mysql package&quot; -i inventory.yml
+
+# Service operations
+onigirazu run webservers &quot;start nginx service&quot; -i inventory.yml
+onigirazu run all &quot;restart apache service&quot; -i inventory.yml
+onigirazu run dbservers &quot;stop mysql service&quot; -i inventory.yml
+
+# File operations
+onigirazu run all &quot;create file /tmp/test.txt&quot; -i inventory.yml
+onigirazu run all &quot;delete file /tmp/old.log&quot; -i inventory.yml
+</code></pre>
+
+<h4>3. <strong>Module:Args Syntax</strong> (Compact)</h4>
+<pre class="codehilite"><code class="language-bash">onigirazu run all &quot;package:name=nginx,state=present&quot; -i inventory.yml
+onigirazu run webservers &quot;service:name=nginx,state=started&quot; -i inventory.yml
+onigirazu run all &quot;shell:cmd=uptime&quot; -i inventory.yml
+</code></pre>
+
+<h4>4. <strong>JSON Format</strong> (Structured)</h4>
+<pre class="codehilite"><code class="language-bash">onigirazu run all '{&quot;module&quot;:&quot;package&quot;,&quot;args&quot;:{&quot;name&quot;:&quot;nginx&quot;,&quot;state&quot;:&quot;present&quot;}}' -i inventory.yml
+onigirazu run webservers '{&quot;module&quot;:&quot;service&quot;,&quot;args&quot;:{&quot;name&quot;:&quot;nginx&quot;,&quot;state&quot;:&quot;started&quot;}}' -i inventory.yml
+</code></pre>
+
+<h4>5. <strong>YAML Format</strong> (Readable)</h4>
+<pre class="codehilite"><code class="language-bash">onigirazu run all 'module: package
+args:
+  name: nginx
+  state: present' -i inventory.yml
+</code></pre>
+
+<h3>Output Formats</h3>
+<p>Control how results are displayed:</p>
+<pre class="codehilite"><code class="language-bash"># Default text output (colored, human-readable)
+onigirazu run all -m ping -i inventory.yml
+
+# JSON output (for scripting)
+onigirazu run all -m shell 'cmd=&quot;uptime&quot;' -i inventory.yml -o json
+
+# YAML output (structured)
+onigirazu run all -m ping -i inventory.yml -o yaml
+
+# Table format (compact view)
+onigirazu run all -m ping -i inventory.yml -o table
+</code></pre>
+
+<h3>Advanced Options</h3>
+<pre class="codehilite"><code class="language-bash"># Parallel execution (default: 5)
+onigirazu run all -m shell 'cmd=&quot;uptime&quot;' --parallel 10 -i inventory.yml
+
+# Check mode (dry-run)
+onigirazu run all -m package name=nginx state=present --check -i inventory.yml
+
+# Verbose output
+onigirazu run all -m command 'command=&quot;uptime&quot;' -V -i inventory.yml
+
+# Custom timeout
+onigirazu run all -m shell 'cmd=&quot;long-running-task&quot;' --timeout 120s -i inventory.yml
+
+# No color output
+onigirazu run all -m ping --no-color -i inventory.yml
+</code></pre>
+
+<h3>Real-World Examples</h3>
+<pre class="codehilite"><code class="language-bash"># System information gathering
+onigirazu run all -m shell 'cmd=&quot;df -h&quot;' -i inventory.yml
+onigirazu run all -m shell 'cmd=&quot;free -h&quot;' -i inventory.yml
+onigirazu run all -m shell 'cmd=&quot;uname -a&quot;' -i inventory.yml
+
+# Quick deployments
+onigirazu run webservers &quot;install nginx package&quot; -i inventory.yml
+onigirazu run webservers &quot;start nginx service&quot; -i inventory.yml
+
+# Troubleshooting
+onigirazu run all -m shell 'cmd=&quot;systemctl status nginx&quot;' -i inventory.yml
+onigirazu run all -m shell 'cmd=&quot;tail -n 50 /var/log/syslog&quot;' -i inventory.yml
+
+# Batch operations
+onigirazu run all &quot;update all package&quot; --parallel 20 -i inventory.yml
+onigirazu run webservers &quot;restart nginx service&quot; -i inventory.yml
+</code></pre>
+
+<h3>Host Patterns</h3>
+<p>Target specific hosts or groups:</p>
+<pre class="codehilite"><code class="language-bash"># All hosts
+onigirazu run all -m ping -i inventory.yml
+
+# Specific group
+onigirazu run webservers -m ping -i inventory.yml
+onigirazu run dbservers -m ping -i inventory.yml
+
+# Single host
+onigirazu run web1 -m ping -i inventory.yml
+onigirazu run localhost -m shell 'cmd=&quot;whoami&quot;' -i inventory.yml
+
+# Multiple groups (comma-separated)
+onigirazu run webservers,dbservers -m ping -i inventory.yml
+</code></pre>
+
+<h3>Why Onigirazu Ad-hoc Commands Are Better</h3>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>Onigirazu</th>
+<th>Ansible</th>
+<th>Others</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Input formats</strong></td>
+<td>✅ 5 formats</td>
+<td>❌ 1 format</td>
+<td>❌ 1-2 formats</td>
+</tr>
+<tr>
+<td><strong>Natural language</strong></td>
+<td>✅ Yes</td>
+<td>❌ No</td>
+<td>❌ No</td>
+</tr>
+<tr>
+<td><strong>JSON/YAML input</strong></td>
+<td>✅ Yes</td>
+<td>❌ No</td>
+<td>❌ No</td>
+</tr>
+<tr>
+<td><strong>Output formats</strong></td>
+<td>✅ 4 formats</td>
+<td>✅ 2 formats</td>
+<td>❌ 1-2 formats</td>
+</tr>
+<tr>
+<td><strong>Parallel execution</strong></td>
+<td>✅ Yes</td>
+<td>✅ Yes</td>
+<td>✅ Yes</td>
+</tr>
+<tr>
+<td><strong>Check mode</strong></td>
+<td>✅ Yes</td>
+<td>✅ Yes</td>
+<td>✅ Yes</td>
+</tr>
+<tr>
+<td><strong>Stdout display</strong></td>
+<td>✅ Formatted</td>
+<td>⚠️ Basic</td>
+<td>⚠️ Basic</td>
+</tr>
+</tbody>
+</table>
+<p>📚 <strong>For detailed documentation and more examples, see <a href="docs/ADHOC_GUIDE.md">docs/ADHOC_GUIDE.md</a></strong></p>
 <h2>Modules</h2>
 <p>Onigirazu includes several built-in modules:</p>
 <h3>Core Modules</h3>
