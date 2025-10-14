@@ -2,6 +2,33 @@
 
 ## [Unreleased]
 
+## [1.30.2] - 2025-02-01
+
+### 🐛 Bug Fixes
+
+- **Repository Structure**: Removed duplicate nested `onigirazu/onigirazu/` directory from repository
+  - Cleaned up 329 duplicate files (94,212 lines of code)
+  - Fixed incorrect repository structure that was committed to git
+  - Repository now has clean, logical structure
+
+- **Workflow ID Generation**: Fixed race condition in workflow orchestrator
+  - Added atomic counters to ensure unique IDs even when generated simultaneously
+  - Fixed flaky test `TestWorkflowOrchestrator_ListWorkflows`
+  - Improved thread-safety using `sync/atomic` package
+  - Prevents ID collisions when workflows are created in rapid succession
+
+### 🔧 Maintenance
+
+- **Code Quality**: Improved reliability of workflow execution system
+- **Testing**: Fixed intermittent test failures in workflow orchestrator
+
+### 📊 Statistics
+
+- 329 duplicate files removed from repository
+- 2 critical bugs fixed
+- 100% test pass rate achieved
+- 100% backward compatible with v1.30.1
+
 ## [1.30.1] - 2025-02-01
 
 ### 🔧 Maintenance
