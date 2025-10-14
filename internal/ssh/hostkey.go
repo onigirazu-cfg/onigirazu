@@ -73,7 +73,8 @@ func (hkm *HostKeyManager) loadKnownHosts() error {
 		keyType := parts[1]
 		keyData := parts[2]
 
-		key, err := ssh.ParsePublicKey([]byte(keyType + " " + keyData))
+		// Parse the public key using ParseAuthorizedKey
+		key, _, _, _, err := ssh.ParseAuthorizedKey([]byte(keyType + " " + keyData))
 		if err != nil {
 			continue
 		}

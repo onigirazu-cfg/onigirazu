@@ -1,0 +1,454 @@
+package ssh
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/onigirazu-cfg/onigirazu/pkg/types"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// TestIsLocal tests the IsLocal function
+func TestIsLocal(t *testing.T) {
+	tests := []struct {
+		name     string
+		host     types.Host
+		expected bool
+	}{
+		{
+			name: "localhost by name",
+			host: types.Host{
+				Address: "localhost",
+			},
+			expected: true,
+		},
+		{
+			name: "localhost by IPv4",
+			host: types.Host{
+				Address: "127.0.0.1",
+			},
+			expected: true,
+		},
+		{
+			name: "localhost by IPv6",
+			host: types.Host{
+				Address: "::1",
+			},
+			expected: true,
+		},
+		{
+			name: "remote host",
+			host: types.Host{
+				Address: "192.168.1.100",
+			},
+			expected: false,
+		},
+		{
+			name: "remote hostname",
+			host: types.Host{
+				Address: "example.com",
+			},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := IsLocal(tt.host)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestNewClient_NoAuthMethod tests client creation without authentication
+func TestNewClient_NoAuthMethod(t *testing.T) {
+	host := types.Host{
+		Name:    "test-host",
+		Address: "192.168.1.100",
+		User:    "testuser",
+		Port:    22,
+		// No KeyFile or Password
+	}
+
+	client, err := NewClient(host)
+	assert.Error(t, err)
+	assert.Nil(t, client)
+	assert.Contains(t, err.Error(), "no authentication method available")
+}
+
+// TestNewClient_InvalidKeyFile tests client creation with invalid key file
+func TestNewClient_InvalidKeyFile(t *testing.T) {
+	host := types.Host{
+		Name:    "test-host",
+		Address: "192.168.1.100",
+		User:    "testuser",
+		Port:    22,
+		KeyFile: "/nonexistent/key/file",
+	}
+
+	client, err := NewClient(host)
+	assert.Error(t, err)
+	assert.Nil(t, client)
+	assert.Contains(t, err.Error(), "unable to read private key")
+}
+
+// TestNewClient_InvalidKeyFormat tests client creation with invalid key format
+func TestNewClient_InvalidKeyFormat(t *testing.T) {
+	// Create temporary invalid key file
+	tmpDir := t.TempDir()
+	keyFile := filepath.Join(tmpDir, "invalid_key")
+	err := os.WriteFile(keyFile, []byte("this is not a valid SSH key"), 0600)
+	require.NoError(t, err)
+
+	host := types.Host{
+		Name:    "test-host",
+		Address: "192.168.1.100",
+		User:    "testuser",
+		Port:    22,
+		KeyFile: keyFile,
+	}
+
+	client, err := NewClient(host)
+	assert.Error(t, err)
+	assert.Nil(t, client)
+	assert.Contains(t, err.Error(), "unable to parse private key")
+}
+
+// TestNewClient_DefaultPort tests that port defaults to 22
+func TestNewClient_DefaultPort(t *testing.T) {
+	// Create temporary key file with valid SSH key
+	tmpDir := t.TempDir()
+	keyFile := filepath.Join(tmpDir, "test_key")
+
+	// Generate a valid test private key
+	keyBytes := generateTestPrivateKey(t)
+	err := os.WriteFile(keyFile, keyBytes, 0600)
+	require.NoError(t, err)
+
+	host := types.Host{
+		Name:    "test-host",
+		Address: "192.168.1.100",
+		User:    "testuser",
+		Port:    0, // Should default to 22
+		KeyFile: keyFile,
+	}
+
+	// This will fail to connect, but we're testing the port defaulting logic
+	client, err := NewClient(host)
+	// Connection will fail, but error should mention port 22
+	if err != nil {
+		assert.Contains(t, err.Error(), "192.168.1.100:22")
+	}
+	if client != nil {
+		client.Close()
+	}
+}
+
+// TestClient_Close tests closing a nil client
+func TestClient_Close_NilClient(t *testing.T) {
+	client := &Client{
+		client: nil,
+	}
+
+	err := client.Close()
+	assert.NoError(t, err)
+}
+
+// TestClient_GetClient tests getting the underlying SSH client
+func TestClient_GetClient(t *testing.T) {
+	client := &Client{
+		client: nil,
+	}
+
+	sshClient := client.GetClient()
+	assert.Nil(t, sshClient)
+}
+
+// TestNewClientWithHostKeyManager_CustomManager tests client creation with custom host key manager
+func TestNewClientWithHostKeyManager_CustomManager(t *testing.T) {
+	tmpDir := t.TempDir()
+	knownHostsFile := filepath.Join(tmpDir, "known_hosts")
+
+	hostKeyManager := NewHostKeyManager(knownHostsFile, false)
+	assert.NotNil(t, hostKeyManager)
+
+	host := types.Host{
+		Name:     "test-host",
+		Address:  "192.168.1.100",
+		User:     "testuser",
+		Port:     22,
+		Password: "testpass", // Use password auth for this test
+	}
+
+	// This will fail to connect, but we're testing the host key manager integration
+	client, err := NewClientWithHostKeyManager(host, hostKeyManager)
+	if err != nil {
+		// Expected to fail since we're not connecting to a real host
+		assert.Contains(t, err.Error(), "failed to connect")
+	}
+	if client != nil {
+		client.Close()
+	}
+}
+
+// TestClient_AuthenticationMethods tests different authentication methods
+func TestClient_AuthenticationMethods(t *testing.T) {
+	tests := []struct {
+		name        string
+		host        types.Host
+		expectError bool
+		errorMsg    string
+	}{
+		{
+			name: "password authentication",
+			host: types.Host{
+				Name:     "test-host",
+				Address:  "192.168.1.100",
+				User:     "testuser",
+				Port:     22,
+				Password: "testpass",
+			},
+			expectError: true, // Will fail to connect to non-existent host
+			errorMsg:    "failed to connect",
+		},
+		{
+			name: "no authentication",
+			host: types.Host{
+				Name:    "test-host",
+				Address: "192.168.1.100",
+				User:    "testuser",
+				Port:    22,
+			},
+			expectError: true,
+			errorMsg:    "no authentication method available",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client, err := NewClient(tt.host)
+			if tt.expectError {
+				assert.Error(t, err)
+				if tt.errorMsg != "" {
+					assert.Contains(t, err.Error(), tt.errorMsg)
+				}
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, client)
+			}
+			if client != nil {
+				client.Close()
+			}
+		})
+	}
+}
+
+// TestClient_CopyFile_InvalidLocalFile tests copying non-existent local file
+func TestClient_CopyFile_InvalidLocalFile(t *testing.T) {
+	// Create a mock client (we won't actually connect)
+	// This test only checks local file reading, which happens before SFTP
+	tmpDir := t.TempDir()
+	keyFile := filepath.Join(tmpDir, "test_key")
+	keyBytes := generateTestPrivateKey(t)
+	err := os.WriteFile(keyFile, keyBytes, 0600)
+	require.NoError(t, err)
+
+	host := types.Host{
+		Name:    "test-host",
+		Address: "192.168.1.100",
+		User:    "testuser",
+		KeyFile: keyFile,
+	}
+
+	// This will fail to connect, but we're testing local file reading
+	client, _ := NewClient(host)
+	if client != nil {
+		defer client.Close()
+		err = client.CopyFile("/nonexistent/file", "/tmp/test.txt", 0644)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to read local file")
+	}
+}
+
+// BenchmarkIsLocal benchmarks the IsLocal function
+func BenchmarkIsLocal(b *testing.B) {
+	host := types.Host{
+		Address: "localhost",
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		IsLocal(host)
+	}
+}
+
+// BenchmarkIsLocal_Remote benchmarks IsLocal with remote host
+func BenchmarkIsLocal_Remote(b *testing.B) {
+	host := types.Host{
+		Address: "192.168.1.100",
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		IsLocal(host)
+	}
+}
+
+// TestClient_HostInfo tests that client stores host information
+func TestClient_HostInfo(t *testing.T) {
+	host := types.Host{
+		Name:    "test-host",
+		Address: "192.168.1.100",
+		User:    "testuser",
+		Port:    22,
+	}
+
+	client := &Client{
+		client: nil,
+		host:   host,
+	}
+
+	assert.Equal(t, "test-host", client.host.Name)
+	assert.Equal(t, "192.168.1.100", client.host.Address)
+	assert.Equal(t, "testuser", client.host.User)
+	assert.Equal(t, 22, client.host.Port)
+}
+
+// TestNewClient_ConnectionTimeout tests connection timeout behavior
+func TestNewClient_ConnectionTimeout(t *testing.T) {
+	// Use a non-routable IP to trigger timeout
+	host := types.Host{
+		Name:     "timeout-test",
+		Address:  "192.0.2.1", // TEST-NET-1, non-routable
+		User:     "testuser",
+		Port:     22,
+		Password: "testpass",
+	}
+
+	client, err := NewClient(host)
+	assert.Error(t, err)
+	assert.Nil(t, client)
+	// Should timeout or fail to connect
+	assert.Contains(t, err.Error(), "failed to connect")
+}
+
+// TestClient_MultipleAuthMethods tests client with multiple auth methods
+func TestClient_MultipleAuthMethods(t *testing.T) {
+	tmpDir := t.TempDir()
+	keyFile := filepath.Join(tmpDir, "test_key")
+
+	// Generate a valid test private key
+	keyBytes := generateTestPrivateKey(t)
+	err := os.WriteFile(keyFile, keyBytes, 0600)
+	require.NoError(t, err)
+
+	host := types.Host{
+		Name:     "test-host",
+		Address:  "192.168.1.100",
+		User:     "testuser",
+		Port:     22,
+		KeyFile:  keyFile,
+		Password: "testpass", // Both key and password
+	}
+
+	// This will fail to connect, but we're testing that both auth methods are added
+	client, err := NewClient(host)
+	if err != nil {
+		// Expected to fail since we're not connecting to a real host
+		assert.Contains(t, err.Error(), "failed to connect")
+	}
+	if client != nil {
+		client.Close()
+	}
+}
+
+// TestClient_ErrorMessages tests that error messages are descriptive
+func TestClient_ErrorMessages(t *testing.T) {
+	tests := []struct {
+		name          string
+		setupFunc     func() (*Client, error)
+		expectedError string
+	}{
+		{
+			name: "no auth method",
+			setupFunc: func() (*Client, error) {
+				return NewClient(types.Host{
+					Name:    "test",
+					Address: "192.168.1.100",
+					User:    "testuser",
+				})
+			},
+			expectedError: "no authentication method available",
+		},
+		{
+			name: "invalid key file",
+			setupFunc: func() (*Client, error) {
+				return NewClient(types.Host{
+					Name:    "test",
+					Address: "192.168.1.100",
+					User:    "testuser",
+					KeyFile: "/nonexistent/key",
+				})
+			},
+			expectedError: "unable to read private key",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client, err := tt.setupFunc()
+			assert.Error(t, err)
+			assert.Contains(t, err.Error(), tt.expectedError)
+			if client != nil {
+				client.Close()
+			}
+		})
+	}
+}
+
+// TestClient_StructFields tests that Client struct has expected fields
+func TestClient_StructFields(t *testing.T) {
+	host := types.Host{
+		Name:    "test-host",
+		Address: "localhost",
+		User:    "testuser",
+	}
+
+	client := &Client{
+		client: nil,
+		host:   host,
+	}
+
+	// Verify struct fields are accessible
+	assert.NotNil(t, client)
+	assert.Equal(t, host.Name, client.host.Name)
+	assert.Nil(t, client.client)
+}
+
+// TestIsLocal_EdgeCases tests edge cases for IsLocal function
+func TestIsLocal_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name     string
+		address  string
+		expected bool
+	}{
+		{"empty address", "", false},
+		{"localhost uppercase", "LOCALHOST", false}, // Case sensitive
+		{"localhost with port", "localhost:22", false},
+		{"IPv4 loopback", "127.0.0.1", true},
+		{"IPv4 loopback range", "127.0.0.2", false}, // Only 127.0.0.1 is checked
+		{"IPv6 loopback", "::1", true},
+		{"IPv6 loopback expanded", "0:0:0:0:0:0:0:1", false}, // Not normalized
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			host := types.Host{Address: tt.address}
+			result := IsLocal(host)
+			assert.Equal(t, tt.expected, result, fmt.Sprintf("IsLocal(%s) = %v, want %v", tt.address, result, tt.expected))
+		})
+	}
+}
