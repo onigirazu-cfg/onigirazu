@@ -49,7 +49,7 @@ jobs:
     - name: Upload Gosec SARIF file
       if: always()
       continue-on-error: true
-      uses: github/codeql-action/upload-sarif@v3
+      uses: github/codeql-action/upload-sarif@v4
       with:
         sarif_file: gosec.sarif
         category: gosec
@@ -66,7 +66,7 @@ jobs:
     - name: Upload Trivy filesystem scan results
       if: always()
       continue-on-error: true
-      uses: github/codeql-action/upload-sarif@v3
+      uses: github/codeql-action/upload-sarif@v4
       with:
         sarif_file: 'trivy-fs-results.sarif'
         category: trivy-fs
@@ -83,7 +83,7 @@ jobs:
     - name: Upload Trivy dependencies scan results
       if: always()
       continue-on-error: true
-      uses: github/codeql-action/upload-sarif@v3
+      uses: github/codeql-action/upload-sarif@v4
       with:
         sarif_file: 'trivy-deps-results.sarif'
         category: trivy-deps
@@ -117,7 +117,7 @@ jobs:
       uses: actions/checkout@v5
 
     - name: Initialize CodeQL
-      uses: github/codeql-action/init@v3
+      uses: github/codeql-action/init@v4
       with:
         languages: ${{ matrix.language }}
         queries: security-extended,security-and-quality
@@ -142,7 +142,7 @@ jobs:
         go build -v ./...
 
     - name: Perform CodeQL Analysis
-      uses: github/codeql-action/analyze@v3
+      uses: github/codeql-action/analyze@v4
       with:
         category: "/language:${{matrix.language}}"
 
