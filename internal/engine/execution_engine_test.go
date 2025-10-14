@@ -396,7 +396,7 @@ func createTestEngine() (*ExecutionEngine, *MockConfig, *MockLogger, *MockInvent
 	mockCacheManager := new(MockCacheManager)
 
 	// Set up default mock behaviors
-	// Note: GetDryRun, GetCheckMode, GetVerbose are not set here to allow tests to override
+	// Note: GetDryRun, GetCheckMode, GetVerbose are not set here to allow tests to configure them
 	mockConfig.On("GetMaxConcurrency").Return(10)
 	mockConfig.On("GetDefaultTimeout").Return(30 * time.Second)
 	mockConfig.On("GetRetryAttempts").Return(3)
@@ -1045,4 +1045,318 @@ func TestExecutePlaybook_InventoryError(t *testing.T) {
 	assert.NotNil(t, result)
 	assert.True(t, result.Failed)
 	assert.Contains(t, result.Error, "inventory error")
+}
+
+// TestGetMetrics tests the GetMetrics method
+func TestGetMetrics(t *testing.T) {
+	engine, _, _, _, _, _ := createTestEngine()
+
+	metrics := engine.GetMetrics()
+	assert.NotNil(t, metrics)
+}
+
+// TestGetExecutionSummary tests the GetExecutionSummary method
+func TestGetExecutionSummary(t *testing.T) {
+	engine, _, _, _, _, _ := createTestEngine()
+
+	summary := engine.GetExecutionSummary()
+	assert.NotNil(t, summary)
+	assert.Contains(t, summary, "execution_stats")
+	assert.Contains(t, summary, "metrics")
+	assert.Contains(t, summary, "performance")
+	assert.Contains(t, summary, "errors")
+	assert.Contains(t, summary, "hosts")
+	assert.Contains(t, summary, "cache")
+}
+
+// TestEvaluateCondition tests the evaluateCondition method
+func TestEvaluateCondition(t *testing.T) {
+	engine, _, _, _, _, mockTemplateEngine := createTestEngine()
+	ctx := context.Background()
+	vars := map[string]interface{}{"test_var": "value"}
+
+	tests := []struct {
+		name           string
+		condition      string
+		templateResult string
+		templateError  error
+		expectedSkip   bool
+		expectedError  bool
+	}{
+		{
+			name:           "condition evaluates to true",
+			condition:      "{{ test_var == 'value' }}",
+			templateResult: "true",
+			expectedSkip:   false,
+			expectedError:  false,
+		},
+		{
+			name:           "condition evaluates to false",
+			condition:      "{{ test_var == 'other' }}",
+			templateResult: "false",
+			expectedSkip:   true,
+			expectedError:  false,
+		},
+		{
+			name:           "condition evaluates to yes",
+			condition:      "{{ enabled }}",
+			templateResult: "yes",
+			expectedSkip:   false,
+			expectedError:  false,
+		},
+		{
+			name:           "condition evaluates to no",
+			condition:      "{{ disabled }}",
+			templateResult: "no",
+			expectedSkip:   true,
+			expectedError:  false,
+		},
+		{
+			name:           "condition evaluates to 1",
+			condition:      "{{ count }}",
+			templateResult: "1",
+			expectedSkip:   false,
+			expectedError:  false,
+		},
+		{
+			name:           "condition evaluates to 0",
+			condition:      "{{ count }}",
+			templateResult: "0",
+			expectedSkip:   true,
+			expectedError:  false,
+		},
+		{
+			name:           "condition evaluates to empty string",
+			condition:      "{{ empty }}",
+			templateResult: "",
+			expectedSkip:   true,
+			expectedError:  false,
+		},
+		{
+			name:           "template rendering error",
+			condition:      "{{ invalid",
+			templateResult: "",
+			templateError:  errors.New("template error"),
+			expectedSkip:   false,
+			expectedError:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockTemplateEngine.On("Render", ctx, tt.condition, vars).
+				Return(tt.templateResult, tt.templateError).Once()
+
+			skip, err := engine.evaluateCondition(ctx, tt.condition, vars)
+
+			if tt.expectedError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expectedSkip, skip)
+			}
+		})
+	}
+}
+
+// TestGetLoopItems tests the getLoopItems method
+func TestGetLoopItems(t *testing.T) {
+	engine, _, _, _, _, _ := createTestEngine()
+
+	tests := []struct {
+		name          string
+		loop          *types.Loop
+		expectedItems int
+		expectedError bool
+	}{
+		{
+			name: "loop with items",
+			loop: &types.Loop{
+				Items: []interface{}{"item1", "item2", "item3"},
+			},
+			expectedItems: 3,
+			expectedError: false,
+		},
+		{
+			name: "loop with range",
+			loop: &types.Loop{
+				Range: "1-10",
+			},
+			expectedItems: 10,
+			expectedError: false,
+		},
+		{
+			name:          "loop without items or range",
+			loop:          &types.Loop{},
+			expectedItems: 0,
+			expectedError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			items, err := engine.getLoopItems(tt.loop, nil)
+
+			if tt.expectedError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Len(t, items, tt.expectedItems)
+			}
+		})
+	}
+}
+
+// TestGatherFacts tests the gatherFacts method
+func TestGatherFacts(t *testing.T) {
+	engine, _, mockLogger, _, _, _ := createTestEngine()
+	ctx := context.Background()
+
+	hosts := []types.Host{
+		{Name: "host1", Address: "192.168.1.1", Port: 22, User: "user1"},
+	}
+
+	// Mock logger calls
+	mockLogger.On("Debug", mock.Anything, mock.Anything).Return()
+	mockLogger.On("Warn", mock.Anything, mock.Anything, mock.Anything).Return()
+
+	err := engine.gatherFacts(ctx, hosts)
+	assert.NoError(t, err)
+
+	// Verify facts were stored (even if gathering failed, basic facts should be stored)
+	engine.mutex.RLock()
+	facts, exists := engine.facts["host1"]
+	engine.mutex.RUnlock()
+
+	assert.True(t, exists)
+	assert.NotNil(t, facts)
+	assert.Equal(t, "host1", facts["onigirazu_hostname"])
+	assert.Equal(t, "192.168.1.1", facts["onigirazu_host"])
+}
+
+// TestExecuteTaskList tests the executeTaskList method
+func TestExecuteTaskList(t *testing.T) {
+	engine, mockConfig, mockLogger, mockInventoryMgr, mockModuleRegistry, mockTemplateEngine := createTestEngine()
+	ctx := context.Background()
+
+	mockConfig.On("GetDryRun").Return(false)
+
+	hosts := []types.Host{
+		{Name: "host1", Address: "192.168.1.1", Port: 22, User: "user1"},
+	}
+	mockInventoryMgr.hosts = hosts
+
+	// Mock template engine - return the args map directly
+	mockTemplateEngine.On("RenderTaskArgs", mock.Anything, mock.Anything, mock.Anything).
+		Return(map[string]interface{}{}, nil)
+
+	// Mock module execution
+	mockModuleRegistry.On("ExecuteTask", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(types.TaskResult{Success: true, Changed: false}, nil)
+
+	// Mock logger calls
+	mockLogger.On("Debug", mock.Anything, mock.Anything).Return()
+	mockLogger.On("Debug", mock.Anything, mock.Anything, mock.Anything).Return()
+	mockLogger.On("Debug", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
+	mockLogger.On("TaskStart", mock.Anything, mock.Anything).Return()
+	mockLogger.On("TaskEnd", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
+
+	tasks := []types.Task{
+		{Name: "task1", Module: "debug"},
+		{Name: "task2", Module: "debug"},
+	}
+
+	playResult := &types.PlayResult{
+		Name:  "test play",
+		Hosts: []types.HostResult{},
+	}
+
+	err := engine.executeTaskList(ctx, tasks, hosts, map[string]interface{}{}, playResult)
+	assert.NoError(t, err)
+}
+
+// TestExecuteTaskList_WithCondition tests executeTaskList with conditional tasks
+func TestExecuteTaskList_WithCondition(t *testing.T) {
+	engine, mockConfig, mockLogger, mockInventoryMgr, mockModuleRegistry, mockTemplateEngine := createTestEngine()
+	ctx := context.Background()
+
+	mockConfig.On("GetDryRun").Return(false)
+
+	hosts := []types.Host{
+		{Name: "host1", Address: "192.168.1.1", Port: 22, User: "user1"},
+	}
+	mockInventoryMgr.hosts = hosts
+
+	// Mock template engine for condition evaluation
+	// When condition evaluates to "false", the task should be skipped
+	mockTemplateEngine.On("Render", ctx, "{{ skip_task }}", mock.Anything).
+		Return("false", nil).Once()
+
+	// Mock logger calls
+	mockLogger.On("Debug", mock.Anything, mock.Anything).Return()
+	mockLogger.On("Debug", mock.Anything, mock.Anything, mock.Anything).Return()
+	mockLogger.On("Debug", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
+
+	tasks := []types.Task{
+		{Name: "task1", Module: "debug", When: "{{ skip_task }}"},
+	}
+
+	playResult := &types.PlayResult{
+		Name:  "test play",
+		Hosts: []types.HostResult{},
+	}
+
+	err := engine.executeTaskList(ctx, tasks, hosts, map[string]interface{}{"skip_task": false}, playResult)
+	assert.NoError(t, err)
+
+	// Verify that the module was not executed because task was skipped
+	mockModuleRegistry.AssertNotCalled(t, "ExecuteTask")
+}
+
+// TestExecuteTaskList_ConditionError tests executeTaskList with condition evaluation error
+func TestExecuteTaskList_ConditionError(t *testing.T) {
+	engine, mockConfig, mockLogger, mockInventoryMgr, mockModuleRegistry, mockTemplateEngine := createTestEngine()
+	ctx := context.Background()
+
+	mockConfig.On("GetDryRun").Return(false)
+
+	hosts := []types.Host{
+		{Name: "host1", Address: "192.168.1.1", Port: 22, User: "user1"},
+	}
+	mockInventoryMgr.hosts = hosts
+
+	// Mock template engine to return error
+	mockTemplateEngine.On("Render", ctx, "{{ invalid", mock.Anything).
+		Return("", errors.New("template error")).Once()
+
+	// Mock template engine for task args
+	mockTemplateEngine.On("RenderTaskArgs", mock.Anything, mock.Anything, mock.Anything).
+		Return(map[string]interface{}{}, nil)
+
+	// Mock module execution
+	mockModuleRegistry.On("ExecuteTask", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(types.TaskResult{Success: true, Changed: false}, nil)
+
+	// Mock logger calls
+	mockLogger.On("Debug", mock.Anything, mock.Anything).Return()
+	mockLogger.On("Debug", mock.Anything, mock.Anything, mock.Anything).Return()
+	mockLogger.On("Debug", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
+	mockLogger.On("Warn", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
+	mockLogger.On("TaskStart", mock.Anything, mock.Anything).Return()
+	mockLogger.On("TaskEnd", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
+
+	tasks := []types.Task{
+		{Name: "task1", Module: "debug", When: "{{ invalid"},
+	}
+
+	playResult := &types.PlayResult{
+		Name:  "test play",
+		Hosts: []types.HostResult{},
+	}
+
+	err := engine.executeTaskList(ctx, tasks, hosts, map[string]interface{}{}, playResult)
+	assert.NoError(t, err) // Should continue despite condition error
+
+	// Verify that the task was still executed despite condition error
+	mockModuleRegistry.AssertCalled(t, "ExecuteTask", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 }
