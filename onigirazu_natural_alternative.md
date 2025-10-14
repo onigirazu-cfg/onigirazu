@@ -158,3 +158,4 @@ onigirazu run all -m command "complex_command_here" -i inventory.yml
 - **🎯 Простіший** синтаксис
 - **📦 Менше** залежностей
 - **🔧 Більше** гнучкості
+

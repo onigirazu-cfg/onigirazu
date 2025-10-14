@@ -764,3 +764,4 @@ onigirazu run all "install nginx package" --parallel 10 -i inventory.yml
 ---
 
 **📚 Onigirazu API provides everything you need for infrastructure automation!**
+

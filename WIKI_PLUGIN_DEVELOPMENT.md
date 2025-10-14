@@ -1032,3 +1032,4 @@ plugins:
 ---
 
 **🔌 Plugin development makes Onigirazu highly extensible and customizable!**
+

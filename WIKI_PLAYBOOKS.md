@@ -706,3 +706,4 @@ onigirazu apply playbook.yml -i inventory.yml --validate
 ---
 
 **📚 Playbooks make infrastructure management declarative and repeatable!**
+

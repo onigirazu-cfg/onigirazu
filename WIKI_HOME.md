@@ -269,3 +269,4 @@ Onigirazu is licensed under the MIT License. See [LICENSE](https://github.com/on
 ---
 
 **🍙 Onigirazu - Modern Configuration Management Made Simple**
+

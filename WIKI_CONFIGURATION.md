@@ -603,3 +603,4 @@ onigirazu run all -m ping -i inventory.yml --trace
 ---
 
 **⚙️ Onigirazu is now configured and ready to use!**
+

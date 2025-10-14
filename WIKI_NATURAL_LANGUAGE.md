@@ -262,3 +262,4 @@ onigirazu run all "shutdown system" -i inventory.yml
 ---
 
 **🎯 Natural Language makes Onigirazu the most user-friendly configuration management tool!**
+

@@ -862,3 +862,4 @@ onigirazu run all "install nginx package" --check -i inventory.yml
 ---
 
 **📖 Onigirazu makes infrastructure management simple, fast, and secure!**
+

@@ -98,3 +98,4 @@
         test_command: whoami
       when:
         - allow_reboot | bool
+

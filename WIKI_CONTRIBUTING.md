@@ -500,3 +500,4 @@ We recognize contributors in several ways:
 ---
 
 **🤝 Thank you for contributing to Onigirazu!**
+

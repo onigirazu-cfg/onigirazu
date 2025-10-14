@@ -534,3 +534,4 @@ go list -json -m all | nancy sleuth
 ---
 
 **🔄 The pull request process ensures high-quality contributions to Onigirazu!**
+

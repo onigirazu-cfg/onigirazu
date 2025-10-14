@@ -144,3 +144,4 @@ onigirazu run all "delete old files in /tmp" --parallel 50 -i inventory.yml
 - **📊 Моніторинг** - Використання JSON/YAML виводу
 
 **Onigirazu надає всі переваги Ansible з додатковими можливостями та значно кращою продуктивністю!**
+

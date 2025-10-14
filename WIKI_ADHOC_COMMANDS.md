@@ -330,3 +330,4 @@ onigirazu run all "install nginx package" --output json -i inventory.yml
 ---
 
 **🔧 Ad-hoc commands make Onigirazu perfect for quick operations and debugging!**
+
