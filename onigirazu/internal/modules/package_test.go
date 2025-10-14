@@ -645,25 +645,6 @@ func (m *MockCommandExecutor) ExecuteWithContext(ctx context.Context, command st
 }
 
 // ============================================================================
-// HELPER FUNCTIONS
-// ============================================================================
-
-// createTestHost creates a test host for testing
-func createTestHost() types.Host {
-	return types.Host{
-		Name:    "test-host",
-		Address: "test.example.com",
-		Port:    22,
-		User:    "testuser",
-	}
-}
-
-// createTestContext creates a test context with timeout
-func createTestContext() (context.Context, context.CancelFunc) {
-	return context.WithTimeout(context.Background(), 5*time.Second)
-}
-
-// ============================================================================
 // BASIC MODULE TESTS
 // ============================================================================
 
@@ -1921,10 +1902,6 @@ func TestNewUnifiedAptManager(t *testing.T) {
 		cache:    NewPackageStateCache(10 * time.Minute),
 	}
 
-	if manager == nil {
-		t.Fatal("Expected non-nil manager")
-	}
-
 	if manager.hostname != hostname {
 		t.Errorf("Expected hostname %s, got %s", hostname, manager.hostname)
 	}
@@ -2096,10 +2073,6 @@ func TestNewUnifiedBrewManager(t *testing.T) {
 		cache:    NewPackageStateCache(10 * time.Minute),
 	}
 
-	if manager == nil {
-		t.Fatal("Expected non-nil manager")
-	}
-
 	if manager.hostname != hostname {
 		t.Errorf("Expected hostname %s, got %s", hostname, manager.hostname)
 	}
@@ -2125,14 +2098,6 @@ func TestNewUnifiedDnfManager(t *testing.T) {
 
 	manager := &UnifiedDnfManager{
 		UnifiedYumManager: yumManager,
-	}
-
-	if manager == nil {
-		t.Fatal("Expected non-nil manager")
-	}
-
-	if manager.UnifiedYumManager == nil {
-		t.Fatal("Expected embedded YUM manager to be non-nil")
 	}
 
 	if manager.hostname != hostname {
