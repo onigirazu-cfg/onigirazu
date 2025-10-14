@@ -576,3 +576,477 @@ func TestEnhancedLoggerConcurrency(t *testing.T) {
 		t.Errorf("Expected %d total logs, got %d", expectedLogs, stats.TotalLogs)
 	}
 }
+
+// TestEnhancedLoggerLogWithContext tests logging with context
+func TestEnhancedLoggerLogWithContext(t *testing.T) {
+	var buf bytes.Buffer
+	logger := NewEnhanced("info", FormatJSON, &buf)
+	defer logger.Close()
+
+	ctx := map[string]interface{}{
+		"request_id": "12345",
+		"user":       "testuser",
+	}
+
+	logger.LogWithContext(LevelInfo, ctx, "test message with context")
+	logger.Flush() // Flush buffer to get output
+
+	output := buf.String()
+	if !strings.Contains(output, "test message with context") {
+		t.Error("Expected message in output")
+	}
+	if !strings.Contains(output, "request_id") {
+		t.Error("Expected request_id field in output")
+	}
+	if !strings.Contains(output, "12345") {
+		t.Error("Expected request_id value in output")
+	}
+}
+
+// TestEnhancedLoggerLogWithContextBuffering tests buffering with LogWithContext
+func TestEnhancedLoggerLogWithContextBuffering(t *testing.T) {
+	var buf bytes.Buffer
+	logger := NewEnhancedWithBuffer("info", FormatJSON, &buf, 5)
+	defer logger.Close()
+
+	ctx := map[string]interface{}{
+		"key": "value",
+	}
+
+	// Add messages to buffer
+	for i := 0; i < 3; i++ {
+		logger.LogWithContext(LevelInfo, ctx, "message %d", i)
+	}
+
+	// Buffer should have messages
+	stats := logger.GetStats()
+	if stats.BufferSize != 3 {
+		t.Errorf("Expected buffer size 3, got %d", stats.BufferSize)
+	}
+
+	// Flush buffer
+	logger.Flush()
+
+	output := buf.String()
+	if !strings.Contains(output, "message 0") {
+		t.Error("Expected message 0 after flush")
+	}
+	if !strings.Contains(output, "message 2") {
+		t.Error("Expected message 2 after flush")
+	}
+}
+
+// TestEnhancedLoggerLogWithContextBufferOverflow tests buffer overflow
+func TestEnhancedLoggerLogWithContextBufferOverflow(t *testing.T) {
+	var buf bytes.Buffer
+	logger := NewEnhancedWithBuffer("info", FormatText, &buf, 2)
+	defer logger.Close()
+
+	ctx := map[string]interface{}{
+		"key": "value",
+	}
+
+	// Fill buffer and overflow
+	for i := 0; i < 5; i++ {
+		logger.LogWithContext(LevelInfo, ctx, "message %d", i)
+	}
+
+	output := buf.String()
+	// Should have written messages when buffer overflowed
+	if !strings.Contains(output, "message") {
+		t.Error("Expected messages in output after buffer overflow")
+	}
+}
+
+// TestEnhancedLoggerTrace tests trace logging
+func TestEnhancedLoggerTrace(t *testing.T) {
+	var buf bytes.Buffer
+	logger := NewEnhanced("debug", FormatJSON, &buf)
+	defer logger.Close()
+
+	logger.Trace("trace message")
+	logger.Flush() // Flush buffer to get output
+
+	output := buf.String()
+	if !strings.Contains(output, "trace message") {
+		t.Error("Expected trace message in output")
+	}
+	if !strings.Contains(output, "TRACE") {
+		t.Error("Expected TRACE level indicator in output")
+	}
+}
+
+// TestEnhancedLoggerTraceNotLogged tests trace not logged at info level
+func TestEnhancedLoggerTraceNotLogged(t *testing.T) {
+	var buf bytes.Buffer
+	logger := NewEnhanced("info", FormatText, &buf)
+	defer logger.Close()
+
+	logger.Trace("trace message")
+
+	output := buf.String()
+	if strings.Contains(output, "trace message") {
+		t.Error("Trace message should not be logged at info level")
+	}
+}
+
+// TestEnhancedLoggerPerformance tests performance logging
+func TestEnhancedLoggerPerformance(t *testing.T) {
+	var buf bytes.Buffer
+	logger := NewEnhanced("info", FormatJSON, &buf)
+	defer logger.Close()
+
+	duration := 150 * time.Millisecond
+	details := map[string]interface{}{
+		"queries": 5,
+		"cache":   "hit",
+	}
+
+	logger.Performance("database_query", duration, details)
+	logger.Flush() // Flush buffer to get output
+
+	output := buf.String()
+	if !strings.Contains(output, "database_query") {
+		t.Error("Expected operation name in output")
+	}
+	if !strings.Contains(output, "performance") {
+		t.Error("Expected performance type in output")
+	}
+	if !strings.Contains(output, "queries") {
+		t.Error("Expected queries detail in output")
+	}
+}
+
+// TestEnhancedLoggerAudit tests audit logging
+func TestEnhancedLoggerAudit(t *testing.T) {
+	var buf bytes.Buffer
+	logger := NewEnhanced("info", FormatJSON, &buf)
+	defer logger.Close()
+
+	details := map[string]interface{}{
+		"resource": "/api/users",
+		"method":   "POST",
+	}
+
+	logger.Audit("admin", "create_user", details)
+	logger.Flush() // Flush buffer to get output
+
+	output := buf.String()
+	if !strings.Contains(output, "admin") {
+		t.Error("Expected user in output")
+	}
+	if !strings.Contains(output, "create_user") {
+		t.Error("Expected action in output")
+	}
+	if !strings.Contains(output, "audit") {
+		t.Error("Expected audit type in output")
+	}
+	if !strings.Contains(output, "resource") {
+		t.Error("Expected resource detail in output")
+	}
+}
+
+// TestEnhancedLoggerSecurity tests security logging
+func TestEnhancedLoggerSecurity(t *testing.T) {
+	var buf bytes.Buffer
+	logger := NewEnhanced("info", FormatText, &buf)
+	defer logger.Close()
+
+	details := map[string]interface{}{
+		"ip":     "192.168.1.100",
+		"reason": "too many attempts",
+	}
+
+	// Test with high severity (should log as ERROR)
+	logger.Security("failed_login", "high", details)
+	logger.Flush() // Flush buffer to get output
+
+	output := buf.String()
+	if !strings.Contains(output, "failed_login") {
+		t.Error("Expected event in output")
+	}
+	if !strings.Contains(output, "high") {
+		t.Error("Expected severity in output")
+	}
+	if !strings.Contains(output, "ERROR") {
+		t.Error("Expected ERROR level for high severity")
+	}
+
+	// Test with low severity (should log as WARN)
+	buf.Reset()
+	logger.Security("suspicious_activity", "low", details)
+	logger.Flush() // Flush buffer to get output
+
+	output = buf.String()
+	if !strings.Contains(output, "WARN") {
+		t.Error("Expected WARN level for low severity")
+	}
+}
+
+// TestEnhancedLoggerSecurityCritical tests critical security logging
+func TestEnhancedLoggerSecurityCritical(t *testing.T) {
+	var buf bytes.Buffer
+	logger := NewEnhanced("info", FormatText, &buf)
+	defer logger.Close()
+
+	details := map[string]interface{}{
+		"attack_type": "sql_injection",
+	}
+
+	logger.Security("attack_detected", "critical", details)
+	logger.Flush() // Flush buffer to get output
+
+	output := buf.String()
+	if !strings.Contains(output, "ERROR") {
+		t.Error("Expected ERROR level for critical severity")
+	}
+}
+
+// TestEnhancedLoggerTaskSkipped tests task skipped logging
+func TestEnhancedLoggerTaskSkipped(t *testing.T) {
+	var buf bytes.Buffer
+	logger := NewEnhanced("info", FormatJSON, &buf)
+	defer logger.Close()
+
+	logger.TaskSkipped("host1", "install_package", "already installed")
+
+	output := buf.String()
+	if !strings.Contains(output, "host1") {
+		t.Error("Expected host in output")
+	}
+	if !strings.Contains(output, "install_package") {
+		t.Error("Expected task name in output")
+	}
+	if !strings.Contains(output, "already installed") {
+		t.Error("Expected reason in output")
+	}
+	if !strings.Contains(output, "task_skipped") {
+		t.Error("Expected task_skipped type in output")
+	}
+}
+
+// TestEnhancedLoggerPlayStart tests play start logging
+func TestEnhancedLoggerPlayStart(t *testing.T) {
+	var buf bytes.Buffer
+	logger := NewEnhanced("info", FormatText, &buf)
+	defer logger.Close()
+
+	logger.PlayStart("setup_servers", 0, 3)
+
+	output := buf.String()
+	if !strings.Contains(output, "setup_servers") {
+		t.Error("Expected play name in output")
+	}
+	// PlayStart uses playIndex directly, so it should be "0/3" not "1/3"
+	if !strings.Contains(output, "0/3") {
+		t.Error("Expected play index in output")
+	}
+}
+
+// TestEnhancedLoggerPlayEnd tests play end logging
+func TestEnhancedLoggerPlayEnd(t *testing.T) {
+	var buf bytes.Buffer
+	logger := NewEnhanced("info", FormatJSON, &buf)
+	defer logger.Close()
+
+	duration := 5 * time.Second
+
+	// Test successful play
+	logger.PlayEnd("setup_servers", "host1", true, duration)
+
+	output := buf.String()
+	if !strings.Contains(output, "setup_servers") {
+		t.Error("Expected play name in output")
+	}
+	if !strings.Contains(output, "host1") {
+		t.Error("Expected host in output")
+	}
+	if !strings.Contains(output, "SUCCESSFULLY") {
+		t.Error("Expected SUCCESSFULLY status in output")
+	}
+
+	// Test failed play
+	buf.Reset()
+	logger.PlayEnd("setup_servers", "host2", false, duration)
+
+	output = buf.String()
+	if !strings.Contains(output, "WITH ERRORS") {
+		t.Error("Expected WITH ERRORS status in output")
+	}
+}
+
+// TestEnhancedLoggerProgress tests progress logging
+func TestEnhancedLoggerProgress(t *testing.T) {
+	var buf bytes.Buffer
+	logger := NewEnhanced("info", FormatJSON, &buf)
+	defer logger.Close()
+
+	logger.Progress(7, 10, "install_nginx", "web-server-1")
+
+	output := buf.String()
+	if !strings.Contains(output, "7") {
+		t.Error("Expected completed count in output")
+	}
+	if !strings.Contains(output, "10") {
+		t.Error("Expected total count in output")
+	}
+	if !strings.Contains(output, "70.0") {
+		t.Error("Expected percentage in output")
+	}
+	if !strings.Contains(output, "install_nginx") {
+		t.Error("Expected task name in output")
+	}
+	if !strings.Contains(output, "web-server-1") {
+		t.Error("Expected host name in output")
+	}
+}
+
+// TestEnhancedLoggerRetry tests retry logging
+func TestEnhancedLoggerRetry(t *testing.T) {
+	var buf bytes.Buffer
+	logger := NewEnhanced("info", FormatText, &buf)
+	defer logger.Close()
+
+	err := fmt.Errorf("connection timeout")
+	delay := 3 * time.Second
+
+	logger.Retry("connect_database", "db-server-1", 2, 5, delay, err)
+
+	output := buf.String()
+	if !strings.Contains(output, "connect_database") {
+		t.Error("Expected task name in output")
+	}
+	if !strings.Contains(output, "db-server-1") {
+		t.Error("Expected host name in output")
+	}
+	if !strings.Contains(output, "2/5") {
+		t.Error("Expected attempt count in output")
+	}
+	if !strings.Contains(output, "3s") {
+		t.Error("Expected delay in output")
+	}
+	if !strings.Contains(output, "connection timeout") {
+		t.Error("Expected error message in output")
+	}
+	if !strings.Contains(output, "WARN") {
+		t.Error("Expected WARN level for retry")
+	}
+}
+
+// TestEnhancedLoggerFlushBufferLocked tests buffer flushing
+func TestEnhancedLoggerFlushBufferLocked(t *testing.T) {
+	var buf bytes.Buffer
+	logger := NewEnhancedWithBuffer("info", FormatText, &buf, 10)
+	defer logger.Close()
+
+	ctx := map[string]interface{}{
+		"test": "value",
+	}
+
+	// Add messages to buffer
+	for i := 0; i < 5; i++ {
+		logger.LogWithContext(LevelInfo, ctx, "buffered message %d", i)
+	}
+
+	// Verify buffer has messages
+	stats := logger.GetStats()
+	if stats.BufferSize == 0 {
+		t.Error("Expected non-empty buffer")
+	}
+
+	// Flush buffer
+	logger.Flush()
+
+	// Verify buffer is empty
+	stats = logger.GetStats()
+	if stats.BufferSize != 0 {
+		t.Errorf("Expected empty buffer after flush, got %d", stats.BufferSize)
+	}
+
+	// Verify messages were written
+	output := buf.String()
+	if !strings.Contains(output, "buffered message 0") {
+		t.Error("Expected first message in output")
+	}
+	if !strings.Contains(output, "buffered message 4") {
+		t.Error("Expected last message in output")
+	}
+}
+
+// TestEnhancedLoggerSetBufferSizeFlush tests buffer size reduction triggers flush
+func TestEnhancedLoggerSetBufferSizeFlush(t *testing.T) {
+	var buf bytes.Buffer
+	logger := NewEnhancedWithBuffer("info", FormatText, &buf, 100)
+	defer logger.Close()
+
+	ctx := map[string]interface{}{
+		"key": "value",
+	}
+
+	// Add messages to buffer
+	for i := 0; i < 10; i++ {
+		logger.LogWithContext(LevelInfo, ctx, "message %d", i)
+	}
+
+	// Reduce buffer size below current buffer length
+	logger.SetBufferSize(5)
+
+	// Buffer should be flushed
+	output := buf.String()
+	if !strings.Contains(output, "message 0") {
+		t.Error("Expected messages flushed when buffer size reduced")
+	}
+}
+
+// TestEnhancedLoggerWriteEntry tests writeEntry methods
+func TestEnhancedLoggerWriteEntry(t *testing.T) {
+	var buf bytes.Buffer
+	logger := NewEnhancedWithBuffer("info", FormatText, &buf, 5)
+	defer logger.Close()
+
+	ctx := map[string]interface{}{
+		"field1": "value1",
+		"field2": 42,
+	}
+
+	// Add messages to trigger writeEntry through buffer flush
+	for i := 0; i < 6; i++ {
+		logger.LogWithContext(LevelInfo, ctx, "message %d", i)
+	}
+
+	output := buf.String()
+	if !strings.Contains(output, "message") {
+		t.Error("Expected messages written via writeEntry")
+	}
+	if !strings.Contains(output, "field1=value1") {
+		t.Error("Expected fields in text output")
+	}
+}
+
+// TestEnhancedLoggerWriteEntryJSON tests writeEntry with JSON format
+func TestEnhancedLoggerWriteEntryJSON(t *testing.T) {
+	var buf bytes.Buffer
+	logger := NewEnhancedWithBuffer("info", FormatJSON, &buf, 3)
+	defer logger.Close()
+
+	ctx := map[string]interface{}{
+		"user_id": 123,
+		"action":  "login",
+	}
+
+	// Add messages to trigger writeEntryJSON through buffer flush
+	for i := 0; i < 5; i++ {
+		logger.LogWithContext(LevelInfo, ctx, "event %d", i)
+	}
+
+	output := buf.String()
+	if !strings.Contains(output, `"user_id":123`) {
+		t.Error("Expected user_id field in JSON output")
+	}
+	if !strings.Contains(output, `"action":"login"`) {
+		t.Error("Expected action field in JSON output")
+	}
+	if !strings.Contains(output, "event") {
+		t.Error("Expected event messages in output")
+	}
+}
