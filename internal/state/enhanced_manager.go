@@ -413,22 +413,24 @@ func (m *EnhancedManager) cleanupOldBackups() error {
 // Restore restores state from a backup file
 func (m *EnhancedManager) Restore(backupFile string) error {
 	m.mutex.Lock()
-	defer m.mutex.Unlock()
 
 	// Verify backup file exists
 	if _, err := os.Stat(backupFile); os.IsNotExist(err) {
+		m.mutex.Unlock()
 		return fmt.Errorf("backup file does not exist: %s", backupFile)
 	}
 
 	// Copy backup to state file
 	src, err := os.Open(backupFile) // #nosec G304 -- backupFile is constructed from state file path
 	if err != nil {
+		m.mutex.Unlock()
 		return err
 	}
 	defer src.Close()
 
 	dst, err := os.Create(m.stateFile)
 	if err != nil {
+		m.mutex.Unlock()
 		return err
 	}
 	defer func() {
@@ -437,18 +439,24 @@ func (m *EnhancedManager) Restore(backupFile string) error {
 	}()
 
 	if _, err = io.Copy(dst, src); err != nil {
+		m.mutex.Unlock()
 		return err
 	}
 
 	// Ensure data is flushed to disk before closing
 	if err = dst.Sync(); err != nil {
+		m.mutex.Unlock()
 		return err
 	}
 
 	// Explicitly close and handle any errors
 	if err = dst.Close(); err != nil {
+		m.mutex.Unlock()
 		return err
 	}
+
+	// Unlock before reloading state to avoid deadlock
+	m.mutex.Unlock()
 
 	// Reload state
 	ctx := context.Background()
