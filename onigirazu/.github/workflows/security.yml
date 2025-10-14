@@ -33,10 +33,17 @@ jobs:
         go-version: ${{ env.GO_VERSION }}
         cache: true
 
+    - name: Download dependencies
+      run: |
+        cd onigirazu
+        go mod download
+        go mod verify
+
     - name: Run Gosec Security Scanner
       run: |
+        cd onigirazu
         go install github.com/securego/gosec/v2/cmd/gosec@latest
-        gosec -fmt sarif -out gosec.sarif -stdout -verbose=text ./...
+        gosec -fmt sarif -out ../gosec.sarif -stdout -verbose=text ./...
 
     - name: Upload Gosec SARIF file
       if: always()
@@ -50,7 +57,7 @@ jobs:
       uses: aquasecurity/trivy-action@master
       with:
         scan-type: 'fs'
-        scan-ref: '.'
+        scan-ref: './onigirazu'
         format: 'sarif'
         output: 'trivy-fs-results.sarif'
         severity: 'CRITICAL,HIGH,MEDIUM'
@@ -67,7 +74,7 @@ jobs:
       uses: aquasecurity/trivy-action@master
       with:
         scan-type: 'fs'
-        scan-ref: 'go.mod'
+        scan-ref: './onigirazu/go.mod'
         format: 'sarif'
         output: 'trivy-deps-results.sarif'
         severity: 'CRITICAL,HIGH,MEDIUM'
@@ -82,12 +89,14 @@ jobs:
 
     - name: Run govulncheck
       run: |
+        cd onigirazu
         go install golang.org/x/vuln/cmd/govulncheck@latest
         govulncheck ./...
 
     - name: Run Nancy vulnerability scanner
       continue-on-error: true
       run: |
+        cd onigirazu
         go list -json -deps ./... | docker run --rm -i sonatypecommunity/nancy:latest sleuth
 
   codeql:
@@ -111,6 +120,7 @@ jobs:
       with:
         languages: ${{ matrix.language }}
         queries: security-extended,security-and-quality
+        source-root: onigirazu
 
     - name: Set up Go
       uses: actions/setup-go@v6
@@ -118,8 +128,16 @@ jobs:
         go-version: ${{ env.GO_VERSION }}
         cache: true
 
-    - name: Autobuild
-      uses: github/codeql-action/autobuild@v3
+    - name: Download dependencies
+      run: |
+        cd onigirazu
+        go mod download
+        go mod verify
+
+    - name: Build
+      run: |
+        cd onigirazu
+        go build -v ./...
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v3
