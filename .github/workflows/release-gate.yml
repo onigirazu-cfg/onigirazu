@@ -35,10 +35,8 @@ jobs:
       with:
         go-version: ${{ env.GO_VERSION }}
         cache: true
-        cache-dependency-path: onigirazu/go.sum
 
     - name: Run Gosec Security Scanner
-      working-directory: onigirazu
       run: |
         go install github.com/securego/gosec/v2/cmd/gosec@latest
         gosec -fmt sarif -out gosec.sarif -stdout -verbose=text ./...
@@ -48,11 +46,10 @@ jobs:
       continue-on-error: true
       uses: github/codeql-action/upload-sarif@v4
       with:
-        sarif_file: onigirazu/gosec.sarif
+        sarif_file: gosec.sarif
         category: gosec
 
     - name: Run govulncheck
-      working-directory: onigirazu
       run: |
         go install golang.org/x/vuln/cmd/govulncheck@latest
         govulncheck ./...
@@ -72,7 +69,6 @@ jobs:
       with:
         go-version: ${{ env.GO_VERSION }}
         cache: true
-        cache-dependency-path: onigirazu/go.sum
 
     - name: Install quality tools
       run: |
@@ -80,7 +76,6 @@ jobs:
         go install golang.org/x/tools/cmd/goimports@latest
 
     - name: Check formatting
-      working-directory: onigirazu
       run: |
         if [ "$(gofmt -s -l . | wc -l)" -gt 0 ]; then
           echo "The following files are not formatted:"
@@ -89,7 +84,6 @@ jobs:
         fi
 
     - name: Check imports
-      working-directory: onigirazu
       run: |
         if [ "$(goimports -l . | wc -l)" -gt 0 ]; then
           echo "The following files have import issues:"
@@ -98,11 +92,9 @@ jobs:
         fi
 
     - name: Run go vet
-      working-directory: onigirazu
       run: go vet ./...
 
     - name: Run staticcheck
-      working-directory: onigirazu
       run: staticcheck ./...
 
   tests:
@@ -120,22 +112,17 @@ jobs:
       with:
         go-version: ${{ env.GO_VERSION }}
         cache: true
-        cache-dependency-path: onigirazu/go.sum
 
     - name: Download dependencies
-      working-directory: onigirazu
       run: go mod download
 
     - name: Verify dependencies
-      working-directory: onigirazu
       run: go mod verify
 
     - name: Run tests with race detection
-      working-directory: onigirazu
       run: go test -race -coverprofile=coverage.out -covermode=atomic -timeout=10m ./...
 
     - name: Check coverage threshold
-      working-directory: onigirazu
       run: |
         COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//')
         echo "Current coverage: ${COVERAGE}%"
@@ -167,10 +154,8 @@ jobs:
       with:
         go-version: ${{ env.GO_VERSION }}
         cache: true
-        cache-dependency-path: onigirazu/go.sum
 
     - name: Build binary
-      working-directory: onigirazu
       env:
         GOOS: ${{ matrix.goos }}
         GOARCH: ${{ matrix.goarch }}
@@ -197,14 +182,12 @@ jobs:
       with:
         go-version: ${{ env.GO_VERSION }}
         cache: true
-        cache-dependency-path: onigirazu/go.sum
 
     - name: golangci-lint
       uses: golangci/golangci-lint-action@v8
       with:
         version: v2.5.0
         args: --timeout=10m
-        working-directory: onigirazu
 
   # Quality gate - all checks must pass
   quality-gate:
