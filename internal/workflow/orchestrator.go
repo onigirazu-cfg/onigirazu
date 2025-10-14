@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -820,16 +821,25 @@ func (wo *WorkflowOrchestrator) ListExecutions() []*WorkflowExecution {
 }
 
 // Helper functions for ID generation
+var (
+	workflowIDCounter      uint64
+	executionIDCounter     uint64
+	stepExecutionIDCounter uint64
+)
+
 func generateWorkflowID() string {
-	return fmt.Sprintf("workflow_%d", time.Now().UnixNano())
+	counter := atomic.AddUint64(&workflowIDCounter, 1)
+	return fmt.Sprintf("workflow_%d_%d", time.Now().UnixNano(), counter)
 }
 
 func generateExecutionID() string {
-	return fmt.Sprintf("exec_%d", time.Now().UnixNano())
+	counter := atomic.AddUint64(&executionIDCounter, 1)
+	return fmt.Sprintf("exec_%d_%d", time.Now().UnixNano(), counter)
 }
 
 func generateStepExecutionID() string {
-	return fmt.Sprintf("step_%d", time.Now().UnixNano())
+	counter := atomic.AddUint64(&stepExecutionIDCounter, 1)
+	return fmt.Sprintf("step_%d_%d", time.Now().UnixNano(), counter)
 }
 
 // mergeVariables merges two variable maps
