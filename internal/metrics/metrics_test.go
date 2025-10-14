@@ -213,3 +213,225 @@ func TestMetrics_GetUptime(t *testing.T) {
 	assert.Greater(t, uptime, time.Duration(0))
 	assert.Less(t, uptime, 1*time.Second) // Should be very small for test
 }
+
+func TestNewMetricsWithPrometheus(t *testing.T) {
+	m := NewMetricsWithPrometheus()
+
+	assert.NotNil(t, m)
+	assert.NotNil(t, m.promRegistry)
+	assert.NotNil(t, m.promMetrics)
+	assert.NotNil(t, m.promMetrics.TasksTotal)
+	assert.NotNil(t, m.promMetrics.TaskDuration)
+	assert.NotNil(t, m.promMetrics.PlaybooksTotal)
+	assert.NotNil(t, m.promMetrics.PlaysTotal)
+	assert.NotNil(t, m.promMetrics.CacheHitRate)
+	assert.NotNil(t, m.promMetrics.HostsConnected)
+	assert.NotNil(t, m.promMetrics.ConcurrentTasks)
+	assert.NotNil(t, m.promMetrics.ErrorsTotal)
+	assert.NotNil(t, m.promMetrics.ModuleUsage)
+	assert.Equal(t, int64(0), m.PlaybooksExecuted)
+	assert.NotNil(t, m.ModuleUsage)
+	assert.False(t, m.StartTime.IsZero())
+}
+
+func TestMetrics_AddTaskExecutionTime(t *testing.T) {
+	m := NewMetrics()
+
+	duration := 150 * time.Millisecond
+	m.AddTaskExecutionTime("test-module", "host1", duration)
+
+	assert.Equal(t, duration, m.TotalExecutionTime)
+	assert.Equal(t, duration, m.MinTaskTime)
+	assert.Equal(t, duration, m.MaxTaskTime)
+
+	// Add another task with different duration
+	duration2 := 250 * time.Millisecond
+	m.AddTaskExecutionTime("test-module", "host2", duration2)
+
+	assert.Equal(t, duration+duration2, m.TotalExecutionTime)
+	assert.Equal(t, duration, m.MinTaskTime)
+	assert.Equal(t, duration2, m.MaxTaskTime)
+}
+
+func TestMetrics_RecordHostExecutionTime(t *testing.T) {
+	m := NewMetrics()
+
+	m.RecordHostExecutionTime("host1", 100*time.Millisecond)
+	m.RecordHostExecutionTime("host2", 200*time.Millisecond)
+	m.RecordHostExecutionTime("host1", 150*time.Millisecond)
+
+	assert.Equal(t, int64(250), m.HostExecutionTime["host1"]) // 100 + 150
+	assert.Equal(t, int64(200), m.HostExecutionTime["host2"])
+}
+
+func TestMetrics_IncrementHostsConnected(t *testing.T) {
+	m := NewMetrics()
+
+	m.IncrementHostsConnected()
+	assert.Equal(t, int64(1), m.HostsConnected)
+
+	m.IncrementHostsConnected()
+	assert.Equal(t, int64(2), m.HostsConnected)
+}
+
+func TestMetrics_IncrementHostsUnreachable(t *testing.T) {
+	m := NewMetrics()
+
+	m.IncrementHostsUnreachable()
+	assert.Equal(t, int64(1), m.HostsUnreachable)
+
+	m.IncrementHostsUnreachable()
+	assert.Equal(t, int64(2), m.HostsUnreachable)
+}
+
+func TestMetrics_SetConcurrentTasks(t *testing.T) {
+	m := NewMetrics()
+
+	m.SetConcurrentTasks(5)
+	assert.Equal(t, int64(5), m.CurrentConcurrentTasks)
+
+	m.SetConcurrentTasks(10)
+	assert.Equal(t, int64(10), m.CurrentConcurrentTasks)
+	assert.Equal(t, int64(10), m.MaxConcurrentTasks)
+
+	// Test with Prometheus metrics
+	mProm := NewMetricsWithPrometheus()
+	mProm.SetConcurrentTasks(3)
+	assert.Equal(t, int64(3), mProm.CurrentConcurrentTasks)
+}
+
+func TestMetrics_UpdateResourceUsage(t *testing.T) {
+	m := NewMetrics()
+
+	m.UpdateResourceUsage(1024*1024, 50.5, 1000, 2000) // 1MB memory, 50.5% CPU, 1000 network, 2000 disk
+
+	assert.Equal(t, int64(1024*1024), m.MemoryUsage)
+	assert.Equal(t, 50.5, m.CPUUsage)
+	assert.Equal(t, int64(1000), m.NetworkBytes)
+	assert.Equal(t, int64(2000), m.DiskIOBytes)
+}
+
+func TestMetrics_GetSummary(t *testing.T) {
+	m := NewMetrics()
+
+	// Add some data
+	m.IncrementPlaybooksExecuted()
+	m.IncrementTasksExecuted()
+	m.IncrementTasksSucceeded()
+	m.IncrementModuleUsage("file")
+	m.IncrementModuleUsage("command")
+	m.IncrementModuleUsage("file")
+	m.AddExecutionTime(100 * time.Millisecond)
+
+	summary := m.GetSummary()
+
+	assert.NotNil(t, summary)
+	assert.NotNil(t, summary.Overview)
+	assert.Equal(t, int64(1), summary.Overview.PlaybooksExecuted)
+	assert.Equal(t, int64(1), summary.Overview.TasksExecuted)
+	assert.Equal(t, int64(1), summary.Overview.TasksSucceeded)
+	assert.Equal(t, 100.0, summary.Overview.SuccessRate)
+	assert.NotNil(t, summary.Modules)
+	assert.Equal(t, int64(2), summary.Modules.Usage["file"])
+	assert.Equal(t, int64(1), summary.Modules.Usage["command"])
+}
+
+func TestMetrics_GetPrometheusHandler(t *testing.T) {
+	m := NewMetricsWithPrometheus()
+
+	handler := m.GetPrometheusHandler()
+	assert.NotNil(t, handler)
+}
+
+func TestMetrics_RecordTaskResult(t *testing.T) {
+	m := NewMetrics()
+
+	// Test successful task
+	m.RecordTaskResult("file", "host1", "success", 100*time.Millisecond, false)
+	assert.Equal(t, int64(1), m.TasksExecuted)
+	assert.Equal(t, int64(1), m.TasksSucceeded)
+	assert.Equal(t, int64(1), m.ModuleUsage["file"])
+
+	// Test successful task with change
+	m.RecordTaskResult("file", "host1", "success", 100*time.Millisecond, true)
+	assert.Equal(t, int64(2), m.TasksExecuted)
+	assert.Equal(t, int64(2), m.TasksSucceeded)
+	assert.Equal(t, int64(1), m.TasksChanged)
+
+	// Test failed task
+	m.RecordTaskResult("command", "host2", "failed", 50*time.Millisecond, false)
+	assert.Equal(t, int64(3), m.TasksExecuted)
+	assert.Equal(t, int64(1), m.TasksFailed)
+	assert.Equal(t, int64(1), m.ModuleUsage["command"])
+
+	// Test skipped task
+	m.RecordTaskResult("copy", "host3", "skipped", 10*time.Millisecond, false)
+	assert.Equal(t, int64(4), m.TasksExecuted)
+	assert.Equal(t, int64(1), m.TasksSkipped)
+}
+
+func TestMetrics_GetFormattedSummary(t *testing.T) {
+	m := NewMetrics()
+
+	// Add some data
+	m.IncrementPlaybooksExecuted()
+	m.IncrementTasksExecuted()
+	m.IncrementTasksSucceeded()
+	m.IncrementCacheHits()
+	m.IncrementCacheMisses()
+	m.AddExecutionTime(500 * time.Millisecond)
+
+	summary := m.GetFormattedSummary()
+
+	assert.Contains(t, summary, "=== Onigirazu Metrics Summary ===")
+	assert.Contains(t, summary, "📊 Overview:")
+	assert.Contains(t, summary, "Playbooks: 1")
+	assert.Contains(t, summary, "Tasks: 1")
+	assert.Contains(t, summary, "Success: 1 (100.0%)")
+	assert.Contains(t, summary, "⚡ Performance:")
+	assert.Contains(t, summary, "🖥️  Hosts:")
+}
+
+func TestMetrics_ConcurrentAccess(t *testing.T) {
+	m := NewMetrics()
+
+	// Test concurrent access to metrics
+	done := make(chan bool)
+
+	for i := 0; i < 10; i++ {
+		go func() {
+			for j := 0; j < 100; j++ {
+				m.IncrementTasksExecuted()
+				m.IncrementModuleUsage("test")
+				m.AddExecutionTime(1 * time.Millisecond)
+			}
+			done <- true
+		}()
+	}
+
+	// Wait for all goroutines
+	for i := 0; i < 10; i++ {
+		<-done
+	}
+
+	assert.Equal(t, int64(1000), m.TasksExecuted)
+	assert.Equal(t, int64(1000), m.ModuleUsage["test"])
+}
+
+func TestMetrics_PrometheusIntegration(t *testing.T) {
+	m := NewMetricsWithPrometheus()
+
+	// Test that Prometheus metrics are updated
+	m.IncrementPlaybooksExecuted()
+	m.IncrementTasksExecuted()
+	m.IncrementTasksSucceeded()
+	m.IncrementModuleUsage("file")
+	m.IncrementCacheHits()
+	m.IncrementCacheMisses()
+
+	// Verify basic metrics are tracked
+	assert.Equal(t, int64(1), m.PlaybooksExecuted)
+	assert.Equal(t, int64(1), m.TasksExecuted)
+	assert.Equal(t, int64(1), m.TasksSucceeded)
+	assert.Equal(t, int64(1), m.ModuleUsage["file"])
+}
