@@ -276,3 +276,162 @@ func BenchmarkExtractField(b *testing.B) {
 		_, _ = client.extractField(item, "password")
 	}
 }
+
+// TestBitwardenClient_GetSecret tests the GetSecret method
+func TestBitwardenClient_GetSecret(t *testing.T) {
+	t.Run("not authenticated", func(t *testing.T) {
+		// Create client directly without authentication
+		client := &BitwardenClient{
+			cache: NewSecretCache(5 * time.Minute),
+		}
+
+		ctx := context.Background()
+		_, err := client.GetSecret(ctx, "test-item", "password")
+		if err == nil {
+			t.Error("Expected error for unauthenticated client")
+		}
+
+		provErr, ok := err.(*ProviderError)
+		if !ok {
+			t.Errorf("Expected ProviderError, got %T", err)
+		}
+		if provErr.Provider != "bitwarden" {
+			t.Errorf("Expected provider 'bitwarden', got '%s'", provErr.Provider)
+		}
+		if provErr.Message != "not authenticated" {
+			t.Errorf("Expected message 'not authenticated', got '%s'", provErr.Message)
+		}
+	})
+
+	t.Run("cache hit", func(t *testing.T) {
+		config := map[string]interface{}{
+			"session_token": "test-token",
+			"cache_ttl":     300,
+		}
+		client, err := NewBitwardenClient(config)
+		if err != nil {
+			t.Fatalf("Failed to create client: %v", err)
+		}
+
+		// Pre-populate cache
+		cacheKey := "test-item:password"
+		client.cache.Set(cacheKey, "cached-password")
+
+		ctx := context.Background()
+		value, err := client.GetSecret(ctx, "test-item", "password")
+		if err != nil {
+			t.Errorf("Unexpected error: %v", err)
+		}
+		if value != "cached-password" {
+			t.Errorf("Expected 'cached-password', got '%s'", value)
+		}
+	})
+}
+
+// TestBitwardenClient_ListSecrets tests the ListSecrets method
+func TestBitwardenClient_ListSecrets(t *testing.T) {
+	t.Run("not authenticated", func(t *testing.T) {
+		// Create client directly without authentication
+		client := &BitwardenClient{
+			cache: NewSecretCache(5 * time.Minute),
+		}
+
+		ctx := context.Background()
+		_, err := client.ListSecrets(ctx, "")
+		if err == nil {
+			t.Error("Expected error for unauthenticated client")
+		}
+
+		provErr, ok := err.(*ProviderError)
+		if !ok {
+			t.Errorf("Expected ProviderError, got %T", err)
+		}
+		if provErr.Provider != "bitwarden" {
+			t.Errorf("Expected provider 'bitwarden', got '%s'", provErr.Provider)
+		}
+		if provErr.Message != "not authenticated" {
+			t.Errorf("Expected message 'not authenticated', got '%s'", provErr.Message)
+		}
+	})
+}
+
+// TestBitwardenClient_Authenticate tests the authenticate method
+func TestBitwardenClient_Authenticate(t *testing.T) {
+	t.Run("with session token in config", func(t *testing.T) {
+		config := map[string]interface{}{
+			"session_token": "test-session-token",
+		}
+		client := &BitwardenClient{
+			cache: NewSecretCache(5 * time.Minute),
+		}
+
+		err := client.authenticate(config)
+		if err != nil {
+			t.Errorf("Unexpected error: %v", err)
+		}
+		if client.sessionToken != "test-session-token" {
+			t.Errorf("Expected session token 'test-session-token', got '%s'", client.sessionToken)
+		}
+	})
+
+	t.Run("missing credentials", func(t *testing.T) {
+		config := map[string]interface{}{}
+		client := &BitwardenClient{
+			cache: NewSecretCache(5 * time.Minute),
+		}
+
+		err := client.authenticate(config)
+		if err == nil {
+			t.Error("Expected error for missing credentials")
+		}
+	})
+}
+
+// TestProviderError_Error tests the Error method with wrapped error
+func TestProviderError_Error(t *testing.T) {
+	t.Run("without wrapped error", func(t *testing.T) {
+		err := &ProviderError{
+			Provider: "test",
+			Message:  "test message",
+		}
+		expected := "test: test message"
+		if err.Error() != expected {
+			t.Errorf("Expected '%s', got '%s'", expected, err.Error())
+		}
+	})
+
+	t.Run("with wrapped error", func(t *testing.T) {
+		innerErr := context.Canceled
+		err := &ProviderError{
+			Provider: "test",
+			Message:  "operation canceled",
+			Err:      innerErr,
+		}
+		expected := "test: operation canceled: context canceled"
+		if err.Error() != expected {
+			t.Errorf("Expected '%s', got '%s'", expected, err.Error())
+		}
+	})
+}
+
+// TestNewProvider_VaultProvider tests creating a Vault provider
+func TestNewProvider_VaultProvider(t *testing.T) {
+	config := ProviderConfig{
+		Type: "vault",
+		Config: map[string]interface{}{
+			"address": "https://vault.example.com",
+			"token":   "test-token",
+		},
+	}
+
+	provider, err := NewProvider(config)
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+	if provider == nil {
+		t.Error("Expected provider to be created")
+	}
+	if provider.Name() != "vault" {
+		t.Errorf("Expected provider name 'vault', got '%s'", provider.Name())
+	}
+}
