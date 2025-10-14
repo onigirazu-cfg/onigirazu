@@ -1,0 +1,391 @@
+name: Comprehensive Module Testing on Ubuntu
+plays:
+  - name: Test All Onigirazu Modules
+    hosts: all
+    gather_facts: true
+
+    tasks:
+      # ============================================================================
+      # 1. SYSTEM INFO & FACTS
+      # ============================================================================
+      - name: Display system information
+        debug:
+          msg: "Testing on {{ onigirazu_distribution }} {{ onigirazu_distribution_version }}"
+
+      # ============================================================================
+      # 2. COMMAND MODULE
+      # ============================================================================
+      - name: Test command module - simple command
+        command:
+          cmd: "whoami"
+        register: whoami_result
+
+      - name: Display whoami result
+        debug:
+          msg: "Current user: {{ whoami_result.stdout }}"
+
+      - name: Test command module - with working directory
+        command:
+          cmd: "pwd"
+          chdir: "/tmp"
+        register: pwd_result
+
+      - name: Display pwd result
+        debug:
+          msg: "Working directory: {{ pwd_result.stdout }}"
+
+      # ============================================================================
+      # 3. SHELL MODULE
+      # ============================================================================
+      - name: Test shell module - with pipes
+        shell:
+          cmd: "echo 'Hello from Onigirazu' | wc -w"
+        register: shell_result
+
+      - name: Display shell result
+        debug:
+          msg: "Word count: {{ shell_result.stdout }}"
+
+      - name: Test shell module - environment variables
+        shell:
+          cmd: "echo $TEST_VAR"
+          environment:
+            TEST_VAR: "Onigirazu Test"
+        register: env_result
+
+      - name: Display environment result
+        debug:
+          msg: "Environment variable: {{ env_result.stdout }}"
+
+      # ============================================================================
+      # 4. FILE MODULE
+      # ============================================================================
+      - name: Test file module - create directory
+        file:
+          path: "/tmp/onigirazu-test"
+          state: "directory"
+          mode: "0755"
+
+      - name: Test file module - create file
+        file:
+          path: "/tmp/onigirazu-test/test-file.txt"
+          state: "touch"
+          mode: "0644"
+
+      - name: Test file module - check file exists
+        stat:
+          path: "/tmp/onigirazu-test/test-file.txt"
+        register: stat_result
+
+      - name: Display stat result
+        debug:
+          msg: "File exists: {{ stat_result.stat.exists }}"
+
+      # ============================================================================
+      # 5. COPY MODULE
+      # ============================================================================
+      - name: Test copy module - content
+        copy:
+          content: "This is a test file created by Onigirazu\nLine 2\nLine 3\n"
+          dest: "/tmp/onigirazu-test/copied-file.txt"
+          mode: "0644"
+
+      - name: Verify copied file
+        command:
+          cmd: "cat /tmp/onigirazu-test/copied-file.txt"
+        register: cat_result
+
+      - name: Display copied file content
+        debug:
+          msg: "{{ cat_result.stdout }}"
+
+      # ============================================================================
+      # 6. TEMPLATE MODULE
+      # ============================================================================
+      - name: Test template module
+        template:
+          content: |
+            # Onigirazu Test Configuration
+            # Generated on: {{ onigirazu_date_time.iso8601 }}
+            # Host: {{ onigirazu_hostname }}
+            # User: {{ onigirazu_user_id }}
+            # Distribution: {{ onigirazu_distribution }} {{ onigirazu_distribution_version }}
+
+            test_value=success
+          dest: "/tmp/onigirazu-test/config.conf"
+          mode: "0644"
+
+      - name: Verify template file
+        command:
+          cmd: "cat /tmp/onigirazu-test/config.conf"
+        register: template_result
+
+      - name: Display template result
+        debug:
+          msg: "{{ template_result.stdout }}"
+
+      # ============================================================================
+      # 7. PACKAGE MODULE (APT on Ubuntu)
+      # ============================================================================
+      - name: Test package module - update cache
+        package:
+          update_cache: true
+        become: true
+
+      - name: Test package module - check if package is installed
+        package:
+          name: "curl"
+          state: "present"
+        become: true
+        register: package_result
+
+      - name: Display package result
+        debug:
+          msg: "Package curl status: {{ package_result.changed }}"
+
+      # ============================================================================
+      # 8. SERVICE MODULE
+      # ============================================================================
+      - name: Test service module - check SSH service
+        service:
+          name: "ssh"
+          state: "started"
+        become: true
+        register: service_result
+
+      - name: Display service result
+        debug:
+          msg: "SSH service is running: {{ service_result.status.active }}"
+
+      # ============================================================================
+      # 9. USER MODULE
+      # ============================================================================
+      - name: Test user module - create test user
+        user:
+          name: "onigirazu-test"
+          state: "present"
+          shell: "/bin/bash"
+          create_home: true
+        become: true
+        register: user_result
+
+      - name: Display user result
+        debug:
+          msg: "User created: {{ user_result.changed }}"
+
+      - name: Verify user exists
+        command:
+          cmd: "id onigirazu-test"
+        become: true
+        register: id_result
+
+      - name: Display user info
+        debug:
+          msg: "{{ id_result.stdout }}"
+
+      # ============================================================================
+      # 10. GROUP MODULE
+      # ============================================================================
+      - name: Test group module - create test group
+        group:
+          name: "onigirazu-group"
+          state: "present"
+        become: true
+        register: group_result
+
+      - name: Display group result
+        debug:
+          msg: "Group created: {{ group_result.changed }}"
+
+      - name: Verify group exists
+        command:
+          cmd: "getent group onigirazu-group"
+        become: true
+        register: group_check
+
+      - name: Display group info
+        debug:
+          msg: "{{ group_check.stdout }}"
+
+      # ============================================================================
+      # 11. LINEINFILE MODULE
+      # ============================================================================
+      - name: Test lineinfile module - add line
+        lineinfile:
+          path: "/tmp/onigirazu-test/test-file.txt"
+          line: "This line was added by lineinfile module"
+          state: "present"
+        register: lineinfile_result
+
+      - name: Display lineinfile result
+        debug:
+          msg: "Line added: {{ lineinfile_result.changed }}"
+
+      - name: Verify line was added
+        command:
+          cmd: "cat /tmp/onigirazu-test/test-file.txt"
+        register: verify_line
+
+      - name: Display file with new line
+        debug:
+          msg: "{{ verify_line.stdout }}"
+
+      # ============================================================================
+      # 12. GIT MODULE
+      # ============================================================================
+      - name: Ensure git is installed
+        package:
+          name: "git"
+          state: "present"
+        become: true
+
+      - name: Test git module - clone repository
+        git:
+          repo: "https://github.com/torvalds/linux.git"
+          dest: "/tmp/onigirazu-test/linux-repo"
+          depth: 1
+          version: "master"
+        register: git_result
+        ignore_errors: true
+
+      - name: Display git result
+        debug:
+          msg: "Git clone status: {{ git_result.changed | default('skipped') }}"
+
+      # ============================================================================
+      # 13. SYSTEMD MODULE
+      # ============================================================================
+      - name: Test systemd module - check systemd status
+        systemd:
+          name: "ssh"
+          state: "started"
+        become: true
+        register: systemd_result
+
+      - name: Display systemd result
+        debug:
+          msg: "Systemd service status: {{ systemd_result.status.ActiveState }}"
+
+      # ============================================================================
+      # 14. SYSCTL MODULE
+      # ============================================================================
+      - name: Test sysctl module - read value
+        sysctl:
+          name: "kernel.hostname"
+          state: "present"
+        become: true
+        register: sysctl_result
+
+      - name: Display sysctl result
+        debug:
+          msg: "Hostname from sysctl: {{ sysctl_result.value }}"
+
+      # ============================================================================
+      # 15. CRON MODULE
+      # ============================================================================
+      - name: Test cron module - add cron job
+        cron:
+          name: "Onigirazu test job"
+          minute: "0"
+          hour: "2"
+          job: "echo 'Onigirazu test' >> /tmp/onigirazu-cron.log"
+          state: "present"
+        become: true
+        register: cron_result
+
+      - name: Display cron result
+        debug:
+          msg: "Cron job added: {{ cron_result.changed }}"
+
+      # ============================================================================
+      # 16. ARCHIVE MODULE
+      # ============================================================================
+      - name: Test archive module - create archive
+        archive:
+          path: "/tmp/onigirazu-test"
+          dest: "/tmp/onigirazu-test-archive.tar.gz"
+          format: "gz"
+        register: archive_result
+
+      - name: Display archive result
+        debug:
+          msg: "Archive created: {{ archive_result.changed }}"
+
+      - name: Verify archive exists
+        stat:
+          path: "/tmp/onigirazu-test-archive.tar.gz"
+        register: archive_stat
+
+      - name: Display archive info
+        debug:
+          msg: "Archive size: {{ archive_stat.stat.size }} bytes"
+
+      # ============================================================================
+      # 17. CLEANUP
+      # ============================================================================
+      - name: Cleanup - remove test user
+        user:
+          name: "onigirazu-test"
+          state: "absent"
+          remove: true
+        become: true
+
+      - name: Cleanup - remove test group
+        group:
+          name: "onigirazu-group"
+          state: "absent"
+        become: true
+
+      - name: Cleanup - remove cron job
+        cron:
+          name: "Onigirazu test job"
+          state: "absent"
+        become: true
+
+      - name: Cleanup - remove test directory
+        file:
+          path: "/tmp/onigirazu-test"
+          state: "absent"
+
+      - name: Cleanup - remove archive
+        file:
+          path: "/tmp/onigirazu-test-archive.tar.gz"
+          state: "absent"
+
+      - name: Cleanup - remove git repo
+        file:
+          path: "/tmp/onigirazu-test/linux-repo"
+          state: "absent"
+        ignore_errors: true
+
+      # ============================================================================
+      # 18. FINAL STATUS
+      # ============================================================================
+      - name: Display test completion message
+        debug:
+          msg: |
+            ========================================
+            ALL MODULE TESTS COMPLETED SUCCESSFULLY!
+            ========================================
+            Tested modules:
+            ✅ command
+            ✅ shell
+            ✅ file
+            ✅ copy
+            ✅ template
+            ✅ package (apt)
+            ✅ service
+            ✅ user
+            ✅ group
+            ✅ lineinfile
+            ✅ git
+            ✅ systemd
+            ✅ sysctl
+            ✅ cron
+            ✅ archive
+            ✅ stat
+            ✅ debug
+
+            Host: {{ onigirazu_hostname }}
+            Distribution: {{ onigirazu_distribution }} {{ onigirazu_distribution_version }}
+            ========================================

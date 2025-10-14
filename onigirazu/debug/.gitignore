@@ -1,0 +1,2 @@
+# Ignore all Go files in this directory from builds
+*.go

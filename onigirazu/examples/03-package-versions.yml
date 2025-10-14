@@ -1,0 +1,41 @@
+---
+# Package Management with Version Control
+# Demonstrates different ways to specify package versions
+
+plays:
+  - name: "Package Version Management"
+    hosts: all
+    tasks:
+      # Method 1: Global version for all packages (simple list)
+      - name: "Install packages with same version (if applicable)"
+        package:
+          name: ["curl", "wget"]
+          state: "present"
+          version: ""  # Empty = latest available
+      # Method 2: Individual versions for each package (object format)
+      - name: "Install packages with specific versions"
+        package:
+          name:
+            - name: "git"
+              version: ""  # Latest version
+            - name: "vim"
+              version: ""  # Latest version
+            - name: "htop"
+              # No version specified = latest
+          state: "present"
+      # Method 3: Mixed - some with versions, some without
+      - name: "Install mixed packages"
+        package:
+          name:
+            - name: "jq"
+              version: ""  # Latest
+            - name: "tree"
+              # No version = latest
+            - "curl"  # Simple string = latest
+          state: "present"
+      # Method 4: Single package with specific version
+      - name: "Install specific git version (if needed)"
+        package:
+          name: "git"
+          state: "present"
+          # version: "1:2.43.0-1ubuntu7.3"  # Uncomment to pin version

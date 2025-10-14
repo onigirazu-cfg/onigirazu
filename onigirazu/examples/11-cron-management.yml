@@ -1,0 +1,163 @@
+---
+# Cron Management Examples
+# This playbook demonstrates cron module capabilities
+
+- name: Cron Management Demo
+  hosts: all
+  tasks:
+    # Individual Cron Jobs
+    - name: Add daily backup cron job
+      cron:
+        operation: job
+        name: daily_backup
+        job: /usr/local/bin/backup.sh
+        minute: "0"
+        hour: "2"
+        user: root
+
+    - name: Add hourly cleanup job
+      cron:
+        operation: job
+        name: hourly_cleanup
+        job: /usr/local/bin/cleanup.sh
+        minute: "0"
+        user: www-data
+
+    - name: Add weekly report job
+      cron:
+        operation: job
+        name: weekly_report
+        job: /usr/local/bin/report.sh
+        minute: "0"
+        hour: "8"
+        weekday: "1"
+        user: root
+
+    - name: Add job using special time
+      cron:
+        operation: job
+        name: reboot_task
+        job: /usr/local/bin/startup.sh
+        special_time: reboot
+        user: root
+
+    - name: Remove cron job
+      cron:
+        operation: job
+        name: old_job
+        state: absent
+        user: root
+
+    # Crontab File Management
+    - name: Set complete crontab for user
+      cron:
+        operation: file
+        user: backup
+        backup: true
+        content: |
+          # Managed by Onigirazu
+
+          # Daily backup at 2 AM
+          0 2 * * * /usr/local/bin/backup.sh
+
+          # Weekly cleanup on Sunday
+          0 3 * * 0 /usr/local/bin/cleanup.sh
+
+          # Monthly report on 1st day
+          0 9 1 * * /usr/local/bin/report.sh
+
+    - name: Remove user's crontab
+      cron:
+        operation: file
+        user: olduser
+        state: absent
+
+    # System Cron Files
+    - name: Create cron.d file for application
+      cron:
+        operation: system
+        name: myapp
+        cron_type: d
+        content: |
+          # MyApp scheduled tasks
+          */5 * * * * www-data /opt/myapp/check.sh
+          0 */6 * * * www-data /opt/myapp/sync.sh
+
+    - name: Create daily cron script
+      cron:
+        operation: system
+        name: daily-maintenance
+        cron_type: daily
+        content: |
+          #!/bin/bash
+          # Daily maintenance script
+
+          # Clean temp files
+          find /tmp -type f -mtime +7 -delete
+
+          # Rotate logs
+          /usr/sbin/logrotate /etc/logrotate.conf
+
+    - name: Create hourly monitoring script
+      cron:
+        operation: system
+        name: monitor
+        cron_type: hourly
+        content: |
+          #!/bin/bash
+          # Hourly monitoring
+
+          /usr/local/bin/check-services.sh
+          /usr/local/bin/check-disk-space.sh
+
+    - name: Create weekly backup script
+      cron:
+        operation: system
+        name: weekly-backup
+        cron_type: weekly
+        content: |
+          #!/bin/bash
+          # Weekly full backup
+
+          /usr/local/bin/full-backup.sh
+          /usr/local/bin/upload-to-cloud.sh
+
+    - name: Create monthly report script
+      cron:
+        operation: system
+        name: monthly-report
+        cron_type: monthly
+        content: |
+          #!/bin/bash
+          # Monthly report generation
+
+          /usr/local/bin/generate-report.sh
+          /usr/local/bin/send-report.sh
+
+    - name: Remove system cron file
+      cron:
+        operation: system
+        name: old-task
+        cron_type: d
+        state: absent
+
+    # List Cron Jobs
+    - name: List all cron jobs for root
+      cron:
+        operation: list
+        user: root
+      register: root_crons
+
+    - name: Display root cron jobs
+      debug:
+        var: root_crons
+
+    - name: List cron jobs for www-data
+      cron:
+        operation: list
+        user: www-data
+      register: www_crons
+
+    - name: Display www-data cron jobs
+      debug:
+        var: www_crons

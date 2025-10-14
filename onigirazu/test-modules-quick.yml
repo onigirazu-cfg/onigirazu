@@ -1,0 +1,88 @@
+---
+plays:
+  - name: "Quick Module Test"
+    hosts: all
+    gather_facts: true
+    become: true
+
+    tasks:
+      # Test COMMAND module (should work)
+      - name: "Test command module"
+        command:
+          cmd: "echo 'Hello from command'"
+        register: cmd_result
+
+      - name: "Display command result"
+        debug:
+          msg: "Command output: {{ cmd_result.stdout }}"
+
+      # Test SHELL module (should work)
+      - name: "Test shell module"
+        shell:
+          cmd: "echo 'Hello from shell' | cat"
+        register: shell_result
+
+      - name: "Display shell result"
+        debug:
+          msg: "Shell output: {{ shell_result.stdout }}"
+
+      # Test FILE module (should work)
+      - name: "Test file module - create directory"
+        file:
+          path: "/tmp/onigirazu-test-dir"
+          state: "directory"
+          mode: "0755"
+
+      - name: "Verify directory exists"
+        command:
+          cmd: "ls -ld /tmp/onigirazu-test-dir"
+        register: dir_check
+
+      - name: "Display directory check"
+        debug:
+          msg: "Directory: {{ dir_check.stdout }}"
+
+      # Test COPY module (should work)
+      - name: "Test copy module"
+        copy:
+          content: "Test content from copy module\n"
+          dest: "/tmp/onigirazu-test-file.txt"
+          mode: "0644"
+
+      - name: "Verify file content"
+        command:
+          cmd: "cat /tmp/onigirazu-test-file.txt"
+        register: file_content
+
+      - name: "Display file content"
+        debug:
+          msg: "File content: {{ file_content.stdout }}"
+
+      # Test TEMPLATE module (should work)
+      - name: "Test template module"
+        template:
+          content: |
+            Hostname: {{ onigirazu_hostname }}
+            User: {{ onigirazu_user }}
+            Date: {{ onigirazu_date_time.date }}
+          dest: "/tmp/onigirazu-template-test.txt"
+          mode: "0644"
+
+      - name: "Verify template file"
+        command:
+          cmd: "cat /tmp/onigirazu-template-test.txt"
+        register: template_content
+
+      - name: "Display template content"
+        debug:
+          msg: "Template content: {{ template_content.stdout }}"
+
+      # Cleanup
+      - name: "Cleanup test files"
+        file:
+          path: "{{ item }}"
+          state: "absent"
+        loop:
+          - "/tmp/onigirazu-test-file.txt"
+          - "/tmp/onigirazu-template-test.txt"
+          - "/tmp/onigirazu-test-dir"
