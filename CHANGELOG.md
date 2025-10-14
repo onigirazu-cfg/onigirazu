@@ -2,25 +2,32 @@
 
 ## [Unreleased]
 
-### 📚 Documentation
+## [1.30.1] - 2025-02-01
 
-- **Major Documentation Update**:
-  - Added IMPLEMENTATION_STATUS_2025.md - Comprehensive status of all features
-  - Added QUICK_RECOMMENDATIONS_2025_UPDATED.md - Updated priorities based on current state
-  - Added TEST_COVERAGE_REPORT_2025.md - Detailed test coverage analysis
-  - Documented all implemented features (performance, plugins, caching, CLI)
-  - Identified 2 failing tests and 8 packages with 0% coverage
-  - Created 12-week action plan to reach 70% test coverage
+### 🔧 Maintenance
 
-### 🎯 Current Status
+- **Dependency Updates**:
+  - Updated `golang.org/x/crypto` from 0.42.0 to 0.43.0 (security improvements)
+  - Updated `golang.org/x/text` from 0.29.0 to 0.30.0
 
-- **Performance:** ✅ 86% improvement achieved (all 7 phases complete)
-- **Plugin System:** ✅ Fully functional (4 plugin types)
-- **Caching:** ✅ Facts, templates, packages (92.8% coverage)
-- **CLI:** ✅ Short flags, auto-detection, colored output
-- **Secrets:** ✅ Bitwarden and Vault integration
-- **Test Coverage:** ⚠️ 45% average (target: 70%+)
-- **Failing Tests:** ⚠️ 2 tests (blocking CI/CD)
+- **GitHub Actions Updates**:
+  - Updated `codecov/codecov-action` from v4 to v5 (changed `file` parameter to `files`)
+  - Updated `actions/setup-python` from v4 to v6
+  - Updated `peaceiris/actions-gh-pages` from v3 to v4
+  - Updated `peter-evans/create-pull-request` from v6 to v7
+  - Updated `github/codeql-action` from v3 to v4 (6 instances across workflows)
+
+- **CI/CD Improvements**:
+  - Fixed security workflow to use correct onigirazu subdirectory paths
+  - Added dependency download for all security scanners
+  - Improved workflow reliability and maintainability
+
+### 📊 Statistics
+
+- All Dependabot PRs processed and merged
+- 7 GitHub Actions updated to latest versions
+- 2 Go dependencies updated with security improvements
+- 100% backward compatible with v1.30.0
 
 ## [1.27.1] - 2025-01-29
 
