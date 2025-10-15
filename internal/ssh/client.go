@@ -22,7 +22,7 @@ type Client struct {
 
 // NewClient creates a new SSH client for the given host
 func NewClient(host types.Host) (*Client, error) {
-	return NewClientWithHostKeyManager(host, NewHostKeyManager("", false))
+	return NewClientWithHostKeyManager(host, NewHostKeyManagerWithInsecure("", false, host.InsecureIgnoreHostKey))
 }
 
 // NewClientWithHostKeyManager creates a new SSH client with custom host key manager

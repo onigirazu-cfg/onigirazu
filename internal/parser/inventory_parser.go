@@ -297,10 +297,13 @@ type tomlInventory struct {
 }
 
 type tomlHost struct {
-	Address string                 `toml:"address"`
-	Port    int                    `toml:"port"`
-	User    string                 `toml:"user"`
-	Vars    map[string]interface{} `toml:"vars"`
+	Address               string                 `toml:"address"`
+	Port                  int                    `toml:"port"`
+	User                  string                 `toml:"user"`
+	KeyFile               string                 `toml:"key_file"`
+	Password              string                 `toml:"password"`
+	InsecureIgnoreHostKey bool                   `toml:"insecure_ignore_host_key"`
+	Vars                  map[string]interface{} `toml:"vars"`
 }
 
 type tomlGroup struct {
@@ -325,11 +328,14 @@ func (p *InventoryParser) parseTomlInventory(data []byte) (*types.Inventory, err
 	// Convert hosts
 	for name, tomlHost := range tomlInv.Hosts {
 		host := types.Host{
-			Name:    name,
-			Address: tomlHost.Address,
-			Port:    tomlHost.Port,
-			User:    tomlHost.User,
-			Vars:    tomlHost.Vars,
+			Name:                  name,
+			Address:               tomlHost.Address,
+			Port:                  tomlHost.Port,
+			User:                  tomlHost.User,
+			KeyFile:               tomlHost.KeyFile,
+			Password:              tomlHost.Password,
+			InsecureIgnoreHostKey: tomlHost.InsecureIgnoreHostKey,
+			Vars:                  tomlHost.Vars,
 		}
 
 		// Set defaults

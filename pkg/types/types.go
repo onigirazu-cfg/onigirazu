@@ -2,19 +2,21 @@ package types
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 )
 
 // Host represents a target host
 type Host struct {
-	Name     string                 `yaml:"name"`
-	Address  string                 `yaml:"address"`
-	Port     int                    `yaml:"port,omitempty"`
-	User     string                 `yaml:"user,omitempty"`
-	Password string                 `yaml:"password,omitempty"`
-	KeyFile  string                 `yaml:"key_file,omitempty"`
-	Vars     map[string]interface{} `yaml:"vars,omitempty"`
+	Name                  string                 `yaml:"name"`
+	Address               string                 `yaml:"address"`
+	Port                  int                    `yaml:"port,omitempty"`
+	User                  string                 `yaml:"user,omitempty"`
+	Password              string                 `yaml:"password,omitempty"`
+	KeyFile               string                 `yaml:"key_file,omitempty"`
+	InsecureIgnoreHostKey bool                   `yaml:"insecure_ignore_host_key,omitempty"`
+	Vars                  map[string]interface{} `yaml:"vars,omitempty"`
 }
 
 // UnmarshalYAML implements custom YAML unmarshaling for Host
@@ -28,13 +30,14 @@ func (h *Host) UnmarshalYAML(unmarshal func(interface{}) error) error {
 
 	// Define reserved field names that map to struct fields
 	reservedFields := map[string]bool{
-		"name":     true,
-		"address":  true,
-		"port":     true,
-		"user":     true,
-		"password": true,
-		"key_file": true,
-		"vars":     true,
+		"name":                     true,
+		"address":                  true,
+		"port":                     true,
+		"user":                     true,
+		"password":                 true,
+		"key_file":                 true,
+		"insecure_ignore_host_key": true,
+		"vars":                     true,
 	}
 
 	// Initialize Vars map
@@ -59,6 +62,9 @@ func (h *Host) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	if keyFile, ok := hostMap["key_file"].(string); ok {
 		h.KeyFile = keyFile
 	}
+	if insecure, ok := hostMap["insecure_ignore_host_key"].(bool); ok {
+		h.InsecureIgnoreHostKey = insecure
+	}
 
 	// Handle vars field if it exists (nested vars)
 	if vars, ok := hostMap["vars"].(map[string]interface{}); ok {
@@ -68,6 +74,70 @@ func (h *Host) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	}
 
 	// Collect all other fields (including onigirazu_* variables) into Vars
+	for key, value := range hostMap {
+		if !reservedFields[key] {
+			h.Vars[key] = value
+		}
+	}
+
+	return nil
+}
+
+// UnmarshalJSON implements custom JSON unmarshaling for Host
+func (h *Host) UnmarshalJSON(data []byte) error {
+	// First unmarshal as a map to get all fields
+	var hostMap map[string]interface{}
+	if err := json.Unmarshal(data, &hostMap); err != nil {
+		return err
+	}
+
+	// Define reserved field names that map to struct fields
+	reservedFields := map[string]bool{
+		"name":                     true,
+		"address":                  true,
+		"port":                     true,
+		"user":                     true,
+		"password":                 true,
+		"key_file":                 true,
+		"insecure_ignore_host_key": true,
+		"vars":                     true,
+	}
+
+	// Initialize Vars map
+	h.Vars = make(map[string]interface{})
+
+	// Extract known fields
+	if name, ok := hostMap["name"].(string); ok {
+		h.Name = name
+	}
+	if address, ok := hostMap["address"].(string); ok {
+		h.Address = address
+	}
+	// JSON numbers are float64 by default
+	if port, ok := hostMap["port"].(float64); ok {
+		h.Port = int(port)
+	}
+	if user, ok := hostMap["user"].(string); ok {
+		h.User = user
+	}
+	if password, ok := hostMap["password"].(string); ok {
+		h.Password = password
+	}
+	if keyFile, ok := hostMap["key_file"].(string); ok {
+		h.KeyFile = keyFile
+	}
+	if insecure, ok := hostMap["insecure_ignore_host_key"].(bool); ok {
+		h.InsecureIgnoreHostKey = insecure
+	}
+
+	// Handle vars field if it exists (nested vars)
+	if vars, ok := hostMap["vars"].(map[string]interface{}); ok {
+		for k, v := range vars {
+			h.Vars[k] = v
+		}
+	}
+
+	// Collect all other fields into Vars
 	for key, value := range hostMap {
 		if !reservedFields[key] {
 			h.Vars[key] = value

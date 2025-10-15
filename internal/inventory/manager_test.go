@@ -590,3 +590,79 @@ func createTestManager() *Manager {
 
 	return NewManager(parser, logger, cache)
 }
+
+func TestManager_GroupVarsAppliedToHostFields(t *testing.T) {
+	logger := &mockLogger{}
+	parser := &mockParser{
+		parseInventoryFunc: func(ctx context.Context, filePath string) (*types.Inventory, error) {
+			return &types.Inventory{
+				Groups: map[string]*types.Group{
+					"test-group": {
+						Name: "test-group",
+						Hosts: map[string]*types.Host{
+							"host1": {
+								Name: "host1",
+							},
+							"host2": {
+								Name:                  "host2",
+								Address:               "192.168.1.2",
+								User:                  "custom-user",
+								Password:              "custom-pass",
+								InsecureIgnoreHostKey: true,
+							},
+						},
+						Vars: map[string]interface{}{
+							"address":                  "192.168.1.100",
+							"user":                     "group-user",
+							"port":                     2222,
+							"password":                 "group-pass",
+							"key_file":                 "/path/to/group/key",
+							"insecure_ignore_host_key": true,
+							"custom_var":               "group-value",
+						},
+					},
+				},
+			}, nil
+		},
+	}
+
+	cache := newMockCache()
+	manager := NewManager(parser, logger, cache)
+	err := manager.LoadInventory(context.Background(), "test.yml")
+	assert.NoError(t, err)
+
+	hosts, err := manager.GetHosts("test-group")
+	assert.NoError(t, err)
+	assert.Len(t, hosts, 2)
+
+	// host1 should inherit all group settings
+	host1Found := false
+	for _, h := range hosts {
+		if h.Name == "host1" {
+			host1Found = true
+			assert.Equal(t, "192.168.1.100", h.Address, "host1 should inherit address from group")
+			assert.Equal(t, "group-user", h.User, "host1 should inherit user from group")
+			assert.Equal(t, 2222, h.Port, "host1 should inherit port from group")
+			assert.Equal(t, "group-pass", h.Password, "host1 should inherit password from group")
+			assert.Equal(t, "/path/to/group/key", h.KeyFile, "host1 should inherit key_file from group")
+			assert.True(t, h.InsecureIgnoreHostKey, "host1 should inherit insecure_ignore_host_key from group")
+			assert.Equal(t, "group-value", h.Vars["custom_var"], "host1 should inherit custom vars from group")
+		}
+	}
+	assert.True(t, host1Found, "host1 should be found in results")
+
+	// host2 should keep its own settings (host settings take precedence)
+	host2Found := false
+	for _, h := range hosts {
+		if h.Name == "host2" {
+			host2Found = true
+			assert.Equal(t, "192.168.1.2", h.Address, "host2 should keep its own address")
+			assert.Equal(t, "custom-user", h.User, "host2 should keep its own user")
+			assert.Equal(t, "custom-pass", h.Password, "host2 should keep its own password")
+			assert.Equal(t, 2222, h.Port, "host2 should inherit port from group (not set on host)")
+			assert.Equal(t, "/path/to/group/key", h.KeyFile, "host2 should inherit key_file from group (not set on host)")
+			assert.True(t, h.InsecureIgnoreHostKey, "host2 already has insecure_ignore_host_key=true")
+		}
+	}
+	assert.True(t, host2Found, "host2 should be found in results")
+}

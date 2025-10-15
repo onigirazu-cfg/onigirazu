@@ -1022,3 +1022,53 @@ fi
 	assert.Equal(t, "dynamic1", inventory.Hosts[0].Name)
 	assert.Contains(t, inventory.Groups, "dynamic")
 }
+
+func TestInventoryParser_InsecureIgnoreHostKey_YAML(t *testing.T) {
+	logger := &mockLogger{}
+	parser := NewInventoryParser(logger)
+
+	yamlData := `
+hosts:
+  - name: test-host
+    address: 192.168.1.1
+    insecure_ignore_host_key: true
+`
+	inv, err := parser.parseYamlInventory([]byte(yamlData))
+	assert.NoError(t, err)
+	assert.Len(t, inv.Hosts, 1)
+	assert.True(t, inv.Hosts[0].InsecureIgnoreHostKey, "InsecureIgnoreHostKey should be true")
+}
+
+func TestInventoryParser_InsecureIgnoreHostKey_TOML(t *testing.T) {
+	logger := &mockLogger{}
+	parser := NewInventoryParser(logger)
+
+	tomlData := `
+[hosts.test-host]
+address = "192.168.1.1"
+insecure_ignore_host_key = true
+`
+	inv, err := parser.parseTomlInventory([]byte(tomlData))
+	assert.NoError(t, err)
+	assert.Len(t, inv.Hosts, 1)
+	assert.True(t, inv.Hosts[0].InsecureIgnoreHostKey, "InsecureIgnoreHostKey should be true")
+}
+
+func TestInventoryParser_InsecureIgnoreHostKey_JSON(t *testing.T) {
+	logger := &mockLogger{}
+	parser := NewInventoryParser(logger)
+
+	jsonData := `{
+  "hosts": [
+    {
+      "name": "test-host",
+      "address": "192.168.1.1",
+      "insecure_ignore_host_key": true
+    }
+  ]
+}`
+	inv, err := parser.parseJsonInventory([]byte(jsonData))
+	assert.NoError(t, err)
+	assert.Len(t, inv.Hosts, 1)
+	assert.True(t, inv.Hosts[0].InsecureIgnoreHostKey, "InsecureIgnoreHostKey should be true")
+}

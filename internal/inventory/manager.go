@@ -457,8 +457,15 @@ func (m *Manager) validateHosts(inventory *types.Inventory) error {
 			if host.Address == "" {
 				host.Address = hostName
 			}
+			// Store original port value before setting default
+			if host.Vars == nil {
+				host.Vars = make(map[string]interface{})
+			}
 			if host.Port == 0 {
+				host.Vars["_original_port"] = 0
 				host.Port = 22
+			} else {
+				host.Vars["_original_port"] = host.Port
 			}
 
 			// Log final host configuration
@@ -536,6 +543,39 @@ func (m *Manager) getGroupHosts(group *types.Group, groupName string) []types.Ho
 		for key, value := range group.Vars {
 			if _, exists := hostCopy.Vars[key]; !exists {
 				hostCopy.Vars[key] = value
+			}
+		}
+
+		// Apply special group variables to host fields
+		// Group vars are applied if the host field is at its default value
+		if address, ok := group.Vars["address"].(string); ok {
+			if host.Address == "" || host.Address == host.Name {
+				hostCopy.Address = address
+			}
+		}
+		if user, ok := group.Vars["user"].(string); ok {
+			if host.User == "" {
+				hostCopy.User = user
+			}
+		}
+		if port, ok := group.Vars["port"].(int); ok {
+			if origPort, hasOrig := host.Vars["_original_port"].(int); hasOrig && origPort == 0 {
+				hostCopy.Port = port
+			}
+		}
+		if password, ok := group.Vars["password"].(string); ok {
+			if host.Password == "" {
+				hostCopy.Password = password
+			}
+		}
+		if keyFile, ok := group.Vars["key_file"].(string); ok {
+			if host.KeyFile == "" {
+				hostCopy.KeyFile = keyFile
+			}
+		}
+		if insecure, ok := group.Vars["insecure_ignore_host_key"].(bool); ok {
+			if !host.InsecureIgnoreHostKey {
+				hostCopy.InsecureIgnoreHostKey = insecure
 			}
 		}
 

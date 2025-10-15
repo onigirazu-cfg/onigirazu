@@ -25,9 +25,14 @@ type HostKeyManager struct {
 	knownHosts     map[string]ssh.PublicKey
 	mutex          sync.RWMutex
 	strictMode     bool
+	insecure       bool
 }
 
 func NewHostKeyManager(knownHostsFile string, strictMode bool) *HostKeyManager {
+	return NewHostKeyManagerWithInsecure(knownHostsFile, strictMode, false)
+}
+
+func NewHostKeyManagerWithInsecure(knownHostsFile string, strictMode bool, insecure bool) *HostKeyManager {
 	if knownHostsFile == "" {
 		home, _ := os.UserHomeDir()
 		knownHostsFile = filepath.Join(home, ".ssh", "known_hosts")
@@ -37,10 +42,12 @@ func NewHostKeyManager(knownHostsFile string, strictMode bool) *HostKeyManager {
 		knownHostsFile: knownHostsFile,
 		knownHosts:     make(map[string]ssh.PublicKey),
 		strictMode:     strictMode,
+		insecure:       insecure,
 	}
 
-	// Load known hosts, ignore errors as file may not exist yet
-	_ = hkm.loadKnownHosts()
+	if !insecure {
+		_ = hkm.loadKnownHosts()
+	}
 	return hkm
 }
 
@@ -88,9 +95,12 @@ func (hkm *HostKeyManager) loadKnownHosts() error {
 }
 
 func (hkm *HostKeyManager) VerifyHostKey(hostname string, remote net.Addr, key ssh.PublicKey) error {
+	if hkm.insecure {
+		return nil
+	}
+
 	hkm.mutex.RLock()
 
-	// Проверяем по hostname
 	if knownKey, exists := hkm.knownHosts[hostname]; exists {
 		hkm.mutex.RUnlock()
 		if keysEqual(key, knownKey) {
@@ -99,7 +109,6 @@ func (hkm *HostKeyManager) VerifyHostKey(hostname string, remote net.Addr, key s
 		return fmt.Errorf("host key verification failed for %s: key mismatch", hostname)
 	}
 
-	// Проверяем по IP адресу
 	if tcpAddr, ok := remote.(*net.TCPAddr); ok {
 		ip := tcpAddr.IP.String()
 		if knownKey, exists := hkm.knownHosts[ip]; exists {
@@ -117,7 +126,6 @@ func (hkm *HostKeyManager) VerifyHostKey(hostname string, remote net.Addr, key s
 		return fmt.Errorf("host key verification failed for %s: unknown host", hostname)
 	}
 
-	// В нестрогом режиме добавляем новый ключ
 	return hkm.addHostKey(hostname, key)
 }
 
