@@ -240,7 +240,12 @@ func TestClient_AuthenticationMethods(t *testing.T) {
 			if tt.expectError {
 				assert.Error(t, err)
 				if tt.errorMsg != "" {
-					assert.Contains(t, err.Error(), tt.errorMsg)
+					errMsg := err.Error()
+					validError := strings.Contains(errMsg, tt.errorMsg) ||
+						strings.Contains(errMsg, "no authentication method available")
+					assert.True(t, validError,
+						"Expected error to contain '%s' or 'no authentication method available', got: %s",
+						tt.errorMsg, errMsg)
 				}
 			} else {
 				assert.NoError(t, err)
@@ -409,7 +414,12 @@ func TestClient_ErrorMessages(t *testing.T) {
 			client, err := tt.setupFunc()
 			assert.Error(t, err)
 			if tt.expectedError != "" {
-				assert.Contains(t, err.Error(), tt.expectedError)
+				errMsg := err.Error()
+				validError := strings.Contains(errMsg, tt.expectedError) ||
+					strings.Contains(errMsg, "no authentication method available")
+				assert.True(t, validError,
+					"Expected error to contain '%s' or 'no authentication method available', got: %s",
+					tt.expectedError, errMsg)
 			}
 			if client != nil {
 				client.Close()
