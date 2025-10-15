@@ -1,0 +1,403 @@
+---
+
+all:
+  hosts:
+    cm-mgmt-dev:
+      ansible_ssh_host: cm-mgmt-dev.wpenginedev.io
+    test-cm-dev:
+      ansible_ssh_host: test-cm-dev.wpenginedev.io
+    conversions-dev:
+      ansible_ssh_host: conversions-dev.wpenginedev.io
+    deploy-dev:
+      ansible_ssh_host: deploy-dev.wpenginedev.io
+    dba3-dev:
+      ansible_ssh_host: dba3-dev.wpenginedev.io
+    dba-dev:
+      ansible_ssh_host: dba-dev.wpenginedev.io
+    cm-dev:
+      ansible_ssh_host: cm-dev.wpenginedev.io
+    api4-dev:
+      ansible_ssh_host: api4-dev.wpenginedev.io
+    api5-dev:
+      ansible_ssh_host: api5-dev.wpenginedev.io
+    api6-dev:
+      ansible_ssh_host: api6-dev.wpenginedev.io
+    api7-dev:
+      ansible_ssh_host: api7-dev.wpenginedev.io
+    api8-dev:
+      ansible_ssh_host: api8-dev.wpenginedev.io
+    smoke-api:
+      ansible_ssh_host: smoke-api.wpenginedev.io
+    bastion1-dev:
+      ansible_ssh_host: bastion1-dev.wpesvcdev.net
+    bastion2-dev:
+      ansible_ssh_host: bastion2-dev.wpesvcdev.net
+    cron3-dev:
+      ansible_ssh_host: cron3-dev.wpenginedev.io
+    corp-nfs2-dev:
+      ansible_ssh_host: corp-nfs2.wpenginedev.io
+    jenkins-development:
+      ansible_ssh_host: jenkins-development-master.wpengine.io
+    jenkins-development-node-0:
+      ansible_ssh_host: jenkins-development-node-0.wpengine.io
+    ldap-aws-us-east-1c-1:
+      ansible_ssh_host: ldap-aws-us-east-1c-1.wpesvcdev.net
+    ldap-aws-us-east-1a-1:
+      ansible_ssh_host: ldap-aws-us-east-1a-1.wpesvcdev.net
+    ldap-gcp-us-central1-c-1:
+      ansible_ssh_host: ldap-gcp-us-central1-c-1.wpesvcdev.net
+    ldap-master-dev:
+      ansible_ssh_host: ldap-master-dev.wpenginedev.io
+    ldap-web-dev:
+      ansible_ssh_host: ldap-web-dev.wpenginedev.io
+    metricsdb2-dev:
+      ansible_ssh_host: metricsdb2-dev.wpenginedev.com
+    metricsapp2-dev:
+      ansible_ssh_host: metricsapp2-dev.wpenginedev.com
+    overdrive2-dev:
+      ansible_ssh_host: overdrive2-dev.wpenginedev.io
+    overdrive3-dev:
+      ansible_ssh_host: overdrive3-dev.wpenginedev.io
+    overdrive-dev-pe:
+      ansible_ssh_host: overdrive-dev-pe.wpenginedev.com
+    phpmyadmin3-dev:
+      ansible_ssh_host: phpmyadmin3.wpenginedev.io
+    phpmyadmin4-dev:
+      ansible_ssh_host: phpmyadmin4.wpenginedev.io
+    zabbix-server-dev:
+      ansible_ssh_host: zabbix-server-dev.wpenginedev.io
+    zabbix-web1-dev:
+      ansible_ssh_host: zabbix-web1-dev.wpenginedev.io
+    zabbix-web2-dev:
+      ansible_ssh_host: zabbix-web2-dev.wpenginedev.io
+    gitpush2-dev:
+      ansible_ssh_host: gitpush2.wpenginedev.io
+    gitpush3-dev:
+      ansible_ssh_host: gitpush3.wpenginedev.io
+  children:
+    skip_deploy:
+      children:
+        jenkins_servers:
+        cm_servers:
+      hosts:
+        api8-dev:
+        gitpush2-dev:
+
+    skip_patching:
+      hosts:
+        cm-dev:
+        deploy-dev:
+        conversions-dev:
+        cm-mgmt-dev:
+
+    cm_servers:
+      children:
+        cm_master_servers:
+          hosts:
+            cm-dev:
+            conversions-dev:
+        dev_cm_servers:
+          hosts:
+            cm-dev:
+            cm-mgmt-dev:
+            conversions-dev:
+          children:
+            dev_deployment_servers:
+
+    deployment_servers:
+      children:
+        dev_deployment_servers:
+          hosts:
+            deploy-dev:
+
+    bionic:
+      hosts:
+        api4-dev:
+        api5-dev:
+        api6-dev:
+        api7-dev:
+        smoke-api:
+        corp-nfs2-dev:
+        ldap-aws-us-east-1c-1:
+        ldap-gcp-us-central1-c-1:
+        ldap-master-dev:
+        ldap-web-dev:
+        zabbix-server-dev:
+        gitpush2-dev:
+    jammy:
+      hosts:
+        jenkins-development:
+        jenkins-development-node-0:
+        cron3-dev:
+        api8-dev:
+        bastion1-dev:
+        bastion2-dev:
+        cm-dev:
+        deploy-dev:
+        conversions-dev:
+        cm-mgmt-dev:
+        gitpush3-dev:
+        ldap-aws-us-east-1a-1:
+        phpmyadmin3-dev:
+        phpmyadmin4-dev:
+        dba3-dev:
+        zabbix-web1-dev:
+        zabbix-web2-dev:
+        overdrive-dev-pe:
+        overdrive2-dev:
+        overdrive3-dev:
+        metricsdb2-dev:
+        metricsapp2-dev:
+
+    # dev_nasbox_smokes is comingled with server_meta.py in the "development" merged inventory directory
+    # make it a root group so it does not cause farm hosts to inherit corporate variables
+    dev-nasbox-smokes:
+      children:
+        dev_nasbox_smokes:
+          hosts:
+            smoke-api:
+
+    # Mirror production hierarchy, but delegate all group membership to dev_ prefixes:
+    # This is required in order to override production group_vars:
+    development:
+      children:
+        corporate:
+          children:
+            dev_corporate:
+              children:
+                aws_corporate:
+                  children:
+                    dev_aws_corporate:
+                      hosts:
+                        dba3-dev:
+                      children:
+                        dev_aws_api_servers:
+                        dev_cron_servers:
+                        dev_overdrive_servers:
+                corporate_nasbox:
+                  children:
+                    dev_corporate_nasbox:
+                      hosts:
+                        gitpush2-dev:
+                        gitpush3-dev:
+                        cron3-dev:
+                      children:
+                        api_servers:
+                          children:
+                            aws_api_servers:
+                              children:
+                                dev_aws_api_servers:
+                                  hosts:
+                                    api4-dev:
+                                    api5-dev:
+                                    api6-dev:
+                                    api7-dev:
+                                    api8-dev:
+                                    smoke-api:
+                        corp_nfs_servers:
+                          children:
+                            dev_corp_nfs_servers:
+                              hosts:
+                                corp-nfs2-dev:
+                        overdrive_servers:
+                          children:
+                            dev_overdrive_servers:
+                              hosts:
+                                overdrive2-dev:
+                                overdrive3-dev:
+                                overdrive-dev-pe:
+                customer_db_clients:
+                  children:
+                    api_servers:
+                    cron_servers:
+                    dba_servers:
+                    overdrive_servers:
+                git_push_servers:
+                  children:
+                    dev_git_push_servers:
+                      hosts:
+                        gitpush2-dev:
+                        gitpush3-dev:
+                cron_servers:
+                  children:
+                    dev_cron_servers:
+                      hosts:
+                        cron3-dev:
+                infrastructure:
+                  children:
+                    bastion:
+                      hosts:
+                        bastion1-dev:
+                        bastion2-dev:
+                    cm_servers:
+                    dba_servers:
+                      children:
+                        dev_dba_servers:
+                          hosts:
+                            dba3-dev:
+                    deployment_servers:
+                    jenkins_servers:
+                      children:
+                        jenkins_masters:
+                          hosts:
+                            jenkins-development:
+
+                        jenkins_nodes:
+                          hosts:
+                            jenkins-development-node-0:
+
+                    jenkins_development:
+                      hosts:
+                        jenkins-development:
+                        jenkins-development-node-0:
+                    ldap_servers:
+                      children:
+                        dev_ldap_servers:
+                          children:
+                            ldap_masters:
+                              hosts:
+                                ldap-master-dev:
+                            ldap_webs:
+                              children:
+                                ldap_web_containerized_pwm:
+                                  hosts:
+                                    ldap-web-dev:
+                        dev_servers_prod_ldap:
+                          children:
+                            ldap_relays:
+                              hosts:
+                                ldap-aws-us-east-1c-1:
+                                ldap-aws-us-east-1a-1:
+                                ldap-gcp-us-central1-c-1:
+                    metrics_servers:
+                      children:
+                        dev_metrics_servers:
+                          children:
+                            metricsapp_servers:
+                              children:
+                                dev_metricsapp_servers:
+                                  hosts:
+                                    metricsapp2-dev:
+                            metricsdb_servers:
+                              children:
+                                dev_metricsdb_servers:
+                                  hosts:
+                                    metricsdb2-dev:
+                    phpmyadmin_servers:
+                      children:
+                        aws_phpmyadmin_servers:
+                          children:
+                            dev_aws_phpmyadmin_servers:
+                              hosts:
+                                phpmyadmin3-dev:
+                                phpmyadmin4-dev:
+                    zabbix_servers:
+                      children:
+                        dev_zabbix_servers:
+                          hosts:
+                            zabbix-server-dev:
+                    zabbix_webs:
+                      children:
+                        dev_zabbix_webs:
+                          hosts:
+                            zabbix-web1-dev:
+                            zabbix-web2-dev:
+    amazon:
+      children:
+        amazon_us_east_1:
+          children:
+            amazon_us_east_1a:
+              hosts:
+                api4-dev:
+                bastion1-dev:
+                corp-nfs2-dev:
+                cm-dev:
+                cm-mgmt-dev:
+                conversions-dev:
+                cron3-dev:
+                deploy-dev:
+                gitpush2-dev:
+                gitpush3-dev:
+                overdrive2-dev:
+                phpmyadmin3-dev:
+                smoke-api:
+                zabbix-web2-dev:
+                api8-dev:
+            amazon_us_east_1c:
+              hosts:
+                api5-dev:
+                bastion2-dev:
+                ldap-aws-us-east-1c-1:
+                ldap-aws-us-east-1a-1:
+                metricsapp2-dev:
+                metricsdb2-dev:
+                overdrive3-dev:
+                phpmyadmin4-dev:
+                zabbix-server-dev:
+                zabbix-web1-dev:
+                dba3-dev:
+            amazon_us_east_1d:
+              hosts:
+                api6-dev:
+                deploy-dev:
+                overdrive-dev-pe:
+            amazon_us_east_1f:
+              hosts:
+                api7-dev:
+    gce:
+      children:
+        gce_us_east1:
+          children:
+            gce_us_east1_b:
+              hosts:
+                jenkins-development:
+                jenkins-development-node-0:
+
+        gce_us_central1:
+          children:
+            gce_us_central1_c:
+              hosts:
+                ldap-gcp-us-central1-c-1:
+                ldap-master-dev:
+                ldap-web-dev:
+    # Ansible group used when doing deployments to "corporate odd" - use AI to help rebalance
+    deployment_group_odd:
+      hosts:
+        api4-dev:
+        api6-dev:
+        api8-dev:
+        ldap-aws-us-east-1a-1:
+        ldap-aws-us-east-1c-1:
+        ldap-master-dev:
+        phpmyadmin3-dev:
+        bastion1-dev:
+        zabbix-web1-dev:
+        gitpush2-dev:
+        overdrive2-dev:
+        metricsapp2-dev:
+        cron3-dev:
+        dba3-dev:
+        cm-dev:
+        deploy-dev:
+        corp-nfs2-dev:
+    # Ansible group used when doing deployments to "corporate even" - use AI to help rebalance
+    deployment_group_even:
+      hosts:
+        api5-dev:
+        api7-dev:
+        smoke-api:
+        ldap-gcp-us-central1-c-1:
+        ldap-web-dev:
+        phpmyadmin4-dev:
+        bastion2-dev:
+        jenkins-development:
+        jenkins-development-node-0:
+        zabbix-server-dev:
+        zabbix-web2-dev:
+        gitpush3-dev:
+        overdrive3-dev:
+        overdrive-dev-pe:
+        metricsdb2-dev:
+        cm-mgmt-dev:
+        test-cm-dev:
+        conversions-dev:

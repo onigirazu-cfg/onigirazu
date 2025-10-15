@@ -1,0 +1,25 @@
+---
+# Debug Remote Testing
+# Simple test to debug variable access
+
+plays:
+  - name: "Debug Variable Access"
+    hosts: all
+    gather_facts: true
+
+    tasks:
+      - name: "Test basic variable access"
+        debug:
+          msg: "Hostname: {{ onigirazu_hostname }}"
+
+      - name: "Test OS family"
+        debug:
+          msg: "OS Family: {{ onigirazu_os_family }}"
+
+      - name: "Test date/time"
+        debug:
+          msg: "Time: {{ onigirazu_date_time.iso8601 }}"
+
+      - name: "Test environment"
+        debug:
+          msg: "Home: {{ onigirazu_env.HOME }}"

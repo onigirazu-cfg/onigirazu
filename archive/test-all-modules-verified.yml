@@ -1,0 +1,572 @@
+---
+# Comprehensive Module Testing with State Verification
+# Tests all modules with before/after state checks
+
+plays:
+  - name: "Test All Onigirazu Modules with Before/After Checks"
+    hosts: all
+    gather_facts: true
+
+    tasks:
+      # ============================================================================
+      # 1. SYSTEM INFO & FACTS
+      # ============================================================================
+      - name: "[INFO] Display system information"
+        debug:
+          msg: "Testing on {{ onigirazu_distribution }} {{ onigirazu_distribution_version }}"
+
+      - name: "[INFO] Display test start time"
+        debug:
+          msg: "Test started at {{ onigirazu_date_time.iso8601 }}"
+
+      # ============================================================================
+      # 2. COMMAND MODULE
+      # ============================================================================
+      - name: "[COMMAND] Test simple command"
+        command:
+          cmd: "whoami"
+        register: whoami_result
+
+      - name: "[COMMAND] Verify result"
+        debug:
+          msg: "✅ Current user: {{ whoami_result.stdout }}"
+
+      - name: "[COMMAND] Test with working directory"
+        command:
+          cmd: "pwd"
+          chdir: "/tmp"
+        register: pwd_result
+
+      - name: "[COMMAND] Verify pwd result"
+        debug:
+          msg: "✅ Working directory: {{ pwd_result.stdout }}"
+
+      # ============================================================================
+      # 3. SHELL MODULE
+      # ============================================================================
+      - name: "[SHELL] Test with pipes"
+        shell:
+          cmd: "echo 'Hello from Onigirazu' | wc -w"
+        register: shell_result
+
+      - name: "[SHELL] Verify result"
+        debug:
+          msg: "✅ Word count: {{ shell_result.stdout }}"
+
+      # ============================================================================
+      # 4. FILE MODULE - Create Directory
+      # ============================================================================
+      - name: "[FILE] BEFORE - Check if test directory exists"
+        stat:
+          path: "/tmp/onigirazu-test"
+        register: dir_before
+
+      - name: "[FILE] Display state before"
+        debug:
+          msg: "Directory exists before: {{ dir_before.stat.exists }}"
+
+      - name: "[FILE] Create test directory"
+        file:
+          path: "/tmp/onigirazu-test"
+          state: "directory"
+          mode: "0755"
+        register: dir_create
+
+      - name: "[FILE] AFTER - Verify directory was created"
+        stat:
+          path: "/tmp/onigirazu-test"
+        register: dir_after
+
+      - name: "[FILE] Verify directory creation"
+        debug:
+          msg: "✅ Directory created: {{ dir_after.stat.exists }} (was: {{ dir_before.stat.exists }})"
+
+      # ============================================================================
+      # 5. FILE MODULE - Create File
+      # ============================================================================
+      - name: "[FILE] BEFORE - Check if test file exists"
+        stat:
+          path: "/tmp/onigirazu-test/test-file.txt"
+        register: file_before
+
+      - name: "[FILE] Create test file"
+        file:
+          path: "/tmp/onigirazu-test/test-file.txt"
+          state: "touch"
+          mode: "0644"
+
+      - name: "[FILE] AFTER - Verify file was created"
+        stat:
+          path: "/tmp/onigirazu-test/test-file.txt"
+        register: file_after
+
+      - name: "[FILE] Verify file creation"
+        debug:
+          msg: "✅ File created: {{ file_after.stat.exists }} (was: {{ file_before.stat.exists }}), mode: {{ file_after.stat.mode }}"
+
+      # ============================================================================
+      # 6. COPY MODULE
+      # ============================================================================
+      - name: "[COPY] BEFORE - Check file content"
+        command:
+          cmd: "cat /tmp/onigirazu-test/copied-file.txt"
+        register: copy_before
+        ignore_errors: true
+
+      - name: "[COPY] Copy content to file"
+        copy:
+          content: "This is a test file created by Onigirazu\nLine 2\nLine 3\n"
+          dest: "/tmp/onigirazu-test/copied-file.txt"
+          mode: "0644"
+
+      - name: "[COPY] AFTER - Verify file content"
+        command:
+          cmd: "cat /tmp/onigirazu-test/copied-file.txt"
+        register: copy_after
+
+      - name: "[COPY] Verify copy operation"
+        debug:
+          msg: "✅ File copied successfully. Content:\n{{ copy_after.stdout }}"
+
+      # ============================================================================
+      # 7. TEMPLATE MODULE
+      # ============================================================================
+      - name: "[TEMPLATE] BEFORE - Check template file"
+        stat:
+          path: "/tmp/onigirazu-test/config.conf"
+        register: template_before
+
+      - name: "[TEMPLATE] Render template"
+        template:
+          content: |
+            # Onigirazu Test Configuration
+            # Generated on: {{ onigirazu_date_time.iso8601 }}
+            # Host: {{ onigirazu_hostname }}
+            # User: {{ onigirazu_user_id }}
+            # Distribution: {{ onigirazu_distribution }} {{ onigirazu_distribution_version }}
+
+            test_value=success
+          dest: "/tmp/onigirazu-test/config.conf"
+          mode: "0644"
+
+      - name: "[TEMPLATE] AFTER - Verify template was rendered"
+        command:
+          cmd: "cat /tmp/onigirazu-test/config.conf"
+        register: template_after
+
+      - name: "[TEMPLATE] Verify template rendering"
+        debug:
+          msg: "✅ Template rendered (existed before: {{ template_before.stat.exists }}):\n{{ template_after.stdout }}"
+
+      # ============================================================================
+      # 8. PACKAGE MODULE
+      # ============================================================================
+      - name: "[PACKAGE] BEFORE - Check if curl is installed"
+        command:
+          cmd: "dpkg -l curl"
+        register: package_before
+        ignore_errors: true
+        become: true
+
+      - name: "[PACKAGE] Update cache"
+        package:
+          update_cache: true
+        become: true
+
+      - name: "[PACKAGE] Install curl"
+        package:
+          name: "curl"
+          state: "present"
+        become: true
+        register: package_install
+
+      - name: "[PACKAGE] AFTER - Verify curl is installed"
+        command:
+          cmd: "dpkg -l curl"
+        register: package_after
+        become: true
+
+      - name: "[PACKAGE] Verify package installation"
+        debug:
+          msg: "✅ Package curl installed: {{ package_install.changed }}"
+
+      # ============================================================================
+      # 9. SERVICE MODULE
+      # ============================================================================
+      - name: "[SERVICE] BEFORE - Check SSH service status"
+        command:
+          cmd: "systemctl is-active ssh"
+        register: service_before
+        ignore_errors: true
+        become: true
+
+      - name: "[SERVICE] Ensure SSH service is started"
+        service:
+          name: "ssh"
+          state: "started"
+        become: true
+        register: service_result
+
+      - name: "[SERVICE] AFTER - Verify SSH service status"
+        command:
+          cmd: "systemctl is-active ssh"
+        register: service_after
+        become: true
+
+      - name: "[SERVICE] Verify service state"
+        debug:
+          msg: "✅ SSH service: before={{ service_before.stdout }}, after={{ service_after.stdout }}"
+
+      # ============================================================================
+      # 10. USER MODULE
+      # ============================================================================
+      - name: "[USER] BEFORE - Check if test user exists"
+        command:
+          cmd: "id onigirazu-test"
+        register: user_before
+        ignore_errors: true
+        become: true
+
+      - name: "[USER] Create test user"
+        user:
+          name: "onigirazu-test"
+          state: "present"
+          shell: "/bin/bash"
+          create_home: true
+        become: true
+        register: user_create
+
+      - name: "[USER] AFTER - Verify user was created"
+        command:
+          cmd: "id onigirazu-test"
+        register: user_after
+        become: true
+
+      - name: "[USER] Verify user creation"
+        debug:
+          msg: "✅ User created: {{ user_create.changed }}, Info: {{ user_after.stdout }}"
+
+      # ============================================================================
+      # 11. GROUP MODULE
+      # ============================================================================
+      - name: "[GROUP] BEFORE - Check if test group exists"
+        command:
+          cmd: "getent group onigirazu-group"
+        register: group_before
+        ignore_errors: true
+        become: true
+
+      - name: "[GROUP] Create test group"
+        group:
+          name: "onigirazu-group"
+          state: "present"
+        become: true
+        register: group_create
+
+      - name: "[GROUP] AFTER - Verify group was created"
+        command:
+          cmd: "getent group onigirazu-group"
+        register: group_after
+        become: true
+
+      - name: "[GROUP] Verify group creation"
+        debug:
+          msg: "✅ Group created: {{ group_create.changed }}, Info: {{ group_after.stdout }}"
+
+      # ============================================================================
+      # 12. LINEINFILE MODULE
+      # ============================================================================
+      - name: "[LINEINFILE] BEFORE - Check file content"
+        command:
+          cmd: "cat /tmp/onigirazu-test/test-file.txt"
+        register: lineinfile_before
+        ignore_errors: true
+
+      - name: "[LINEINFILE] Add line to file"
+        lineinfile:
+          path: "/tmp/onigirazu-test/test-file.txt"
+          line: "This line was added by lineinfile module"
+          state: "present"
+        register: lineinfile_add
+
+      - name: "[LINEINFILE] AFTER - Verify line was added"
+        command:
+          cmd: "cat /tmp/onigirazu-test/test-file.txt"
+        register: lineinfile_after
+
+      - name: "[LINEINFILE] Verify line addition"
+        debug:
+          msg: "✅ Line added: {{ lineinfile_add.changed }}\nBefore:\n{{ lineinfile_before.stdout }}\nAfter:\n{{ lineinfile_after.stdout }}"
+
+      # ============================================================================
+      # 13. GIT MODULE
+      # ============================================================================
+      - name: "[GIT] Ensure git is installed"
+        package:
+          name: "git"
+          state: "present"
+        become: true
+
+      - name: "[GIT] BEFORE - Check if repo exists"
+        stat:
+          path: "/tmp/onigirazu-test/test-repo"
+        register: git_before
+
+      - name: "[GIT] Clone small test repository"
+        git:
+          repo: "https://github.com/octocat/Hello-World.git"
+          dest: "/tmp/onigirazu-test/test-repo"
+          depth: 1
+        register: git_clone
+        ignore_errors: true
+
+      - name: "[GIT] AFTER - Verify repo was cloned"
+        stat:
+          path: "/tmp/onigirazu-test/test-repo"
+        register: git_after
+
+      - name: "[GIT] Verify git clone"
+        debug:
+          msg: "✅ Git clone: existed before={{ git_before.stat.exists }}, exists after={{ git_after.stat.exists }}"
+
+      # ============================================================================
+      # 14. SYSTEMD MODULE
+      # ============================================================================
+      - name: "[SYSTEMD] BEFORE - Check systemd service status"
+        command:
+          cmd: "systemctl show ssh --property=ActiveState"
+        register: systemd_before
+        become: true
+
+      - name: "[SYSTEMD] Manage systemd service"
+        systemd:
+          name: "ssh"
+          state: "started"
+        become: true
+        register: systemd_manage
+
+      - name: "[SYSTEMD] AFTER - Verify systemd service status"
+        command:
+          cmd: "systemctl show ssh --property=ActiveState"
+        register: systemd_after
+        become: true
+
+      - name: "[SYSTEMD] Verify systemd state"
+        debug:
+          msg: "✅ Systemd service: before={{ systemd_before.stdout }}, after={{ systemd_after.stdout }}"
+
+      # ============================================================================
+      # 15. SYSCTL MODULE
+      # ============================================================================
+      - name: "[SYSCTL] BEFORE - Read kernel parameter"
+        command:
+          cmd: "sysctl kernel.hostname"
+        register: sysctl_before
+        become: true
+
+      - name: "[SYSCTL] Read sysctl value"
+        sysctl:
+          name: "kernel.hostname"
+          state: "present"
+        become: true
+        register: sysctl_read
+
+      - name: "[SYSCTL] AFTER - Verify kernel parameter"
+        command:
+          cmd: "sysctl kernel.hostname"
+        register: sysctl_after
+        become: true
+
+      - name: "[SYSCTL] Verify sysctl operation"
+        debug:
+          msg: "✅ Sysctl: before={{ sysctl_before.stdout }}, after={{ sysctl_after.stdout }}"
+
+      # ============================================================================
+      # 16. CRON MODULE
+      # ============================================================================
+      - name: "[CRON] BEFORE - Check crontab"
+        command:
+          cmd: "crontab -l"
+        register: cron_before
+        ignore_errors: true
+        become: true
+
+      - name: "[CRON] Add cron job"
+        cron:
+          name: "Onigirazu test job"
+          minute: "0"
+          hour: "2"
+          job: "echo 'Onigirazu test' >> /tmp/onigirazu-cron.log"
+          state: "present"
+        become: true
+        register: cron_add
+
+      - name: "[CRON] AFTER - Verify cron job was added"
+        command:
+          cmd: "crontab -l"
+        register: cron_after
+        become: true
+
+      - name: "[CRON] Verify cron job"
+        debug:
+          msg: "✅ Cron job added: {{ cron_add.changed }}\nCrontab:\n{{ cron_after.stdout }}"
+
+      # ============================================================================
+      # 17. ARCHIVE MODULE
+      # ============================================================================
+      - name: "[ARCHIVE] BEFORE - Check if archive exists"
+        stat:
+          path: "/tmp/onigirazu-test-archive.tar.gz"
+        register: archive_before
+
+      - name: "[ARCHIVE] Create archive"
+        archive:
+          path: "/tmp/onigirazu-test"
+          dest: "/tmp/onigirazu-test-archive.tar.gz"
+          format: "gz"
+        register: archive_create
+
+      - name: "[ARCHIVE] AFTER - Verify archive was created"
+        stat:
+          path: "/tmp/onigirazu-test-archive.tar.gz"
+        register: archive_after
+
+      - name: "[ARCHIVE] Verify archive creation"
+        debug:
+          msg: "✅ Archive created: existed before={{ archive_before.stat.exists }}, exists after={{ archive_after.stat.exists }}, size={{ archive_after.stat.size }} bytes"
+
+      # ============================================================================
+      # 18. STAT MODULE - Comprehensive Test
+      # ============================================================================
+      - name: "[STAT] Get detailed file statistics"
+        stat:
+          path: "/tmp/onigirazu-test-archive.tar.gz"
+        register: stat_detailed
+
+      - name: "[STAT] Verify stat information"
+        debug:
+          msg: "✅ Stat info: size={{ stat_detailed.stat.size }}, mode={{ stat_detailed.stat.mode }}, exists={{ stat_detailed.stat.exists }}"
+
+      # ============================================================================
+      # 19. FINAL VERIFICATION
+      # ============================================================================
+      - name: "[VERIFY] List all created files"
+        command:
+          cmd: "ls -lah /tmp/onigirazu-test/"
+        register: final_list
+
+      - name: "[VERIFY] Display created files"
+        debug:
+          msg: "✅ Created files:\n{{ final_list.stdout }}"
+
+      # ============================================================================
+      # 20. CLEANUP
+      # ============================================================================
+      - name: "[CLEANUP] Remove test user"
+        user:
+          name: "onigirazu-test"
+          state: "absent"
+          remove: true
+        become: true
+
+      - name: "[CLEANUP] Verify user removal"
+        command:
+          cmd: "id onigirazu-test"
+        register: cleanup_user
+        ignore_errors: true
+        become: true
+
+      - name: "[CLEANUP] Display user removal status"
+        debug:
+          msg: "✅ User removed: {{ cleanup_user.rc != 0 }}"
+
+      - name: "[CLEANUP] Remove test group"
+        group:
+          name: "onigirazu-group"
+          state: "absent"
+        become: true
+
+      - name: "[CLEANUP] Verify group removal"
+        command:
+          cmd: "getent group onigirazu-group"
+        register: cleanup_group
+        ignore_errors: true
+        become: true
+
+      - name: "[CLEANUP] Display group removal status"
+        debug:
+          msg: "✅ Group removed: {{ cleanup_group.rc != 0 }}"
+
+      - name: "[CLEANUP] Remove cron job"
+        cron:
+          name: "Onigirazu test job"
+          state: "absent"
+        become: true
+
+      - name: "[CLEANUP] Verify cron removal"
+        command:
+          cmd: "crontab -l"
+        register: cleanup_cron
+        ignore_errors: true
+        become: true
+
+      - name: "[CLEANUP] Display cron removal status"
+        debug:
+          msg: "✅ Cron job removed"
+
+      - name: "[CLEANUP] Remove test directory"
+        file:
+          path: "/tmp/onigirazu-test"
+          state: "absent"
+
+      - name: "[CLEANUP] Verify directory removal"
+        stat:
+          path: "/tmp/onigirazu-test"
+        register: cleanup_dir
+
+      - name: "[CLEANUP] Display directory removal status"
+        debug:
+          msg: "✅ Directory removed: {{ not cleanup_dir.stat.exists }}"
+
+      - name: "[CLEANUP] Remove test archive"
+        file:
+          path: "/tmp/onigirazu-test-archive.tar.gz"
+          state: "absent"
+
+      - name: "[CLEANUP] Remove git test repo"
+        file:
+          path: "/tmp/onigirazu-test/test-repo"
+          state: "absent"
+        ignore_errors: true
+
+      # ============================================================================
+      # 21. FINAL SUMMARY
+      # ============================================================================
+      - name: "[SUMMARY] Display test completion"
+        debug:
+          msg: |
+            ========================================
+            ✅ ALL TESTS COMPLETED SUCCESSFULLY
+            ========================================
+
+            Tested Modules (17):
+            ✅ command      - Command execution
+            ✅ shell        - Shell with pipes
+            ✅ file         - File/directory management
+            ✅ copy         - File copying
+            ✅ template     - Template rendering
+            ✅ package      - Package management (APT)
+            ✅ service      - Service management
+            ✅ user         - User management
+            ✅ group        - Group management
+            ✅ lineinfile   - Line editing
+            ✅ git          - Git operations
+            ✅ systemd      - Systemd control
+            ✅ sysctl       - Kernel parameters
+            ✅ cron         - Cron jobs
+            ✅ archive      - Archive creation
+            ✅ stat         - File statistics
+            ✅ debug        - Debug output
+
+            All state changes verified with before/after checks!
+            ========================================

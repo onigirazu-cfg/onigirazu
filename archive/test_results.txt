@@ -1,0 +1,34 @@
+	github.com/onigirazu-cfg/onigirazu/cmd/onigirazu		coverage: 0.0% of statements
+	github.com/onigirazu-cfg/onigirazu/cmd/yaml-format		coverage: 0.0% of statements
+# github.com/onigirazu-cfg/onigirazu/internal/metrics.test
+ld: warning: '/private/var/folders/rq/p23bgb7s3sx32r9z8w0j4vvh0000gp/T/go-link-3763658993/000013.o' has malformed LC_DYSYMTAB, expected 98 undefined symbols to start at index 1626, found 95 undefined symbols starting at index 1626
+# github.com/onigirazu-cfg/onigirazu/internal/engine.test
+ld: warning: '/private/var/folders/rq/p23bgb7s3sx32r9z8w0j4vvh0000gp/T/go-link-2086027720/000013.o' has malformed LC_DYSYMTAB, expected 98 undefined symbols to start at index 1626, found 95 undefined symbols starting at index 1626
+ok  	github.com/onigirazu-cfg/onigirazu/internal/bufferpool	1.681s	coverage: 94.4% of statements
+ok  	github.com/onigirazu-cfg/onigirazu/internal/cache	3.360s	coverage: 94.2% of statements
+ok  	github.com/onigirazu-cfg/onigirazu/internal/config	2.088s	coverage: 23.5% of statements
+ok  	github.com/onigirazu-cfg/onigirazu/internal/core	1.871s	coverage: 69.7% of statements
+ok  	github.com/onigirazu-cfg/onigirazu/internal/engine	3.697s	coverage: 67.4% of statements
+ok  	github.com/onigirazu-cfg/onigirazu/internal/execution	3.020s	coverage: 87.8% of statements
+ok  	github.com/onigirazu-cfg/onigirazu/internal/executor	2.117s	coverage: 45.3% of statements
+ok  	github.com/onigirazu-cfg/onigirazu/internal/facts	1.982s	coverage: 30.4% of statements
+?   	github.com/onigirazu-cfg/onigirazu/internal/interfaces	[no test files]
+ok  	github.com/onigirazu-cfg/onigirazu/internal/inventory	2.320s	coverage: 85.3% of statements
+ok  	github.com/onigirazu-cfg/onigirazu/internal/logger	1.900s	coverage: 10.9% of statements
+ok  	github.com/onigirazu-cfg/onigirazu/internal/metrics	2.503s	coverage: 42.1% of statements
+ok  	github.com/onigirazu-cfg/onigirazu/internal/modules	4.033s	coverage: 26.6% of statements
+	github.com/onigirazu-cfg/onigirazu/internal/monitoring		coverage: 0.0% of statements
+ok  	github.com/onigirazu-cfg/onigirazu/internal/parser	2.627s	coverage: 14.4% of statements
+	github.com/onigirazu-cfg/onigirazu/internal/progress		coverage: 0.0% of statements
+ok  	github.com/onigirazu-cfg/onigirazu/internal/security	3.149s	coverage: 59.0% of statements
+ok  	github.com/onigirazu-cfg/onigirazu/internal/ssh	2.459s	coverage: 33.3% of statements
+	github.com/onigirazu-cfg/onigirazu/internal/state		coverage: 0.0% of statements
+	github.com/onigirazu-cfg/onigirazu/internal/template		coverage: 0.0% of statements
+	github.com/onigirazu-cfg/onigirazu/internal/version		coverage: 0.0% of statements
+ok  	github.com/onigirazu-cfg/onigirazu/internal/workflow	9.704s	coverage: 90.8% of statements
+	github.com/onigirazu-cfg/onigirazu/pkg/errors		coverage: 0.0% of statements
+ok  	github.com/onigirazu-cfg/onigirazu/pkg/formatter	1.689s	coverage: 77.0% of statements
+ok  	github.com/onigirazu-cfg/onigirazu/pkg/types	1.588s	coverage: 64.3% of statements
+	github.com/onigirazu-cfg/onigirazu/pkg/utils		coverage: 0.0% of statements
+	github.com/onigirazu-cfg/onigirazu/scripts/docgen		coverage: 0.0% of statements
+ok  	github.com/onigirazu-cfg/onigirazu/tests	1.812s	coverage: [no statements]

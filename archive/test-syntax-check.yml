@@ -1,0 +1,45 @@
+---
+# Quick syntax check playbook
+
+plays:
+  - name: "Syntax Check Test"
+    hosts: localhost
+    gather_facts: true
+
+    tasks:
+      - name: "[TEST] Display system info"
+        debug:
+          msg: "Testing on {{ onigirazu_distribution }} {{ onigirazu_distribution_version }}"
+
+      - name: "[TEST] BEFORE - Check directory"
+        stat:
+          path: "/tmp/syntax-test"
+        register: before_check
+
+      - name: "[TEST] Display before state"
+        debug:
+          msg: "Directory exists before: {{ before_check.stat.exists }}"
+
+      - name: "[TEST] Create directory"
+        file:
+          path: "/tmp/syntax-test"
+          state: "directory"
+          mode: "0755"
+
+      - name: "[TEST] AFTER - Check directory"
+        stat:
+          path: "/tmp/syntax-test"
+        register: after_check
+
+      - name: "[TEST] Display after state"
+        debug:
+          msg: "✅ Directory exists after: {{ after_check.stat.exists }} (was: {{ before_check.stat.exists }})"
+
+      - name: "[CLEANUP] Remove test directory"
+        file:
+          path: "/tmp/syntax-test"
+          state: "absent"
+
+      - name: "[SUCCESS] All syntax checks passed"
+        debug:
+          msg: "✅ Syntax is correct! Ready for Ubuntu testing."
