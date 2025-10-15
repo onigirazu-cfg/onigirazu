@@ -937,12 +937,14 @@ onigirazu rollback --snapshot &lt;snapshot-id&gt;
 onigirazu rollback --cleanup --max-age 30d
 </code></pre>
 
-<p><strong>Features:</strong>
-- ✅ Automatic snapshot creation before changes
-- ✅ Selective rollback of specific resources
-- ✅ Dry-run mode to preview changes
-- ✅ Resource-level reversibility tracking
-- ✅ Snapshot cleanup and management</p>
+<p><strong>Features:</strong></p>
+<ul>
+<li>✅ Automatic snapshot creation before changes</li>
+<li>✅ Selective rollback of specific resources</li>
+<li>✅ Dry-run mode to preview changes</li>
+<li>✅ Resource-level reversibility tracking</li>
+<li>✅ Snapshot cleanup and management</li>
+</ul>
 <h3>Drift Detection</h3>
 <p>Detect configuration drift and fix it automatically:</p>
 <pre class="codehilite"><code class="language-bash"># Detect drift
@@ -955,11 +957,13 @@ onigirazu drift report
 onigirazu drift fix -p playbook.yml -i inventory.yml
 </code></pre>
 
-<p><strong>Features:</strong>
-- ✅ Automatic drift detection
-- ✅ Detailed drift reports
-- ✅ One-command drift remediation
-- ✅ Resource-level drift tracking</p>
+<p><strong>Features:</strong></p>
+<ul>
+<li>✅ Automatic drift detection</li>
+<li>✅ Detailed drift reports</li>
+<li>✅ One-command drift remediation</li>
+<li>✅ Resource-level drift tracking</li>
+</ul>
 <h2>🧪 Testing &amp; Quality</h2>
 <p>Onigirazu maintains high code quality through comprehensive testing and continuous integration.</p>
 <h3>Test Coverage</h3>
@@ -1059,6 +1063,15 @@ make golangci     # golangci-lint
 <li><strong><a href="../onigirazu_docs/OPTIMIZATION_AND_FEATURES_ANALYSIS.md">Optimization Analysis</a></strong> - Performance optimization details</li>
 <li><strong><a href="../onigirazu_docs/RELEASE_GUIDE.md">Release Guide</a></strong> - How to create releases</li>
 </ul>
+<h3>Module Development</h3>
+<p>For developers creating or maintaining modules:</p>
+<ul>
+<li><strong><a href="../EXECUTOR_SAFETY_QUICK_START.md">Executor Safety Quick Start</a></strong> - 5-minute guide to safe module development</li>
+<li><strong><a href="../EXECUTOR_ARCHITECTURE_INDEX.md">Executor Architecture Index</a></strong> - Complete documentation index</li>
+<li><strong><a href="../docs/MODULE_DEVELOPMENT_GUIDE.md">Module Development Guide</a></strong> - Comprehensive guide with examples</li>
+<li><strong><a href="../docs/ARCHITECTURE_IMPROVEMENTS.md">Architecture Improvements</a></strong> - Architectural analysis and best practices</li>
+</ul>
+<p><strong>⚠️ Important:</strong> All new modules must use <code>BaseExecutorModule</code> to prevent executor caching bugs. Run <code>./scripts/check_executor_caching.sh</code> to verify your code.</p>
 <h2>Contributing</h2>
 <ol>
 <li>Fork the repository</li>
