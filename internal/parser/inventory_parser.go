@@ -3,8 +3,10 @@ package parser
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -41,10 +43,14 @@ func (p *InventoryParser) FindInventoryFile(baseDir string) (string, error) {
 		"inventory.yml",
 		"inventory.yaml",
 		"inventory.toml",
+		"inventory.json",
+		"inventory.ini",
 		"hosts",
 		"hosts.yml",
 		"hosts.yaml",
 		"hosts.toml",
+		"hosts.json",
+		"hosts.ini",
 		"inventory",
 	}
 
@@ -75,6 +81,10 @@ func (p *InventoryParser) ParseInventoryFile(ctx context.Context, filePath strin
 		return p.parseTomlInventory(data)
 	case ".yml", ".yaml":
 		return p.parseYamlInventory(data)
+	case ".json":
+		return p.parseJsonInventory(data)
+	case ".ini":
+		return p.parseIniInventory(data)
 	default:
 		// Try to auto-detect format
 		return p.autoDetectAndParse(data, filePath)
@@ -85,13 +95,25 @@ func (p *InventoryParser) ParseInventoryFile(ctx context.Context, filePath strin
 func (p *InventoryParser) autoDetectAndParse(data []byte, filePath string) (*types.Inventory, error) {
 	content := string(data)
 
+	// Check if it's executable (dynamic inventory script)
+	if p.isExecutable(filePath) {
+		p.logger.Debug("Detected executable script for %s", filePath)
+		return p.parseDynamicInventory(filePath)
+	}
+
 	// Check if it's a simple list (no YAML/TOML markers)
 	if p.isSimpleList(content) {
 		p.logger.Debug("Detected simple list format for %s", filePath)
 		return p.parseSimpleList(data)
 	}
 
-	// Try YAML first (most common)
+	// Try JSON first
+	if inv, err := p.parseJsonInventory(data); err == nil {
+		p.logger.Debug("Successfully parsed as JSON: %s", filePath)
+		return inv, nil
+	}
+
+	// Try YAML
 	if inv, err := p.parseYamlInventory(data); err == nil {
 		p.logger.Debug("Successfully parsed as YAML: %s", filePath)
 		return inv, nil
@@ -100,6 +122,12 @@ func (p *InventoryParser) autoDetectAndParse(data []byte, filePath string) (*typ
 	// Try TOML
 	if inv, err := p.parseTomlInventory(data); err == nil {
 		p.logger.Debug("Successfully parsed as TOML: %s", filePath)
+		return inv, nil
+	}
+
+	// Try INI
+	if inv, err := p.parseIniInventory(data); err == nil {
+		p.logger.Debug("Successfully parsed as INI: %s", filePath)
 		return inv, nil
 	}
 
@@ -350,4 +378,216 @@ func (p *InventoryParser) parseTomlInventory(data []byte) (*types.Inventory, err
 
 	p.logger.Info("Parsed TOML inventory: %d groups, %d hosts", len(inventory.Groups), len(inventory.Hosts))
 	return inventory, nil
+}
+
+// parseJsonInventory parses JSON format inventory
+func (p *InventoryParser) parseJsonInventory(data []byte) (*types.Inventory, error) {
+	var inventory types.Inventory
+	if err := json.Unmarshal(data, &inventory); err != nil {
+		return nil, fmt.Errorf("error parsing JSON inventory: %w", err)
+	}
+
+	if inventory.Groups == nil {
+		inventory.Groups = make(map[string]*types.Group)
+	}
+	if inventory.Hosts == nil {
+		inventory.Hosts = make([]types.Host, 0)
+	}
+
+	p.logger.Info("Parsed JSON inventory: %d groups, %d hosts", len(inventory.Groups), len(inventory.Hosts))
+	return &inventory, nil
+}
+
+// parseIniInventory parses INI/Ansible format inventory
+func (p *InventoryParser) parseIniInventory(data []byte) (*types.Inventory, error) {
+	inventory := &types.Inventory{
+		Groups: make(map[string]*types.Group),
+		Hosts:  make([]types.Host, 0),
+	}
+
+	scanner := bufio.NewScanner(strings.NewReader(string(data)))
+	var currentGroup *types.Group
+	var isChildrenSection bool
+	var isVarsSection bool
+	lineNum := 0
+
+	for scanner.Scan() {
+		lineNum++
+		line := strings.TrimSpace(scanner.Text())
+
+		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") {
+			continue
+		}
+
+		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
+			groupName := strings.Trim(line, "[]")
+			isChildrenSection = false
+			isVarsSection = false
+			
+			if strings.Contains(groupName, ":") {
+				parts := strings.SplitN(groupName, ":", 2)
+				groupName = parts[0]
+				groupType := parts[1]
+
+				if groupType == "children" {
+					isChildrenSection = true
+					if existingGroup, exists := inventory.Groups[groupName]; exists {
+						currentGroup = existingGroup
+					} else {
+						currentGroup = &types.Group{
+							Name:     groupName,
+							Hosts:    make(map[string]*types.Host),
+							Children: make([]string, 0),
+							Vars:     make(map[string]interface{}),
+						}
+						inventory.Groups[groupName] = currentGroup
+					}
+					continue
+				} else if groupType == "vars" {
+					isVarsSection = true
+					if existingGroup, exists := inventory.Groups[groupName]; exists {
+						currentGroup = existingGroup
+					} else {
+						currentGroup = &types.Group{
+							Name:     groupName,
+							Hosts:    make(map[string]*types.Host),
+							Children: make([]string, 0),
+							Vars:     make(map[string]interface{}),
+						}
+						inventory.Groups[groupName] = currentGroup
+					}
+					continue
+				}
+			}
+
+			if existingGroup, exists := inventory.Groups[groupName]; exists {
+				currentGroup = existingGroup
+			} else {
+				currentGroup = &types.Group{
+					Name:     groupName,
+					Hosts:    make(map[string]*types.Host),
+					Children: make([]string, 0),
+					Vars:     make(map[string]interface{}),
+				}
+				inventory.Groups[groupName] = currentGroup
+			}
+			continue
+		}
+
+		if currentGroup != nil {
+			if isChildrenSection {
+				currentGroup.Children = append(currentGroup.Children, line)
+			} else if isVarsSection {
+				parts := strings.SplitN(line, "=", 2)
+				if len(parts) == 2 {
+					key := strings.TrimSpace(parts[0])
+					value := strings.TrimSpace(parts[1])
+					currentGroup.Vars[key] = value
+				}
+			} else {
+				host := p.parseIniHostLine(line, lineNum)
+				if host != nil {
+					inventory.Hosts = append(inventory.Hosts, *host)
+					currentGroup.Hosts[host.Name] = host
+				}
+			}
+		} else {
+			host := p.parseIniHostLine(line, lineNum)
+			if host != nil {
+				inventory.Hosts = append(inventory.Hosts, *host)
+			}
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("error reading INI inventory: %w", err)
+	}
+
+	p.logger.Info("Parsed INI inventory: %d groups, %d hosts", len(inventory.Groups), len(inventory.Hosts))
+	return inventory, nil
+}
+
+// parseIniHostLine parses a single host line from INI format
+func (p *InventoryParser) parseIniHostLine(line string, lineNum int) *types.Host {
+	parts := strings.Fields(line)
+	if len(parts) == 0 {
+		return nil
+	}
+
+	hostSpec := parts[0]
+	var user, address, name string
+	port := 22
+
+	if strings.Contains(hostSpec, "@") {
+		userParts := strings.SplitN(hostSpec, "@", 2)
+		user = userParts[0]
+		hostSpec = userParts[1]
+	}
+
+	if strings.Contains(hostSpec, ":") && !strings.Contains(hostSpec, "://") {
+		portParts := strings.SplitN(hostSpec, ":", 2)
+		address = portParts[0]
+		if _, err := fmt.Sscanf(portParts[1], "%d", &port); err != nil {
+			p.logger.Warn("Invalid port in line %d: %s, using default 22", lineNum, line)
+			port = 22
+		}
+	} else {
+		address = hostSpec
+	}
+
+	name = address
+	if user == "" {
+		user = "root"
+	}
+
+	host := &types.Host{
+		Name:    name,
+		Address: address,
+		Port:    port,
+		User:    user,
+		Vars:    make(map[string]interface{}),
+	}
+
+	for i := 1; i < len(parts); i++ {
+		if strings.Contains(parts[i], "=") {
+			varParts := strings.SplitN(parts[i], "=", 2)
+			key := strings.TrimSpace(varParts[0])
+			value := strings.TrimSpace(varParts[1])
+
+			switch key {
+			case "ansible_host", "onigirazu_host":
+				host.Address = value
+			case "ansible_port", "onigirazu_port":
+				if p, err := fmt.Sscanf(value, "%d", &port); err == nil && p > 0 {
+					host.Port = port
+				}
+			case "ansible_user", "onigirazu_user":
+				host.User = value
+			default:
+				host.Vars[key] = value
+			}
+		}
+	}
+
+	return host
+}
+
+// isExecutable checks if file is executable
+func (p *InventoryParser) isExecutable(filePath string) bool {
+	info, err := os.Stat(filePath)
+	if err != nil {
+		return false
+	}
+	return info.Mode()&0111 != 0
+}
+
+// parseDynamicInventory executes a dynamic inventory script and parses its JSON output
+func (p *InventoryParser) parseDynamicInventory(scriptPath string) (*types.Inventory, error) {
+	cmd := exec.Command(scriptPath, "--list") // #nosec G204 -- scriptPath is user-provided inventory file
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("error executing dynamic inventory script: %w", err)
+	}
+
+	return p.parseJsonInventory(output)
 }

@@ -646,3 +646,368 @@ children = ["webservers"]
 	assert.Len(t, inventory.Groups, 2)
 	assert.Contains(t, inventory.Groups["production"].Children, "webservers")
 }
+
+func TestInventoryParser_ParseInventoryFile_JSON(t *testing.T) {
+	tmpDir := t.TempDir()
+	inventoryPath := filepath.Join(tmpDir, "inventory.json")
+
+	jsonContent := `{
+  "hosts": [
+    {
+      "name": "web1",
+      "address": "192.168.1.10",
+      "port": 22,
+      "user": "deploy",
+      "vars": {
+        "app_port": 8080
+      }
+    },
+    {
+      "name": "db1",
+      "address": "192.168.1.20",
+      "port": 22,
+      "user": "postgres",
+      "vars": {
+        "db_port": 5432
+      }
+    }
+  ],
+  "groups": {
+    "webservers": {
+      "name": "webservers",
+      "hosts": {
+        "web1": {}
+      },
+      "vars": {
+        "http_port": 80
+      },
+      "children": []
+    },
+    "databases": {
+      "name": "databases",
+      "hosts": {
+        "db1": {}
+      },
+      "vars": {
+        "backup_enabled": true
+      },
+      "children": []
+    }
+  }
+}`
+
+	err := os.WriteFile(inventoryPath, []byte(jsonContent), 0644)
+	require.NoError(t, err)
+
+	logger := &mockLogger{}
+	parser := NewInventoryParser(logger)
+
+	inventory, err := parser.ParseInventoryFile(context.Background(), inventoryPath)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, inventory)
+	assert.Len(t, inventory.Hosts, 2)
+	assert.Len(t, inventory.Groups, 2)
+	assert.Equal(t, "web1", inventory.Hosts[0].Name)
+	assert.Equal(t, "192.168.1.10", inventory.Hosts[0].Address)
+	assert.Equal(t, float64(8080), inventory.Hosts[0].Vars["app_port"])
+	assert.Contains(t, inventory.Groups, "webservers")
+	assert.Contains(t, inventory.Groups, "databases")
+}
+
+func TestInventoryParser_ParseInventoryFile_INI(t *testing.T) {
+	tmpDir := t.TempDir()
+	inventoryPath := filepath.Join(tmpDir, "inventory.ini")
+
+	iniContent := `# Test inventory
+[webservers]
+web1 ansible_host=192.168.1.10 ansible_user=deploy app_port=8080
+web2 ansible_host=192.168.1.11 ansible_user=deploy app_port=8080
+
+[databases]
+db1 ansible_host=192.168.1.20 ansible_user=postgres db_port=5432
+
+[webservers:vars]
+http_port=80
+https_port=443
+
+[databases:vars]
+backup_enabled=true
+
+[production:children]
+webservers
+databases
+
+[production:vars]
+env=production
+`
+
+	err := os.WriteFile(inventoryPath, []byte(iniContent), 0644)
+	require.NoError(t, err)
+
+	logger := &mockLogger{}
+	parser := NewInventoryParser(logger)
+
+	inventory, err := parser.ParseInventoryFile(context.Background(), inventoryPath)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, inventory)
+	assert.Len(t, inventory.Hosts, 3)
+	assert.Len(t, inventory.Groups, 3)
+	
+	assert.Contains(t, inventory.Groups, "webservers")
+	assert.Contains(t, inventory.Groups, "databases")
+	assert.Contains(t, inventory.Groups, "production")
+	
+	webservers := inventory.Groups["webservers"]
+	assert.Len(t, webservers.Hosts, 2)
+	assert.Equal(t, "80", webservers.Vars["http_port"])
+	
+	production := inventory.Groups["production"]
+	assert.Len(t, production.Children, 2)
+	assert.Contains(t, production.Children, "webservers")
+	assert.Contains(t, production.Children, "databases")
+	assert.Equal(t, "production", production.Vars["env"])
+}
+
+func TestInventoryParser_ParseJsonInventory(t *testing.T) {
+	logger := &mockLogger{}
+	parser := NewInventoryParser(logger)
+
+	jsonContent := `{
+  "hosts": [
+    {
+      "name": "test1",
+      "address": "10.0.0.1",
+      "port": 22,
+      "user": "root",
+      "vars": {}
+    }
+  ],
+  "groups": {
+    "testgroup": {
+      "name": "testgroup",
+      "hosts": {
+        "test1": {}
+      },
+      "vars": {
+        "test_var": "value"
+      },
+      "children": []
+    }
+  }
+}`
+
+	inventory, err := parser.parseJsonInventory([]byte(jsonContent))
+
+	assert.NoError(t, err)
+	assert.NotNil(t, inventory)
+	assert.Len(t, inventory.Hosts, 1)
+	assert.Len(t, inventory.Groups, 1)
+	assert.Equal(t, "test1", inventory.Hosts[0].Name)
+	assert.Equal(t, "10.0.0.1", inventory.Hosts[0].Address)
+}
+
+func TestInventoryParser_ParseJsonInventory_Invalid(t *testing.T) {
+	logger := &mockLogger{}
+	parser := NewInventoryParser(logger)
+
+	invalidJson := `{invalid json`
+
+	inventory, err := parser.parseJsonInventory([]byte(invalidJson))
+
+	assert.Error(t, err)
+	assert.Nil(t, inventory)
+	assert.Contains(t, err.Error(), "error parsing JSON inventory")
+}
+
+func TestInventoryParser_ParseIniInventory(t *testing.T) {
+	logger := &mockLogger{}
+	parser := NewInventoryParser(logger)
+
+	iniContent := `[group1]
+host1 ansible_host=10.0.0.1 ansible_user=ubuntu
+host2 ansible_host=10.0.0.2
+
+[group1:vars]
+var1=value1
+
+[group2:children]
+group1
+
+[group2:vars]
+var2=value2
+`
+
+	inventory, err := parser.parseIniInventory([]byte(iniContent))
+
+	assert.NoError(t, err)
+	assert.NotNil(t, inventory)
+	assert.Len(t, inventory.Groups, 2)
+	
+	group1 := inventory.Groups["group1"]
+	assert.NotNil(t, group1)
+	assert.Len(t, group1.Hosts, 2)
+	assert.Equal(t, "value1", group1.Vars["var1"])
+	
+	group2 := inventory.Groups["group2"]
+	assert.NotNil(t, group2)
+	assert.Len(t, group2.Children, 1)
+	assert.Contains(t, group2.Children, "group1")
+	assert.Equal(t, "value2", group2.Vars["var2"])
+}
+
+func TestInventoryParser_ParseIniHostLine(t *testing.T) {
+	logger := &mockLogger{}
+	parser := NewInventoryParser(logger)
+
+	tests := []struct {
+		name     string
+		line     string
+		expected struct {
+			name    string
+			address string
+			port    int
+			user    string
+		}
+	}{
+		{
+			name: "simple host",
+			line: "web1",
+			expected: struct {
+				name    string
+				address string
+				port    int
+				user    string
+			}{
+				name:    "web1",
+				address: "web1",
+				port:    22,
+				user:    "root",
+			},
+		},
+		{
+			name: "host with ansible_host",
+			line: "web1 ansible_host=192.168.1.10",
+			expected: struct {
+				name    string
+				address string
+				port    int
+				user    string
+			}{
+				name:    "web1",
+				address: "192.168.1.10",
+				port:    22,
+				user:    "root",
+			},
+		},
+		{
+			name: "host with ansible_user",
+			line: "web1 ansible_host=192.168.1.10 ansible_user=deploy",
+			expected: struct {
+				name    string
+				address string
+				port    int
+				user    string
+			}{
+				name:    "web1",
+				address: "192.168.1.10",
+				port:    22,
+				user:    "deploy",
+			},
+		},
+		{
+			name: "host with ansible_port",
+			line: "web1 ansible_host=192.168.1.10 ansible_port=2222",
+			expected: struct {
+				name    string
+				address string
+				port    int
+				user    string
+			}{
+				name:    "web1",
+				address: "192.168.1.10",
+				port:    2222,
+				user:    "root",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			host := parser.parseIniHostLine(tt.line, 1)
+			
+			assert.NotNil(t, host)
+			assert.Equal(t, tt.expected.name, host.Name)
+			assert.Equal(t, tt.expected.address, host.Address)
+			assert.Equal(t, tt.expected.port, host.Port)
+			assert.Equal(t, tt.expected.user, host.User)
+		})
+	}
+}
+
+func TestInventoryParser_IsExecutable(t *testing.T) {
+	tmpDir := t.TempDir()
+	
+	executablePath := filepath.Join(tmpDir, "script.sh")
+	err := os.WriteFile(executablePath, []byte("#!/bin/bash\necho test"), 0755)
+	require.NoError(t, err)
+	
+	nonExecutablePath := filepath.Join(tmpDir, "file.txt")
+	err = os.WriteFile(nonExecutablePath, []byte("test"), 0644)
+	require.NoError(t, err)
+	
+	logger := &mockLogger{}
+	parser := NewInventoryParser(logger)
+	
+	assert.True(t, parser.isExecutable(executablePath))
+	assert.False(t, parser.isExecutable(nonExecutablePath))
+	assert.False(t, parser.isExecutable("/nonexistent/file"))
+}
+
+func TestInventoryParser_ParseDynamicInventory(t *testing.T) {
+	tmpDir := t.TempDir()
+	scriptPath := filepath.Join(tmpDir, "dynamic.sh")
+	
+	scriptContent := `#!/bin/bash
+if [ "$1" = "--list" ]; then
+    cat <<EOF
+{
+  "hosts": [
+    {
+      "name": "dynamic1",
+      "address": "10.0.0.1",
+      "port": 22,
+      "user": "ubuntu",
+      "vars": {}
+    }
+  ],
+  "groups": {
+    "dynamic": {
+      "name": "dynamic",
+      "hosts": {
+        "dynamic1": {}
+      },
+      "vars": {},
+      "children": []
+    }
+  }
+}
+EOF
+fi
+`
+	
+	err := os.WriteFile(scriptPath, []byte(scriptContent), 0755)
+	require.NoError(t, err)
+	
+	logger := &mockLogger{}
+	parser := NewInventoryParser(logger)
+	
+	inventory, err := parser.parseDynamicInventory(scriptPath)
+	
+	assert.NoError(t, err)
+	assert.NotNil(t, inventory)
+	assert.Len(t, inventory.Hosts, 1)
+	assert.Equal(t, "dynamic1", inventory.Hosts[0].Name)
+	assert.Contains(t, inventory.Groups, "dynamic")
+}

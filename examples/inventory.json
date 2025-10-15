@@ -1,0 +1,108 @@
+{
+  "hosts": [
+    {
+      "name": "web1",
+      "address": "192.168.1.10",
+      "port": 22,
+      "user": "deploy",
+      "vars": {
+        "onigirazu_host": "192.168.1.10",
+        "onigirazu_user": "deploy",
+        "app_port": 8080,
+        "env": "production"
+      }
+    },
+    {
+      "name": "web2",
+      "address": "192.168.1.11",
+      "port": 22,
+      "user": "deploy",
+      "vars": {
+        "onigirazu_host": "192.168.1.11",
+        "onigirazu_user": "deploy",
+        "app_port": 8080,
+        "env": "production"
+      }
+    },
+    {
+      "name": "db1",
+      "address": "192.168.1.20",
+      "port": 22,
+      "user": "postgres",
+      "vars": {
+        "onigirazu_host": "192.168.1.20",
+        "onigirazu_user": "postgres",
+        "db_port": 5432,
+        "db_name": "myapp"
+      }
+    },
+    {
+      "name": "db2",
+      "address": "192.168.1.21",
+      "port": 22,
+      "user": "postgres",
+      "vars": {
+        "onigirazu_host": "192.168.1.21",
+        "onigirazu_user": "postgres",
+        "db_port": 5432,
+        "db_name": "myapp"
+      }
+    },
+    {
+      "name": "cache1",
+      "address": "192.168.1.30",
+      "port": 22,
+      "user": "redis",
+      "vars": {
+        "onigirazu_host": "192.168.1.30",
+        "redis_port": 6379
+      }
+    }
+  ],
+  "groups": {
+    "webservers": {
+      "name": "webservers",
+      "hosts": {
+        "web1": {},
+        "web2": {}
+      },
+      "vars": {
+        "http_port": 80,
+        "https_port": 443,
+        "max_connections": 1000
+      },
+      "children": []
+    },
+    "databases": {
+      "name": "databases",
+      "hosts": {
+        "db1": {},
+        "db2": {}
+      },
+      "vars": {
+        "backup_enabled": true,
+        "backup_schedule": "0 2 * * *"
+      },
+      "children": []
+    },
+    "cache": {
+      "name": "cache",
+      "hosts": {
+        "cache1": {}
+      },
+      "vars": {
+        "max_memory": "2gb"
+      },
+      "children": []
+    },
+    "production": {
+      "name": "production",
+      "hosts": {},
+      "vars": {
+        "env": "production",
+        "monitoring_enabled": true
+      },
+      "children": ["webservers", "databases", "cache"]
+    }
+  }
+}
