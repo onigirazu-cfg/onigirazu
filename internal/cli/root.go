@@ -79,6 +79,7 @@ across your infrastructure with a focus on simplicity and reliability.`,
 	rootCmd.AddCommand(newRunCmd())
 	rootCmd.AddCommand(rollbackCmd)
 	rootCmd.AddCommand(newDriftCmd())
+	rootCmd.AddCommand(inventoryCmd)
 
 	return rootCmd
 }

@@ -714,3 +714,138 @@ func (m *Manager) ListGroups() []string {
 	sort.Strings(names)
 	return names
 }
+
+// GetHostGroups returns all groups that contain the specified host
+func (m *Manager) GetHostGroups(hostName string) []string {
+	m.mutex.RLock()
+	defer m.mutex.RUnlock()
+
+	if m.inventory == nil {
+		return []string{}
+	}
+
+	groups := make([]string, 0)
+	for groupName, group := range m.inventory.Groups {
+		if _, exists := group.Hosts[hostName]; exists {
+			groups = append(groups, groupName)
+		}
+	}
+
+	sort.Strings(groups)
+	return groups
+}
+
+// GetGroupHierarchy returns the full hierarchy of a group including all parent and child groups
+func (m *Manager) GetGroupHierarchy(groupName string) (*GroupHierarchy, error) {
+	m.mutex.RLock()
+	defer m.mutex.RUnlock()
+
+	if m.inventory == nil {
+		return nil, fmt.Errorf("no inventory loaded")
+	}
+
+	group, exists := m.inventory.Groups[groupName]
+	if !exists {
+		return nil, fmt.Errorf("group '%s' not found", groupName)
+	}
+
+	hierarchy := &GroupHierarchy{
+		Name:     groupName,
+		Children: make([]string, len(group.Children)),
+		Parents:  m.findParentGroups(groupName),
+		Hosts:    make([]string, 0, len(group.Hosts)),
+	}
+
+	copy(hierarchy.Children, group.Children)
+
+	for hostName := range group.Hosts {
+		hierarchy.Hosts = append(hierarchy.Hosts, hostName)
+	}
+
+	sort.Strings(hierarchy.Children)
+	sort.Strings(hierarchy.Parents)
+	sort.Strings(hierarchy.Hosts)
+
+	return hierarchy, nil
+}
+
+// findParentGroups finds all groups that have the specified group as a child
+func (m *Manager) findParentGroups(childGroupName string) []string {
+	parents := make([]string, 0)
+
+	for groupName, group := range m.inventory.Groups {
+		for _, child := range group.Children {
+			if child == childGroupName {
+				parents = append(parents, groupName)
+				break
+			}
+		}
+	}
+
+	return parents
+}
+
+// IsHostInGroup checks if a host belongs to a group (including through inheritance)
+func (m *Manager) IsHostInGroup(hostName, groupName string) bool {
+	m.mutex.RLock()
+	defer m.mutex.RUnlock()
+
+	if m.inventory == nil {
+		return false
+	}
+
+	group, exists := m.inventory.Groups[groupName]
+	if !exists {
+		return false
+	}
+
+	_, found := group.Hosts[hostName]
+	return found
+}
+
+// GetAllHostsInGroup returns all hosts in a group including hosts from child groups
+func (m *Manager) GetAllHostsInGroup(groupName string) ([]string, error) {
+	m.mutex.RLock()
+	defer m.mutex.RUnlock()
+
+	if m.inventory == nil {
+		return nil, fmt.Errorf("no inventory loaded")
+	}
+
+	group, exists := m.inventory.Groups[groupName]
+	if !exists {
+		return nil, fmt.Errorf("group '%s' not found", groupName)
+	}
+
+	hostSet := make(map[string]bool)
+	m.collectHostsRecursive(group, hostSet)
+
+	hosts := make([]string, 0, len(hostSet))
+	for hostName := range hostSet {
+		hosts = append(hosts, hostName)
+	}
+
+	sort.Strings(hosts)
+	return hosts, nil
+}
+
+// collectHostsRecursive recursively collects all hosts from a group and its children
+func (m *Manager) collectHostsRecursive(group *types.Group, hostSet map[string]bool) {
+	for hostName := range group.Hosts {
+		hostSet[hostName] = true
+	}
+
+	for _, childName := range group.Children {
+		if childGroup, exists := m.inventory.Groups[childName]; exists {
+			m.collectHostsRecursive(childGroup, hostSet)
+		}
+	}
+}
+
+// GroupHierarchy represents the hierarchy information for a group
+type GroupHierarchy struct {
+	Name     string
+	Parents  []string
+	Children []string
+	Hosts    []string
+}

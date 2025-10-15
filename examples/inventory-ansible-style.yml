@@ -1,0 +1,150 @@
+# Ansible-style inventory example for Onigirazu
+# This demonstrates:
+# 1. Defining hosts separately with their properties
+# 2. Organizing hosts into groups
+# 3. Nested groups (groups within groups)
+# 4. Group variables inheritance
+
+# Define all hosts with their connection details
+hosts:
+  - name: web1
+    address: 192.168.1.10
+    port: 22
+    user: deploy
+    vars:
+      onigirazu_host: 192.168.1.10
+      onigirazu_user: deploy
+      onigirazu_ssh_private_key_file: ~/.ssh/web_key
+      app_port: 8080
+      
+  - name: web2
+    address: 192.168.1.11
+    port: 22
+    user: deploy
+    vars:
+      onigirazu_host: 192.168.1.11
+      onigirazu_user: deploy
+      onigirazu_ssh_private_key_file: ~/.ssh/web_key
+      app_port: 8080
+      
+  - name: web3
+    address: 192.168.1.12
+    port: 22
+    user: deploy
+    vars:
+      onigirazu_host: 192.168.1.12
+      onigirazu_user: deploy
+      onigirazu_ssh_private_key_file: ~/.ssh/web_key
+      app_port: 8080
+
+  - name: db1
+    address: 192.168.1.20
+    port: 22
+    user: postgres
+    vars:
+      onigirazu_host: 192.168.1.20
+      onigirazu_user: postgres
+      onigirazu_ssh_private_key_file: ~/.ssh/db_key
+      db_port: 5432
+      
+  - name: db2
+    address: 192.168.1.21
+    port: 22
+    user: postgres
+    vars:
+      onigirazu_host: 192.168.1.21
+      onigirazu_user: postgres
+      onigirazu_ssh_private_key_file: ~/.ssh/db_key
+      db_port: 5432
+
+  - name: cache1
+    address: 192.168.1.30
+    port: 22
+    user: redis
+    vars:
+      onigirazu_host: 192.168.1.30
+      onigirazu_user: redis
+      redis_port: 6379
+
+  - name: lb1
+    address: 192.168.1.40
+    port: 22
+    user: nginx
+    vars:
+      onigirazu_host: 192.168.1.40
+      onigirazu_user: nginx
+      nginx_port: 80
+
+# Define groups and assign hosts to them
+groups:
+  # Web servers group
+  webservers:
+    hosts:
+      web1:
+      web2:
+      web3:
+    vars:
+      http_port: 80
+      https_port: 443
+      max_connections: 1000
+
+  # Database servers group
+  databases:
+    hosts:
+      db1:
+      db2:
+    vars:
+      max_connections: 200
+      backup_enabled: true
+
+  # Cache servers group
+  cache:
+    hosts:
+      cache1:
+    vars:
+      max_memory: 2gb
+
+  # Load balancers group
+  loadbalancers:
+    hosts:
+      lb1:
+    vars:
+      backend_timeout: 30s
+
+  # Production environment - includes webservers and databases
+  production:
+    children:
+      - webservers
+      - databases
+      - cache
+      - loadbalancers
+    vars:
+      env: production
+      monitoring_enabled: true
+      log_level: info
+
+  # Frontend tier - webservers and load balancers
+  frontend:
+    children:
+      - webservers
+      - loadbalancers
+    vars:
+      tier: frontend
+      ssl_enabled: true
+
+  # Backend tier - databases and cache
+  backend:
+    children:
+      - databases
+      - cache
+    vars:
+      tier: backend
+      internal_network: true
+
+  # All production servers
+  all:
+    children:
+      - production
+    vars:
+      datacenter: us-east-1
+      company: acme
