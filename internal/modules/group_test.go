@@ -416,3 +416,11 @@ func TestGroupModule_Validate_EdgeCases(t *testing.T) {
 		})
 	}
 }
+
+// TestGroupModuleFixed_IsIdempotent tests that the group module is idempotent
+func TestGroupModuleFixed_IsIdempotent(t *testing.T) {
+	module := NewGroupModuleFixed()
+	if !module.IsIdempotent() {
+		t.Error("GroupModuleFixed should be idempotent")
+	}
+}

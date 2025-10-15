@@ -388,3 +388,172 @@ func BenchmarkUserModule_Validate_Minimal(b *testing.B) {
 		_ = module.Validate(args)
 	}
 }
+
+// TestUserModule_BuildUserAddCommand tests the buildUserAddCommand method
+func TestUserModule_BuildUserAddCommand(t *testing.T) {
+	module := NewUserModuleFixed()
+
+	tests := []struct {
+		name     string
+		username string
+		args     map[string]interface{}
+		want     []string
+	}{
+		{
+			name:     "minimal_command",
+			username: "testuser",
+			args:     map[string]interface{}{},
+			want:     []string{"useradd", "-m", "testuser"},
+		},
+		{
+			name:     "with_home_directory",
+			username: "testuser",
+			args: map[string]interface{}{
+				"home": "/custom/home",
+			},
+			want: []string{"useradd", "-d", "/custom/home", "-m", "testuser"},
+		},
+		{
+			name:     "with_shell",
+			username: "testuser",
+			args: map[string]interface{}{
+				"shell": "/bin/zsh",
+			},
+			want: []string{"useradd", "-s", "/bin/zsh", "-m", "testuser"},
+		},
+		{
+			name:     "with_primary_group",
+			username: "testuser",
+			args: map[string]interface{}{
+				"group": "developers",
+			},
+			want: []string{"useradd", "-g", "developers", "-m", "testuser"},
+		},
+		{
+			name:     "with_supplementary_groups",
+			username: "testuser",
+			args: map[string]interface{}{
+				"groups": "wheel,docker",
+			},
+			want: []string{"useradd", "-G", "wheel,docker", "-m", "testuser"},
+		},
+		{
+			name:     "with_uid_int",
+			username: "testuser",
+			args: map[string]interface{}{
+				"uid": 1500,
+			},
+			want: []string{"useradd", "-u", "1500", "-m", "testuser"},
+		},
+		{
+			name:     "with_uid_int64",
+			username: "testuser",
+			args: map[string]interface{}{
+				"uid": int64(2000),
+			},
+			want: []string{"useradd", "-u", "2000", "-m", "testuser"},
+		},
+		{
+			name:     "with_uid_float64",
+			username: "testuser",
+			args: map[string]interface{}{
+				"uid": float64(2500),
+			},
+			want: []string{"useradd", "-u", "2500", "-m", "testuser"},
+		},
+		{
+			name:     "with_uid_string",
+			username: "testuser",
+			args: map[string]interface{}{
+				"uid": "3000",
+			},
+			want: []string{"useradd", "-u", "3000", "-m", "testuser"},
+		},
+		{
+			name:     "with_gid_int",
+			username: "testuser",
+			args: map[string]interface{}{
+				"gid": 1500,
+			},
+			want: []string{"useradd", "-g", "1500", "-m", "testuser"},
+		},
+		{
+			name:     "with_gid_string",
+			username: "testuser",
+			args: map[string]interface{}{
+				"gid": "2000",
+			},
+			want: []string{"useradd", "-g", "2000", "-m", "testuser"},
+		},
+		{
+			name:     "with_all_options",
+			username: "testuser",
+			args: map[string]interface{}{
+				"home":   "/home/custom",
+				"shell":  "/bin/bash",
+				"group":  "users",
+				"groups": "wheel,docker",
+				"uid":    1000,
+			},
+			want: []string{"useradd", "-d", "/home/custom", "-s", "/bin/bash", "-g", "users", "-G", "wheel,docker", "-u", "1000", "-m", "testuser"},
+		},
+		{
+			name:     "with_empty_home",
+			username: "testuser",
+			args: map[string]interface{}{
+				"home": "",
+			},
+			want: []string{"useradd", "-m", "testuser"},
+		},
+		{
+			name:     "with_empty_shell",
+			username: "testuser",
+			args: map[string]interface{}{
+				"shell": "",
+			},
+			want: []string{"useradd", "-m", "testuser"},
+		},
+		{
+			name:     "with_invalid_home_type",
+			username: "testuser",
+			args: map[string]interface{}{
+				"home": 123,
+			},
+			want: []string{"useradd", "-m", "testuser"},
+		},
+		{
+			name:     "with_invalid_shell_type",
+			username: "testuser",
+			args: map[string]interface{}{
+				"shell": 123,
+			},
+			want: []string{"useradd", "-m", "testuser"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := module.buildUserAddCommand(tt.username, tt.args)
+
+			if len(got) != len(tt.want) {
+				t.Errorf("buildUserAddCommand() length = %v, want %v\nGot: %v\nWant: %v", len(got), len(tt.want), got, tt.want)
+				return
+			}
+
+			for i := range got {
+				if got[i] != tt.want[i] {
+					t.Errorf("buildUserAddCommand()[%d] = %v, want %v\nGot: %v\nWant: %v", i, got[i], tt.want[i], got, tt.want)
+				}
+			}
+		})
+	}
+}
+
+// TestUserModule_IsIdempotent tests the IsIdempotent method
+func TestUserModule_IsIdempotent(t *testing.T) {
+	module := NewUserModuleFixed()
+
+	if !module.IsIdempotent() {
+		t.Error("IsIdempotent() should return true for user module")
+	}
+}

@@ -644,3 +644,100 @@ func BenchmarkTemplateModule_Execute(b *testing.B) {
 		_, _ = module.Execute(ctx, host, args)
 	}
 }
+
+// TestParseFileMode tests the parseFileMode helper function
+func TestParseFileMode(t *testing.T) {
+	tests := []struct {
+		name     string
+		mode     string
+		expected os.FileMode
+		wantErr  bool
+	}{
+		{
+			name:     "empty string returns default 0644",
+			mode:     "",
+			expected: 0644,
+			wantErr:  false,
+		},
+		{
+			name:     "valid octal mode 0644",
+			mode:     "0644",
+			expected: 0644,
+			wantErr:  false,
+		},
+		{
+			name:     "valid octal mode 0755",
+			mode:     "0755",
+			expected: 0755,
+			wantErr:  false,
+		},
+		{
+			name:     "valid octal mode 0600",
+			mode:     "0600",
+			expected: 0600,
+			wantErr:  false,
+		},
+		{
+			name:     "valid octal mode 0777",
+			mode:     "0777",
+			expected: 0777,
+			wantErr:  false,
+		},
+		{
+			name:     "valid octal mode without leading zero",
+			mode:     "644",
+			expected: 0644,
+			wantErr:  false,
+		},
+		{
+			name:     "valid octal mode 0400 (read-only)",
+			mode:     "0400",
+			expected: 0400,
+			wantErr:  false,
+		},
+		{
+			name:     "invalid mode - non-octal digit",
+			mode:     "0888",
+			expected: 0644,
+			wantErr:  true,
+		},
+		{
+			name:     "invalid mode - alphabetic characters",
+			mode:     "rwxr-xr-x",
+			expected: 0644,
+			wantErr:  true,
+		},
+		{
+			name:     "invalid mode - special characters",
+			mode:     "0@44",
+			expected: 0644,
+			wantErr:  true,
+		},
+		{
+			name:     "invalid mode - negative number",
+			mode:     "-644",
+			expected: 0644,
+			wantErr:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := parseFileMode(tt.mode)
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("parseFileMode() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+
+			if !tt.wantErr && result != tt.expected {
+				t.Errorf("parseFileMode() = %o, expected %o", result, tt.expected)
+			}
+
+			// For error cases, verify we get the default mode
+			if tt.wantErr && result != tt.expected {
+				t.Errorf("parseFileMode() on error = %o, expected default %o", result, tt.expected)
+			}
+		})
+	}
+}
