@@ -8,7 +8,7 @@ Onigirazu is a modern, high-performance configuration management tool written in
 
 - **YAML-based Playbooks**: Human-readable configuration files with improved syntax
 - **Agentless Architecture**: No need to install agents on target hosts
-- **SSH-based Communication**: Secure remote execution
+- **SSH-based Communication**: Secure remote execution with strict host key checking
 - **Parallel Execution**: Concurrent task execution with configurable limits
 - **Idempotent Operations**: Safe to run multiple times
 - **State Management**: Track changes and maintain system state
@@ -17,14 +17,19 @@ Onigirazu is a modern, high-performance configuration management tool written in
 
 ### Advanced Features
 
+- **Ad-hoc Commands**: Execute commands without playbooks (5 input formats including natural language)
+- **Rollback Support**: Automatic snapshots and one-command rollback
+- **Drift Detection**: Detect and fix configuration drift automatically
 - **Enhanced Logging**: Structured logging with multiple output formats
 - **Progress Tracking**: Real-time execution progress with visual indicators
-- **Caching System**: Intelligent caching for improved performance
+- **Caching System**: Intelligent caching for improved performance (facts, templates, packages)
 - **Retry Logic**: Configurable retry mechanisms with exponential backoff
 - **Conditional Execution**: Skip tasks based on conditions
 - **Loop Support**: Iterate over lists and ranges
-- **Module System**: Extensible architecture with built-in modules
-- **Inventory Management**: Flexible host and group management
+- **Module System**: Extensible architecture with 22+ built-in modules
+- **Plugin System**: Extensible plugin architecture (modules, callbacks, filters, inventory)
+- **Secrets Management**: Bitwarden integration for secure credential management
+- **Inventory Management**: Flexible host and group management (YAML, TOML, simple list)
 - **Variable Interpolation**: Dynamic variable substitution
 - **Error Handling**: Comprehensive error handling and reporting
 
@@ -887,13 +892,81 @@ make docs
 - 🚀 **Auto-generated** - Always up-to-date with code
 - 🌐 **Interactive server** - Browse with `pkgsite`
 
+## 🔄 State Management & Rollback
+
+Onigirazu includes powerful state management and rollback capabilities for safe infrastructure changes.
+
+### State Management
+
+Track and manage execution state:
+
+```bash
+# Show current state
+onigirazu state show
+
+# Clear state
+onigirazu state clear
+
+# Export state
+onigirazu state export > state-backup.json
+```
+
+### Rollback Support
+
+Automatically create snapshots before playbook execution and rollback if needed:
+
+```bash
+# List available snapshots
+onigirazu rollback --list
+
+# Show snapshot information
+onigirazu rollback --info --snapshot <snapshot-id>
+
+# Preview rollback changes (dry-run)
+onigirazu rollback --dry-run --snapshot <snapshot-id>
+
+# Perform rollback
+onigirazu rollback --snapshot <snapshot-id>
+
+# Cleanup old snapshots (older than 30 days)
+onigirazu rollback --cleanup --max-age 30d
+```
+
+**Features:**
+- ✅ Automatic snapshot creation before changes
+- ✅ Selective rollback of specific resources
+- ✅ Dry-run mode to preview changes
+- ✅ Resource-level reversibility tracking
+- ✅ Snapshot cleanup and management
+
+### Drift Detection
+
+Detect configuration drift and fix it automatically:
+
+```bash
+# Detect drift
+onigirazu drift detect -p playbook.yml -i inventory.yml
+
+# Show drift report
+onigirazu drift report
+
+# Fix detected drift
+onigirazu drift fix -p playbook.yml -i inventory.yml
+```
+
+**Features:**
+- ✅ Automatic drift detection
+- ✅ Detailed drift reports
+- ✅ One-command drift remediation
+- ✅ Resource-level drift tracking
+
 ## 🧪 Testing & Quality
 
 Onigirazu maintains high code quality through comprehensive testing and continuous integration.
 
 ### Test Coverage
 
-- **Overall Coverage:** 36.5%
+- **Overall Coverage:** 65%+
 - **Critical Packages:** >80% coverage
 - **Race Conditions:** Zero detected
 - **CI/CD:** Automated testing on every commit
@@ -902,21 +975,21 @@ Onigirazu maintains high code quality through comprehensive testing and continuo
 
 | Category | Packages | Coverage |
 |----------|----------|----------|
-| ✅ Excellent (>80%) | 5 packages | 94.4% - 85.3% |
-| ✅ Good (60-80%) | 4 packages | 77.0% - 64.3% |
-| ⚠️ Medium (40-60%) | 3 packages | 59.0% - 42.1% |
-| ⚠️ Low (<40%) | 6 packages | 33.3% - 10.9% |
-| ❌ No Tests | 11 packages | 0.0% |
+| ✅ Excellent (>80%) | 12 packages | 100% - 80% |
+| ✅ Good (60-80%) | 8 packages | 77.4% - 61.0% |
+| ⚠️ Medium (40-60%) | 3 packages | 43.7% - 34.2% |
 
 **Critical packages with excellent coverage:**
 
-- `internal/workflow` - 89.8%
-- `internal/execution` - 87.8%
-- `internal/inventory` - 85.3%
-- `internal/cache` - 94.2%
-- `internal/bufferpool` - 94.4%
-
-📊 **For detailed coverage report, see [TEST_COVERAGE_REPORT.md](TEST_COVERAGE_REPORT.md)**
+- `internal/version` - 100%
+- `pkg/errors` - 100%
+- `pkg/utils` - 94.0%
+- `internal/workflow` - 89.9%
+- `internal/security` - 87.2%
+- `pkg/types` - 86.9%
+- `internal/parser` - 85.0%
+- `internal/metrics` - 82.9%
+- `internal/template` - 80.0%
 
 ### Running Tests
 
