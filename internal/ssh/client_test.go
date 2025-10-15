@@ -5,6 +5,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
@@ -77,7 +78,12 @@ func TestNewClient_NoAuthMethod(t *testing.T) {
 	client, err := NewClient(host)
 	assert.Error(t, err)
 	assert.Nil(t, client)
-	assert.Contains(t, err.Error(), "no authentication method available")
+	// Error can be either "no authentication method" or connection failure
+	// since we now try default SSH keys
+	assert.True(t, 
+		strings.Contains(err.Error(), "no authentication method available") ||
+		strings.Contains(err.Error(), "failed to connect"),
+		"Expected authentication or connection error, got: %v", err)
 }
 
 // TestNewClient_InvalidKeyFile tests client creation with invalid key file
@@ -224,7 +230,7 @@ func TestClient_AuthenticationMethods(t *testing.T) {
 				Port:    22,
 			},
 			expectError: true,
-			errorMsg:    "no authentication method available",
+			errorMsg:    "failed to connect",
 		},
 	}
 
@@ -382,7 +388,7 @@ func TestClient_ErrorMessages(t *testing.T) {
 					User:    "testuser",
 				})
 			},
-			expectedError: "no authentication method available",
+			expectedError: "failed to connect",
 		},
 		{
 			name: "invalid key file",

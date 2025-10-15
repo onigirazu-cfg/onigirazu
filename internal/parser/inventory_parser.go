@@ -336,9 +336,6 @@ func (p *InventoryParser) parseTomlInventory(data []byte) (*types.Inventory, err
 		if host.Port == 0 {
 			host.Port = 22
 		}
-		if host.User == "" {
-			host.User = "root"
-		}
 		if host.Address == "" {
 			host.Address = name
 		}
@@ -536,9 +533,6 @@ func (p *InventoryParser) parseIniHostLine(line string, lineNum int) *types.Host
 	}
 
 	name = address
-	if user == "" {
-		user = "root"
-	}
 
 	host := &types.Host{
 		Name:    name,

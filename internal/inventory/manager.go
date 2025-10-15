@@ -460,9 +460,6 @@ func (m *Manager) validateHosts(inventory *types.Inventory) error {
 			if host.Port == 0 {
 				host.Port = 22
 			}
-			if host.User == "" {
-				host.User = "root"
-			}
 
 			// Log final host configuration
 			m.logger.Debug("Final host configuration for '%s': Name=%s, Address=%s, Port=%d, User=%s, KeyFile=%s",

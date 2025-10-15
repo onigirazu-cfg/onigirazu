@@ -411,9 +411,6 @@ hosts = ["host1", "host2"]
 		if host.Port == 0 {
 			t.Errorf("Expected default port 22, got %d", host.Port)
 		}
-		if host.User == "" {
-			t.Errorf("Expected default user 'root', got empty")
-		}
 		if host.Vars == nil {
 			t.Error("Expected vars map to be initialized")
 		}
@@ -883,7 +880,7 @@ func TestInventoryParser_ParseIniHostLine(t *testing.T) {
 				name:    "web1",
 				address: "web1",
 				port:    22,
-				user:    "root",
+				user:    "",
 			},
 		},
 		{
@@ -898,7 +895,7 @@ func TestInventoryParser_ParseIniHostLine(t *testing.T) {
 				name:    "web1",
 				address: "192.168.1.10",
 				port:    22,
-				user:    "root",
+				user:    "",
 			},
 		},
 		{
@@ -928,7 +925,7 @@ func TestInventoryParser_ParseIniHostLine(t *testing.T) {
 				name:    "web1",
 				address: "192.168.1.10",
 				port:    2222,
-				user:    "root",
+				user:    "",
 			},
 		},
 	}

@@ -27,27 +27,51 @@ func NewClient(host types.Host) (*Client, error) {
 
 // NewClientWithHostKeyManager creates a new SSH client with custom host key manager
 func NewClientWithHostKeyManager(host types.Host, hostKeyManager *HostKeyManager) (*Client, error) {
+	// Apply defaults if not specified
+	if host.User == "" {
+		host.User = os.Getenv("USER")
+		if host.User == "" {
+			host.User = "root"
+		}
+	}
+
 	fmt.Printf("[DEBUG SSH] NewClientWithHostKeyManager called for host: %s, Address: %s, User: %s, KeyFile: %s\n",
 		host.Name, host.Address, host.User, host.KeyFile)
 
 	var auth []ssh.AuthMethod
 
 	// Try key-based authentication first
-	if host.KeyFile != "" {
-		fmt.Printf("[DEBUG SSH] Reading key file: %s\n", host.KeyFile)
-		key, err := os.ReadFile(host.KeyFile)
-		if err != nil {
-			return nil, fmt.Errorf("unable to read private key: %v", err)
-		}
-		fmt.Printf("[DEBUG SSH] Key file read successfully, size: %d bytes\n", len(key))
+	keyFile := host.KeyFile
+	useDefaultKey := false
+	if keyFile == "" {
+		keyFile = getDefaultSSHKey()
+		useDefaultKey = true
+	}
 
-		signer, err := ssh.ParsePrivateKey(key)
+	if keyFile != "" {
+		fmt.Printf("[DEBUG SSH] Reading key file: %s\n", keyFile)
+		key, err := os.ReadFile(keyFile)
 		if err != nil {
-			return nil, fmt.Errorf("unable to parse private key: %v", err)
-		}
-		fmt.Printf("[DEBUG SSH] Private key parsed successfully\n")
+			// If explicitly specified key file fails, return error
+			if !useDefaultKey {
+				return nil, fmt.Errorf("unable to read private key: %v", err)
+			}
+			fmt.Printf("[DEBUG SSH] Failed to read default key file: %v\n", err)
+		} else {
+			fmt.Printf("[DEBUG SSH] Key file read successfully, size: %d bytes\n", len(key))
 
-		auth = append(auth, ssh.PublicKeys(signer))
+			signer, err := ssh.ParsePrivateKey(key)
+			if err != nil {
+				// If explicitly specified key file fails to parse, return error
+				if !useDefaultKey {
+					return nil, fmt.Errorf("unable to parse private key: %v", err)
+				}
+				fmt.Printf("[DEBUG SSH] Failed to parse default private key: %v\n", err)
+			} else {
+				fmt.Printf("[DEBUG SSH] Private key parsed successfully\n")
+				auth = append(auth, ssh.PublicKeys(signer))
+			}
+		}
 	} else {
 		fmt.Printf("[DEBUG SSH] No KeyFile specified for host %s\n", host.Name)
 	}
@@ -221,6 +245,30 @@ func (c *Client) StatFile(remotePath string) (os.FileInfo, error) {
 	}
 
 	return fileInfo, nil
+}
+
+// getDefaultSSHKey returns the path to the default SSH key
+func getDefaultSSHKey() string {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+
+	// Try common SSH key locations in order of preference
+	keyPaths := []string{
+		filepath.Join(homeDir, ".ssh", "id_ed25519"),
+		filepath.Join(homeDir, ".ssh", "id_rsa"),
+		filepath.Join(homeDir, ".ssh", "id_ecdsa"),
+		filepath.Join(homeDir, ".ssh", "id_dsa"),
+	}
+
+	for _, keyPath := range keyPaths {
+		if _, err := os.Stat(keyPath); err == nil {
+			return keyPath
+		}
+	}
+
+	return ""
 }
 
 // CopyFile copies a file from local to remote host using SFTP
