@@ -581,6 +581,21 @@ onigirazu run webservers,dbservers -m ping -i inventory.yml
 <li><strong>cron</strong>: Cron job management (user crontabs, system cron, job scheduling)</li>
 <li><strong>firewall</strong>: Unified firewall management with automatic detection (UFW, firewalld, iptables)</li>
 </ul>
+<h3>Docker/Container Modules</h3>
+<ul>
+<li><strong>docker_container</strong>: Manage Docker containers (create, start, stop, remove)</li>
+<li><strong>docker_image</strong>: Manage Docker images (pull, build, remove)</li>
+<li><strong>docker_compose</strong>: Manage Docker Compose applications (up, down, restart, build)</li>
+<li><strong>podman</strong>: Manage Podman containers (rootless container support)</li>
+</ul>
+<h3>Database Modules</h3>
+<ul>
+<li><strong>mysql_db</strong>: Manage MySQL databases (create, drop, dump, import)</li>
+<li><strong>mysql_user</strong>: Manage MySQL users and privileges</li>
+<li><strong>postgresql_db</strong>: Manage PostgreSQL databases (create, drop, dump, restore)</li>
+<li><strong>postgresql_user</strong>: Manage PostgreSQL users and privileges</li>
+<li><strong>mongodb</strong>: Manage MongoDB databases and users</li>
+</ul>
 <h3>Module Examples</h3>
 <h4>File Module</h4>
 <pre class="codehilite"><code class="language-yaml">- name: &quot;Create directory&quot;
