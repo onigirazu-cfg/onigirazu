@@ -74,7 +74,7 @@
 <ul>
 <li><strong>YAML-based Playbooks</strong>: Human-readable configuration files with improved syntax</li>
 <li><strong>Agentless Architecture</strong>: No need to install agents on target hosts</li>
-<li><strong>SSH-based Communication</strong>: Secure remote execution</li>
+<li><strong>SSH-based Communication</strong>: Secure remote execution with strict host key checking</li>
 <li><strong>Parallel Execution</strong>: Concurrent task execution with configurable limits</li>
 <li><strong>Idempotent Operations</strong>: Safe to run multiple times</li>
 <li><strong>State Management</strong>: Track changes and maintain system state</li>
@@ -83,14 +83,19 @@
 </ul>
 <h3>Advanced Features</h3>
 <ul>
+<li><strong>Ad-hoc Commands</strong>: Execute commands without playbooks (5 input formats including natural language)</li>
+<li><strong>Rollback Support</strong>: Automatic snapshots and one-command rollback</li>
+<li><strong>Drift Detection</strong>: Detect and fix configuration drift automatically</li>
 <li><strong>Enhanced Logging</strong>: Structured logging with multiple output formats</li>
 <li><strong>Progress Tracking</strong>: Real-time execution progress with visual indicators</li>
-<li><strong>Caching System</strong>: Intelligent caching for improved performance</li>
+<li><strong>Caching System</strong>: Intelligent caching for improved performance (facts, templates, packages)</li>
 <li><strong>Retry Logic</strong>: Configurable retry mechanisms with exponential backoff</li>
 <li><strong>Conditional Execution</strong>: Skip tasks based on conditions</li>
 <li><strong>Loop Support</strong>: Iterate over lists and ranges</li>
-<li><strong>Module System</strong>: Extensible architecture with built-in modules</li>
-<li><strong>Inventory Management</strong>: Flexible host and group management</li>
+<li><strong>Module System</strong>: Extensible architecture with 22+ built-in modules</li>
+<li><strong>Plugin System</strong>: Extensible plugin architecture (modules, callbacks, filters, inventory)</li>
+<li><strong>Secrets Management</strong>: Bitwarden integration for secure credential management</li>
+<li><strong>Inventory Management</strong>: Flexible host and group management (YAML, TOML, simple list)</li>
 <li><strong>Variable Interpolation</strong>: Dynamic variable substitution</li>
 <li><strong>Error Handling</strong>: Comprehensive error handling and reporting</li>
 </ul>
@@ -885,11 +890,66 @@ make docs
 <li>🚀 <strong>Auto-generated</strong> - Always up-to-date with code</li>
 <li>🌐 <strong>Interactive server</strong> - Browse with <code>pkgsite</code></li>
 </ul>
+<h2>🔄 State Management &amp; Rollback</h2>
+<p>Onigirazu includes powerful state management and rollback capabilities for safe infrastructure changes.</p>
+<h3>State Management</h3>
+<p>Track and manage execution state:</p>
+<pre class="codehilite"><code class="language-bash"># Show current state
+onigirazu state show
+
+# Clear state
+onigirazu state clear
+
+# Export state
+onigirazu state export &gt; state-backup.json
+</code></pre>
+
+<h3>Rollback Support</h3>
+<p>Automatically create snapshots before playbook execution and rollback if needed:</p>
+<pre class="codehilite"><code class="language-bash"># List available snapshots
+onigirazu rollback --list
+
+# Show snapshot information
+onigirazu rollback --info --snapshot &lt;snapshot-id&gt;
+
+# Preview rollback changes (dry-run)
+onigirazu rollback --dry-run --snapshot &lt;snapshot-id&gt;
+
+# Perform rollback
+onigirazu rollback --snapshot &lt;snapshot-id&gt;
+
+# Cleanup old snapshots (older than 30 days)
+onigirazu rollback --cleanup --max-age 30d
+</code></pre>
+
+<p><strong>Features:</strong>
+- ✅ Automatic snapshot creation before changes
+- ✅ Selective rollback of specific resources
+- ✅ Dry-run mode to preview changes
+- ✅ Resource-level reversibility tracking
+- ✅ Snapshot cleanup and management</p>
+<h3>Drift Detection</h3>
+<p>Detect configuration drift and fix it automatically:</p>
+<pre class="codehilite"><code class="language-bash"># Detect drift
+onigirazu drift detect -p playbook.yml -i inventory.yml
+
+# Show drift report
+onigirazu drift report
+
+# Fix detected drift
+onigirazu drift fix -p playbook.yml -i inventory.yml
+</code></pre>
+
+<p><strong>Features:</strong>
+- ✅ Automatic drift detection
+- ✅ Detailed drift reports
+- ✅ One-command drift remediation
+- ✅ Resource-level drift tracking</p>
 <h2>🧪 Testing &amp; Quality</h2>
 <p>Onigirazu maintains high code quality through comprehensive testing and continuous integration.</p>
 <h3>Test Coverage</h3>
 <ul>
-<li><strong>Overall Coverage:</strong> 36.5%</li>
+<li><strong>Overall Coverage:</strong> 65%+</li>
 <li><strong>Critical Packages:</strong> &gt;80% coverage</li>
 <li><strong>Race Conditions:</strong> Zero detected</li>
 <li><strong>CI/CD:</strong> Automated testing on every commit</li>
@@ -906,40 +966,33 @@ make docs
 <tbody>
 <tr>
 <td>✅ Excellent (&gt;80%)</td>
-<td>5 packages</td>
-<td>94.4% - 85.3%</td>
+<td>12 packages</td>
+<td>100% - 80%</td>
 </tr>
 <tr>
 <td>✅ Good (60-80%)</td>
-<td>4 packages</td>
-<td>77.0% - 64.3%</td>
+<td>8 packages</td>
+<td>77.4% - 61.0%</td>
 </tr>
 <tr>
 <td>⚠️ Medium (40-60%)</td>
 <td>3 packages</td>
-<td>59.0% - 42.1%</td>
-</tr>
-<tr>
-<td>⚠️ Low (&lt;40%)</td>
-<td>6 packages</td>
-<td>33.3% - 10.9%</td>
-</tr>
-<tr>
-<td>❌ No Tests</td>
-<td>11 packages</td>
-<td>0.0%</td>
+<td>43.7% - 34.2%</td>
 </tr>
 </tbody>
 </table>
 <p><strong>Critical packages with excellent coverage:</strong></p>
 <ul>
-<li><code>internal/workflow</code> - 89.8%</li>
-<li><code>internal/execution</code> - 87.8%</li>
-<li><code>internal/inventory</code> - 85.3%</li>
-<li><code>internal/cache</code> - 94.2%</li>
-<li><code>internal/bufferpool</code> - 94.4%</li>
+<li><code>internal/version</code> - 100%</li>
+<li><code>pkg/errors</code> - 100%</li>
+<li><code>pkg/utils</code> - 94.0%</li>
+<li><code>internal/workflow</code> - 89.9%</li>
+<li><code>internal/security</code> - 87.2%</li>
+<li><code>pkg/types</code> - 86.9%</li>
+<li><code>internal/parser</code> - 85.0%</li>
+<li><code>internal/metrics</code> - 82.9%</li>
+<li><code>internal/template</code> - 80.0%</li>
 </ul>
-<p>📊 <strong>For detailed coverage report, see <a href="TEST_COVERAGE_REPORT.md">TEST_COVERAGE_REPORT.md</a></strong></p>
 <h3>Running Tests</h3>
 <pre class="codehilite"><code class="language-bash"># Run all tests
 make test
