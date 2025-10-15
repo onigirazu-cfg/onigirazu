@@ -174,7 +174,7 @@ func detectDrift(detector *drift.Detector, registry *modules.Registry, log *logg
 
 	// Output report
 	if driftOutput != "" {
-		if err := os.WriteFile(driftOutput, []byte(reportContent), 0644); err != nil {
+		if err := os.WriteFile(driftOutput, []byte(reportContent), 0600); err != nil {
 			return fmt.Errorf("failed to write report to file: %w", err)
 		}
 		log.Info("Report saved to: %s", driftOutput)

@@ -133,7 +133,7 @@ func listSnapshots(executor *rollback.RollbackExecutor) error {
 		)
 	}
 
-	w.Flush()
+	_ = w.Flush()
 	return nil
 }
 
@@ -157,7 +157,7 @@ func showSnapshotInfo(executor *rollback.RollbackExecutor, snapshotID string) er
 		for resType, count := range info.ResourcesByType {
 			fmt.Fprintf(w, "  %s:\t%d\n", resType, count)
 		}
-		w.Flush()
+		_ = w.Flush()
 		fmt.Println()
 	}
 
@@ -167,7 +167,7 @@ func showSnapshotInfo(executor *rollback.RollbackExecutor, snapshotID string) er
 		for host, count := range info.ResourcesByHost {
 			fmt.Fprintf(w, "  %s:\t%d\n", host, count)
 		}
-		w.Flush()
+		_ = w.Flush()
 	}
 
 	return nil
@@ -208,7 +208,7 @@ func dryRunRollback(executor *rollback.RollbackExecutor, snapshotID string) erro
 				op.Details,
 			)
 		}
-		w.Flush()
+		_ = w.Flush()
 	}
 
 	fmt.Println()

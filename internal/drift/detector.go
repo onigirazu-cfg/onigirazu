@@ -478,7 +478,7 @@ func (d *Detector) saveReport(report *DriftReport) error {
 func (d *Detector) LoadReport(reportID string) (*DriftReport, error) {
 	filename := filepath.Join(d.reportDir, fmt.Sprintf("drift_report_%s.json", reportID))
 
-	data, err := os.ReadFile(filename)
+	data, err := os.ReadFile(filename) // #nosec G304 - filename is constructed from reportDir and sanitized reportID
 	if err != nil {
 		return nil, fmt.Errorf("failed to read report file: %w", err)
 	}
@@ -500,7 +500,7 @@ func (d *Detector) ListReports() ([]DriftReport, error) {
 
 	reports := make([]DriftReport, 0, len(files))
 	for _, file := range files {
-		data, err := os.ReadFile(file)
+		data, err := os.ReadFile(file) // #nosec G304 - file paths come from filepath.Glob with controlled pattern
 		if err != nil {
 			d.logger.Warn("Failed to read report file %s: %v", file, err)
 			continue

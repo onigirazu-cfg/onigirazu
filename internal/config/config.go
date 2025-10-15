@@ -55,12 +55,12 @@ type Config struct {
 	EnableProfiling bool   `yaml:"enable_profiling" json:"enable_profiling"`
 
 	// SSH/Connection
-	SSHTimeout       time.Duration `yaml:"ssh_timeout" json:"ssh_timeout"`
-	SSHKeepAlive     time.Duration `yaml:"ssh_keepalive" json:"ssh_keepalive"`
-	SSHMaxSessions   int           `yaml:"ssh_max_sessions" json:"ssh_max_sessions"`
-	ConnectionReuse  bool          `yaml:"connection_reuse" json:"connection_reuse"`
-	SSHStrictHostKey bool          `yaml:"ssh_strict_host_key" json:"ssh_strict_host_key"`
-	SSHKnownHostsFile string       `yaml:"ssh_known_hosts_file" json:"ssh_known_hosts_file"`
+	SSHTimeout        time.Duration `yaml:"ssh_timeout" json:"ssh_timeout"`
+	SSHKeepAlive      time.Duration `yaml:"ssh_keepalive" json:"ssh_keepalive"`
+	SSHMaxSessions    int           `yaml:"ssh_max_sessions" json:"ssh_max_sessions"`
+	ConnectionReuse   bool          `yaml:"connection_reuse" json:"connection_reuse"`
+	SSHStrictHostKey  bool          `yaml:"ssh_strict_host_key" json:"ssh_strict_host_key"`
+	SSHKnownHostsFile string        `yaml:"ssh_known_hosts_file" json:"ssh_known_hosts_file"`
 
 	// Vault integration
 	VaultEnabled bool   `yaml:"vault_enabled" json:"vault_enabled"`

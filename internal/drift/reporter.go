@@ -444,5 +444,5 @@ func (r *Reporter) SaveReportToFile(report *DriftReport, filename string, format
 		return err
 	}
 
-	return os.WriteFile(filename, []byte(content), 0644)
+	return os.WriteFile(filename, []byte(content), 0600)
 }
