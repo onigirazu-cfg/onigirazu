@@ -371,7 +371,7 @@ func TestCommandExecutor_ExecuteLocal_WithBecome(t *testing.T) {
 
 	// Execute a simple command - it will fail if sudo requires password,
 	// but we're testing the wrapping logic
-	_, err = executor.Execute("echo", "test")
+	_, _ = executor.Execute("echo", "test")
 	// We don't check error because sudo might not be configured for passwordless
 	// The important part is that the command was wrapped correctly
 }

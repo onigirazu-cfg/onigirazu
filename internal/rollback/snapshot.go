@@ -179,7 +179,6 @@ func generateSnapshotID() string {
 // CreateResourceSnapshot creates a resource snapshot from task execution
 func CreateResourceSnapshot(ctx context.Context, task *types.Task, host *types.Host,
 	currentState map[string]interface{}) ResourceSnapshot {
-
 	resource := ResourceSnapshot{
 		Type:       task.Module,
 		Identifier: getResourceIdentifier(task),
