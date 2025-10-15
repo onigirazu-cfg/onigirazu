@@ -287,3 +287,195 @@ func TestCopyModuleExecuteWithBackup(t *testing.T) {
 		t.Errorf("File content mismatch. Expected: %s, Got: %s", newContent, string(content))
 	}
 }
+
+// TestCopyModule_Validate tests the Validate method with comprehensive test cases
+func TestCopyModule_Validate(t *testing.T) {
+	module := NewCopyModule()
+
+	tests := []struct {
+		name    string
+		args    map[string]interface{}
+		wantErr bool
+		errMsg  string
+	}{
+		{
+			name: "valid with content",
+			args: map[string]interface{}{
+				"dest":    "/tmp/test.txt",
+				"content": "test content",
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid with src - /etc/hosts",
+			args: map[string]interface{}{
+				"dest": "/tmp/test.txt",
+				"src":  "/etc/hosts",
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid with content and mode",
+			args: map[string]interface{}{
+				"dest":    "/tmp/test.txt",
+				"content": "test content",
+				"mode":    "0644",
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid with content and owner/group",
+			args: map[string]interface{}{
+				"dest":    "/tmp/test.txt",
+				"content": "test content",
+				"owner":   "root",
+				"group":   "wheel",
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid with backup option",
+			args: map[string]interface{}{
+				"dest":    "/tmp/test.txt",
+				"content": "test content",
+				"backup":  true,
+			},
+			wantErr: false,
+		},
+		{
+			name: "missing dest",
+			args: map[string]interface{}{
+				"content": "test content",
+			},
+			wantErr: true,
+			errMsg:  "'dest' is required and must be a non-empty string",
+		},
+		{
+			name: "empty dest",
+			args: map[string]interface{}{
+				"dest":    "",
+				"content": "test content",
+			},
+			wantErr: true,
+			errMsg:  "'dest' is required and must be a non-empty string",
+		},
+		{
+			name: "dest not a string",
+			args: map[string]interface{}{
+				"dest":    123,
+				"content": "test content",
+			},
+			wantErr: true,
+			errMsg:  "'dest' is required and must be a non-empty string",
+		},
+		{
+			name: "missing src and content",
+			args: map[string]interface{}{
+				"dest": "/tmp/test.txt",
+			},
+			wantErr: true,
+			errMsg:  "either 'src' or 'content' must be specified",
+		},
+		{
+			name: "both src and content",
+			args: map[string]interface{}{
+				"dest":    "/tmp/test.txt",
+				"src":     "/etc/hosts",
+				"content": "test content",
+			},
+			wantErr: true,
+			errMsg:  "'src' and 'content' are mutually exclusive",
+		},
+		{
+			name: "non-existent src file",
+			args: map[string]interface{}{
+				"dest": "/tmp/test.txt",
+				"src":  "/non/existent/file/path/that/does/not/exist",
+			},
+			wantErr: true,
+			errMsg:  "source file '/non/existent/file/path/that/does/not/exist' does not exist",
+		},
+		{
+			name: "invalid mode - too short",
+			args: map[string]interface{}{
+				"dest":    "/tmp/test.txt",
+				"content": "test content",
+				"mode":    "64",
+			},
+			wantErr: true,
+			errMsg:  "invalid mode '64': mode should be 3-4 digit octal string",
+		},
+		{
+			name: "invalid mode - too long",
+			args: map[string]interface{}{
+				"dest":    "/tmp/test.txt",
+				"content": "test content",
+				"mode":    "06444",
+			},
+			wantErr: true,
+			errMsg:  "invalid mode '06444': mode should be 3-4 digit octal string",
+		},
+		{
+			name: "valid mode - 3 digits",
+			args: map[string]interface{}{
+				"dest":    "/tmp/test.txt",
+				"content": "test content",
+				"mode":    "644",
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid mode - 4 digits",
+			args: map[string]interface{}{
+				"dest":    "/tmp/test.txt",
+				"content": "test content",
+				"mode":    "0755",
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := module.Validate(tt.args)
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("Validate() error = nil, wantErr %v", tt.wantErr)
+					return
+				}
+				if tt.errMsg != "" && err.Error() != tt.errMsg {
+					t.Errorf("Validate() error = %v, want %v", err.Error(), tt.errMsg)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Validate() unexpected error = %v", err)
+				}
+			}
+		})
+	}
+}
+
+// TestCopyModule_GetDescription tests the GetDescription method
+func TestCopyModule_GetDescription(t *testing.T) {
+	module := NewCopyModule()
+
+	desc := module.GetDescription()
+	if desc == "" {
+		t.Error("GetDescription() should not return empty string")
+	}
+
+	expectedDesc := "Copy files to remote locations"
+	if desc != expectedDesc {
+		t.Errorf("GetDescription() = %q, want %q", desc, expectedDesc)
+	}
+}
+
+// TestCopyModule_GetName tests the GetName method
+func TestCopyModule_GetName(t *testing.T) {
+	module := NewCopyModule()
+
+	name := module.GetName()
+	if name != "copy" {
+		t.Errorf("GetName() = %q, want %q", name, "copy")
+	}
+}
