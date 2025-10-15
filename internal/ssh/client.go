@@ -50,7 +50,7 @@ func NewClientWithHostKeyManager(host types.Host, hostKeyManager *HostKeyManager
 
 	if keyFile != "" {
 		fmt.Printf("[DEBUG SSH] Reading key file: %s\n", keyFile)
-		key, err := os.ReadFile(keyFile)
+		key, err := os.ReadFile(keyFile) // #nosec G304 - keyFile is from trusted inventory configuration
 		if err != nil {
 			// If explicitly specified key file fails, return error
 			if !useDefaultKey {

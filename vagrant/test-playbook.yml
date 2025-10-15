@@ -1,0 +1,66 @@
+---
+- name: Test basic functionality on all hosts
+  hosts: all
+  gather_facts: yes
+  tasks:
+    - name: Print OS information
+      debug:
+        msg: "Running on {{ ansible_distribution }} {{ ansible_distribution_version }}"
+
+    - name: Test file creation
+      file:
+        path: /tmp/onigirazu-test
+        state: directory
+        mode: '0755'
+
+    - name: Test file with content
+      copy:
+        content: "Test from Onigirazu\n"
+        dest: /tmp/onigirazu-test/test.txt
+        mode: '0644'
+
+    - name: Test command execution
+      command: whoami
+      register: whoami_result
+
+    - name: Show command result
+      debug:
+        msg: "Current user: {{ whoami_result.stdout }}"
+
+    - name: Test package installation (apt)
+      apt:
+        name: curl
+        state: present
+        update_cache: yes
+      when: ansible_pkg_mgr == 'apt'
+      become: yes
+
+    - name: Test package installation (yum)
+      yum:
+        name: curl
+        state: present
+      when: ansible_pkg_mgr == 'yum'
+      become: yes
+
+    - name: Test package installation (zypper)
+      zypper:
+        name: curl
+        state: present
+      when: ansible_pkg_mgr == 'zypper'
+      become: yes
+
+    - name: Test package installation (pkg)
+      pkgng:
+        name: curl
+        state: present
+      when: ansible_pkg_mgr == 'pkgng'
+      become: yes
+
+    - name: Test service status
+      service_facts:
+      when: ansible_system == 'Linux'
+
+    - name: Cleanup test files
+      file:
+        path: /tmp/onigirazu-test
+        state: absent

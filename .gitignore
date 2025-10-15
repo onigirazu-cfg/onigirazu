@@ -4,64 +4,38 @@
 *.dll
 *.so
 *.dylib
+bin/
+dist/
 
 # Test binary, built with `go test -c`
 *.test
 
 # Output of the go coverage tool
 *.out
+coverage.html
 
-# Dependency directories (remove the comment below to include it)
-# vendor/
+# Dependency directories
+vendor/
 
 # Go workspace file
 go.work
 
-# Build artifacts
-/onigirazu-bin
-/onigirazu.exe
-/dist/
-/build/
-bin/
-/onigirazu
-/go_teransible
-
-# IDE files
-.vscode/
+# IDE specific files
 .idea/
+.vscode/
 *.swp
 *.swo
 *~
 
-# OS generated files
+# OS specific files
 .DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
 Thumbs.db
 
-# State files and backups
-.onigirazu-state*
-.ansible/
-
-# Temporary files
-*.tmp
-*.temp
+# Onigirazu specific
+.onigirazu-state
 *.log
-coverage.html
 
-# Private configuration and notes (not for public repo)
-.zencoder/
-.cursorrules
-.ai-rules.md
-PRIVATE_NOTES.md
-LOCAL_CONFIG.md
-SETUP_COMPLETE.md
-test_fail.txt
-TEST_FIXES_PROGRESS.md
-RELEASE_*.md
-
-# Subprojects (managed separately)
-onigirazu_docs/
+# Vagrant
+.vagrant/
+*.box
+vagrant/.vagrant/

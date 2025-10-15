@@ -80,9 +80,9 @@ func TestNewClient_NoAuthMethod(t *testing.T) {
 	assert.Nil(t, client)
 	// Error can be either "no authentication method" or connection failure
 	// since we now try default SSH keys
-	assert.True(t, 
+	assert.True(t,
 		strings.Contains(err.Error(), "no authentication method available") ||
-		strings.Contains(err.Error(), "failed to connect"),
+			strings.Contains(err.Error(), "failed to connect"),
 		"Expected authentication or connection error, got: %v", err)
 }
 
@@ -222,7 +222,7 @@ func TestClient_AuthenticationMethods(t *testing.T) {
 			errorMsg:    "failed to connect",
 		},
 		{
-			name: "no authentication",
+			name: "key authentication with default key",
 			host: types.Host{
 				Name:    "test-host",
 				Address: "192.168.1.100",
@@ -380,7 +380,7 @@ func TestClient_ErrorMessages(t *testing.T) {
 		expectedError string
 	}{
 		{
-			name: "no auth method",
+			name: "connection with default key",
 			setupFunc: func() (*Client, error) {
 				return NewClient(types.Host{
 					Name:    "test",

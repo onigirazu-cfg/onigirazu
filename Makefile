@@ -1,4 +1,4 @@
-.PHONY: build test clean run-example install lint fmt vet security coverage release-test ci-setup ci-status ci-validate ci-pipeline ci-pre-check ci-release-prepare ci-release-create test-race test-coverage docs docs-generate docs-serve docs-open docs-clean
+.PHONY: build test clean run-example install lint fmt vet security coverage release-test ci-setup ci-status ci-validate ci-pipeline ci-pre-check ci-release-prepare ci-release-create test-race test-coverage docs docs-generate docs-serve docs-open docs-clean vagrant-up vagrant-up-all vagrant-halt vagrant-halt-all vagrant-destroy vagrant-destroy-all vagrant-status vagrant-ssh vagrant-test vagrant-test-all vagrant-provision
 
 # Variables
 BINARY_NAME=onigirazu
@@ -242,6 +242,19 @@ help:
 	@echo "  docs-open     - Open documentation in browser"
 	@echo "  docs-clean    - Clean generated documentation"
 	@echo ""
+	@echo "Vagrant commands:"
+	@echo "  vagrant-up         - Start a specific VM"
+	@echo "  vagrant-up-all     - Start all VMs"
+	@echo "  vagrant-halt       - Stop a specific VM"
+	@echo "  vagrant-halt-all   - Stop all VMs"
+	@echo "  vagrant-destroy    - Destroy a specific VM"
+	@echo "  vagrant-destroy-all - Destroy all VMs"
+	@echo "  vagrant-status     - Show status of all VMs"
+	@echo "  vagrant-ssh        - SSH into a specific VM"
+	@echo "  vagrant-provision  - Re-provision a specific VM"
+	@echo "  vagrant-test       - Test Onigirazu against VM group"
+	@echo "  vagrant-test-all   - Run comprehensive tests on all VMs"
+	@echo ""
 	@echo "Other commands:"
 	@echo "  help          - Show this help"
 
@@ -285,3 +298,46 @@ docs:
 	@echo "Logo files:"
 	@echo "  docs/logo.png - Main logo (200px width)"
 	@echo "  docs/logo.svg - Vector version"
+
+# Vagrant commands for local testing
+vagrant-up:
+	@read -p "Enter VM name (ubuntu2004, ubuntu2204, debian11, centos7, rocky8, opensuse15, freebsd13, etc.): " vm; \
+	vagrant up $$vm
+
+vagrant-up-all:
+	@echo "Starting all VMs (this may take a while)..."
+	vagrant up ubuntu2004 ubuntu2204 ubuntu2404 debian11 debian12 centos7 rocky8 rocky9 opensuse15 freebsd13 freebsd14
+
+vagrant-halt:
+	@read -p "Enter VM name to halt: " vm; \
+	vagrant halt $$vm
+
+vagrant-halt-all:
+	vagrant halt
+
+vagrant-destroy:
+	@read -p "Enter VM name to destroy: " vm; \
+	vagrant destroy -f $$vm
+
+vagrant-destroy-all:
+	vagrant destroy -f
+
+vagrant-status:
+	vagrant status
+
+vagrant-ssh:
+	@read -p "Enter VM name to SSH into: " vm; \
+	vagrant ssh $$vm
+
+vagrant-provision:
+	@read -p "Enter VM name to provision: " vm; \
+	vagrant provision $$vm
+
+vagrant-test: build
+	@echo "Testing Onigirazu against Vagrant VMs..."
+	@read -p "Enter VM group (ubuntu, debian, redhat, suse, bsd, linux, all): " group; \
+	./bin/onigirazu run -i vagrant/inventory.ini -m ping --limit $$group
+
+vagrant-test-all: build
+	@echo "Running comprehensive tests on all VMs..."
+	./scripts/vagrant-test.sh
