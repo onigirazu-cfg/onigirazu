@@ -2,7 +2,6 @@ package secrets
 
 import (
 	"context"
-	"fmt"
 )
 
 // VaultClient manages HashiCorp Vault secret retrieval

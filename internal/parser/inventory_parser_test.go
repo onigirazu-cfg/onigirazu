@@ -946,6 +946,20 @@ func TestInventoryParser_ParseIniHostLine(t *testing.T) {
 	}
 }
 
+func TestInventoryParser_ParseIniHostLineWithKeyFile(t *testing.T) {
+	logger := &mockLogger{}
+	parser := NewInventoryParser(logger)
+
+	line := "web1 ansible_host=192.168.1.10 ansible_user=deploy ansible_ssh_private_key_file=/home/user/.ssh/id_rsa"
+	host := parser.parseIniHostLine(line, 1)
+
+	assert.NotNil(t, host)
+	assert.Equal(t, "web1", host.Name)
+	assert.Equal(t, "192.168.1.10", host.Address)
+	assert.Equal(t, "deploy", host.User)
+	assert.Equal(t, "/home/user/.ssh/id_rsa", host.KeyFile)
+}
+
 func TestInventoryParser_IsExecutable(t *testing.T) {
 	tmpDir := t.TempDir()
 

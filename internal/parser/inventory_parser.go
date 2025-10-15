@@ -563,6 +563,10 @@ func (p *InventoryParser) parseIniHostLine(line string, lineNum int) *types.Host
 				}
 			case "ansible_user", "onigirazu_user":
 				host.User = value
+			case "ansible_ssh_private_key_file", "onigirazu_ssh_private_key_file":
+				host.KeyFile = value
+			case "ansible_password", "onigirazu_password":
+				host.Password = value
 			default:
 				host.Vars[key] = value
 			}
