@@ -13,6 +13,7 @@ hosts:
     address: 192.168.1.10
     port: 22
     user: deploy
+    # insecure_ignore_host_key: true  # Uncomment to disable host key verification (not recommended for production)
     vars:
       http_port: 80
       https_port: 443
@@ -62,6 +63,7 @@ groups:
       environment: prod
       debug: false
       backup_enabled: true
+      # insecure_ignore_host_key: true  # Uncomment to disable host key verification for all hosts in this group
 
   # All servers (meta-group)
   all:
@@ -77,3 +79,4 @@ groups:
       dns_servers:
         - 8.8.8.8
         - 8.8.4.4
+      # insecure_ignore_host_key: true  # Uncomment to disable host key verification for ALL hosts

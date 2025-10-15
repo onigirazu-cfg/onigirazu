@@ -10,6 +10,7 @@ connection = "local"
 address = "192.168.1.10"
 port = 22
 user = "deploy"
+# insecure_ignore_host_key = true  # Uncomment to disable host key verification (not recommended for production)
 [hosts.web-server-01.vars]
 http_port = 80
 https_port = 443
@@ -48,6 +49,7 @@ hosts = ["web-server-01", "db-server-01"]
 environment = "prod"
 debug = false
 backup_enabled = true
+# insecure_ignore_host_key = true  # Uncomment to disable host key verification for all hosts in this group
 
 [groups.all]
 children = ["webservers", "databases"]
@@ -55,3 +57,4 @@ children = ["webservers", "databases"]
 timezone = "UTC"
 ntp_servers = ["0.pool.ntp.org", "1.pool.ntp.org"]
 dns_servers = ["8.8.8.8", "8.8.4.4"]
+# insecure_ignore_host_key = true  # Uncomment to disable host key verification for ALL hosts
