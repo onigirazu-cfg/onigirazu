@@ -44,7 +44,31 @@ func TestTemplateModule_Validate(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "missing src",
+			name: "valid with content instead of src",
+			args: map[string]interface{}{
+				"content": "template content",
+				"dest":    "/tmp/output.txt",
+			},
+			wantErr: false,
+		},
+		{
+			name: "content not string",
+			args: map[string]interface{}{
+				"content": 123,
+				"dest":    "/tmp/output.txt",
+			},
+			wantErr: true,
+		},
+		{
+			name: "empty content",
+			args: map[string]interface{}{
+				"content": "",
+				"dest":    "/tmp/output.txt",
+			},
+			wantErr: true,
+		},
+		{
+			name: "missing src and content",
 			args: map[string]interface{}{
 				"dest": "/tmp/output.txt",
 			},

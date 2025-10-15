@@ -87,6 +87,56 @@ func TestLineinfileModule_Validate(t *testing.T) {
 			},
 			wantErr: true,
 		},
+		{
+			name: "valid with regexp",
+			args: map[string]interface{}{
+				"name":   "test_lineinfile",
+				"path":   "/tmp/test.txt",
+				"line":   "test line",
+				"regexp": "^test.*",
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid with insertafter",
+			args: map[string]interface{}{
+				"name":        "test_lineinfile",
+				"path":        "/tmp/test.txt",
+				"line":        "test line",
+				"insertafter": "^marker",
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid with insertbefore",
+			args: map[string]interface{}{
+				"name":         "test_lineinfile",
+				"path":         "/tmp/test.txt",
+				"line":         "test line",
+				"insertbefore": "^marker",
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid with create true",
+			args: map[string]interface{}{
+				"name":   "test_lineinfile",
+				"path":   "/tmp/test.txt",
+				"line":   "test line",
+				"create": true,
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid with backup true",
+			args: map[string]interface{}{
+				"name":   "test_lineinfile",
+				"path":   "/tmp/test.txt",
+				"line":   "test line",
+				"backup": true,
+			},
+			wantErr: false,
+		},
 	}
 
 	for _, tt := range tests {

@@ -52,11 +52,65 @@ func TestGroupModule_Validate(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "valid_with_gid_int64",
+			args: map[string]interface{}{
+				"name":  "testgroup",
+				"state": "present",
+				"gid":   int64(1000),
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid_with_gid_float64",
+			args: map[string]interface{}{
+				"name":  "testgroup",
+				"state": "present",
+				"gid":   float64(1000),
+			},
+			wantErr: false,
+		},
+		{
 			name: "valid_with_system",
 			args: map[string]interface{}{
 				"name":   "testgroup",
 				"state":  "present",
 				"system": true,
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid_with_system_string_true",
+			args: map[string]interface{}{
+				"name":   "testgroup",
+				"state":  "present",
+				"system": "true",
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid_with_system_string_yes",
+			args: map[string]interface{}{
+				"name":   "testgroup",
+				"state":  "present",
+				"system": "yes",
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid_with_system_string_false",
+			args: map[string]interface{}{
+				"name":   "testgroup",
+				"state":  "present",
+				"system": "false",
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid_with_system_string_no",
+			args: map[string]interface{}{
+				"name":   "testgroup",
+				"state":  "present",
+				"system": "no",
 			},
 			wantErr: false,
 		},

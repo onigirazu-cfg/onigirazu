@@ -106,6 +106,24 @@ func TestUserModule_Validate(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "valid_with_gid_int64",
+			args: map[string]interface{}{
+				"name":  "testuser",
+				"state": "present",
+				"gid":   int64(1000),
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid_with_gid_float64",
+			args: map[string]interface{}{
+				"name":  "testuser",
+				"state": "present",
+				"gid":   float64(1000),
+			},
+			wantErr: false,
+		},
+		{
 			name: "missing_name",
 			args: map[string]interface{}{
 				"state": "present",

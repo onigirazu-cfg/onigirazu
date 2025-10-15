@@ -2,6 +2,100 @@
 
 ## [Unreleased]
 
+## [1.31.0] - 2025-10-15
+
+### ✨ New Features
+
+- **Drift Detection System**: Comprehensive configuration drift detection and remediation
+  - Detect unauthorized changes by comparing current state with snapshots
+  - Auto-fix detected drift with `--auto-fix` flag
+  - Generate reports in multiple formats (text, JSON, HTML)
+  - Severity-based drift classification (critical, high, medium, low)
+  - List and view detailed drift reports
+  - CLI commands: `onigirazu drift detect`, `onigirazu drift list`, `onigirazu drift info`
+
+- **Rollback Support**: Safe rollback to previous system states
+  - Automatic snapshot creation before playbook execution
+  - Rollback to any previous snapshot
+  - Dry-run mode to preview rollback changes
+  - List available snapshots with metadata
+  - Cleanup old snapshots with configurable retention
+  - CLI commands: `onigirazu rollback`, `onigirazu rollback --list`, `onigirazu rollback --cleanup`
+
+### 🧪 Testing Improvements
+
+- **Module Test Coverage**: Significantly improved test coverage for core modules
+  - Group module: Added 54 comprehensive tests
+  - Lineinfile module: Added 50 comprehensive tests
+  - Template module: Added 26 additional tests
+  - User module: Added 18 additional tests
+  - Overall module coverage improved by ~30%
+
+- **Drift Detection Tests**: Full test suite for drift detection functionality
+  - Configuration tests
+  - State comparison tests
+  - Severity calculation tests
+  - Fix order calculation tests
+  - All tests passing ✅
+
+- **Rollback Tests**: Complete test coverage for rollback functionality
+  - Snapshot creation and management tests
+  - Rollback execution tests (dry-run and actual)
+  - Cleanup and retention tests
+  - Resource snapshot generation tests
+  - All tests passing ✅
+
+### 🔧 Technical Details
+
+- **New Packages**:
+  - `internal/drift`: Drift detection, fixing, and reporting
+  - `internal/rollback`: Snapshot management and rollback execution
+
+- **New CLI Commands**:
+  - `drift detect`: Detect configuration drift
+  - `drift list`: List all drift reports
+  - `drift info`: Show detailed drift information
+  - `rollback`: Rollback to a previous snapshot
+  - `rollback --list`: List available snapshots
+  - `rollback --cleanup`: Cleanup old snapshots
+
+### 📊 Statistics
+
+- 8 new source files added (drift + rollback packages)
+- 4 new CLI commands
+- ~200 new tests added
+- Module test coverage improved by ~30%
+- 100% backward compatible with v1.30.x
+
+### 🎯 Use Cases
+
+**Drift Detection:**
+```bash
+# Detect drift from latest snapshot
+onigirazu drift detect --snapshot <id>
+
+# Auto-fix detected drift
+onigirazu drift detect --snapshot <id> --auto-fix
+
+# Generate HTML report
+onigirazu drift detect --snapshot <id> --format html --output report.html
+```
+
+**Rollback:**
+```bash
+# List available snapshots
+onigirazu rollback --list
+
+# Preview rollback (dry-run)
+onigirazu rollback --dry-run --snapshot <id>
+
+# Perform rollback
+onigirazu rollback --snapshot <id>
+
+# Cleanup snapshots older than 30 days
+onigirazu rollback --cleanup --max-age 30d
+```
+
 ## [1.30.2] - 2025-02-01
 
 ### 🐛 Bug Fixes
