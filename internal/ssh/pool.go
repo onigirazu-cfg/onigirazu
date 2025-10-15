@@ -47,6 +47,11 @@ func DefaultPoolConfig() PoolConfig {
 
 // NewConnectionPool creates a new SSH connection pool
 func NewConnectionPool(config PoolConfig) *ConnectionPool {
+	return NewConnectionPoolWithHostKeyManager(config, NewHostKeyManager("", false))
+}
+
+// NewConnectionPoolWithHostKeyManager creates a new SSH connection pool with custom host key manager
+func NewConnectionPoolWithHostKeyManager(config PoolConfig, hostKeyMgr *HostKeyManager) *ConnectionPool {
 	if config.MaxIdle == 0 {
 		config.MaxIdle = 5 * time.Minute
 	}
@@ -63,10 +68,9 @@ func NewConnectionPool(config PoolConfig) *ConnectionPool {
 		maxLifetime: config.MaxLifetime,
 		cleanupTick: config.CleanupTick,
 		stopCleanup: make(chan struct{}),
-		hostKeyMgr:  NewHostKeyManager("", false),
+		hostKeyMgr:  hostKeyMgr,
 	}
 
-	// Start cleanup goroutine
 	go pool.cleanupLoop()
 
 	return pool
@@ -293,4 +297,24 @@ func GetGlobalPool() *ConnectionPool {
 // SetGlobalPool sets a custom global connection pool
 func SetGlobalPool(pool *ConnectionPool) {
 	globalPool = pool
+}
+
+// InitializeGlobalPool initializes the global pool with config-based host key manager
+func InitializeGlobalPool(cfg interface{}) {
+	strictMode := false
+	knownHostsFile := ""
+
+	type SSHConfig interface {
+		IsSSHStrictHostKeyEnabled() bool
+		GetSSHKnownHostsFile() string
+	}
+
+	if sshCfg, ok := cfg.(SSHConfig); ok {
+		strictMode = sshCfg.IsSSHStrictHostKeyEnabled()
+		knownHostsFile = sshCfg.GetSSHKnownHostsFile()
+	}
+
+	hostKeyMgr := NewHostKeyManager(knownHostsFile, strictMode)
+	pool := NewConnectionPoolWithHostKeyManager(DefaultPoolConfig(), hostKeyMgr)
+	SetGlobalPool(pool)
 }

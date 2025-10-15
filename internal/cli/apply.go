@@ -21,6 +21,7 @@ import (
 	"github.com/onigirazu-cfg/onigirazu/internal/parser"
 	"github.com/onigirazu-cfg/onigirazu/internal/plugins"
 	"github.com/onigirazu-cfg/onigirazu/internal/progress"
+	sshpkg "github.com/onigirazu-cfg/onigirazu/internal/ssh"
 	"github.com/onigirazu-cfg/onigirazu/internal/state"
 	"github.com/onigirazu-cfg/onigirazu/internal/template"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
@@ -187,6 +188,10 @@ Examples:
 
 			// Initialize components
 			cacheManager := cache.NewManager(5 * time.Minute) // Default TTL of 5 minutes
+
+			// Initialize SSH connection pool with host key manager
+			sshpkg.InitializeGlobalPool(cfg)
+			log.Debug("SSH connection pool initialized (strict_mode=%v)", cfg.IsSSHStrictHostKeyEnabled())
 
 			// Create template engine with plugin support
 			var templateEngine *template.Engine
