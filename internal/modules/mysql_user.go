@@ -12,7 +12,6 @@ import (
 
 type MySQLUserModule struct {
 	BaseModule
-	executor *executor.CommandExecutor
 }
 
 func NewMySQLUserModule() *MySQLUserModule {
@@ -36,15 +35,13 @@ func (m *MySQLUserModule) Execute(ctx context.Context, host types.Host, args map
 		Timestamp: startTime,
 	}
 
-	if m.executor == nil {
-		var err error
-		m.executor, err = executor.NewCommandExecutor(host)
-		if err != nil {
-			result.Success = false
-			result.Error = fmt.Sprintf("failed to create executor: %v", err)
-			return result, err
-		}
+	exec, err := executor.NewCommandExecutor(host)
+	if err != nil {
+		result.Success = false
+		result.Error = fmt.Sprintf("failed to create executor: %v", err)
+		return result, err
 	}
+	defer exec.Close()
 
 	userName, ok := args["name"].(string)
 	if !ok || userName == "" {
@@ -79,7 +76,7 @@ func (m *MySQLUserModule) Execute(ctx context.Context, host types.Host, args map
 		loginPort = "3306"
 	}
 
-	exists, err := m.userExists(ctx, userName, userHost, loginUser, loginPassword, loginHost, loginPort)
+	exists, err := m.userExists(ctx, exec, userName, userHost, loginUser, loginPassword, loginHost, loginPort)
 	if err != nil {
 		result.Success = false
 		result.Error = fmt.Sprintf("failed to check user: %v", err)
@@ -90,7 +87,7 @@ func (m *MySQLUserModule) Execute(ctx context.Context, host types.Host, args map
 	case "present":
 		if !exists {
 			password, _ := args["password"].(string)
-			if err := m.createUser(ctx, userName, userHost, password, loginUser, loginPassword, loginHost, loginPort); err != nil {
+			if err := m.createUser(ctx, exec, userName, userHost, password, loginUser, loginPassword, loginHost, loginPort); err != nil {
 				result.Success = false
 				result.Error = fmt.Sprintf("failed to create user: %v", err)
 				return result, err
@@ -100,7 +97,7 @@ func (m *MySQLUserModule) Execute(ctx context.Context, host types.Host, args map
 		}
 
 		if priv, ok := args["priv"].(string); ok && priv != "" {
-			if err := m.grantPrivileges(ctx, userName, userHost, priv, loginUser, loginPassword, loginHost, loginPort); err != nil {
+			if err := m.grantPrivileges(ctx, exec, userName, userHost, priv, loginUser, loginPassword, loginHost, loginPort); err != nil {
 				result.Success = false
 				result.Error = fmt.Sprintf("failed to grant privileges: %v", err)
 				return result, err
@@ -111,7 +108,7 @@ func (m *MySQLUserModule) Execute(ctx context.Context, host types.Host, args map
 
 	case "absent":
 		if exists {
-			if err := m.dropUser(ctx, userName, userHost, loginUser, loginPassword, loginHost, loginPort); err != nil {
+			if err := m.dropUser(ctx, exec, userName, userHost, loginUser, loginPassword, loginHost, loginPort); err != nil {
 				result.Success = false
 				result.Error = fmt.Sprintf("failed to drop user: %v", err)
 				return result, err
@@ -142,11 +139,11 @@ func (m *MySQLUserModule) buildMySQLCmd(loginUser, loginPassword, loginHost, log
 	return strings.Join(cmdParts, " ")
 }
 
-func (m *MySQLUserModule) userExists(ctx context.Context, userName, userHost, loginUser, loginPassword, loginHost, loginPort string) (bool, error) {
+func (m *MySQLUserModule) userExists(ctx context.Context, exec *executor.CommandExecutor, userName, userHost, loginUser, loginPassword, loginHost, loginPort string) (bool, error) {
 	baseCmd := m.buildMySQLCmd(loginUser, loginPassword, loginHost, loginPort)
 	cmd := fmt.Sprintf("%s -e \"SELECT User FROM mysql.user WHERE User='%s' AND Host='%s'\" 2>/dev/null", baseCmd, userName, userHost)
 
-	stdout, err := m.executor.Execute(cmd)
+	stdout, err := exec.Execute(cmd)
 	if err != nil {
 		return false, nil
 	}
@@ -154,11 +151,11 @@ func (m *MySQLUserModule) userExists(ctx context.Context, userName, userHost, lo
 	return strings.Contains(stdout, userName), nil
 }
 
-func (m *MySQLUserModule) createUser(ctx context.Context, userName, userHost, password, loginUser, loginPassword, loginHost, loginPort string) error {
+func (m *MySQLUserModule) createUser(ctx context.Context, exec *executor.CommandExecutor, userName, userHost, password, loginUser, loginPassword, loginHost, loginPort string) error {
 	baseCmd := m.buildMySQLCmd(loginUser, loginPassword, loginHost, loginPort)
 	cmd := fmt.Sprintf("%s -e \"CREATE USER '%s'@'%s' IDENTIFIED BY '%s'\"", baseCmd, userName, userHost, password)
 
-	_, err := m.executor.Execute(cmd)
+	_, err := exec.Execute(cmd)
 	if err != nil {
 		return fmt.Errorf("failed to create user: %s", err.Error())
 	}
@@ -166,11 +163,11 @@ func (m *MySQLUserModule) createUser(ctx context.Context, userName, userHost, pa
 	return nil
 }
 
-func (m *MySQLUserModule) dropUser(ctx context.Context, userName, userHost, loginUser, loginPassword, loginHost, loginPort string) error {
+func (m *MySQLUserModule) dropUser(ctx context.Context, exec *executor.CommandExecutor, userName, userHost, loginUser, loginPassword, loginHost, loginPort string) error {
 	baseCmd := m.buildMySQLCmd(loginUser, loginPassword, loginHost, loginPort)
 	cmd := fmt.Sprintf("%s -e \"DROP USER '%s'@'%s'\"", baseCmd, userName, userHost)
 
-	_, err := m.executor.Execute(cmd)
+	_, err := exec.Execute(cmd)
 	if err != nil {
 		return fmt.Errorf("failed to drop user: %s", err.Error())
 	}
@@ -178,11 +175,11 @@ func (m *MySQLUserModule) dropUser(ctx context.Context, userName, userHost, logi
 	return nil
 }
 
-func (m *MySQLUserModule) grantPrivileges(ctx context.Context, userName, userHost, priv, loginUser, loginPassword, loginHost, loginPort string) error {
+func (m *MySQLUserModule) grantPrivileges(ctx context.Context, exec *executor.CommandExecutor, userName, userHost, priv, loginUser, loginPassword, loginHost, loginPort string) error {
 	baseCmd := m.buildMySQLCmd(loginUser, loginPassword, loginHost, loginPort)
 	cmd := fmt.Sprintf("%s -e \"GRANT %s TO '%s'@'%s'; FLUSH PRIVILEGES\"", baseCmd, priv, userName, userHost)
 
-	_, err := m.executor.Execute(cmd)
+	_, err := exec.Execute(cmd)
 	if err != nil {
 		return fmt.Errorf("failed to grant privileges: %s", err.Error())
 	}

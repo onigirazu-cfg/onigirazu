@@ -14,7 +14,6 @@ import (
 // StatModule retrieves file or directory status
 type StatModule struct {
 	*BaseModule
-	executor *executor.CommandExecutor
 }
 
 func NewStatModule() *StatModule {
@@ -45,22 +44,20 @@ func (m *StatModule) Execute(ctx context.Context, host types.Host, args map[stri
 		return result, err
 	}
 
-	// Initialize executor if not already done
-	if m.executor == nil {
-		exec, err := executor.NewCommandExecutor(host)
-		if err != nil {
-			result.Success = false
-			result.Error = fmt.Sprintf("failed to create executor: %v", err)
-			result.Duration = time.Since(startTime)
-			return result, err
-		}
-		m.executor = exec
+	// Initialize executor for this execution
+	exec, err := executor.NewCommandExecutor(host)
+	if err != nil {
+		result.Success = false
+		result.Error = fmt.Sprintf("failed to create executor: %v", err)
+		result.Duration = time.Since(startTime)
+		return result, err
 	}
+	defer exec.Close()
 
 	path := args["path"].(string)
 
 	// Get file info using remote stat command
-	statOutput, err := m.getRemoteFileStat(path)
+	statOutput, err := m.getRemoteFileStat(exec, path)
 
 	if err != nil {
 		// Check if file doesn't exist
@@ -95,14 +92,14 @@ func (m *StatModule) Execute(ctx context.Context, host types.Host, args map[stri
 }
 
 // getRemoteFileStat retrieves file information from remote host using stat command
-func (m *StatModule) getRemoteFileStat(path string) (map[string]interface{}, error) {
+func (m *StatModule) getRemoteFileStat(exec *executor.CommandExecutor, path string) (map[string]interface{}, error) {
 	// Use stat command with JSON-like output format
 	// Format: exists|type|size|mode|mtime
 	// Build command with proper escaping - escape pipes in echo to avoid shell interpretation
 	cmd := fmt.Sprintf(`if [ -e '%s' ]; then if [ -d '%s' ]; then TYPE=directory; elif [ -L '%s' ]; then TYPE=link; elif [ -f '%s' ]; then TYPE=file; else TYPE=other; fi; SIZE=$(stat -c %%s '%s' 2>/dev/null || stat -f %%z '%s' 2>/dev/null); MODE=$(stat -c %%a '%s' 2>/dev/null || stat -f %%A '%s' 2>/dev/null); MTIME=$(stat -c %%Y '%s' 2>/dev/null || stat -f %%m '%s' 2>/dev/null); echo "exists=true|type=$TYPE|size=$SIZE|mode=$MODE|mtime=$MTIME"; else echo "exists=false"; fi`,
 		path, path, path, path, path, path, path, path, path, path)
 
-	output, err := m.executor.Execute(cmd)
+	output, err := exec.Execute(cmd)
 	if err != nil {
 		return nil, fmt.Errorf("stat command failed: %v, output: %s", err, output)
 	}

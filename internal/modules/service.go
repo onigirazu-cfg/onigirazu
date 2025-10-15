@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"runtime"
 	"strings"
 	"time"
 
@@ -29,8 +28,8 @@ type ServiceStatus struct {
 // ServiceModule implements service management
 type ServiceModuleFixed struct {
 	BaseModule
-	serviceManager ServiceManagerFixed
-	executor       *executor.CommandExecutor
+	// testServiceManager is used for testing only - if set, it will be used instead of detecting the service manager
+	testServiceManager ServiceManagerFixed
 }
 
 // ServiceManagerFixed interface for different service management systems
@@ -49,32 +48,11 @@ type ServiceManagerFixed interface {
 
 // NewServiceModuleFixed creates a new service module
 func NewServiceModuleFixed() *ServiceModuleFixed {
-	var manager ServiceManagerFixed
-
-	// Detect service management system
-	switch runtime.GOOS {
-	case "linux":
-		if hasSystemd() {
-			manager = &SystemdManagerFixed{}
-		} else if hasSysVInit() {
-			manager = &SysVInitManagerFixed{}
-		} else {
-			manager = &GenericManagerFixed{}
-		}
-	case "darwin":
-		manager = &LaunchdManagerFixed{}
-	case "windows":
-		manager = &WindowsServiceManagerFixed{}
-	default:
-		manager = &GenericManagerFixed{}
-	}
-
 	return &ServiceModuleFixed{
 		BaseModule: BaseModule{
 			name:        "service",
 			description: "Manage system services",
 		},
-		serviceManager: manager,
 	}
 }
 
@@ -96,28 +74,32 @@ func (m *ServiceModuleFixed) Execute(ctx context.Context, host types.Host, args 
 		Timestamp: startTime,
 	}
 
-	// Initialize executor if not already done
-	if m.executor == nil {
-		exec, err := executor.NewCommandExecutor(host)
-		if err != nil {
-			return m.failResult(result, fmt.Sprintf("failed to create executor: %v", err))
-		}
-		m.executor = exec
+	// Create a fresh executor for this execution
+	exec, err := executor.NewCommandExecutor(host)
+	if err != nil {
+		return m.failResult(result, fmt.Sprintf("failed to create executor: %v", err))
+	}
+	defer exec.Close()
 
-		// Configure become (privilege escalation) if requested
-		if become, ok := args["_become"].(bool); ok && become {
-			becomeUser, _ := args["_become_user"].(string)
-			becomeMethod, _ := args["_become_method"].(string)
-			exec.SetBecome(true, becomeUser, becomeMethod)
-		}
+	// Configure become (privilege escalation) if requested
+	if become, ok := args["_become"].(bool); ok && become {
+		becomeUser, _ := args["_become_user"].(string)
+		becomeMethod, _ := args["_become_method"].(string)
+		exec.SetBecome(true, becomeUser, becomeMethod)
+	}
 
+	// Use test service manager if set (for testing), otherwise detect it
+	var serviceManager ServiceManagerFixed
+	if m.testServiceManager != nil {
+		serviceManager = m.testServiceManager
+		serviceManager.SetExecutor(exec)
+	} else {
 		// Detect service manager for the remote host
-		manager, err := m.detectServiceManager(exec)
+		serviceManager, err = m.detectServiceManager(exec)
 		if err != nil {
 			return m.failResult(result, fmt.Sprintf("failed to detect service manager: %v", err))
 		}
-		m.serviceManager = manager
-		m.serviceManager.SetExecutor(exec)
+		serviceManager.SetExecutor(exec)
 	}
 
 	// Get required parameters
@@ -130,7 +112,7 @@ func (m *ServiceModuleFixed) Execute(ctx context.Context, host types.Host, args 
 	enabled := getBoolArg(args, "enabled", false)
 
 	// Get current status
-	currentStatus, err := m.serviceManager.GetStatus(name)
+	currentStatus, err := serviceManager.GetStatus(name)
 	if err != nil {
 		return m.failResult(result, fmt.Sprintf("failed to get service status: %v", err))
 	}
@@ -142,7 +124,7 @@ func (m *ServiceModuleFixed) Execute(ctx context.Context, host types.Host, args 
 	switch state {
 	case "started":
 		if !currentStatus.Running {
-			if err := m.serviceManager.Start(name); err != nil {
+			if err := serviceManager.Start(name); err != nil {
 				return m.failResult(result, fmt.Sprintf("failed to start service: %v", err))
 			}
 			changed = true
@@ -150,20 +132,20 @@ func (m *ServiceModuleFixed) Execute(ctx context.Context, host types.Host, args 
 		}
 	case "stopped":
 		if currentStatus.Running {
-			if err := m.serviceManager.Stop(name); err != nil {
+			if err := serviceManager.Stop(name); err != nil {
 				return m.failResult(result, fmt.Sprintf("failed to stop service: %v", err))
 			}
 			changed = true
 			result.Output["action"] = "stopped"
 		}
 	case "restarted":
-		if err := m.serviceManager.Restart(name); err != nil {
+		if err := serviceManager.Restart(name); err != nil {
 			return m.failResult(result, fmt.Sprintf("failed to restart service: %v", err))
 		}
 		changed = true
 		result.Output["action"] = "restarted"
 	case "reloaded":
-		if err := m.serviceManager.Reload(name); err != nil {
+		if err := serviceManager.Reload(name); err != nil {
 			return m.failResult(result, fmt.Sprintf("failed to reload service: %v", err))
 		}
 		changed = true
@@ -173,13 +155,13 @@ func (m *ServiceModuleFixed) Execute(ctx context.Context, host types.Host, args 
 	// Handle enabled state
 	if args["enabled"] != nil {
 		if enabled && !currentStatus.Enabled {
-			if err := m.serviceManager.Enable(name); err != nil {
+			if err := serviceManager.Enable(name); err != nil {
 				return m.failResult(result, fmt.Sprintf("failed to enable service: %v", err))
 			}
 			changed = true
 			result.Output["enabled"] = true
 		} else if !enabled && currentStatus.Enabled {
-			if err := m.serviceManager.Disable(name); err != nil {
+			if err := serviceManager.Disable(name); err != nil {
 				return m.failResult(result, fmt.Sprintf("failed to disable service: %v", err))
 			}
 			changed = true
@@ -189,7 +171,7 @@ func (m *ServiceModuleFixed) Execute(ctx context.Context, host types.Host, args 
 
 	// Get updated status
 	if changed {
-		updatedStatus, err := m.serviceManager.GetStatus(name)
+		updatedStatus, err := serviceManager.GetStatus(name)
 		if err == nil {
 			result.Output["service_status"] = updatedStatus
 		}

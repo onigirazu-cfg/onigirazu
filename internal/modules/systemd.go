@@ -13,7 +13,6 @@ import (
 // SystemdModule implements systemd management
 type SystemdModule struct {
 	BaseModule
-	executor *executor.CommandExecutor
 }
 
 // NewSystemdModule creates a new systemd module
@@ -39,36 +38,34 @@ func (m *SystemdModule) Execute(ctx context.Context, host types.Host, args map[s
 		Timestamp: startTime,
 	}
 
-	// Initialize executor
-	if m.executor == nil {
-		exec, err := executor.NewCommandExecutor(host)
-		if err != nil {
-			return m.failResult(result, fmt.Sprintf("failed to create executor: %v", err))
-		}
-		m.executor = exec
+	// Create a fresh executor for this execution
+	exec, err := executor.NewCommandExecutor(host)
+	if err != nil {
+		return m.failResult(result, fmt.Sprintf("failed to create executor: %v", err))
 	}
+	defer exec.Close()
 
 	// Get operation type
 	operation := getStringArg(args, "operation", "service")
 
 	switch operation {
 	case "service":
-		return m.handleService(ctx, host, args, result)
+		return m.handleService(ctx, exec, host, args, result)
 	case "unit":
-		return m.handleUnit(ctx, host, args, result)
+		return m.handleUnit(ctx, exec, host, args, result)
 	case "timer":
-		return m.handleTimer(ctx, host, args, result)
+		return m.handleTimer(ctx, exec, host, args, result)
 	case "daemon-reload":
-		return m.handleDaemonReload(ctx, host, args, result)
+		return m.handleDaemonReload(ctx, exec, host, args, result)
 	case "status":
-		return m.handleStatus(ctx, host, args, result)
+		return m.handleStatus(ctx, exec, host, args, result)
 	default:
 		return m.failResult(result, fmt.Sprintf("unknown operation: %s", operation))
 	}
 }
 
 // handleService manages systemd services
-func (m *SystemdModule) handleService(ctx context.Context, host types.Host, args map[string]interface{}, result types.TaskResult) (types.TaskResult, error) {
+func (m *SystemdModule) handleService(ctx context.Context, exec *executor.CommandExecutor, host types.Host, args map[string]interface{}, result types.TaskResult) (types.TaskResult, error) {
 	name, ok := args["name"].(string)
 	if !ok {
 		return m.failResult(result, "name parameter is required")
@@ -82,7 +79,7 @@ func (m *SystemdModule) handleService(ctx context.Context, host types.Host, args
 
 	// Handle state changes
 	if state != "" {
-		currentState, err := m.getServiceState(name)
+		currentState, err := m.getServiceState(exec, name)
 		if err != nil {
 			return m.failResult(result, fmt.Sprintf("failed to get service state: %v", err))
 		}
@@ -90,7 +87,7 @@ func (m *SystemdModule) handleService(ctx context.Context, host types.Host, args
 		switch state {
 		case "started":
 			if currentState != "active" {
-				if _, err := m.executor.Execute("systemctl", "start", name); err != nil {
+				if _, err := exec.Execute("systemctl", "start", name); err != nil {
 					return m.failResult(result, fmt.Sprintf("failed to start service: %v", err))
 				}
 				changed = true
@@ -98,20 +95,20 @@ func (m *SystemdModule) handleService(ctx context.Context, host types.Host, args
 			}
 		case "stopped":
 			if currentState == "active" {
-				if _, err := m.executor.Execute("systemctl", "stop", name); err != nil {
+				if _, err := exec.Execute("systemctl", "stop", name); err != nil {
 					return m.failResult(result, fmt.Sprintf("failed to stop service: %v", err))
 				}
 				changed = true
 				result.Output["action"] = "stopped"
 			}
 		case "restarted":
-			if _, err := m.executor.Execute("systemctl", "restart", name); err != nil {
+			if _, err := exec.Execute("systemctl", "restart", name); err != nil {
 				return m.failResult(result, fmt.Sprintf("failed to restart service: %v", err))
 			}
 			changed = true
 			result.Output["action"] = "restarted"
 		case "reloaded":
-			if _, err := m.executor.Execute("systemctl", "reload", name); err != nil {
+			if _, err := exec.Execute("systemctl", "reload", name); err != nil {
 				return m.failResult(result, fmt.Sprintf("failed to reload service: %v", err))
 			}
 			changed = true
@@ -122,19 +119,19 @@ func (m *SystemdModule) handleService(ctx context.Context, host types.Host, args
 	// Handle enabled state
 	if enabled != nil {
 		enabledBool := getBoolArg(args, "enabled", false)
-		isEnabled, err := m.isServiceEnabled(name)
+		isEnabled, err := m.isServiceEnabled(exec, name)
 		if err != nil {
 			return m.failResult(result, fmt.Sprintf("failed to check enabled state: %v", err))
 		}
 
 		if enabledBool && !isEnabled {
-			if _, err := m.executor.Execute("systemctl", "enable", name); err != nil {
+			if _, err := exec.Execute("systemctl", "enable", name); err != nil {
 				return m.failResult(result, fmt.Sprintf("failed to enable service: %v", err))
 			}
 			changed = true
 			result.Output["enabled"] = true
 		} else if !enabledBool && isEnabled {
-			if _, err := m.executor.Execute("systemctl", "disable", name); err != nil {
+			if _, err := exec.Execute("systemctl", "disable", name); err != nil {
 				return m.failResult(result, fmt.Sprintf("failed to disable service: %v", err))
 			}
 			changed = true
@@ -145,19 +142,19 @@ func (m *SystemdModule) handleService(ctx context.Context, host types.Host, args
 	// Handle masked state
 	if masked != nil {
 		maskedBool := getBoolArg(args, "masked", false)
-		isMasked, err := m.isServiceMasked(name)
+		isMasked, err := m.isServiceMasked(exec, name)
 		if err != nil {
 			return m.failResult(result, fmt.Sprintf("failed to check masked state: %v", err))
 		}
 
 		if maskedBool && !isMasked {
-			if _, err := m.executor.Execute("systemctl", "mask", name); err != nil {
+			if _, err := exec.Execute("systemctl", "mask", name); err != nil {
 				return m.failResult(result, fmt.Sprintf("failed to mask service: %v", err))
 			}
 			changed = true
 			result.Output["masked"] = true
 		} else if !maskedBool && isMasked {
-			if _, err := m.executor.Execute("systemctl", "unmask", name); err != nil {
+			if _, err := exec.Execute("systemctl", "unmask", name); err != nil {
 				return m.failResult(result, fmt.Sprintf("failed to unmask service: %v", err))
 			}
 			changed = true
@@ -166,7 +163,7 @@ func (m *SystemdModule) handleService(ctx context.Context, host types.Host, args
 	}
 
 	// Get final status
-	status, err := m.getServiceStatus(name)
+	status, err := m.getServiceStatus(exec, name)
 	if err == nil {
 		result.Output["status"] = status
 	}
@@ -177,7 +174,7 @@ func (m *SystemdModule) handleService(ctx context.Context, host types.Host, args
 }
 
 // handleUnit manages systemd unit files
-func (m *SystemdModule) handleUnit(ctx context.Context, host types.Host, args map[string]interface{}, result types.TaskResult) (types.TaskResult, error) {
+func (m *SystemdModule) handleUnit(ctx context.Context, exec *executor.CommandExecutor, host types.Host, args map[string]interface{}, result types.TaskResult) (types.TaskResult, error) {
 	name, ok := args["name"].(string)
 	if !ok {
 		return m.failResult(result, "name parameter is required")
@@ -201,18 +198,18 @@ func (m *SystemdModule) handleUnit(ctx context.Context, host types.Host, args ma
 		}
 
 		// Check if unit file exists
-		_, err := m.executor.Execute("test", "-f", unitPath)
+		_, err := exec.Execute("test", "-f", unitPath)
 		unitExists := err == nil
 
 		if content != "" {
 			// Write unit file content
 			tmpFile := fmt.Sprintf("/tmp/%s", name)
-			if _, err := m.executor.Execute("sh", "-c", fmt.Sprintf("cat > %s << 'EOF'\n%s\nEOF", tmpFile, content)); err != nil {
+			if _, err := exec.Execute("sh", "-c", fmt.Sprintf("cat > %s << 'EOF'\n%s\nEOF", tmpFile, content)); err != nil {
 				return m.failResult(result, fmt.Sprintf("failed to write unit file: %v", err))
 			}
 
 			// Move to systemd directory
-			if _, err := m.executor.Execute("mv", tmpFile, unitPath); err != nil {
+			if _, err := exec.Execute("mv", tmpFile, unitPath); err != nil {
 				return m.failResult(result, fmt.Sprintf("failed to move unit file: %v", err))
 			}
 
@@ -222,7 +219,7 @@ func (m *SystemdModule) handleUnit(ctx context.Context, host types.Host, args ma
 
 		// Reload systemd if unit was created or modified
 		if changed || !unitExists {
-			if _, err := m.executor.Execute("systemctl", "daemon-reload"); err != nil {
+			if _, err := exec.Execute("systemctl", "daemon-reload"); err != nil {
 				return m.failResult(result, fmt.Sprintf("failed to reload systemd: %v", err))
 			}
 		}
@@ -233,19 +230,19 @@ func (m *SystemdModule) handleUnit(ctx context.Context, host types.Host, args ma
 		}
 
 		// Check if unit file exists
-		_, err := m.executor.Execute("test", "-f", unitPath)
+		_, err := exec.Execute("test", "-f", unitPath)
 		if err == nil {
 			// Stop and disable service first (ignore errors as service might not be running/enabled)
-			_, _ = m.executor.Execute("systemctl", "stop", name)
-			_, _ = m.executor.Execute("systemctl", "disable", name)
+			_, _ = exec.Execute("systemctl", "stop", name)
+			_, _ = exec.Execute("systemctl", "disable", name)
 
 			// Remove unit file
-			if _, err := m.executor.Execute("rm", "-f", unitPath); err != nil {
+			if _, err := exec.Execute("rm", "-f", unitPath); err != nil {
 				return m.failResult(result, fmt.Sprintf("failed to remove unit file: %v", err))
 			}
 
 			// Reload systemd
-			if _, err := m.executor.Execute("systemctl", "daemon-reload"); err != nil {
+			if _, err := exec.Execute("systemctl", "daemon-reload"); err != nil {
 				return m.failResult(result, fmt.Sprintf("failed to reload systemd: %v", err))
 			}
 
@@ -260,7 +257,7 @@ func (m *SystemdModule) handleUnit(ctx context.Context, host types.Host, args ma
 }
 
 // handleTimer manages systemd timers
-func (m *SystemdModule) handleTimer(ctx context.Context, host types.Host, args map[string]interface{}, result types.TaskResult) (types.TaskResult, error) {
+func (m *SystemdModule) handleTimer(ctx context.Context, exec *executor.CommandExecutor, host types.Host, args map[string]interface{}, result types.TaskResult) (types.TaskResult, error) {
 	name, ok := args["name"].(string)
 	if !ok {
 		return m.failResult(result, "name parameter is required")
@@ -278,7 +275,7 @@ func (m *SystemdModule) handleTimer(ctx context.Context, host types.Host, args m
 
 	// Handle state changes
 	if state != "" {
-		currentState, err := m.getServiceState(name)
+		currentState, err := m.getServiceState(exec, name)
 		if err != nil {
 			return m.failResult(result, fmt.Sprintf("failed to get timer state: %v", err))
 		}
@@ -286,7 +283,7 @@ func (m *SystemdModule) handleTimer(ctx context.Context, host types.Host, args m
 		switch state {
 		case "started":
 			if currentState != "active" {
-				if _, err := m.executor.Execute("systemctl", "start", name); err != nil {
+				if _, err := exec.Execute("systemctl", "start", name); err != nil {
 					return m.failResult(result, fmt.Sprintf("failed to start timer: %v", err))
 				}
 				changed = true
@@ -294,7 +291,7 @@ func (m *SystemdModule) handleTimer(ctx context.Context, host types.Host, args m
 			}
 		case "stopped":
 			if currentState == "active" {
-				if _, err := m.executor.Execute("systemctl", "stop", name); err != nil {
+				if _, err := exec.Execute("systemctl", "stop", name); err != nil {
 					return m.failResult(result, fmt.Sprintf("failed to stop timer: %v", err))
 				}
 				changed = true
@@ -306,19 +303,19 @@ func (m *SystemdModule) handleTimer(ctx context.Context, host types.Host, args m
 	// Handle enabled state
 	if enabled != nil {
 		enabledBool := getBoolArg(args, "enabled", false)
-		isEnabled, err := m.isServiceEnabled(name)
+		isEnabled, err := m.isServiceEnabled(exec, name)
 		if err != nil {
 			return m.failResult(result, fmt.Sprintf("failed to check enabled state: %v", err))
 		}
 
 		if enabledBool && !isEnabled {
-			if _, err := m.executor.Execute("systemctl", "enable", name); err != nil {
+			if _, err := exec.Execute("systemctl", "enable", name); err != nil {
 				return m.failResult(result, fmt.Sprintf("failed to enable timer: %v", err))
 			}
 			changed = true
 			result.Output["enabled"] = true
 		} else if !enabledBool && isEnabled {
-			if _, err := m.executor.Execute("systemctl", "disable", name); err != nil {
+			if _, err := exec.Execute("systemctl", "disable", name); err != nil {
 				return m.failResult(result, fmt.Sprintf("failed to disable timer: %v", err))
 			}
 			changed = true
@@ -327,7 +324,7 @@ func (m *SystemdModule) handleTimer(ctx context.Context, host types.Host, args m
 	}
 
 	// Get timer status
-	output, err := m.executor.Execute("systemctl", "list-timers", "--all", name)
+	output, err := exec.Execute("systemctl", "list-timers", "--all", name)
 	if err == nil {
 		result.Output["timer_info"] = strings.TrimSpace(output)
 	}
@@ -338,8 +335,8 @@ func (m *SystemdModule) handleTimer(ctx context.Context, host types.Host, args m
 }
 
 // handleDaemonReload reloads systemd daemon
-func (m *SystemdModule) handleDaemonReload(ctx context.Context, host types.Host, args map[string]interface{}, result types.TaskResult) (types.TaskResult, error) {
-	if _, err := m.executor.Execute("systemctl", "daemon-reload"); err != nil {
+func (m *SystemdModule) handleDaemonReload(ctx context.Context, exec *executor.CommandExecutor, host types.Host, args map[string]interface{}, result types.TaskResult) (types.TaskResult, error) {
+	if _, err := exec.Execute("systemctl", "daemon-reload"); err != nil {
 		return m.failResult(result, fmt.Sprintf("failed to reload systemd: %v", err))
 	}
 
@@ -350,13 +347,13 @@ func (m *SystemdModule) handleDaemonReload(ctx context.Context, host types.Host,
 }
 
 // handleStatus gets systemd status
-func (m *SystemdModule) handleStatus(ctx context.Context, host types.Host, args map[string]interface{}, result types.TaskResult) (types.TaskResult, error) {
+func (m *SystemdModule) handleStatus(ctx context.Context, exec *executor.CommandExecutor, host types.Host, args map[string]interface{}, result types.TaskResult) (types.TaskResult, error) {
 	name, ok := args["name"].(string)
 	if !ok {
 		return m.failResult(result, "name parameter is required")
 	}
 
-	status, err := m.getServiceStatus(name)
+	status, err := m.getServiceStatus(exec, name)
 	if err != nil {
 		return m.failResult(result, fmt.Sprintf("failed to get status: %v", err))
 	}
@@ -367,34 +364,34 @@ func (m *SystemdModule) handleStatus(ctx context.Context, host types.Host, args 
 }
 
 // Helper methods
-func (m *SystemdModule) getServiceState(name string) (string, error) {
-	output, err := m.executor.Execute("systemctl", "is-active", name)
+func (m *SystemdModule) getServiceState(exec *executor.CommandExecutor, name string) (string, error) {
+	output, err := exec.Execute("systemctl", "is-active", name)
 	if err != nil {
 		return "inactive", nil
 	}
 	return strings.TrimSpace(output), nil
 }
 
-func (m *SystemdModule) isServiceEnabled(name string) (bool, error) {
-	output, err := m.executor.Execute("systemctl", "is-enabled", name)
+func (m *SystemdModule) isServiceEnabled(exec *executor.CommandExecutor, name string) (bool, error) {
+	output, err := exec.Execute("systemctl", "is-enabled", name)
 	if err != nil {
 		return false, nil
 	}
 	return strings.TrimSpace(output) == "enabled", nil
 }
 
-func (m *SystemdModule) isServiceMasked(name string) (bool, error) {
-	output, err := m.executor.Execute("systemctl", "is-enabled", name)
+func (m *SystemdModule) isServiceMasked(exec *executor.CommandExecutor, name string) (bool, error) {
+	output, err := exec.Execute("systemctl", "is-enabled", name)
 	if err != nil {
 		return strings.TrimSpace(output) == "masked", nil
 	}
 	return false, nil
 }
 
-func (m *SystemdModule) getServiceStatus(name string) (map[string]string, error) {
+func (m *SystemdModule) getServiceStatus(exec *executor.CommandExecutor, name string) (map[string]string, error) {
 	status := make(map[string]string)
 
-	output, err := m.executor.Execute("systemctl", "show", name, "--property=LoadState,ActiveState,SubState,MainPID,Description,UnitFileState")
+	output, err := exec.Execute("systemctl", "show", name, "--property=LoadState,ActiveState,SubState,MainPID,Description,UnitFileState")
 	if err != nil {
 		return status, err
 	}

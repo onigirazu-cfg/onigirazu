@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/onigirazu-cfg/onigirazu/internal/executor"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
@@ -12,6 +13,13 @@ import (
 type BaseModule struct {
 	name        string
 	description string
+}
+
+// BaseExecutorModule extends BaseModule with safe executor management
+// This prevents the common bug of caching executors which causes all hosts
+// to execute commands on the first host's connection.
+type BaseExecutorModule struct {
+	*BaseModule
 }
 
 func NewBaseModule(name string) *BaseModule {
@@ -112,4 +120,60 @@ func (m *BaseModule) failResult(result types.TaskResult, errorMsg string) (types
 	result.Error = errorMsg
 	result.Duration = time.Since(result.Timestamp)
 	return result, fmt.Errorf("%s", errorMsg)
+}
+
+// NewBaseExecutorModule creates a new base executor module
+func NewBaseExecutorModule(name string) *BaseExecutorModule {
+	return &BaseExecutorModule{
+		BaseModule: NewBaseModule(name),
+	}
+}
+
+// WithExecutor executes a function with a fresh executor instance
+// This ensures that each execution gets its own executor connected to the correct host.
+// The executor is automatically closed after the function completes.
+//
+// Example usage:
+//
+//	err := m.WithExecutor(host, func(exec *executor.CommandExecutor) error {
+//	    output, err := exec.Execute("git", "status")
+//	    if err != nil {
+//	        return err
+//	    }
+//	    // ... process output
+//	    return nil
+//	})
+func (m *BaseExecutorModule) WithExecutor(host types.Host, fn func(*executor.CommandExecutor) error) error {
+	exec, err := executor.NewCommandExecutor(host)
+	if err != nil {
+		return fmt.Errorf("failed to create executor: %w", err)
+	}
+	defer exec.Close()
+
+	return fn(exec)
+}
+
+// WithExecutorResult executes a function with a fresh executor and returns both result and error
+// This is useful when you need to return a value from the executor function.
+//
+// Example usage:
+//
+//	output, err := m.WithExecutorResult(host, func(exec *executor.CommandExecutor) (string, error) {
+//	    return exec.Execute("git", "status")
+//	})
+func (m *BaseExecutorModule) WithExecutorResult(host types.Host, fn func(*executor.CommandExecutor) (string, error)) (string, error) {
+	var result string
+	err := m.WithExecutor(host, func(exec *executor.CommandExecutor) error {
+		var execErr error
+		result, execErr = fn(exec)
+		return execErr
+	})
+	return result, err
+}
+
+// CreateExecutor creates a new executor for the given host
+// The caller is responsible for calling Close() on the returned executor.
+// Consider using WithExecutor() instead for automatic cleanup.
+func (m *BaseExecutorModule) CreateExecutor(host types.Host) (*executor.CommandExecutor, error) {
+	return executor.NewCommandExecutor(host)
 }

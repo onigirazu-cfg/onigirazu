@@ -13,7 +13,6 @@ import (
 // CronModule implements cron job management
 type CronModule struct {
 	BaseModule
-	executor *executor.CommandExecutor
 }
 
 // NewCronModule creates a new cron module
@@ -39,34 +38,32 @@ func (m *CronModule) Execute(ctx context.Context, host types.Host, args map[stri
 		Timestamp: startTime,
 	}
 
-	// Initialize executor
-	if m.executor == nil {
-		exec, err := executor.NewCommandExecutor(host)
-		if err != nil {
-			return m.failResult(result, fmt.Sprintf("failed to create executor: %v", err))
-		}
-		m.executor = exec
+	// Create a fresh executor for this execution
+	exec, err := executor.NewCommandExecutor(host)
+	if err != nil {
+		return m.failResult(result, fmt.Sprintf("failed to create executor: %v", err))
 	}
+	defer exec.Close()
 
 	// Get operation type
 	operation := getStringArg(args, "operation", "job")
 
 	switch operation {
 	case "job":
-		return m.handleJob(ctx, host, args, result)
+		return m.handleJob(ctx, exec, host, args, result)
 	case "file":
-		return m.handleFile(ctx, host, args, result)
+		return m.handleFile(ctx, exec, host, args, result)
 	case "system":
-		return m.handleSystem(ctx, host, args, result)
+		return m.handleSystem(ctx, exec, host, args, result)
 	case "list":
-		return m.handleList(ctx, host, args, result)
+		return m.handleList(ctx, exec, host, args, result)
 	default:
 		return m.failResult(result, fmt.Sprintf("unknown operation: %s", operation))
 	}
 }
 
 // handleJob manages individual cron jobs in user crontab
-func (m *CronModule) handleJob(ctx context.Context, host types.Host, args map[string]interface{}, result types.TaskResult) (types.TaskResult, error) {
+func (m *CronModule) handleJob(ctx context.Context, exec *executor.CommandExecutor, host types.Host, args map[string]interface{}, result types.TaskResult) (types.TaskResult, error) {
 	name := getStringArg(args, "name", "")
 	job := getStringArg(args, "job", "")
 	minute := getStringArg(args, "minute", "*")
@@ -85,7 +82,7 @@ func (m *CronModule) handleJob(ctx context.Context, host types.Host, args map[st
 	changed := false
 
 	// Get current crontab
-	currentCrontab, err := m.getCrontab(user)
+	currentCrontab, err := m.getCrontab(exec, user)
 	if err != nil && !strings.Contains(err.Error(), "no crontab") {
 		return m.failResult(result, fmt.Sprintf("failed to get crontab: %v", err))
 	}
@@ -124,7 +121,7 @@ func (m *CronModule) handleJob(ctx context.Context, host types.Host, args map[st
 	// Write crontab if changed
 	if changed {
 		newCrontab := m.buildCrontab(jobs)
-		if err := m.setCrontab(user, newCrontab); err != nil {
+		if err := m.setCrontab(exec, user, newCrontab); err != nil {
 			return m.failResult(result, fmt.Sprintf("failed to set crontab: %v", err))
 		}
 	}
@@ -136,7 +133,7 @@ func (m *CronModule) handleJob(ctx context.Context, host types.Host, args map[st
 }
 
 // handleFile manages crontab files directly
-func (m *CronModule) handleFile(ctx context.Context, host types.Host, args map[string]interface{}, result types.TaskResult) (types.TaskResult, error) {
+func (m *CronModule) handleFile(ctx context.Context, exec *executor.CommandExecutor, host types.Host, args map[string]interface{}, result types.TaskResult) (types.TaskResult, error) {
 	user := getStringArg(args, "user", "root")
 	content := getStringArg(args, "content", "")
 	backup := getBoolArg(args, "backup", true)
@@ -150,14 +147,14 @@ func (m *CronModule) handleFile(ctx context.Context, host types.Host, args map[s
 		}
 
 		// Get current crontab for comparison
-		currentCrontab, _ := m.getCrontab(user)
+		currentCrontab, _ := m.getCrontab(exec, user)
 
 		if currentCrontab != content {
 			// Backup if requested
 			if backup && currentCrontab != "" {
 				timestamp := time.Now().Format("20060102-150405")
 				backupFile := fmt.Sprintf("/tmp/crontab.%s.%s.backup", user, timestamp)
-				if _, err := m.executor.Execute("sh", "-c", fmt.Sprintf("echo '%s' > %s", currentCrontab, backupFile)); err != nil {
+				if _, err := exec.Execute("sh", "-c", fmt.Sprintf("echo '%s' > %s", currentCrontab, backupFile)); err != nil {
 					result.Output["backup_warning"] = fmt.Sprintf("failed to create backup: %v", err)
 				} else {
 					result.Output["backup_file"] = backupFile
@@ -165,7 +162,7 @@ func (m *CronModule) handleFile(ctx context.Context, host types.Host, args map[s
 			}
 
 			// Set new crontab
-			if err := m.setCrontab(user, content); err != nil {
+			if err := m.setCrontab(exec, user, content); err != nil {
 				return m.failResult(result, fmt.Sprintf("failed to set crontab: %v", err))
 			}
 
@@ -174,7 +171,7 @@ func (m *CronModule) handleFile(ctx context.Context, host types.Host, args map[s
 		}
 	} else if state == "absent" {
 		// Remove crontab
-		if _, err := m.executor.Execute("crontab", "-r", "-u", user); err != nil {
+		if _, err := exec.Execute("crontab", "-r", "-u", user); err != nil {
 			if !strings.Contains(err.Error(), "no crontab") {
 				return m.failResult(result, fmt.Sprintf("failed to remove crontab: %v", err))
 			}
@@ -190,7 +187,7 @@ func (m *CronModule) handleFile(ctx context.Context, host types.Host, args map[s
 }
 
 // handleSystem manages system cron files (cron.d, cron.daily, etc.)
-func (m *CronModule) handleSystem(ctx context.Context, host types.Host, args map[string]interface{}, result types.TaskResult) (types.TaskResult, error) {
+func (m *CronModule) handleSystem(ctx context.Context, exec *executor.CommandExecutor, host types.Host, args map[string]interface{}, result types.TaskResult) (types.TaskResult, error) {
 	name := getStringArg(args, "name", "")
 	content := getStringArg(args, "content", "")
 	cronType := getStringArg(args, "cron_type", "d") // d, daily, hourly, weekly, monthly
@@ -227,28 +224,28 @@ func (m *CronModule) handleSystem(ctx context.Context, host types.Host, args map
 		}
 
 		// Check if file exists and compare content
-		currentContent, err := m.executor.Execute("cat", cronFile)
+		currentContent, err := exec.Execute("cat", cronFile)
 		fileExists := err == nil
 
 		if !fileExists || currentContent != content {
 			// Write content to temp file
 			tmpFile := fmt.Sprintf("/tmp/%s", name)
-			if _, err := m.executor.Execute("sh", "-c", fmt.Sprintf("cat > %s << 'EOF'\n%s\nEOF", tmpFile, content)); err != nil {
+			if _, err := exec.Execute("sh", "-c", fmt.Sprintf("cat > %s << 'EOF'\n%s\nEOF", tmpFile, content)); err != nil {
 				return m.failResult(result, fmt.Sprintf("failed to write temp file: %v", err))
 			}
 
 			// Move to cron directory
-			if _, err := m.executor.Execute("mv", tmpFile, cronFile); err != nil {
+			if _, err := exec.Execute("mv", tmpFile, cronFile); err != nil {
 				return m.failResult(result, fmt.Sprintf("failed to move file: %v", err))
 			}
 
 			// Set permissions
 			if cronType == "d" {
-				if _, err := m.executor.Execute("chmod", "644", cronFile); err != nil {
+				if _, err := exec.Execute("chmod", "644", cronFile); err != nil {
 					return m.failResult(result, fmt.Sprintf("failed to set permissions: %v", err))
 				}
 			} else {
-				if _, err := m.executor.Execute("chmod", "755", cronFile); err != nil {
+				if _, err := exec.Execute("chmod", "755", cronFile); err != nil {
 					return m.failResult(result, fmt.Sprintf("failed to set permissions: %v", err))
 				}
 			}
@@ -259,10 +256,10 @@ func (m *CronModule) handleSystem(ctx context.Context, host types.Host, args map
 		}
 	} else if state == "absent" {
 		// Check if file exists
-		_, err := m.executor.Execute("test", "-f", cronFile)
+		_, err := exec.Execute("test", "-f", cronFile)
 		if err == nil {
 			// Remove file
-			if _, err := m.executor.Execute("rm", "-f", cronFile); err != nil {
+			if _, err := exec.Execute("rm", "-f", cronFile); err != nil {
 				return m.failResult(result, fmt.Sprintf("failed to remove file: %v", err))
 			}
 
@@ -278,11 +275,11 @@ func (m *CronModule) handleSystem(ctx context.Context, host types.Host, args map
 }
 
 // handleList lists cron jobs
-func (m *CronModule) handleList(ctx context.Context, host types.Host, args map[string]interface{}, result types.TaskResult) (types.TaskResult, error) {
+func (m *CronModule) handleList(ctx context.Context, exec *executor.CommandExecutor, host types.Host, args map[string]interface{}, result types.TaskResult) (types.TaskResult, error) {
 	user := getStringArg(args, "user", "root")
 
 	// Get crontab
-	crontab, err := m.getCrontab(user)
+	crontab, err := m.getCrontab(exec, user)
 	if err != nil {
 		if strings.Contains(err.Error(), "no crontab") {
 			result.Output["jobs"] = []string{}
@@ -302,28 +299,28 @@ func (m *CronModule) handleList(ctx context.Context, host types.Host, args map[s
 }
 
 // Helper methods
-func (m *CronModule) getCrontab(user string) (string, error) {
-	output, err := m.executor.Execute("crontab", "-l", "-u", user)
+func (m *CronModule) getCrontab(exec *executor.CommandExecutor, user string) (string, error) {
+	output, err := exec.Execute("crontab", "-l", "-u", user)
 	if err != nil {
 		return "", err
 	}
 	return output, nil
 }
 
-func (m *CronModule) setCrontab(user string, content string) error {
+func (m *CronModule) setCrontab(exec *executor.CommandExecutor, user string, content string) error {
 	// Write content to temp file
 	tmpFile := fmt.Sprintf("/tmp/crontab.%s.tmp", user)
-	if _, err := m.executor.Execute("sh", "-c", fmt.Sprintf("cat > %s << 'EOF'\n%s\nEOF", tmpFile, content)); err != nil {
+	if _, err := exec.Execute("sh", "-c", fmt.Sprintf("cat > %s << 'EOF'\n%s\nEOF", tmpFile, content)); err != nil {
 		return fmt.Errorf("failed to write temp file: %v", err)
 	}
 
 	// Install crontab
-	if _, err := m.executor.Execute("crontab", "-u", user, tmpFile); err != nil {
+	if _, err := exec.Execute("crontab", "-u", user, tmpFile); err != nil {
 		return fmt.Errorf("failed to install crontab: %v", err)
 	}
 
 	// Clean up temp file (ignore errors as it's just cleanup)
-	_, _ = m.executor.Execute("rm", "-f", tmpFile)
+	_, _ = exec.Execute("rm", "-f", tmpFile)
 
 	return nil
 }

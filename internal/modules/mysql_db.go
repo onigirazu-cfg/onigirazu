@@ -12,7 +12,6 @@ import (
 
 type MySQLDBModule struct {
 	BaseModule
-	executor *executor.CommandExecutor
 }
 
 type MySQLDBInfo struct {
@@ -43,15 +42,13 @@ func (m *MySQLDBModule) Execute(ctx context.Context, host types.Host, args map[s
 		Timestamp: startTime,
 	}
 
-	if m.executor == nil {
-		var err error
-		m.executor, err = executor.NewCommandExecutor(host)
-		if err != nil {
-			result.Success = false
-			result.Error = fmt.Sprintf("failed to create executor: %v", err)
-			return result, err
-		}
+	exec, err := executor.NewCommandExecutor(host)
+	if err != nil {
+		result.Success = false
+		result.Error = fmt.Sprintf("failed to create executor: %v", err)
+		return result, err
 	}
+	defer exec.Close()
 
 	dbName, ok := args["name"].(string)
 	if !ok || dbName == "" {
@@ -81,7 +78,7 @@ func (m *MySQLDBModule) Execute(ctx context.Context, host types.Host, args map[s
 		loginPort = "3306"
 	}
 
-	exists, _, err := m.databaseExists(ctx, dbName, loginUser, loginPassword, loginHost, loginPort)
+	exists, _, err := m.databaseExists(ctx, exec, dbName, loginUser, loginPassword, loginHost, loginPort)
 	if err != nil {
 		result.Success = false
 		result.Error = fmt.Sprintf("failed to check database: %v", err)
@@ -101,7 +98,7 @@ func (m *MySQLDBModule) Execute(ctx context.Context, host types.Host, args map[s
 				collation = "utf8mb4_unicode_ci"
 			}
 
-			if err := m.createDatabase(ctx, dbName, charset, collation, loginUser, loginPassword, loginHost, loginPort); err != nil {
+			if err := m.createDatabase(ctx, exec, dbName, charset, collation, loginUser, loginPassword, loginHost, loginPort); err != nil {
 				result.Success = false
 				result.Error = fmt.Sprintf("failed to create database: %v", err)
 				return result, err
@@ -112,7 +109,7 @@ func (m *MySQLDBModule) Execute(ctx context.Context, host types.Host, args map[s
 
 	case "absent":
 		if exists {
-			if err := m.dropDatabase(ctx, dbName, loginUser, loginPassword, loginHost, loginPort); err != nil {
+			if err := m.dropDatabase(ctx, exec, dbName, loginUser, loginPassword, loginHost, loginPort); err != nil {
 				result.Success = false
 				result.Error = fmt.Sprintf("failed to drop database: %v", err)
 				return result, err
@@ -129,7 +126,7 @@ func (m *MySQLDBModule) Execute(ctx context.Context, host types.Host, args map[s
 			return result, fmt.Errorf("target file is required for dump")
 		}
 
-		if err := m.dumpDatabase(ctx, dbName, target, loginUser, loginPassword, loginHost, loginPort); err != nil {
+		if err := m.dumpDatabase(ctx, exec, dbName, target, loginUser, loginPassword, loginHost, loginPort); err != nil {
 			result.Success = false
 			result.Error = fmt.Sprintf("failed to dump database: %v", err)
 			return result, err
@@ -145,7 +142,7 @@ func (m *MySQLDBModule) Execute(ctx context.Context, host types.Host, args map[s
 			return result, fmt.Errorf("target file is required for import")
 		}
 
-		if err := m.importDatabase(ctx, dbName, target, loginUser, loginPassword, loginHost, loginPort); err != nil {
+		if err := m.importDatabase(ctx, exec, dbName, target, loginUser, loginPassword, loginHost, loginPort); err != nil {
 			result.Success = false
 			result.Error = fmt.Sprintf("failed to import database: %v", err)
 			return result, err
@@ -155,7 +152,7 @@ func (m *MySQLDBModule) Execute(ctx context.Context, host types.Host, args map[s
 	}
 
 	if state != "absent" {
-		_, dbInf, _ := m.databaseExists(ctx, dbName, loginUser, loginPassword, loginHost, loginPort)
+		_, dbInf, _ := m.databaseExists(ctx, exec, dbName, loginUser, loginPassword, loginHost, loginPort)
 		result.Output["database"] = dbInf
 	}
 
@@ -185,11 +182,11 @@ func (m *MySQLDBModule) buildMySQLCmd(loginUser, loginPassword, loginHost, login
 	return strings.Join(cmdParts, " ")
 }
 
-func (m *MySQLDBModule) databaseExists(ctx context.Context, dbName, loginUser, loginPassword, loginHost, loginPort string) (bool, *MySQLDBInfo, error) {
+func (m *MySQLDBModule) databaseExists(ctx context.Context, exec *executor.CommandExecutor, dbName, loginUser, loginPassword, loginHost, loginPort string) (bool, *MySQLDBInfo, error) {
 	baseCmd := m.buildMySQLCmd(loginUser, loginPassword, loginHost, loginPort)
 	cmd := fmt.Sprintf("%s -e \"SELECT SCHEMA_NAME, DEFAULT_CHARACTER_SET_NAME, DEFAULT_COLLATION_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME='%s'\" 2>/dev/null", baseCmd, dbName)
 
-	stdout, err := m.executor.Execute(cmd)
+	stdout, err := exec.Execute(cmd)
 	if err != nil {
 		return false, nil, nil
 	}
@@ -214,11 +211,11 @@ func (m *MySQLDBModule) databaseExists(ctx context.Context, dbName, loginUser, l
 	return true, info, nil
 }
 
-func (m *MySQLDBModule) createDatabase(ctx context.Context, dbName, charset, collation, loginUser, loginPassword, loginHost, loginPort string) error {
+func (m *MySQLDBModule) createDatabase(ctx context.Context, exec *executor.CommandExecutor, dbName, charset, collation, loginUser, loginPassword, loginHost, loginPort string) error {
 	baseCmd := m.buildMySQLCmd(loginUser, loginPassword, loginHost, loginPort)
 	cmd := fmt.Sprintf("%s -e \"CREATE DATABASE %s CHARACTER SET %s COLLATE %s\"", baseCmd, dbName, charset, collation)
 
-	_, err := m.executor.Execute(cmd)
+	_, err := exec.Execute(cmd)
 	if err != nil {
 		return fmt.Errorf("failed to create database: %s", err.Error())
 	}
@@ -226,11 +223,11 @@ func (m *MySQLDBModule) createDatabase(ctx context.Context, dbName, charset, col
 	return nil
 }
 
-func (m *MySQLDBModule) dropDatabase(ctx context.Context, dbName, loginUser, loginPassword, loginHost, loginPort string) error {
+func (m *MySQLDBModule) dropDatabase(ctx context.Context, exec *executor.CommandExecutor, dbName, loginUser, loginPassword, loginHost, loginPort string) error {
 	baseCmd := m.buildMySQLCmd(loginUser, loginPassword, loginHost, loginPort)
 	cmd := fmt.Sprintf("%s -e \"DROP DATABASE %s\"", baseCmd, dbName)
 
-	_, err := m.executor.Execute(cmd)
+	_, err := exec.Execute(cmd)
 	if err != nil {
 		return fmt.Errorf("failed to drop database: %s", err.Error())
 	}
@@ -238,7 +235,7 @@ func (m *MySQLDBModule) dropDatabase(ctx context.Context, dbName, loginUser, log
 	return nil
 }
 
-func (m *MySQLDBModule) dumpDatabase(ctx context.Context, dbName, target, loginUser, loginPassword, loginHost, loginPort string) error {
+func (m *MySQLDBModule) dumpDatabase(ctx context.Context, exec *executor.CommandExecutor, dbName, target, loginUser, loginPassword, loginHost, loginPort string) error {
 	cmdParts := []string{"mysqldump"}
 
 	if loginUser != "" {
@@ -260,7 +257,7 @@ func (m *MySQLDBModule) dumpDatabase(ctx context.Context, dbName, target, loginU
 	cmdParts = append(cmdParts, dbName, ">", target)
 	cmd := strings.Join(cmdParts, " ")
 
-	_, err := m.executor.Execute(cmd)
+	_, err := exec.Execute(cmd)
 	if err != nil {
 		return fmt.Errorf("failed to dump database: %s", err.Error())
 	}
@@ -268,11 +265,11 @@ func (m *MySQLDBModule) dumpDatabase(ctx context.Context, dbName, target, loginU
 	return nil
 }
 
-func (m *MySQLDBModule) importDatabase(ctx context.Context, dbName, target, loginUser, loginPassword, loginHost, loginPort string) error {
+func (m *MySQLDBModule) importDatabase(ctx context.Context, exec *executor.CommandExecutor, dbName, target, loginUser, loginPassword, loginHost, loginPort string) error {
 	baseCmd := m.buildMySQLCmd(loginUser, loginPassword, loginHost, loginPort)
 	cmd := fmt.Sprintf("%s %s < %s", baseCmd, dbName, target)
 
-	_, err := m.executor.Execute(cmd)
+	_, err := exec.Execute(cmd)
 	if err != nil {
 		return fmt.Errorf("failed to import database: %s", err.Error())
 	}

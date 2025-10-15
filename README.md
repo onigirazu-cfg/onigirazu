@@ -948,6 +948,7 @@ onigirazu rollback --cleanup --max-age 30d
 ```
 
 **Features:**
+
 - ✅ Automatic snapshot creation before changes
 - ✅ Selective rollback of specific resources
 - ✅ Dry-run mode to preview changes
@@ -970,6 +971,7 @@ onigirazu drift fix -p playbook.yml -i inventory.yml
 ```
 
 **Features:**
+
 - ✅ Automatic drift detection
 - ✅ Detailed drift reports
 - ✅ One-command drift remediation
@@ -1063,6 +1065,17 @@ All development-related documentation (optimization reports, release notes, impl
 - **[Project Status](../onigirazu_docs/PROJECT_STATUS.md)** - Current project status
 - **[Optimization Analysis](../onigirazu_docs/OPTIMIZATION_AND_FEATURES_ANALYSIS.md)** - Performance optimization details
 - **[Release Guide](../onigirazu_docs/RELEASE_GUIDE.md)** - How to create releases
+
+### Module Development
+
+For developers creating or maintaining modules:
+
+- **[Executor Safety Quick Start](../EXECUTOR_SAFETY_QUICK_START.md)** - 5-minute guide to safe module development
+- **[Executor Architecture Index](../EXECUTOR_ARCHITECTURE_INDEX.md)** - Complete documentation index
+- **[Module Development Guide](../docs/MODULE_DEVELOPMENT_GUIDE.md)** - Comprehensive guide with examples
+- **[Architecture Improvements](../docs/ARCHITECTURE_IMPROVEMENTS.md)** - Architectural analysis and best practices
+
+**⚠️ Important:** All new modules must use `BaseExecutorModule` to prevent executor caching bugs. Run `./scripts/check_executor_caching.sh` to verify your code.
 
 ## Contributing
 

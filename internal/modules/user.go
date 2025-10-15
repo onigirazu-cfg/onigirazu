@@ -12,7 +12,6 @@ import (
 // UserModuleFixed manages system users using remote executor
 type UserModuleFixed struct {
 	*BaseModule
-	executor *executor.CommandExecutor
 }
 
 func NewUserModuleFixed() *UserModuleFixed {
@@ -40,26 +39,21 @@ func (m *UserModuleFixed) Execute(ctx context.Context, host types.Host, args map
 		Timestamp: startTime,
 	}
 
-	// Initialize executor if not already done
-	if m.executor == nil {
-		exec, err := executor.NewCommandExecutor(host)
-		if err != nil {
-			result.Success = false
-			result.Error = fmt.Sprintf("failed to create executor: %v", err)
-			result.Duration = time.Since(startTime)
-			return result, nil
-		}
-		m.executor = exec
+	// Create a fresh executor for this execution
+	exec, err := executor.NewCommandExecutor(host)
+	if err != nil {
+		result.Success = false
+		result.Error = fmt.Sprintf("failed to create executor: %v", err)
+		result.Duration = time.Since(startTime)
+		return result, nil
 	}
+	defer exec.Close()
 
-	// Configure become (privilege escalation) - always reset to ensure correct state
+	// Configure become (privilege escalation)
 	if become, ok := args["_become"].(bool); ok && become {
 		becomeUser, _ := args["_become_user"].(string)
 		becomeMethod, _ := args["_become_method"].(string)
-		m.executor.SetBecome(true, becomeUser, becomeMethod)
-	} else {
-		// Reset become if not requested
-		m.executor.SetBecome(false, "", "")
+		exec.SetBecome(true, becomeUser, becomeMethod)
 	}
 
 	// Validate arguments
@@ -75,9 +69,9 @@ func (m *UserModuleFixed) Execute(ctx context.Context, host types.Host, args map
 
 	switch state {
 	case "present":
-		return m.ensureUserPresent(username, args, result, startTime)
+		return m.ensureUserPresent(exec, username, args, result, startTime)
 	case "absent":
-		return m.ensureUserAbsent(username, result, startTime)
+		return m.ensureUserAbsent(exec, username, result, startTime)
 	default:
 		result.Success = false
 		result.Error = fmt.Sprintf("invalid state: %s", state)
@@ -161,8 +155,8 @@ func (m *UserModuleFixed) Validate(args map[string]interface{}) error {
 	return nil
 }
 
-func (m *UserModuleFixed) ensureUserPresent(username string, args map[string]interface{}, result types.TaskResult, startTime time.Time) (types.TaskResult, error) {
-	if m.userExists(username) {
+func (m *UserModuleFixed) ensureUserPresent(exec *executor.CommandExecutor, username string, args map[string]interface{}, result types.TaskResult, startTime time.Time) (types.TaskResult, error) {
+	if m.userExists(exec, username) {
 		result.Success = true
 		result.Changed = false
 		result.Output = map[string]interface{}{
@@ -171,7 +165,7 @@ func (m *UserModuleFixed) ensureUserPresent(username string, args map[string]int
 	} else {
 		// Create user using remote executor
 		cmdArgs := m.buildUserAddCommand(username, args)
-		output, err := m.executor.Execute(cmdArgs[0], cmdArgs[1:]...)
+		output, err := exec.Execute(cmdArgs[0], cmdArgs[1:]...)
 		if err != nil {
 			result.Success = false
 			result.Error = fmt.Sprintf("error creating user: %v", err)
@@ -196,8 +190,8 @@ func (m *UserModuleFixed) ensureUserPresent(username string, args map[string]int
 	return result, nil
 }
 
-func (m *UserModuleFixed) ensureUserAbsent(username string, result types.TaskResult, startTime time.Time) (types.TaskResult, error) {
-	if !m.userExists(username) {
+func (m *UserModuleFixed) ensureUserAbsent(exec *executor.CommandExecutor, username string, result types.TaskResult, startTime time.Time) (types.TaskResult, error) {
+	if !m.userExists(exec, username) {
 		result.Success = true
 		result.Changed = false
 		result.Output = map[string]interface{}{
@@ -205,7 +199,7 @@ func (m *UserModuleFixed) ensureUserAbsent(username string, result types.TaskRes
 		}
 	} else {
 		// Remove user using remote executor
-		output, err := m.executor.Execute("userdel", "-r", username)
+		output, err := exec.Execute("userdel", "-r", username)
 		if err != nil {
 			result.Success = false
 			result.Error = fmt.Sprintf("error removing user: %v", err)
@@ -230,8 +224,8 @@ func (m *UserModuleFixed) ensureUserAbsent(username string, result types.TaskRes
 	return result, nil
 }
 
-func (m *UserModuleFixed) userExists(username string) bool {
-	_, err := m.executor.Execute("id", username)
+func (m *UserModuleFixed) userExists(exec *executor.CommandExecutor, username string) bool {
+	_, err := exec.Execute("id", username)
 	return err == nil
 }
 

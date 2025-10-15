@@ -13,7 +13,6 @@ import (
 
 type DockerImageModule struct {
 	BaseModule
-	executor *executor.CommandExecutor
 }
 
 type ImageInfo struct {
@@ -47,15 +46,13 @@ func (m *DockerImageModule) Execute(ctx context.Context, host types.Host, args m
 		Timestamp: startTime,
 	}
 
-	if m.executor == nil {
-		var err error
-		m.executor, err = executor.NewCommandExecutor(host)
-		if err != nil {
-			result.Success = false
-			result.Error = fmt.Sprintf("failed to create executor: %v", err)
-			return result, err
-		}
+	exec, err := executor.NewCommandExecutor(host)
+	if err != nil {
+		result.Success = false
+		result.Error = fmt.Sprintf("failed to create executor: %v", err)
+		return result, err
 	}
+	defer exec.Close()
 
 	name, ok := args["name"].(string)
 	if !ok || name == "" {
@@ -75,7 +72,7 @@ func (m *DockerImageModule) Execute(ctx context.Context, host types.Host, args m
 	}
 
 	fullName := fmt.Sprintf("%s:%s", name, tag)
-	exists, _, err := m.imageExists(ctx, fullName)
+	exists, _, err := m.imageExists(ctx, exec, fullName)
 	if err != nil {
 		result.Success = false
 		result.Error = fmt.Sprintf("failed to check image: %v", err)
@@ -85,7 +82,7 @@ func (m *DockerImageModule) Execute(ctx context.Context, host types.Host, args m
 	switch state {
 	case "present":
 		if !exists {
-			if err := m.pullImage(ctx, fullName, args); err != nil {
+			if err := m.pullImage(ctx, exec, fullName, args); err != nil {
 				result.Success = false
 				result.Error = fmt.Sprintf("failed to pull image: %v", err)
 				return result, err
@@ -95,7 +92,7 @@ func (m *DockerImageModule) Execute(ctx context.Context, host types.Host, args m
 		} else {
 			force, _ := args["force"].(bool)
 			if force {
-				if err := m.pullImage(ctx, fullName, args); err != nil {
+				if err := m.pullImage(ctx, exec, fullName, args); err != nil {
 					result.Success = false
 					result.Error = fmt.Sprintf("failed to pull image: %v", err)
 					return result, err
@@ -107,7 +104,7 @@ func (m *DockerImageModule) Execute(ctx context.Context, host types.Host, args m
 
 	case "absent":
 		if exists {
-			if err := m.removeImage(ctx, fullName, args); err != nil {
+			if err := m.removeImage(ctx, exec, fullName, args); err != nil {
 				result.Success = false
 				result.Error = fmt.Sprintf("failed to remove image: %v", err)
 				return result, err
@@ -117,7 +114,7 @@ func (m *DockerImageModule) Execute(ctx context.Context, host types.Host, args m
 		}
 
 	case "build":
-		if err := m.buildImage(ctx, name, tag, args); err != nil {
+		if err := m.buildImage(ctx, exec, name, tag, args); err != nil {
 			result.Success = false
 			result.Error = fmt.Sprintf("failed to build image: %v", err)
 			return result, err
@@ -127,7 +124,7 @@ func (m *DockerImageModule) Execute(ctx context.Context, host types.Host, args m
 	}
 
 	if state != "absent" {
-		_, imgInfo, _ := m.imageExists(ctx, fullName)
+		_, imgInfo, _ := m.imageExists(ctx, exec, fullName)
 		result.Output["image"] = imgInfo
 	}
 
@@ -135,9 +132,9 @@ func (m *DockerImageModule) Execute(ctx context.Context, host types.Host, args m
 	return result, nil
 }
 
-func (m *DockerImageModule) imageExists(ctx context.Context, name string) (bool, *ImageInfo, error) {
+func (m *DockerImageModule) imageExists(ctx context.Context, exec *executor.CommandExecutor, name string) (bool, *ImageInfo, error) {
 	cmd := fmt.Sprintf("docker images --format '{{json .}}' %s", name)
-	stdout, err := m.executor.Execute(cmd)
+	stdout, err := exec.Execute(cmd)
 	if err != nil {
 		return false, nil, nil
 	}
@@ -166,7 +163,7 @@ func (m *DockerImageModule) imageExists(ctx context.Context, name string) (bool,
 	return true, info, nil
 }
 
-func (m *DockerImageModule) pullImage(ctx context.Context, name string, args map[string]interface{}) error {
+func (m *DockerImageModule) pullImage(ctx context.Context, exec *executor.CommandExecutor, name string, args map[string]interface{}) error {
 	cmdParts := []string{"docker pull"}
 
 	if platform, ok := args["platform"].(string); ok {
@@ -176,7 +173,7 @@ func (m *DockerImageModule) pullImage(ctx context.Context, name string, args map
 	cmdParts = append(cmdParts, name)
 	cmd := strings.Join(cmdParts, " ")
 
-	_, err := m.executor.Execute(cmd)
+	_, err := exec.Execute(cmd)
 	if err != nil {
 		return fmt.Errorf("failed to pull image: %s", err.Error())
 	}
@@ -184,7 +181,7 @@ func (m *DockerImageModule) pullImage(ctx context.Context, name string, args map
 	return nil
 }
 
-func (m *DockerImageModule) removeImage(ctx context.Context, name string, args map[string]interface{}) error {
+func (m *DockerImageModule) removeImage(ctx context.Context, exec *executor.CommandExecutor, name string, args map[string]interface{}) error {
 	cmdParts := []string{"docker rmi"}
 
 	force, _ := args["force"].(bool)
@@ -195,7 +192,7 @@ func (m *DockerImageModule) removeImage(ctx context.Context, name string, args m
 	cmdParts = append(cmdParts, name)
 	cmd := strings.Join(cmdParts, " ")
 
-	_, err := m.executor.Execute(cmd)
+	_, err := exec.Execute(cmd)
 	if err != nil {
 		return fmt.Errorf("failed to remove image: %s", err.Error())
 	}
@@ -203,7 +200,7 @@ func (m *DockerImageModule) removeImage(ctx context.Context, name string, args m
 	return nil
 }
 
-func (m *DockerImageModule) buildImage(ctx context.Context, name, tag string, args map[string]interface{}) error {
+func (m *DockerImageModule) buildImage(ctx context.Context, exec *executor.CommandExecutor, name, tag string, args map[string]interface{}) error {
 	path, ok := args["path"].(string)
 	if !ok || path == "" {
 		return fmt.Errorf("path is required for building image")
@@ -233,7 +230,7 @@ func (m *DockerImageModule) buildImage(ctx context.Context, name, tag string, ar
 	cmdParts = append(cmdParts, "-t", fullName, path)
 
 	cmd := strings.Join(cmdParts, " ")
-	_, err := m.executor.Execute(cmd)
+	_, err := exec.Execute(cmd)
 	if err != nil {
 		return fmt.Errorf("failed to build image: %s", err.Error())
 	}

@@ -18,7 +18,6 @@ import (
 // CopyModule handles file copying operations
 type CopyModule struct {
 	BaseModule
-	executor *executor.CommandExecutor
 }
 
 // NewCopyModule creates a new copy module instance
@@ -55,17 +54,6 @@ func (m *CopyModule) Execute(ctx context.Context, host types.Host, args map[stri
 		result.Failed = true
 		result.Error = err.Error()
 		return result, err
-	}
-
-	// Initialize executor if not already done
-	if m.executor == nil {
-		exec, err := executor.NewCommandExecutor(host)
-		if err != nil {
-			result.Failed = true
-			result.Error = fmt.Sprintf("failed to create executor: %v", err)
-			return result, err
-		}
-		m.executor = exec
 	}
 
 	src, _ := args["src"].(string)
@@ -262,7 +250,15 @@ func (m *CopyModule) executeRemote(host types.Host, dest string, sourceData []by
 	if backup && destExists {
 		backupPath := dest + ".backup." + time.Now().Format("20060102-150405")
 		// Use command to create backup on remote host
-		_, err := m.executor.Execute("cp", dest, backupPath)
+		exec, err := executor.NewCommandExecutor(host)
+		if err != nil {
+			result.Failed = true
+			result.Error = fmt.Sprintf("failed to create executor for backup: %v", err)
+			return result, err
+		}
+		defer exec.Close()
+
+		_, err = exec.Execute("cp", dest, backupPath)
 		if err != nil {
 			result.Failed = true
 			result.Error = fmt.Sprintf("failed to create backup: %v", err)

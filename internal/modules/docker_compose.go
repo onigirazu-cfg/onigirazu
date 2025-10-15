@@ -12,7 +12,6 @@ import (
 
 type DockerComposeModule struct {
 	BaseModule
-	executor *executor.CommandExecutor
 }
 
 func NewDockerComposeModule() *DockerComposeModule {
@@ -36,15 +35,13 @@ func (m *DockerComposeModule) Execute(ctx context.Context, host types.Host, args
 		Timestamp: startTime,
 	}
 
-	if m.executor == nil {
-		var err error
-		m.executor, err = executor.NewCommandExecutor(host)
-		if err != nil {
-			result.Success = false
-			result.Error = fmt.Sprintf("failed to create executor: %v", err)
-			return result, err
-		}
+	exec, err := executor.NewCommandExecutor(host)
+	if err != nil {
+		result.Success = false
+		result.Error = fmt.Sprintf("failed to create executor: %v", err)
+		return result, err
 	}
+	defer exec.Close()
 
 	projectDir, ok := args["project_dir"].(string)
 	if !ok || projectDir == "" {
@@ -67,7 +64,7 @@ func (m *DockerComposeModule) Execute(ctx context.Context, host types.Host, args
 
 	switch state {
 	case "present":
-		if err := m.composeUp(ctx, projectDir, composeFile, projectName, args); err != nil {
+		if err := m.composeUp(ctx, exec, projectDir, composeFile, projectName, args); err != nil {
 			result.Success = false
 			result.Error = fmt.Sprintf("failed to start compose: %v", err)
 			return result, err
@@ -76,7 +73,7 @@ func (m *DockerComposeModule) Execute(ctx context.Context, host types.Host, args
 		result.Output["action"] = "started"
 
 	case "absent":
-		if err := m.composeDown(ctx, projectDir, composeFile, projectName, args); err != nil {
+		if err := m.composeDown(ctx, exec, projectDir, composeFile, projectName, args); err != nil {
 			result.Success = false
 			result.Error = fmt.Sprintf("failed to stop compose: %v", err)
 			return result, err
@@ -85,7 +82,7 @@ func (m *DockerComposeModule) Execute(ctx context.Context, host types.Host, args
 		result.Output["action"] = "stopped"
 
 	case "restarted":
-		if err := m.composeRestart(ctx, projectDir, composeFile, projectName, args); err != nil {
+		if err := m.composeRestart(ctx, exec, projectDir, composeFile, projectName, args); err != nil {
 			result.Success = false
 			result.Error = fmt.Sprintf("failed to restart compose: %v", err)
 			return result, err
@@ -94,7 +91,7 @@ func (m *DockerComposeModule) Execute(ctx context.Context, host types.Host, args
 		result.Output["action"] = "restarted"
 
 	case "pull":
-		if err := m.composePull(ctx, projectDir, composeFile, projectName); err != nil {
+		if err := m.composePull(ctx, exec, projectDir, composeFile, projectName); err != nil {
 			result.Success = false
 			result.Error = fmt.Sprintf("failed to pull images: %v", err)
 			return result, err
@@ -103,7 +100,7 @@ func (m *DockerComposeModule) Execute(ctx context.Context, host types.Host, args
 		result.Output["action"] = "pulled"
 
 	case "build":
-		if err := m.composeBuild(ctx, projectDir, composeFile, projectName, args); err != nil {
+		if err := m.composeBuild(ctx, exec, projectDir, composeFile, projectName, args); err != nil {
 			result.Success = false
 			result.Error = fmt.Sprintf("failed to build: %v", err)
 			return result, err
@@ -131,7 +128,7 @@ func (m *DockerComposeModule) buildComposeCmd(projectDir, composeFile, projectNa
 	return strings.Join(cmdParts, " ")
 }
 
-func (m *DockerComposeModule) composeUp(ctx context.Context, projectDir, composeFile, projectName string, args map[string]interface{}) error {
+func (m *DockerComposeModule) composeUp(ctx context.Context, exec *executor.CommandExecutor, projectDir, composeFile, projectName string, args map[string]interface{}) error {
 	cmdParts := []string{}
 
 	detach, _ := args["detach"].(bool)
@@ -158,7 +155,7 @@ func (m *DockerComposeModule) composeUp(ctx context.Context, projectDir, compose
 	}
 
 	cmd := m.buildComposeCmd(projectDir, composeFile, projectName, strings.Join(cmdParts, " "))
-	_, err := m.executor.Execute(cmd)
+	_, err := exec.Execute(cmd)
 	if err != nil {
 		return fmt.Errorf("compose up failed: %s", err.Error())
 	}
@@ -166,7 +163,7 @@ func (m *DockerComposeModule) composeUp(ctx context.Context, projectDir, compose
 	return nil
 }
 
-func (m *DockerComposeModule) composeDown(ctx context.Context, projectDir, composeFile, projectName string, args map[string]interface{}) error {
+func (m *DockerComposeModule) composeDown(ctx context.Context, exec *executor.CommandExecutor, projectDir, composeFile, projectName string, args map[string]interface{}) error {
 	cmdParts := []string{"down"}
 
 	removeVolumes, _ := args["remove_volumes"].(bool)
@@ -180,7 +177,7 @@ func (m *DockerComposeModule) composeDown(ctx context.Context, projectDir, compo
 	}
 
 	cmd := m.buildComposeCmd(projectDir, composeFile, projectName, strings.Join(cmdParts, " "))
-	_, err := m.executor.Execute(cmd)
+	_, err := exec.Execute(cmd)
 	if err != nil {
 		return fmt.Errorf("compose down failed: %s", err.Error())
 	}
@@ -188,7 +185,7 @@ func (m *DockerComposeModule) composeDown(ctx context.Context, projectDir, compo
 	return nil
 }
 
-func (m *DockerComposeModule) composeRestart(ctx context.Context, projectDir, composeFile, projectName string, args map[string]interface{}) error {
+func (m *DockerComposeModule) composeRestart(ctx context.Context, exec *executor.CommandExecutor, projectDir, composeFile, projectName string, args map[string]interface{}) error {
 	cmdParts := []string{"restart"}
 
 	if services, ok := args["services"].([]interface{}); ok {
@@ -198,7 +195,7 @@ func (m *DockerComposeModule) composeRestart(ctx context.Context, projectDir, co
 	}
 
 	cmd := m.buildComposeCmd(projectDir, composeFile, projectName, strings.Join(cmdParts, " "))
-	_, err := m.executor.Execute(cmd)
+	_, err := exec.Execute(cmd)
 	if err != nil {
 		return fmt.Errorf("compose restart failed: %s", err.Error())
 	}
@@ -206,9 +203,9 @@ func (m *DockerComposeModule) composeRestart(ctx context.Context, projectDir, co
 	return nil
 }
 
-func (m *DockerComposeModule) composePull(ctx context.Context, projectDir, composeFile, projectName string) error {
+func (m *DockerComposeModule) composePull(ctx context.Context, exec *executor.CommandExecutor, projectDir, composeFile, projectName string) error {
 	cmd := m.buildComposeCmd(projectDir, composeFile, projectName, "pull")
-	_, err := m.executor.Execute(cmd)
+	_, err := exec.Execute(cmd)
 	if err != nil {
 		return fmt.Errorf("compose pull failed: %s", err.Error())
 	}
@@ -216,7 +213,7 @@ func (m *DockerComposeModule) composePull(ctx context.Context, projectDir, compo
 	return nil
 }
 
-func (m *DockerComposeModule) composeBuild(ctx context.Context, projectDir, composeFile, projectName string, args map[string]interface{}) error {
+func (m *DockerComposeModule) composeBuild(ctx context.Context, exec *executor.CommandExecutor, projectDir, composeFile, projectName string, args map[string]interface{}) error {
 	cmdParts := []string{"build"}
 
 	noCache, _ := args["nocache"].(bool)
@@ -236,7 +233,7 @@ func (m *DockerComposeModule) composeBuild(ctx context.Context, projectDir, comp
 	}
 
 	cmd := m.buildComposeCmd(projectDir, composeFile, projectName, strings.Join(cmdParts, " "))
-	_, err := m.executor.Execute(cmd)
+	_, err := exec.Execute(cmd)
 	if err != nil {
 		return fmt.Errorf("compose build failed: %s", err.Error())
 	}

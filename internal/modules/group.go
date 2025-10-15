@@ -12,7 +12,6 @@ import (
 // GroupModuleFixed manages system groups using remote executor
 type GroupModuleFixed struct {
 	*BaseModule
-	executor *executor.CommandExecutor
 }
 
 func NewGroupModuleFixed() *GroupModuleFixed {
@@ -40,26 +39,24 @@ func (m *GroupModuleFixed) Execute(ctx context.Context, host types.Host, args ma
 		Timestamp: startTime,
 	}
 
-	// Initialize executor if not already done
-	if m.executor == nil {
-		exec, err := executor.NewCommandExecutor(host)
-		if err != nil {
-			result.Success = false
-			result.Error = fmt.Sprintf("failed to create executor: %v", err)
-			result.Duration = time.Since(startTime)
-			return result, nil
-		}
-		m.executor = exec
+	// Initialize executor for this execution
+	exec, err := executor.NewCommandExecutor(host)
+	if err != nil {
+		result.Success = false
+		result.Error = fmt.Sprintf("failed to create executor: %v", err)
+		result.Duration = time.Since(startTime)
+		return result, nil
 	}
+	defer exec.Close()
 
 	// Configure become (privilege escalation) - always reset to ensure correct state
 	if become, ok := args["_become"].(bool); ok && become {
 		becomeUser, _ := args["_become_user"].(string)
 		becomeMethod, _ := args["_become_method"].(string)
-		m.executor.SetBecome(true, becomeUser, becomeMethod)
+		exec.SetBecome(true, becomeUser, becomeMethod)
 	} else {
 		// Reset become if not requested
-		m.executor.SetBecome(false, "", "")
+		exec.SetBecome(false, "", "")
 	}
 
 	// Validate arguments
@@ -75,9 +72,9 @@ func (m *GroupModuleFixed) Execute(ctx context.Context, host types.Host, args ma
 
 	switch state {
 	case "present":
-		return m.ensureGroupPresent(groupname, args, result, startTime)
+		return m.ensureGroupPresent(exec, groupname, args, result, startTime)
 	case "absent":
-		return m.ensureGroupAbsent(groupname, result, startTime)
+		return m.ensureGroupAbsent(exec, groupname, result, startTime)
 	default:
 		result.Success = false
 		result.Error = fmt.Sprintf("invalid state: %s", state)
@@ -141,8 +138,8 @@ func (m *GroupModuleFixed) Validate(args map[string]interface{}) error {
 	return nil
 }
 
-func (m *GroupModuleFixed) ensureGroupPresent(groupname string, args map[string]interface{}, result types.TaskResult, startTime time.Time) (types.TaskResult, error) {
-	if m.groupExists(groupname) {
+func (m *GroupModuleFixed) ensureGroupPresent(exec *executor.CommandExecutor, groupname string, args map[string]interface{}, result types.TaskResult, startTime time.Time) (types.TaskResult, error) {
+	if m.groupExists(exec, groupname) {
 		result.Success = true
 		result.Changed = false
 		result.Output = map[string]interface{}{
@@ -151,7 +148,7 @@ func (m *GroupModuleFixed) ensureGroupPresent(groupname string, args map[string]
 	} else {
 		// Create group using remote executor
 		cmdArgs := m.buildGroupAddCommand(groupname, args)
-		output, err := m.executor.Execute(cmdArgs[0], cmdArgs[1:]...)
+		output, err := exec.Execute(cmdArgs[0], cmdArgs[1:]...)
 		if err != nil {
 			result.Success = false
 			result.Error = fmt.Sprintf("error creating group: %v", err)
@@ -176,8 +173,8 @@ func (m *GroupModuleFixed) ensureGroupPresent(groupname string, args map[string]
 	return result, nil
 }
 
-func (m *GroupModuleFixed) ensureGroupAbsent(groupname string, result types.TaskResult, startTime time.Time) (types.TaskResult, error) {
-	if !m.groupExists(groupname) {
+func (m *GroupModuleFixed) ensureGroupAbsent(exec *executor.CommandExecutor, groupname string, result types.TaskResult, startTime time.Time) (types.TaskResult, error) {
+	if !m.groupExists(exec, groupname) {
 		result.Success = true
 		result.Changed = false
 		result.Output = map[string]interface{}{
@@ -185,7 +182,7 @@ func (m *GroupModuleFixed) ensureGroupAbsent(groupname string, result types.Task
 		}
 	} else {
 		// Remove group using remote executor
-		output, err := m.executor.Execute("groupdel", groupname)
+		output, err := exec.Execute("groupdel", groupname)
 		if err != nil {
 			result.Success = false
 			result.Error = fmt.Sprintf("error removing group: %v", err)
@@ -210,8 +207,8 @@ func (m *GroupModuleFixed) ensureGroupAbsent(groupname string, result types.Task
 	return result, nil
 }
 
-func (m *GroupModuleFixed) groupExists(groupname string) bool {
-	_, err := m.executor.Execute("getent", "group", groupname)
+func (m *GroupModuleFixed) groupExists(exec *executor.CommandExecutor, groupname string) bool {
+	_, err := exec.Execute("getent", "group", groupname)
 	return err == nil
 }
 

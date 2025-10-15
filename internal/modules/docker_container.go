@@ -13,7 +13,6 @@ import (
 
 type DockerContainerModule struct {
 	BaseModule
-	executor *executor.CommandExecutor
 }
 
 type ContainerState struct {
@@ -51,15 +50,13 @@ func (m *DockerContainerModule) Execute(ctx context.Context, host types.Host, ar
 		Timestamp: startTime,
 	}
 
-	if m.executor == nil {
-		var err error
-		m.executor, err = executor.NewCommandExecutor(host)
-		if err != nil {
-			result.Success = false
-			result.Error = fmt.Sprintf("failed to create executor: %v", err)
-			return result, err
-		}
+	exec, err := executor.NewCommandExecutor(host)
+	if err != nil {
+		result.Success = false
+		result.Error = fmt.Sprintf("failed to create executor: %v", err)
+		return result, err
 	}
+	defer exec.Close()
 
 	name, ok := args["name"].(string)
 	if !ok || name == "" {
@@ -73,7 +70,7 @@ func (m *DockerContainerModule) Execute(ctx context.Context, host types.Host, ar
 		state = "started"
 	}
 
-	currentState, exists, err := m.getContainerState(ctx, name)
+	currentState, exists, err := m.getContainerState(ctx, exec, name)
 	if err != nil {
 		result.Success = false
 		result.Error = fmt.Sprintf("failed to get container state: %v", err)
@@ -83,7 +80,7 @@ func (m *DockerContainerModule) Execute(ctx context.Context, host types.Host, ar
 	switch state {
 	case "present", "started":
 		if !exists {
-			if err := m.createContainer(ctx, name, args); err != nil {
+			if err := m.createContainer(ctx, exec, name, args); err != nil {
 				result.Success = false
 				result.Error = fmt.Sprintf("failed to create container: %v", err)
 				return result, err
@@ -93,7 +90,7 @@ func (m *DockerContainerModule) Execute(ctx context.Context, host types.Host, ar
 		}
 
 		if state == "started" && (!exists || !currentState.Running) {
-			if err := m.startContainer(ctx, name); err != nil {
+			if err := m.startContainer(ctx, exec, name); err != nil {
 				result.Success = false
 				result.Error = fmt.Sprintf("failed to start container: %v", err)
 				return result, err
@@ -104,7 +101,7 @@ func (m *DockerContainerModule) Execute(ctx context.Context, host types.Host, ar
 
 	case "stopped":
 		if exists && currentState.Running {
-			if err := m.stopContainer(ctx, name); err != nil {
+			if err := m.stopContainer(ctx, exec, name); err != nil {
 				result.Success = false
 				result.Error = fmt.Sprintf("failed to stop container: %v", err)
 				return result, err
@@ -115,7 +112,7 @@ func (m *DockerContainerModule) Execute(ctx context.Context, host types.Host, ar
 
 	case "restarted":
 		if exists {
-			if err := m.restartContainer(ctx, name); err != nil {
+			if err := m.restartContainer(ctx, exec, name); err != nil {
 				result.Success = false
 				result.Error = fmt.Sprintf("failed to restart container: %v", err)
 				return result, err
@@ -127,13 +124,13 @@ func (m *DockerContainerModule) Execute(ctx context.Context, host types.Host, ar
 	case "absent":
 		if exists {
 			if currentState.Running {
-				if err := m.stopContainer(ctx, name); err != nil {
+				if err := m.stopContainer(ctx, exec, name); err != nil {
 					result.Success = false
 					result.Error = fmt.Sprintf("failed to stop container: %v", err)
 					return result, err
 				}
 			}
-			if err := m.removeContainer(ctx, name, args); err != nil {
+			if err := m.removeContainer(ctx, exec, name, args); err != nil {
 				result.Success = false
 				result.Error = fmt.Sprintf("failed to remove container: %v", err)
 				return result, err
@@ -143,16 +140,16 @@ func (m *DockerContainerModule) Execute(ctx context.Context, host types.Host, ar
 		}
 	}
 
-	finalState, _, _ := m.getContainerState(ctx, name)
+	finalState, _, _ := m.getContainerState(ctx, exec, name)
 	result.Output["container"] = finalState
 	result.Duration = time.Since(startTime)
 
 	return result, nil
 }
 
-func (m *DockerContainerModule) getContainerState(ctx context.Context, name string) (*ContainerState, bool, error) {
+func (m *DockerContainerModule) getContainerState(ctx context.Context, exec *executor.CommandExecutor, name string) (*ContainerState, bool, error) {
 	cmd := fmt.Sprintf("docker inspect %s 2>/dev/null", name)
-	stdout, err := m.executor.Execute(cmd)
+	stdout, err := exec.Execute(cmd)
 	if err != nil {
 		return nil, false, nil
 	}
@@ -182,7 +179,7 @@ func (m *DockerContainerModule) getContainerState(ctx context.Context, name stri
 	return state, true, nil
 }
 
-func (m *DockerContainerModule) createContainer(ctx context.Context, name string, args map[string]interface{}) error {
+func (m *DockerContainerModule) createContainer(ctx context.Context, exec *executor.CommandExecutor, name string, args map[string]interface{}) error {
 	image, _ := args["image"].(string)
 	if image == "" {
 		return fmt.Errorf("image is required to create container")
@@ -225,7 +222,7 @@ func (m *DockerContainerModule) createContainer(ctx context.Context, name string
 	}
 
 	cmd := strings.Join(cmdParts, " ")
-	_, err := m.executor.Execute(cmd)
+	_, err := exec.Execute(cmd)
 	if err != nil {
 		return fmt.Errorf("failed to create container: %s", err.Error())
 	}
@@ -233,34 +230,34 @@ func (m *DockerContainerModule) createContainer(ctx context.Context, name string
 	return nil
 }
 
-func (m *DockerContainerModule) startContainer(ctx context.Context, name string) error {
+func (m *DockerContainerModule) startContainer(ctx context.Context, exec *executor.CommandExecutor, name string) error {
 	cmd := fmt.Sprintf("docker start %s", name)
-	_, err := m.executor.Execute(cmd)
+	_, err := exec.Execute(cmd)
 	if err != nil {
 		return fmt.Errorf("failed to start container: %s", err.Error())
 	}
 	return nil
 }
 
-func (m *DockerContainerModule) stopContainer(ctx context.Context, name string) error {
+func (m *DockerContainerModule) stopContainer(ctx context.Context, exec *executor.CommandExecutor, name string) error {
 	cmd := fmt.Sprintf("docker stop %s", name)
-	_, err := m.executor.Execute(cmd)
+	_, err := exec.Execute(cmd)
 	if err != nil {
 		return fmt.Errorf("failed to stop container: %s", err.Error())
 	}
 	return nil
 }
 
-func (m *DockerContainerModule) restartContainer(ctx context.Context, name string) error {
+func (m *DockerContainerModule) restartContainer(ctx context.Context, exec *executor.CommandExecutor, name string) error {
 	cmd := fmt.Sprintf("docker restart %s", name)
-	_, err := m.executor.Execute(cmd)
+	_, err := exec.Execute(cmd)
 	if err != nil {
 		return fmt.Errorf("failed to restart container: %s", err.Error())
 	}
 	return nil
 }
 
-func (m *DockerContainerModule) removeContainer(ctx context.Context, name string, args map[string]interface{}) error {
+func (m *DockerContainerModule) removeContainer(ctx context.Context, exec *executor.CommandExecutor, name string, args map[string]interface{}) error {
 	force, _ := args["force"].(bool)
 	cmdParts := []string{"docker rm"}
 	if force {
@@ -269,7 +266,7 @@ func (m *DockerContainerModule) removeContainer(ctx context.Context, name string
 	cmdParts = append(cmdParts, name)
 
 	cmd := strings.Join(cmdParts, " ")
-	_, err := m.executor.Execute(cmd)
+	_, err := exec.Execute(cmd)
 	if err != nil {
 		return fmt.Errorf("failed to remove container: %s", err.Error())
 	}

@@ -13,7 +13,6 @@ import (
 // CommandModuleFixed executes shell commands using remote executor
 type CommandModuleFixed struct {
 	*BaseModule
-	executor *executor.CommandExecutor
 }
 
 func NewCommandModuleFixed() *CommandModuleFixed {
@@ -41,17 +40,15 @@ func (m *CommandModuleFixed) Execute(ctx context.Context, host types.Host, args 
 		Timestamp: startTime,
 	}
 
-	// Initialize executor if not already done
-	if m.executor == nil {
-		exec, err := executor.NewCommandExecutor(host)
-		if err != nil {
-			result.Success = false
-			result.Error = fmt.Sprintf("failed to create executor: %v", err)
-			result.Duration = time.Since(startTime)
-			return result, nil
-		}
-		m.executor = exec
+	// Create executor for this specific host
+	exec, err := executor.NewCommandExecutor(host)
+	if err != nil {
+		result.Success = false
+		result.Error = fmt.Sprintf("failed to create executor: %v", err)
+		result.Duration = time.Since(startTime)
+		return result, nil
 	}
+	defer exec.Close()
 
 	// Validate arguments
 	if err := m.Validate(args); err != nil {
@@ -70,9 +67,9 @@ func (m *CommandModuleFixed) Execute(ctx context.Context, host types.Host, args 
 	}
 
 	if shell {
-		return m.executeShellCommand(command, result, startTime)
+		return m.executeShellCommand(exec, command, result, startTime)
 	} else {
-		return m.executeCommand(command, result, startTime)
+		return m.executeCommand(exec, command, result, startTime)
 	}
 }
 
@@ -114,7 +111,7 @@ func (m *CommandModuleFixed) Validate(args map[string]interface{}) error {
 	return nil
 }
 
-func (m *CommandModuleFixed) executeCommand(command string, result types.TaskResult, startTime time.Time) (types.TaskResult, error) {
+func (m *CommandModuleFixed) executeCommand(exec *executor.CommandExecutor, command string, result types.TaskResult, startTime time.Time) (types.TaskResult, error) {
 	// Split command into parts for execution
 	parts := strings.Fields(command)
 	if len(parts) == 0 {
@@ -126,7 +123,7 @@ func (m *CommandModuleFixed) executeCommand(command string, result types.TaskRes
 	}
 
 	// Execute using remote executor
-	output, err := m.executor.Execute(parts[0], parts[1:]...)
+	output, err := exec.Execute(parts[0], parts[1:]...)
 
 	if err != nil {
 		result.Success = false
@@ -154,9 +151,9 @@ func (m *CommandModuleFixed) executeCommand(command string, result types.TaskRes
 	return result, nil
 }
 
-func (m *CommandModuleFixed) executeShellCommand(command string, result types.TaskResult, startTime time.Time) (types.TaskResult, error) {
+func (m *CommandModuleFixed) executeShellCommand(exec *executor.CommandExecutor, command string, result types.TaskResult, startTime time.Time) (types.TaskResult, error) {
 	// Execute command through shell using remote executor
-	output, err := m.executor.Execute("sh", "-c", command)
+	output, err := exec.Execute("sh", "-c", command)
 
 	if err != nil {
 		result.Success = false
@@ -187,7 +184,6 @@ func (m *CommandModuleFixed) executeShellCommand(command string, result types.Ta
 // ShellModuleFixed executes shell commands with advanced features using remote executor
 type ShellModuleFixed struct {
 	BaseModule
-	executor *executor.CommandExecutor
 }
 
 func NewShellModuleFixed() *ShellModuleFixed {
@@ -260,16 +256,14 @@ func (m *ShellModuleFixed) Execute(ctx context.Context, host types.Host, args ma
 		Output:  make(map[string]interface{}),
 	}
 
-	// Initialize executor if not already done
-	if m.executor == nil {
-		exec, err := executor.NewCommandExecutor(host)
-		if err != nil {
-			result.Error = fmt.Sprintf("failed to create executor: %v", err)
-			result.Duration = time.Since(startTime)
-			return result, fmt.Errorf("failed to create executor: %v", err)
-		}
-		m.executor = exec
+	// Create executor for this specific host
+	exec, err := executor.NewCommandExecutor(host)
+	if err != nil {
+		result.Error = fmt.Sprintf("failed to create executor: %v", err)
+		result.Duration = time.Since(startTime)
+		return result, fmt.Errorf("failed to create executor: %v", err)
 	}
+	defer exec.Close()
 
 	// Support both 'command' and 'cmd' (Ansible compatibility)
 	command, hasCommand := args["command"].(string)
@@ -304,17 +298,17 @@ func (m *ShellModuleFixed) Execute(ctx context.Context, host types.Host, args ma
 
 	// Execute the command using remote executor
 	// Note: executor.Execute will automatically use shell if needed
-	output, err := m.executor.Execute(fullCommand)
+	output, execErr := exec.Execute(fullCommand)
 
-	if err != nil {
+	if execErr != nil {
 		result.Output = map[string]interface{}{
 			"message": "Shell command failed",
-			"error":   err.Error(),
+			"error":   execErr.Error(),
 			"stdout":  output,
 			"command": command,
 		}
 		result.Duration = time.Since(startTime)
-		return result, fmt.Errorf("command failed: %v", err)
+		return result, fmt.Errorf("command failed: %v", execErr)
 	}
 
 	result.Success = true
