@@ -426,3 +426,231 @@ func TestPackageMetrics(t *testing.T) {
 		}
 	})
 }
+
+// TestUnifiedPackageModule_parsePackageSpecs tests the parsePackageSpecs method
+func TestUnifiedPackageModule_parsePackageSpecs(t *testing.T) {
+	module := NewUnifiedPackageModule()
+
+	tests := []struct {
+		name        string
+		args        map[string]interface{}
+		expected    []PackageSpec
+		expectError bool
+		errorMsg    string
+	}{
+		{
+			name: "single package name as string",
+			args: map[string]interface{}{
+				"name": "nginx",
+			},
+			expected: []PackageSpec{
+				{Name: "nginx", Version: "", State: "present"},
+			},
+			expectError: false,
+		},
+		{
+			name: "single package with global version and state",
+			args: map[string]interface{}{
+				"name":    "nginx",
+				"version": "1.20.0",
+				"state":   "latest",
+			},
+			expected: []PackageSpec{
+				{Name: "nginx", Version: "1.20.0", State: "latest"},
+			},
+			expectError: false,
+		},
+		{
+			name: "list of package names as []string",
+			args: map[string]interface{}{
+				"name": []string{"nginx", "apache2", "mysql"},
+			},
+			expected: []PackageSpec{
+				{Name: "nginx", Version: "", State: "present"},
+				{Name: "apache2", Version: "", State: "present"},
+				{Name: "mysql", Version: "", State: "present"},
+			},
+			expectError: false,
+		},
+		{
+			name: "list of package names as []interface{} with strings",
+			args: map[string]interface{}{
+				"name": []interface{}{"nginx", "apache2"},
+			},
+			expected: []PackageSpec{
+				{Name: "nginx", Version: "", State: "present"},
+				{Name: "apache2", Version: "", State: "present"},
+			},
+			expectError: false,
+		},
+		{
+			name: "list with global version and state",
+			args: map[string]interface{}{
+				"name":    []string{"nginx", "apache2"},
+				"version": "1.0.0",
+				"state":   "absent",
+			},
+			expected: []PackageSpec{
+				{Name: "nginx", Version: "1.0.0", State: "absent"},
+				{Name: "apache2", Version: "1.0.0", State: "absent"},
+			},
+			expectError: false,
+		},
+		{
+			name: "list of objects with individual versions",
+			args: map[string]interface{}{
+				"name": []interface{}{
+					map[string]interface{}{"name": "nginx", "version": "1.20.0"},
+					map[string]interface{}{"name": "apache2", "version": "2.4.0"},
+				},
+			},
+			expected: []PackageSpec{
+				{Name: "nginx", Version: "1.20.0", State: "present"},
+				{Name: "apache2", Version: "2.4.0", State: "present"},
+			},
+			expectError: false,
+		},
+		{
+			name: "list of objects with individual states",
+			args: map[string]interface{}{
+				"name": []interface{}{
+					map[string]interface{}{"name": "nginx", "state": "latest"},
+					map[string]interface{}{"name": "apache2", "state": "absent"},
+				},
+			},
+			expected: []PackageSpec{
+				{Name: "nginx", Version: "", State: "latest"},
+				{Name: "apache2", Version: "", State: "absent"},
+			},
+			expectError: false,
+		},
+		{
+			name: "list of objects with global and individual versions",
+			args: map[string]interface{}{
+				"name": []interface{}{
+					map[string]interface{}{"name": "nginx", "version": "1.20.0"},
+					map[string]interface{}{"name": "apache2"},
+				},
+				"version": "1.0.0",
+				"state":   "latest",
+			},
+			expected: []PackageSpec{
+				{Name: "nginx", Version: "1.20.0", State: "latest"},
+				{Name: "apache2", Version: "1.0.0", State: "latest"},
+			},
+			expectError: false,
+		},
+		{
+			name: "mixed list of strings and objects",
+			args: map[string]interface{}{
+				"name": []interface{}{
+					"nginx",
+					map[string]interface{}{"name": "apache2", "version": "2.4.0"},
+				},
+				"version": "1.0.0",
+			},
+			expected: []PackageSpec{
+				{Name: "nginx", Version: "1.0.0", State: "present"},
+				{Name: "apache2", Version: "2.4.0", State: "present"},
+			},
+			expectError: false,
+		},
+		{
+			name:        "missing name parameter",
+			args:        map[string]interface{}{},
+			expected:    nil,
+			expectError: true,
+			errorMsg:    "name parameter is required",
+		},
+		{
+			name: "invalid name type",
+			args: map[string]interface{}{
+				"name": 123,
+			},
+			expected:    nil,
+			expectError: true,
+			errorMsg:    "name parameter must be a string, list of strings, or list of objects",
+		},
+		{
+			name: "object without name field",
+			args: map[string]interface{}{
+				"name": []interface{}{
+					map[string]interface{}{"version": "1.0.0"},
+				},
+			},
+			expected:    nil,
+			expectError: true,
+			errorMsg:    "name[0].name must be a string",
+		},
+		{
+			name: "object with non-string name",
+			args: map[string]interface{}{
+				"name": []interface{}{
+					map[string]interface{}{"name": 123},
+				},
+			},
+			expected:    nil,
+			expectError: true,
+			errorMsg:    "name[0].name must be a string",
+		},
+		{
+			name: "invalid item type in list",
+			args: map[string]interface{}{
+				"name": []interface{}{
+					123,
+				},
+			},
+			expected:    nil,
+			expectError: true,
+			errorMsg:    "name[0] must be a string or object with 'name' field",
+		},
+		{
+			name: "empty list",
+			args: map[string]interface{}{
+				"name": []interface{}{},
+			},
+			expected:    nil,
+			expectError: true,
+			errorMsg:    "at least one package name is required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := module.parsePackageSpecs(tt.args)
+
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("Expected error but got none")
+					return
+				}
+				if err.Error() != tt.errorMsg {
+					t.Errorf("Expected error '%s', got '%s'", tt.errorMsg, err.Error())
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("Unexpected error: %v", err)
+				return
+			}
+
+			if len(result) != len(tt.expected) {
+				t.Errorf("Expected %d package specs, got %d", len(tt.expected), len(result))
+				return
+			}
+
+			for i, spec := range result {
+				if spec.Name != tt.expected[i].Name {
+					t.Errorf("Package[%d]: expected name '%s', got '%s'", i, tt.expected[i].Name, spec.Name)
+				}
+				if spec.Version != tt.expected[i].Version {
+					t.Errorf("Package[%d]: expected version '%s', got '%s'", i, tt.expected[i].Version, spec.Version)
+				}
+				if spec.State != tt.expected[i].State {
+					t.Errorf("Package[%d]: expected state '%s', got '%s'", i, tt.expected[i].State, spec.State)
+				}
+			}
+		})
+	}
+}
