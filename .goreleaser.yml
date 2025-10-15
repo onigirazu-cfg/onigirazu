@@ -306,15 +306,15 @@ nfpms:
         dst: /usr/share/doc/onigirazu/docs
         file_info:
           mode: 0644
-      - src: ./config.example.yml
+      - src: ./docs/examples/config.example.yml
         dst: /usr/share/onigirazu/config.example.yml
         file_info:
           mode: 0644
-      - src: ./inventory.example.yml
+      - src: ./docs/examples/inventory.example.yml
         dst: /usr/share/onigirazu/inventory.example.yml
         file_info:
           mode: 0644
-      - src: ./playbook.example.yml
+      - src: ./docs/examples/playbook.example.yml
         dst: /usr/share/onigirazu/playbook.example.yml
         file_info:
           mode: 0644
