@@ -81,7 +81,7 @@ func (m *MySQLDBModule) Execute(ctx context.Context, host types.Host, args map[s
 		loginPort = "3306"
 	}
 
-	exists, dbInfo, err := m.databaseExists(ctx, dbName, loginUser, loginPassword, loginHost, loginPort)
+	exists, _, err := m.databaseExists(ctx, dbName, loginUser, loginPassword, loginHost, loginPort)
 	if err != nil {
 		result.Success = false
 		result.Error = fmt.Sprintf("failed to check database: %v", err)
@@ -155,8 +155,8 @@ func (m *MySQLDBModule) Execute(ctx context.Context, host types.Host, args map[s
 	}
 
 	if state != "absent" {
-		_, dbInfo, _ = m.databaseExists(ctx, dbName, loginUser, loginPassword, loginHost, loginPort)
-		result.Output["database"] = dbInfo
+		_, dbInf, _ := m.databaseExists(ctx, dbName, loginUser, loginPassword, loginHost, loginPort)
+		result.Output["database"] = dbInf
 	}
 
 	result.Duration = time.Since(startTime)

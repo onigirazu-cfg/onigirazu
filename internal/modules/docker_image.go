@@ -75,7 +75,7 @@ func (m *DockerImageModule) Execute(ctx context.Context, host types.Host, args m
 	}
 
 	fullName := fmt.Sprintf("%s:%s", name, tag)
-	exists, imageInfo, err := m.imageExists(ctx, fullName)
+	exists, _, err := m.imageExists(ctx, fullName)
 	if err != nil {
 		result.Success = false
 		result.Error = fmt.Sprintf("failed to check image: %v", err)
@@ -127,8 +127,8 @@ func (m *DockerImageModule) Execute(ctx context.Context, host types.Host, args m
 	}
 
 	if state != "absent" {
-		_, imageInfo, _ = m.imageExists(ctx, fullName)
-		result.Output["image"] = imageInfo
+		_, imgInfo, _ := m.imageExists(ctx, fullName)
+		result.Output["image"] = imgInfo
 	}
 
 	result.Duration = time.Since(startTime)
