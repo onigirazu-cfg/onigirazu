@@ -87,7 +87,3 @@ var _ SecretProvider = (*VaultClient)(nil)
 //     // Cache result
 //     // Return value
 // }
-
-func init() {
-	fmt.Println("Vault provider registered (stub implementation)")
-}
