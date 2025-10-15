@@ -208,6 +208,36 @@ func (m *Manager) ClearFilters() {
 	m.groupFilters = make([]GroupFilter, 0)
 }
 
+// ApplyHostOverrides applies SSH user and key file overrides to all hosts
+func (m *Manager) ApplyHostOverrides(user, keyFile string) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	if m.inventory == nil {
+		return
+	}
+
+	for i := range m.inventory.Hosts {
+		if user != "" {
+			m.inventory.Hosts[i].User = user
+		}
+		if keyFile != "" {
+			m.inventory.Hosts[i].KeyFile = keyFile
+		}
+	}
+
+	for _, group := range m.inventory.Groups {
+		for _, host := range group.Hosts {
+			if user != "" {
+				host.User = user
+			}
+			if keyFile != "" {
+				host.KeyFile = keyFile
+			}
+		}
+	}
+}
+
 // GetInventoryStats returns inventory statistics
 func (m *Manager) GetInventoryStats() map[string]interface{} {
 	m.mutex.RLock()

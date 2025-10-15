@@ -38,6 +38,10 @@ func newRunCmd() *cobra.Command {
 
 		// Variables
 		extraVars map[string]string
+
+		// SSH connection options
+		sshUser    string
+		sshKeyFile string
 	)
 
 	cmd := &cobra.Command{
@@ -90,7 +94,10 @@ Examples:
   onigirazu run all "uptime" --parallel 10 -i inventory.yml
 
   # JSON output
-  onigirazu run all -m ping --output json -i inventory.yml`,
+  onigirazu run all -m ping --output json -i inventory.yml
+
+  # Override SSH user and key file
+  onigirazu run all -m ping -u deploy -k ~/.ssh/id_rsa -i inventory.yml`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Parse arguments
@@ -127,6 +134,8 @@ Examples:
 				output,
 				verboseMode,
 				extraVars,
+				sshUser,
+				sshKeyFile,
 			)
 		},
 	}
@@ -148,6 +157,10 @@ Examples:
 	// Variable flags
 	cmd.Flags().StringToStringVarP(&extraVars, "extra-vars", "e", map[string]string{}, "Extra variables (key=value)")
 
+	// SSH connection flags
+	cmd.Flags().StringVarP(&sshUser, "user", "u", "", "SSH user (overrides inventory)")
+	cmd.Flags().StringVarP(&sshKeyFile, "key-file", "k", "", "SSH private key file (overrides inventory)")
+
 	return cmd
 }
 
@@ -164,6 +177,8 @@ func runAdHocCommand(
 	outputFormat string,
 	verboseMode bool,
 	extraVars map[string]string,
+	sshUser string,
+	sshKeyFile string,
 ) error {
 	// Load configuration (for future use)
 	_, err := config.LoadConfig(configPath)
@@ -191,6 +206,11 @@ func runAdHocCommand(
 	ctx := context.Background()
 	if err := inventoryMgr.LoadInventory(ctx, inventoryPath); err != nil {
 		return fmt.Errorf("failed to load inventory: %w", err)
+	}
+
+	// Apply SSH overrides if provided
+	if sshUser != "" || sshKeyFile != "" {
+		inventoryMgr.ApplyHostOverrides(sshUser, sshKeyFile)
 	}
 
 	// Initialize module registry
