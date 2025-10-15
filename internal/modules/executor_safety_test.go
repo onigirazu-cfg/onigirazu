@@ -110,7 +110,15 @@ func TestCreateExecutor(t *testing.T) {
 }
 
 // TestMultipleHostsPattern demonstrates the correct pattern for multi-host execution
+// This test requires actual SSH connectivity and is skipped in CI
 func TestMultipleHostsPattern(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	// Skip this test as it requires actual SSH connectivity to multiple hosts
+	t.Skip("This test requires actual SSH connectivity to multiple hosts - run manually with proper setup")
+
 	module := NewBaseExecutorModule("test")
 
 	hosts := []types.Host{

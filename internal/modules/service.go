@@ -3,7 +3,6 @@ package modules
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -645,16 +644,4 @@ func (m *ServiceModuleFixed) failResult(result types.TaskResult, message string)
 	result.Error = message
 	result.Duration = time.Since(result.Timestamp)
 	return result, nil
-}
-
-// hasSystemd checks if systemd is available
-func hasSystemd() bool {
-	_, err := os.Stat("/run/systemd/system")
-	return err == nil
-}
-
-// hasSysVInit checks if SysV init is available
-func hasSysVInit() bool {
-	_, err := os.Stat("/etc/init.d")
-	return err == nil
 }

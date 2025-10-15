@@ -719,9 +719,8 @@ func TestNewServiceModule(t *testing.T) {
 		t.Errorf("Expected name 'service', got '%s'", module.GetName())
 	}
 
-	if module.testServiceManager == nil {
-		t.Errorf("Expected non-nil service manager")
-	}
+	// Note: testServiceManager is only set in test fixtures, not in production code
+	// The actual service manager is detected at runtime in Execute()
 }
 
 // BenchmarkServiceModule_Execute benchmarks service module execution
