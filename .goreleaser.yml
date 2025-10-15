@@ -79,9 +79,6 @@ archives:
       - LICENSE*
       - docs/**/*
       - examples/**/*
-      - config.example.yml
-      - inventory.example.yml
-      - playbook.example.yml
 
 checksum:
   name_template: 'checksums.txt'
