@@ -423,7 +423,7 @@ func (p *InventoryParser) parseIniInventory(data []byte) (*types.Inventory, erro
 			groupName := strings.Trim(line, "[]")
 			isChildrenSection = false
 			isVarsSection = false
-			
+
 			if strings.Contains(groupName, ":") {
 				parts := strings.SplitN(groupName, ":", 2)
 				groupName = parts[0]

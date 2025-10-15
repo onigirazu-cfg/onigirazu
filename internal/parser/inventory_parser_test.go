@@ -754,15 +754,15 @@ env=production
 	assert.NotNil(t, inventory)
 	assert.Len(t, inventory.Hosts, 3)
 	assert.Len(t, inventory.Groups, 3)
-	
+
 	assert.Contains(t, inventory.Groups, "webservers")
 	assert.Contains(t, inventory.Groups, "databases")
 	assert.Contains(t, inventory.Groups, "production")
-	
+
 	webservers := inventory.Groups["webservers"]
 	assert.Len(t, webservers.Hosts, 2)
 	assert.Equal(t, "80", webservers.Vars["http_port"])
-	
+
 	production := inventory.Groups["production"]
 	assert.Len(t, production.Children, 2)
 	assert.Contains(t, production.Children, "webservers")
@@ -844,12 +844,12 @@ var2=value2
 	assert.NoError(t, err)
 	assert.NotNil(t, inventory)
 	assert.Len(t, inventory.Groups, 2)
-	
+
 	group1 := inventory.Groups["group1"]
 	assert.NotNil(t, group1)
 	assert.Len(t, group1.Hosts, 2)
 	assert.Equal(t, "value1", group1.Vars["var1"])
-	
+
 	group2 := inventory.Groups["group2"]
 	assert.NotNil(t, group2)
 	assert.Len(t, group2.Children, 1)
@@ -936,7 +936,7 @@ func TestInventoryParser_ParseIniHostLine(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			host := parser.parseIniHostLine(tt.line, 1)
-			
+
 			assert.NotNil(t, host)
 			assert.Equal(t, tt.expected.name, host.Name)
 			assert.Equal(t, tt.expected.address, host.Address)
@@ -948,18 +948,18 @@ func TestInventoryParser_ParseIniHostLine(t *testing.T) {
 
 func TestInventoryParser_IsExecutable(t *testing.T) {
 	tmpDir := t.TempDir()
-	
+
 	executablePath := filepath.Join(tmpDir, "script.sh")
 	err := os.WriteFile(executablePath, []byte("#!/bin/bash\necho test"), 0755)
 	require.NoError(t, err)
-	
+
 	nonExecutablePath := filepath.Join(tmpDir, "file.txt")
 	err = os.WriteFile(nonExecutablePath, []byte("test"), 0644)
 	require.NoError(t, err)
-	
+
 	logger := &mockLogger{}
 	parser := NewInventoryParser(logger)
-	
+
 	assert.True(t, parser.isExecutable(executablePath))
 	assert.False(t, parser.isExecutable(nonExecutablePath))
 	assert.False(t, parser.isExecutable("/nonexistent/file"))
@@ -968,7 +968,7 @@ func TestInventoryParser_IsExecutable(t *testing.T) {
 func TestInventoryParser_ParseDynamicInventory(t *testing.T) {
 	tmpDir := t.TempDir()
 	scriptPath := filepath.Join(tmpDir, "dynamic.sh")
-	
+
 	scriptContent := `#!/bin/bash
 if [ "$1" = "--list" ]; then
     cat <<EOF
@@ -996,15 +996,15 @@ if [ "$1" = "--list" ]; then
 EOF
 fi
 `
-	
+
 	err := os.WriteFile(scriptPath, []byte(scriptContent), 0755)
 	require.NoError(t, err)
-	
+
 	logger := &mockLogger{}
 	parser := NewInventoryParser(logger)
-	
+
 	inventory, err := parser.parseDynamicInventory(scriptPath)
-	
+
 	assert.NoError(t, err)
 	assert.NotNil(t, inventory)
 	assert.Len(t, inventory.Hosts, 1)

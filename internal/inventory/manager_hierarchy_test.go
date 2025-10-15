@@ -23,14 +23,15 @@ func (l *testLogger) TaskEnd(taskName, hostName string, changed, success bool)  
 func (l *testLogger) PlayStart(playName string, playIndex, totalPlays int)                    {}
 func (l *testLogger) PlayEnd(playName, hostName string, success bool, duration time.Duration) {}
 func (l *testLogger) Progress(completed, total int, currentTask, currentHost string)          {}
-func (l *testLogger) Retry(taskName, hostName string, attempt, maxAttempts int, delay time.Duration, err error) {}
+func (l *testLogger) Retry(taskName, hostName string, attempt, maxAttempts int, delay time.Duration, err error) {
+}
 
 func setupTestManager(t *testing.T) *Manager {
 	log := &testLogger{}
 	cacheManager := cache.NewManager(0)
 	templateEngine := template.NewEngine()
 	playbookParser := parser.NewEnhancedParser(templateEngine, log)
-	
+
 	return NewManager(playbookParser, log, cacheManager)
 }
 
@@ -126,7 +127,7 @@ func TestGetHostGroups(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			groups := manager.GetHostGroups(tt.hostName)
-			
+
 			if len(groups) != len(tt.expected) {
 				t.Errorf("expected %d groups, got %d", len(tt.expected), len(groups))
 				return
@@ -146,10 +147,10 @@ func TestGetGroupHierarchy(t *testing.T) {
 	manager.inventory = createTestInventory()
 
 	tests := []struct {
-		name           string
-		groupName      string
-		expectError    bool
-		expectedHosts  int
+		name             string
+		groupName        string
+		expectError      bool
+		expectedHosts    int
 		expectedChildren int
 		expectedParents  int
 	}{

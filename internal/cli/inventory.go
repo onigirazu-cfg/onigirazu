@@ -16,11 +16,11 @@ import (
 )
 
 var (
-	inventoryFile   string
-	inventoryHost   string
-	inventoryGroup  string
-	inventoryList   bool
-	inventoryGraph  bool
+	inventoryFile  string
+	inventoryHost  string
+	inventoryGroup string
+	inventoryList  bool
+	inventoryGraph bool
 )
 
 var inventoryCmd = &cobra.Command{
@@ -190,7 +190,8 @@ func showInventoryGraph(invManager *inventory.Manager) error {
 	groups := invManager.ListGroups()
 
 	fmt.Println("Group Hierarchy Graph")
-	fmt.Println("=====================\n")
+	fmt.Println("=====================")
+	fmt.Print("\n")
 
 	visited := make(map[string]bool)
 
@@ -249,7 +250,8 @@ func showInventoryStats(invManager *inventory.Manager) error {
 	stats := invManager.GetInventoryStats()
 
 	fmt.Println("Inventory Statistics")
-	fmt.Println("====================\n")
+	fmt.Println("====================")
+	fmt.Print("\n")
 
 	if loaded, ok := stats["loaded"].(bool); ok && loaded {
 		fmt.Printf("Total Groups: %v\n", stats["groups"])
