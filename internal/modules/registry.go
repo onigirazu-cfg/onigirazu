@@ -40,6 +40,19 @@ func NewRegistry() *Registry {
 	registry.RegisterModule(NewCronModule())
 	registry.RegisterModule(NewFirewallModule())
 	registry.RegisterModule(NewConfigModule())
+	
+	// Docker/Container modules
+	registry.RegisterModule(NewDockerContainerModule())
+	registry.RegisterModule(NewDockerImageModule())
+	registry.RegisterModule(NewDockerComposeModule())
+	registry.RegisterModule(NewPodmanModule())
+	
+	// Database modules
+	registry.RegisterModule(NewMySQLDBModule())
+	registry.RegisterModule(NewMySQLUserModule())
+	registry.RegisterModule(NewPostgreSQLDBModule())
+	registry.RegisterModule(NewPostgreSQLUserModule())
+	registry.RegisterModule(NewMongoDBModule())
 
 	return registry
 }

@@ -562,6 +562,21 @@ Onigirazu includes several built-in modules:
 - **cron**: Cron job management (user crontabs, system cron, job scheduling)
 - **firewall**: Unified firewall management with automatic detection (UFW, firewalld, iptables)
 
+### Docker/Container Modules
+
+- **docker_container**: Manage Docker containers (create, start, stop, remove)
+- **docker_image**: Manage Docker images (pull, build, remove)
+- **docker_compose**: Manage Docker Compose applications (up, down, restart, build)
+- **podman**: Manage Podman containers (rootless container support)
+
+### Database Modules
+
+- **mysql_db**: Manage MySQL databases (create, drop, dump, import)
+- **mysql_user**: Manage MySQL users and privileges
+- **postgresql_db**: Manage PostgreSQL databases (create, drop, dump, restore)
+- **postgresql_user**: Manage PostgreSQL users and privileges
+- **mongodb**: Manage MongoDB databases and users
+
 ### Module Examples
 
 #### File Module
