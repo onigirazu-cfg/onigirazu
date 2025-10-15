@@ -187,26 +187,26 @@ release:
 
     #### Debian/Ubuntu (DEB)
     ```bash
-    wget https://github.com/onigirazu-cfg/onigirazu/releases/download/{{ .Tag }}/onigirazu_{{ .Tag }}_linux_amd64.deb
-    sudo dpkg -i onigirazu_{{ .Tag }}_linux_amd64.deb
+    wget https://github.com/onigirazu-cfg/onigirazu/releases/download/{{ .Tag }}/onigirazu_{{ .Version }}_amd64.deb
+    sudo dpkg -i onigirazu_{{ .Version }}_amd64.deb
     ```
 
     #### RHEL/CentOS/Fedora (RPM)
     ```bash
-    wget https://github.com/onigirazu-cfg/onigirazu/releases/download/{{ .Tag }}/onigirazu_{{ .Tag }}_linux_amd64.rpm
-    sudo rpm -i onigirazu_{{ .Tag }}_linux_amd64.rpm
+    wget https://github.com/onigirazu-cfg/onigirazu/releases/download/{{ .Tag }}/onigirazu_{{ .Version }}_amd64.rpm
+    sudo rpm -i onigirazu_{{ .Version }}_amd64.rpm
     ```
 
     #### Arch Linux
     ```bash
-    wget https://github.com/onigirazu-cfg/onigirazu/releases/download/{{ .Tag }}/onigirazu_{{ .Tag }}_linux_amd64.pkg.tar.zst
-    sudo pacman -U onigirazu_{{ .Tag }}_linux_amd64.pkg.tar.zst
+    wget https://github.com/onigirazu-cfg/onigirazu/releases/download/{{ .Tag }}/onigirazu_{{ .Version }}_amd64.pkg.tar.zst
+    sudo pacman -U onigirazu_{{ .Version }}_amd64.pkg.tar.zst
     ```
 
     #### Alpine Linux (APK)
     ```bash
-    wget https://github.com/onigirazu-cfg/onigirazu/releases/download/{{ .Tag }}/onigirazu_{{ .Tag }}_linux_amd64.apk
-    sudo apk add --allow-untrusted onigirazu_{{ .Tag }}_linux_amd64.apk
+    wget https://github.com/onigirazu-cfg/onigirazu/releases/download/{{ .Tag }}/onigirazu_{{ .Version }}_amd64.apk
+    sudo apk add --allow-untrusted onigirazu_{{ .Version }}_amd64.apk
     ```
 
     ### Manual Installation
