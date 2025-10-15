@@ -35,7 +35,15 @@ Thumbs.db
 .onigirazu-state
 *.log
 
+# Generated files
+coverage.out
+gosec-results.json
+test-state.json
+
 # Vagrant
 .vagrant/
 *.box
+
+# Docker test environment
+docker/ssh/
 vagrant/.vagrant/

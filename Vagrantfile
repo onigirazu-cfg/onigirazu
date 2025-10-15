@@ -13,7 +13,7 @@ Vagrant.configure("2") do |config|
 
   machines = {
     "ubuntu2004" => {
-      box: "ubuntu/focal64",
+      box: "bento/ubuntu-20.04-arm64",
       ip: "192.168.56.10",
       hostname: "ubuntu2004.test"
     },
@@ -94,7 +94,7 @@ Vagrant.configure("2") do |config|
             pw useradd testuser -m -s /bin/sh
           fi
           echo "testuser:testpass" | chpasswd 2>/dev/null || echo "testpass" | pw usermod testuser -h 0
-          
+
           if [ -d /etc/sudoers.d ]; then
             echo "testuser ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/testuser
             chmod 0440 /etc/sudoers.d/testuser

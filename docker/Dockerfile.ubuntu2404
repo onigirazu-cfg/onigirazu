@@ -1,0 +1,36 @@
+ARG BASE_IMAGE=ubuntu:24.04
+FROM ${BASE_IMAGE}
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN if command -v apt-get >/dev/null 2>&1; then \
+        apt-get update && \
+        apt-get install -y openssh-server python3 sudo && \
+        rm -rf /var/lib/apt/lists/* && \
+        mkdir -p /var/run/sshd; \
+    elif command -v dnf >/dev/null 2>&1; then \
+        dnf install -y openssh-server python3 sudo && \
+        dnf clean all && \
+        ssh-keygen -A; \
+    elif command -v yum >/dev/null 2>&1; then \
+        yum install -y openssh-server python3 sudo && \
+        yum clean all && \
+        ssh-keygen -A; \
+    fi
+
+RUN useradd -m -s /bin/bash testuser && \
+    echo 'testuser:testpass' | chpasswd && \
+    usermod -aG sudo testuser 2>/dev/null || usermod -aG wheel testuser
+
+COPY ssh/id_rsa.pub /root/.ssh/authorized_keys
+
+RUN chmod 700 /root/.ssh && \
+    chmod 600 /root/.ssh/authorized_keys
+
+RUN sed -i 's/#PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config && \
+    sed -i 's/#PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config && \
+    sed -i 's/#PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config
+
+EXPOSE 22
+
+CMD ["/usr/sbin/sshd", "-D"]

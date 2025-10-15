@@ -222,7 +222,7 @@ func TestClient_AuthenticationMethods(t *testing.T) {
 			errorMsg:    "failed to connect",
 		},
 		{
-			name: "key authentication with default key",
+			name: "default key authentication",
 			host: types.Host{
 				Name:    "test-host",
 				Address: "192.168.1.100",
@@ -230,6 +230,7 @@ func TestClient_AuthenticationMethods(t *testing.T) {
 				Port:    22,
 			},
 			expectError: true,
+			errorMsg:    "failed to connect",
 		},
 	}
 
@@ -379,7 +380,7 @@ func TestClient_ErrorMessages(t *testing.T) {
 		expectedError string
 	}{
 		{
-			name: "connection without credentials",
+			name: "connection_with_default_key",
 			setupFunc: func() (*Client, error) {
 				return NewClient(types.Host{
 					Name:    "test",
@@ -387,7 +388,7 @@ func TestClient_ErrorMessages(t *testing.T) {
 					User:    "testuser",
 				})
 			},
-			expectedError: "",
+			expectedError: "failed to connect",
 		},
 		{
 			name: "invalid key file",

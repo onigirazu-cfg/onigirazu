@@ -1,0 +1,105 @@
+services:
+  ubuntu2004:
+    build:
+      context: ./docker
+      dockerfile: Dockerfile.ubuntu2004
+    container_name: onigirazu-ubuntu2004
+    hostname: ubuntu2004
+    networks:
+      testnet:
+        ipv4_address: 192.168.56.10
+    ports:
+      - "2220:22"
+    stdin_open: true
+    tty: true
+
+  ubuntu2204:
+    build:
+      context: ./docker
+      dockerfile: Dockerfile.ubuntu2204
+    container_name: onigirazu-ubuntu2204
+    hostname: ubuntu2204
+    networks:
+      testnet:
+        ipv4_address: 192.168.56.11
+    ports:
+      - "2221:22"
+    stdin_open: true
+    tty: true
+
+  ubuntu2404:
+    build:
+      context: ./docker
+      dockerfile: Dockerfile.ubuntu2404
+    container_name: onigirazu-ubuntu2404
+    hostname: ubuntu2404
+    networks:
+      testnet:
+        ipv4_address: 192.168.56.12
+    ports:
+      - "2222:22"
+    stdin_open: true
+    tty: true
+
+  debian11:
+    build:
+      context: ./docker
+      dockerfile: Dockerfile.debian11
+    container_name: onigirazu-debian11
+    hostname: debian11
+    networks:
+      testnet:
+        ipv4_address: 192.168.56.20
+    ports:
+      - "2223:22"
+    stdin_open: true
+    tty: true
+
+  debian12:
+    build:
+      context: ./docker
+      dockerfile: Dockerfile.debian12
+    container_name: onigirazu-debian12
+    hostname: debian12
+    networks:
+      testnet:
+        ipv4_address: 192.168.56.21
+    ports:
+      - "2224:22"
+    stdin_open: true
+    tty: true
+
+  rocky8:
+    build:
+      context: ./docker
+      dockerfile: Dockerfile.rocky8
+    container_name: onigirazu-rocky8
+    hostname: rocky8
+    networks:
+      testnet:
+        ipv4_address: 192.168.56.31
+    ports:
+      - "2225:22"
+    stdin_open: true
+    tty: true
+
+  rocky9:
+    build:
+      context: ./docker
+      dockerfile: Dockerfile.rocky9
+    container_name: onigirazu-rocky9
+    hostname: rocky9
+    networks:
+      testnet:
+        ipv4_address: 192.168.56.32
+    ports:
+      - "2226:22"
+    stdin_open: true
+    tty: true
+
+networks:
+  testnet:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 192.168.56.0/24

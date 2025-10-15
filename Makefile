@@ -334,10 +334,45 @@ vagrant-provision:
 	vagrant provision $$vm
 
 vagrant-test: build
-	@echo "Testing Onigirazu against Vagrant VMs..."
-	@read -p "Enter VM group (ubuntu, debian, redhat, suse, bsd, linux, all): " group; \
-	./bin/onigirazu run -i vagrant/inventory.ini -m ping --limit $$group
+	@if [ -z "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
+		echo "Testing Onigirazu against Vagrant VMs..."; \
+		read -p "Enter VM group (ubuntu, debian, redhat, suse, bsd, linux, all): " group; \
+		./bin/onigirazu run $$group -i vagrant/inventory.ini -m ping -u vagrant -k ~/.vagrant.d/insecure_private_key; \
+	else \
+		group="$(filter-out $@,$(MAKECMDGOALS))"; \
+		./bin/onigirazu run $$group -i vagrant/inventory.ini -m ping -u vagrant -k ~/.vagrant.d/insecure_private_key; \
+	fi
+
+%:
+	@:
 
 vagrant-test-all: build
 	@echo "Running comprehensive tests on all VMs..."
 	./scripts/vagrant-test.sh
+
+docker-setup:
+	@echo "Setting up Docker test environment..."
+	./docker/setup.sh
+
+docker-up:
+	docker-compose -f docker-compose.test.yml up -d
+
+docker-down:
+	docker-compose -f docker-compose.test.yml down
+
+docker-logs:
+	docker-compose -f docker-compose.test.yml logs -f
+
+docker-test: build docker-setup
+	@if [ -z "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
+		echo "Testing Onigirazu against Docker containers..."; \
+		read -p "Enter group (ubuntu, debian, redhat, linux, all): " group; \
+		./bin/onigirazu run $$group -i docker/inventory.ini -m ping -u root -k docker/ssh/id_rsa; \
+	else \
+		group="$(filter-out $@,$(MAKECMDGOALS))"; \
+		./bin/onigirazu run $$group -i docker/inventory.ini -m ping -u root -k docker/ssh/id_rsa; \
+	fi
+
+docker-test-all: build
+	@echo "Running comprehensive tests on all Docker containers..."
+	./scripts/docker-test.sh
