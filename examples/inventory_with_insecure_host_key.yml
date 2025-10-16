@@ -1,0 +1,76 @@
+# Example Inventory: Using insecure_ignore_host_key
+# This demonstrates how to disable SSH host key verification
+# WARNING: Only use this in development/testing environments!
+
+# Method 1: Set on individual host
+hosts:
+  dev-server-01:
+    address: 192.168.1.100
+    port: 22
+    user: deploy
+    insecure_ignore_host_key: true  # Disable host key verification for this host only
+    vars:
+      environment: dev
+
+  dev-server-02:
+    address: 192.168.1.101
+    port: 22
+    user: deploy
+    insecure_ignore_host_key: true
+    vars:
+      environment: dev
+
+  prod-server-01:
+    address: 10.0.1.100
+    port: 22
+    user: deploy
+    # insecure_ignore_host_key is NOT set - host key verification is enabled (secure)
+    key_file: ~/.ssh/prod_key
+    vars:
+      environment: prod
+
+# Method 2: Set on group level (applies to all hosts in group)
+groups:
+  dev-servers:
+    hosts:
+      - dev-server-01
+      - dev-server-02
+    vars:
+      insecure_ignore_host_key: true  # All hosts in this group will ignore host keys
+      debug: true
+
+  prod-servers:
+    hosts:
+      - prod-server-01
+    vars:
+      # insecure_ignore_host_key is NOT set - secure by default
+      backup_enabled: true
+
+  # Method 3: Set on 'all' group (applies to ALL hosts)
+  all:
+    children:
+      - dev-servers
+      - prod-servers
+    vars:
+      timezone: UTC
+      # Uncomment the line below to disable host key verification for ALL hosts
+      # insecure_ignore_host_key: true
+
+# Priority order (from highest to lowest):
+# 1. Host-level setting (in hosts section)
+# 2. Group-level setting (in groups section)
+# 3. All-group setting (in groups.all section)
+#
+# Example: If a host has insecure_ignore_host_key: false, but its group has
+# insecure_ignore_host_key: true, the host-level setting (false) takes precedence.
+
+# Security Best Practices:
+# ✅ DO: Use host key verification in production (default behavior)
+# ✅ DO: Use SSH key files (key_file) for authentication
+# ✅ DO: Keep known_hosts file updated
+# ❌ DON'T: Use insecure_ignore_host_key in production
+# ❌ DON'T: Use password authentication in production
+# ⚠️  ONLY USE insecure_ignore_host_key for:
+#    - Development environments
+#    - Testing with ephemeral VMs/containers
+#    - CI/CD pipelines with dynamic hosts
