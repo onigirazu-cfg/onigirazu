@@ -43,7 +43,7 @@ jobs:
       continue-on-error: true
       run: |
         go install github.com/securego/gosec/v2/cmd/gosec@latest
-        gosec -fmt sarif -out gosec.sarif -stdout -verbose=text ./... || true
+        gosec -fmt sarif -out gosec.sarif -verbose=text ./... || true
 
     - name: Upload Gosec SARIF file
       if: always()
@@ -95,7 +95,8 @@ jobs:
     - name: Run Nancy vulnerability scanner
       continue-on-error: true
       run: |
-        go list -json -deps ./... | docker run --rm -i sonatypecommunity/nancy:latest sleuth
+        go install github.com/sonatype-nexus-community/nancy@latest
+        go list -json -deps ./... | nancy sleuth
 
   codeql:
     runs-on: ubuntu-latest
