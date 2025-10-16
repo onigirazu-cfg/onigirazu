@@ -122,12 +122,7 @@ func (e *CommandExecutor) Execute(command string, args ...string) (string, error
 	}
 
 	// Wrap with become if enabled
-	originalCommand := fullCommand
 	fullCommand = e.wrapWithBecome(fullCommand)
-	if e.become {
-		fmt.Printf("[DEBUG BECOME] Original: %s\n[DEBUG BECOME] Wrapped: %s\n[DEBUG BECOME] Method: %s, User: %s\n",
-			originalCommand, fullCommand, e.becomeMethod, e.becomeUser)
-	}
 
 	if e.sshClient != nil {
 		// Execute on remote host via SSH
