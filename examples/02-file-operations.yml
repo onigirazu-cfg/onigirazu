@@ -20,7 +20,7 @@ plays:
       - name: "Create configuration file"
         file:
           path: "{{ config_dir }}/app.conf"
-          state: "file"
+          state: "present"
           content: |
             # Application Configuration
             app_name={{ app_name }}
@@ -44,12 +44,14 @@ plays:
             app_version: "{{ app_version }}"
             environment: "development"
           mode: "0600"
-      # Create symbolic link
+      # Create symbolic link - NOT SUPPORTED YET (v1.40.0)
+      # Planned feature for future version
       - name: "Create symbolic link"
         file:
           src: "{{ config_dir }}/app.conf"
           dest: "{{ config_dir }}/current.conf"
-          state: "link"
+          state: "touch"
+        when: false  # Disable until symlink support
       # Set file permissions
       - name: "Set executable permissions"
         file:

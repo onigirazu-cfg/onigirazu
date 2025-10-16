@@ -1,0 +1,84 @@
+# Simple Inventory with insecure_ignore_host_key
+# This is a minimal example showing how to convert from text format to YAML
+# to enable insecure_ignore_host_key parameter
+
+# ⚠️ WARNING: Only use insecure_ignore_host_key in development/testing!
+# Never use in production environments!
+
+# Method 1: Set for all hosts globally (simplest)
+groups:
+  all:
+    vars:
+      insecure_ignore_host_key: true  # Applied to ALL hosts
+
+# Define your hosts
+hosts:
+  host-1:
+    address: 192.168.1.10
+    user: root
+    port: 22
+
+  host-2:
+    address: 192.168.1.11
+    user: root
+    port: 2222
+
+  host-3:
+    address: 192.168.1.20
+    user: deploy
+    port: 22
+
+  host-4:
+    address: server.example.com
+    user: root
+    port: 22
+
+# Usage:
+# onigirazu-cli run -i inventory_simple_with_insecure.yml playbook.yml
+
+# ---
+
+# Alternative: Set per host (more control)
+# Uncomment and modify as needed:
+
+# hosts:
+#   dev-server:
+#     address: 192.168.1.10
+#     user: root
+#     port: 22
+#     insecure_ignore_host_key: true  # Only this host ignores host keys
+#
+#   prod-server:
+#     address: 10.0.1.100
+#     user: deploy
+#     port: 22
+#     # insecure_ignore_host_key not set = secure (default)
+
+# ---
+
+# Alternative: Set per group
+# Uncomment and modify as needed:
+
+# groups:
+#   dev-servers:
+#     hosts:
+#       - dev-server-01
+#       - dev-server-02
+#     vars:
+#       insecure_ignore_host_key: true  # All hosts in this group
+#
+#   prod-servers:
+#     hosts:
+#       - prod-server-01
+#       - prod-server-02
+#     # insecure_ignore_host_key not set = secure (default)
+#
+# hosts:
+#   dev-server-01:
+#     address: 192.168.1.10
+#   dev-server-02:
+#     address: 192.168.1.11
+#   prod-server-01:
+#     address: 10.0.1.100
+#   prod-server-02:
+#     address: 10.0.1.101

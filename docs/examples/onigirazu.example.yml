@@ -1,0 +1,245 @@
+# Onigirazu Configuration File Example
+# Place this file as 'onigirazu.yml' in your project directory
+
+# ============================================================================
+# Execution Settings
+# ============================================================================
+
+# Maximum number of concurrent tasks
+max_concurrency: 10
+
+# Default timeout for tasks (e.g., "30s", "5m", "1h")
+default_timeout: 30s
+
+# Number of retry attempts for failed tasks
+retry_attempts: 3
+
+# Delay between retry attempts (e.g., "5s", "10s")
+retry_delay: 5s
+
+# ============================================================================
+# File Paths
+# ============================================================================
+
+# Path to state file for tracking execution state
+state_file: ".onigirazu-state"
+
+# Path to configuration file (this file)
+config_file: "onigirazu.yml"
+
+# ============================================================================
+# Logging
+# ============================================================================
+
+# Log level: "debug", "info", "warn", "error"
+log_level: "info"
+
+# Log format: "text", "json"
+log_format: "text"
+
+# ============================================================================
+# Security Settings
+# ============================================================================
+
+# Allow execution of shell commands
+allow_shell_commands: true
+
+# List of blocked commands (for security)
+blocked_commands:
+  - "rm -rf"
+  - "format"
+  - "mkfs"
+  - "dd if="
+  - ":(){ :|:& };:"  # Fork bomb
+
+# ============================================================================
+# SSH/Connection Settings
+# ============================================================================
+
+# SSH connection timeout (e.g., "30s", "1m")
+ssh_timeout: 30s
+
+# SSH keep-alive interval (e.g., "60s", "2m")
+ssh_keepalive: 60s
+
+# Maximum number of SSH sessions per host
+ssh_max_sessions: 10
+
+# Enable SSH connection reuse
+connection_reuse: true
+
+# SSH strict host key checking (deprecated, use default_insecure_ignore_host_key instead)
+# false = don't verify host keys (insecure)
+# true = verify host keys (secure)
+ssh_strict_host_key: false
+
+# Path to SSH known_hosts file (empty = use ~/.ssh/known_hosts)
+ssh_known_hosts_file: ""
+
+# ============================================================================
+# 🆕 Global Default for insecure_ignore_host_key
+# ============================================================================
+
+# Default value for insecure_ignore_host_key applied to all hosts
+# unless explicitly overridden in inventory file
+#
+# false = SECURE (default) - verify SSH host keys
+# true = INSECURE - ignore SSH host key verification
+#
+# ⚠️ WARNING: Only use 'true' for:
+#   - Development environments
+#   - Test environments
+#   - CI/CD with dynamic hosts
+#   - Ephemeral containers
+#
+# ❌ NEVER use 'true' for:
+#   - Production servers
+#   - Staging environments
+#   - Servers with real data
+#
+# Priority (highest to lowest):
+#   1. Host-level setting in inventory
+#   2. Group-level setting in inventory
+#   3. This global default
+#
+default_insecure_ignore_host_key: false
+
+# ============================================================================
+# Performance Settings
+# ============================================================================
+
+# Enable caching of facts and results
+enable_caching: true
+
+# Cache time-to-live (e.g., "5m", "1h")
+cache_ttl: 5m
+
+# Enable checksum verification for file operations
+enable_checksum: true
+
+# Enable parallel execution
+enable_parallel: false
+
+# Parallel execution strategy: "linear", "free"
+parallel_strategy: "linear"
+
+# ============================================================================
+# Execution Modes
+# ============================================================================
+
+# Dry run mode (don't make actual changes)
+dry_run: false
+
+# Check mode (check if changes are needed)
+check_mode: false
+
+# Verbose output
+verbose: false
+
+# Show diff for file changes
+show_diff: false
+
+# ============================================================================
+# UI/UX Settings
+# ============================================================================
+
+# Enable colored output
+color_output: true
+
+# Show progress bar
+progress_bar: true
+
+# Enable interactive mode
+interactive_mode: false
+
+# Output format: "text", "json", "yaml"
+output_format: "text"
+
+# ============================================================================
+# Monitoring Settings
+# ============================================================================
+
+# Enable metrics collection
+enable_metrics: false
+
+# Metrics HTTP server port
+metrics_port: 9090
+
+# Metrics HTTP endpoint path
+metrics_path: "/metrics"
+
+# Enable profiling
+enable_profiling: false
+
+# ============================================================================
+# Vault Integration (HashiCorp Vault)
+# ============================================================================
+
+# Enable Vault integration
+vault_enabled: false
+
+# Vault server address
+vault_address: ""
+
+# Vault authentication token
+vault_token: ""
+
+# ============================================================================
+# Syntax Preferences
+# ============================================================================
+
+# Preferred module syntax: "flat", "nested"
+# flat:   shell: "echo hello"
+# nested: shell:
+#           command: "echo hello"
+preferred_module_syntax: "nested"
+
+# Enforce module syntax (reject other syntax)
+enforce_module_syntax: false
+
+# ============================================================================
+# Environment-Specific Examples
+# ============================================================================
+
+# Example 1: Development Environment
+# -----------------------------------
+# default_insecure_ignore_host_key: true  # Ignore host key verification
+# log_level: "debug"                      # Detailed logging
+# verbose: true                           # Verbose output
+# show_diff: true                         # Show file changes
+
+# Example 2: Production Environment
+# ----------------------------------
+# default_insecure_ignore_host_key: false # Verify host keys (secure)
+# log_level: "info"                       # Normal logging
+# enable_metrics: true                    # Collect metrics
+# retry_attempts: 5                       # More retries
+
+# Example 3: CI/CD Environment
+# ----------------------------
+# default_insecure_ignore_host_key: true  # Dynamic hosts
+# color_output: false                     # No colors in logs
+# progress_bar: false                     # No progress bar
+# output_format: "json"                   # Machine-readable output
+
+# ============================================================================
+# Notes
+# ============================================================================
+
+# 1. All settings can be overridden by environment variables:
+#    ONIGIRAZU_<SETTING_NAME>=value
+#    Example: ONIGIRAZU_LOG_LEVEL=debug
+#
+# 2. Command-line flags take precedence over config file and env vars
+#
+# 3. Priority order (highest to lowest):
+#    - Command-line flags
+#    - Environment variables
+#    - Configuration file
+#    - Default values
+#
+# 4. For SSH settings, inventory-level settings override global config
+#
+# 5. Use different config files for different environments:
+#    onigirazu-cli apply -c config/dev.yml playbook.yml
+#    onigirazu-cli apply -c config/prod.yml playbook.yml

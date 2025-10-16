@@ -189,8 +189,8 @@ Examples:
 			// Initialize components
 			cacheManager := cache.NewManager(5 * time.Minute) // Default TTL of 5 minutes
 
-			// Initialize SSH connection pool with host key manager
-			sshpkg.InitializeGlobalPool(cfg)
+			// Initialize SSH connection pool with host key manager and logger
+			sshpkg.InitializeGlobalPoolWithLogger(cfg, log)
 			log.Debug("SSH connection pool initialized (strict_mode=%v)", cfg.IsSSHStrictHostKeyEnabled())
 
 			// Create template engine with plugin support
@@ -203,6 +203,12 @@ Examples:
 			}
 
 			stateManager := state.NewEnhancedManager(cfg.StateFile, log)
+
+			// Load existing state before execution
+			if _, err := stateManager.LoadState(ctx); err != nil {
+				log.Warn("Failed to load existing state: %v", err)
+			}
+
 			executionPool := execution.NewPool(cfg.MaxConcurrency, log)
 			progressTracker := progress.NewTracker()
 			moduleRegistry := modules.NewRegistry()
@@ -297,15 +303,54 @@ Examples:
 			if result.Failed {
 				log.Error("Playbook execution failed")
 				displayExecutionSummary(log, result)
+
+				// Still save state even on failure for audit trail
+				currentState := &types.State{
+					LastRun:   time.Now(),
+					Playbook:  playbookPath,
+					Variables: result.Variables,
+					Checksums: make(map[string]string),
+				}
+				if currentState.Variables == nil {
+					currentState.Variables = make(map[string]interface{})
+				}
+				if len(result.Plays) > 0 {
+					currentState.Results = result.Plays
+				}
+
+				if err := stateManager.SaveState(ctx, currentState); err != nil {
+					log.Warn("Failed to save state after failure: %v", err)
+				} else {
+					log.Info("State file saved (failure recorded)")
+				}
+
 				return fmt.Errorf("playbook execution failed")
 			}
 
 			log.Info("Playbook execution successful")
 			displayExecutionSummary(log, result)
 
-			// Save final state
-			if err := stateManager.SaveCurrentState(); err != nil {
+			// Save final state with playbook results
+			currentState := &types.State{
+				LastRun:   time.Now(),
+				Playbook:  playbookPath,
+				Variables: result.Variables,
+				Checksums: make(map[string]string),
+			}
+			if currentState.Variables == nil {
+				currentState.Variables = make(map[string]interface{})
+			}
+
+			// Add playbook results to state
+			if len(result.Plays) > 0 {
+				currentState.Results = result.Plays
+			}
+
+			log.Info("Saving state to: %s", cfg.StateFile)
+			if err := stateManager.SaveState(ctx, currentState); err != nil {
 				log.Warn("Failed to save final state: %v", err)
+			} else {
+				log.Info("State file successfully saved with %d play results", len(currentState.Results))
 			}
 
 			log.Info("Onigirazu execution completed successfully")

@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/onigirazu-cfg/onigirazu/internal/logger"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
@@ -27,6 +28,7 @@ type ConnectionPool struct {
 	cleanupTick time.Duration
 	stopCleanup chan struct{}
 	hostKeyMgr  *HostKeyManager
+	logger      Logger
 }
 
 // PoolConfig holds configuration for the connection pool
@@ -47,11 +49,25 @@ func DefaultPoolConfig() PoolConfig {
 
 // NewConnectionPool creates a new SSH connection pool
 func NewConnectionPool(config PoolConfig) *ConnectionPool {
-	return NewConnectionPoolWithHostKeyManager(config, NewHostKeyManager("", false))
+	return NewConnectionPoolWithLogger(config, logger.New(false))
 }
 
-// NewConnectionPoolWithHostKeyManager creates a new SSH connection pool with custom host key manager
+// NewConnectionPoolWithLogger creates a new SSH connection pool with custom logger
+func NewConnectionPoolWithLogger(config PoolConfig, lg Logger) *ConnectionPool {
+	return NewConnectionPoolWithHostKeyManagerAndLogger(config, NewHostKeyManager("", false), lg)
+}
+
+// NewConnectionPoolWithHostKeyManager creates a new SSH connection pool with custom host key manager (deprecated)
 func NewConnectionPoolWithHostKeyManager(config PoolConfig, hostKeyMgr *HostKeyManager) *ConnectionPool {
+	return NewConnectionPoolWithHostKeyManagerAndLogger(config, hostKeyMgr, logger.New(false))
+}
+
+// NewConnectionPoolWithHostKeyManagerAndLogger creates a new SSH connection pool with custom host key manager and logger
+func NewConnectionPoolWithHostKeyManagerAndLogger(config PoolConfig, hostKeyMgr *HostKeyManager, lg Logger) *ConnectionPool {
+	if lg == nil {
+		lg = logger.New(false)
+	}
+
 	if config.MaxIdle == 0 {
 		config.MaxIdle = 5 * time.Minute
 	}
@@ -69,6 +85,7 @@ func NewConnectionPoolWithHostKeyManager(config PoolConfig, hostKeyMgr *HostKeyM
 		cleanupTick: config.CleanupTick,
 		stopCleanup: make(chan struct{}),
 		hostKeyMgr:  hostKeyMgr,
+		logger:      lg,
 	}
 
 	go pool.cleanupLoop()
@@ -99,7 +116,7 @@ func (p *ConnectionPool) GetConnection(host types.Host) (*Client, error) {
 	}
 
 	// Create new connection
-	client, err := NewClientWithHostKeyManager(host, p.hostKeyMgr)
+	client, err := NewClientWithHostKeyManagerAndLogger(host, p.hostKeyMgr, p.logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create SSH connection: %w", err)
 	}
@@ -301,6 +318,11 @@ func SetGlobalPool(pool *ConnectionPool) {
 
 // InitializeGlobalPool initializes the global pool with config-based host key manager
 func InitializeGlobalPool(cfg interface{}) {
+	InitializeGlobalPoolWithLogger(cfg, logger.New(false))
+}
+
+// InitializeGlobalPoolWithLogger initializes the global pool with config-based host key manager and custom logger
+func InitializeGlobalPoolWithLogger(cfg interface{}, lg Logger) {
 	strictMode := false
 	knownHostsFile := ""
 
@@ -314,7 +336,11 @@ func InitializeGlobalPool(cfg interface{}) {
 		knownHostsFile = sshCfg.GetSSHKnownHostsFile()
 	}
 
+	if lg == nil {
+		lg = logger.New(false)
+	}
+
 	hostKeyMgr := NewHostKeyManager(knownHostsFile, strictMode)
-	pool := NewConnectionPoolWithHostKeyManager(DefaultPoolConfig(), hostKeyMgr)
+	pool := NewConnectionPoolWithHostKeyManagerAndLogger(DefaultPoolConfig(), hostKeyMgr, lg)
 	SetGlobalPool(pool)
 }

@@ -555,13 +555,26 @@ type HostResult struct {
 	Failed  bool         `json:"failed"`
 }
 
+// ExecutionMetadata holds execution context information
+type ExecutionMetadata struct {
+	User        string                 `json:"user"`        // User who ran the playbook
+	Hostname    string                 `json:"hostname"`    // Machine hostname
+	WorkingDir  string                 `json:"working_dir"` // Working directory
+	Environment map[string]string      `json:"environment"` // Environment variables
+	Tags        []string               `json:"tags"`        // Applied tags
+	ExtraVars   map[string]interface{} `json:"extra_vars"`  // Extra variables passed
+}
+
 // State represents saved state
 type State struct {
-	LastRun   time.Time              `json:"last_run"`
-	Playbook  string                 `json:"playbook"`
-	Results   []PlayResult           `json:"results"`
-	Variables map[string]interface{} `json:"variables"`
-	Checksums map[string]string      `json:"checksums"`
+	Version    int                    `json:"version"` // Schema version for migrations (default: 1)
+	LastRun    time.Time              `json:"last_run"`
+	Playbook   string                 `json:"playbook"`
+	Results    []PlayResult           `json:"results"`
+	Variables  map[string]interface{} `json:"variables"`
+	Checksums  map[string]string      `json:"checksums"`
+	Metadata   *ExecutionMetadata     `json:"metadata,omitempty"`   // Execution context info
+	Compressed bool                   `json:"compressed,omitempty"` // Is the state compressed
 }
 
 // Module represents a module interface

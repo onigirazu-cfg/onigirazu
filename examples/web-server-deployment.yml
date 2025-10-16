@@ -128,12 +128,10 @@ plays:
           mode: "0644"
         when: "onigirazu_os_family != 'Darwin'"
 
-      # Enable site
+      # Enable site - Using command instead since symlinks not supported yet
       - name: "Enable Nginx site"
-        file:
-          src: "{{ nginx_conf_dir }}/sites-available/{{ app_name }}"
-          dest: "{{ nginx_conf_dir }}/sites-enabled/{{ app_name }}"
-          state: "link"
+        command:
+          cmd: "ln -sf {{ nginx_conf_dir }}/sites-available/{{ app_name }} {{ nginx_conf_dir }}/sites-enabled/{{ app_name }}"
         when: "onigirazu_os_family != 'Darwin'"
 
       # Remove default site

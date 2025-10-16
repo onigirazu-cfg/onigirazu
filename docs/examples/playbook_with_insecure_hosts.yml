@@ -1,0 +1,65 @@
+# Example Playbook: Working with insecure_ignore_host_key
+# This playbook demonstrates how to use hosts with disabled host key verification
+
+---
+- name: Development Environment Setup
+  hosts: dev-servers  # Uses hosts with insecure_ignore_host_key: true
+  tasks:
+    - name: Check connectivity
+      shell:
+        command: "echo 'Connected to {{ inventory_hostname }}'"
+      register: connectivity_check
+
+    - name: Display result
+      debug:
+        msg: "{{ connectivity_check.output }}"
+
+    - name: Install development tools
+      shell:
+        command: "apt-get update && apt-get install -y git vim curl"
+      become: true
+
+    - name: Create development directory
+      file:
+        path: /home/deploy/dev
+        state: directory
+        mode: '0755'
+
+- name: Production Environment (Secure)
+  hosts: prod-servers  # Uses hosts WITHOUT insecure_ignore_host_key (secure)
+  tasks:
+    - name: Check system status
+      shell:
+        command: "uptime"
+      register: uptime_result
+
+    - name: Display uptime
+      debug:
+        msg: "System uptime: {{ uptime_result.output }}"
+
+# Usage examples:
+#
+# 1. Run with inventory that has insecure_ignore_host_key:
+#    onigirazu-playbook -i inventory_with_insecure_host_key.yml playbook_with_insecure_hosts.yml
+#
+# 2. Run only dev-servers (with insecure host key):
+#    onigirazu-playbook -i inventory_with_insecure_host_key.yml playbook_with_insecure_hosts.yml --limit dev-servers
+#
+# 3. Run only prod-servers (with secure host key verification):
+#    onigirazu-playbook -i inventory_with_insecure_host_key.yml playbook_with_insecure_hosts.yml --limit prod-servers
+
+# How it works:
+# - The insecure_ignore_host_key setting is read from the inventory file
+# - It's stored in the Host object (host.InsecureIgnoreHostKey)
+# - When a module creates an executor using BaseExecutorModule methods:
+#   * CreateExecutor(host)
+#   * WithExecutor(host, func)
+#   * WithExecutorResult(host, func)
+# - The executor automatically uses the InsecureIgnoreHostKey setting
+# - No additional code is needed in your module!
+
+# Technical details:
+# - The setting is passed to the SSH client configuration
+# - When true: SSH will accept any host key (insecure)
+# - When false (default): SSH will verify host key against known_hosts (secure)
+# - The executor handles this automatically in the connection setup

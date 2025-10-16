@@ -15,6 +15,7 @@ import (
 	"github.com/onigirazu-cfg/onigirazu/internal/logger"
 	"github.com/onigirazu-cfg/onigirazu/internal/modules"
 	"github.com/onigirazu-cfg/onigirazu/internal/parser"
+	sshpkg "github.com/onigirazu-cfg/onigirazu/internal/ssh"
 	"github.com/onigirazu-cfg/onigirazu/internal/template"
 	"github.com/onigirazu-cfg/onigirazu/pkg/utils"
 )
@@ -180,14 +181,18 @@ func runAdHocCommand(
 	sshUser string,
 	sshKeyFile string,
 ) error {
-	// Load configuration (for future use)
-	_, err := config.LoadConfig(configPath)
+	// Load configuration
+	cfg, err := config.LoadConfig(configPath)
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
-	// Initialize logger
-	log := logger.New(verbose || verboseMode)
+	// Initialize logger with combined verbose flags
+	shouldBeVerbose := verbose || verboseMode || showDebug
+	log := logger.New(shouldBeVerbose)
+
+	// Initialize SSH connection pool with logger
+	sshpkg.InitializeGlobalPoolWithLogger(cfg, log)
 
 	// Load inventory
 	if inventoryPath == "" {

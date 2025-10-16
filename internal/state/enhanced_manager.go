@@ -463,3 +463,175 @@ func (m *EnhancedManager) Restore(backupFile string) error {
 	_, err = m.LoadState(ctx)
 	return err
 }
+
+// ==================== PHASE 1 FEATURES ====================
+
+// LoadStateWithMigration loads state from file with automatic migration and validation
+func (m *EnhancedManager) LoadStateWithMigration(ctx context.Context) (*types.State, error) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	// Check if context is canceled
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
+
+	if _, err := os.Stat(m.stateFile); os.IsNotExist(err) {
+		m.state = &types.State{
+			Version:   1, // Set default version
+			Variables: make(map[string]interface{}),
+			Checksums: make(map[string]string),
+			LastRun:   time.Now(),
+			Metadata:  &types.ExecutionMetadata{},
+		}
+		return m.state, nil
+	}
+
+	data, err := os.ReadFile(m.stateFile) // #nosec G304 -- stateFile is constructed from fixed state file path
+	if err != nil {
+		return nil, fmt.Errorf("error reading state file: %w", err)
+	}
+
+	// Use migrator to load and migrate state
+	migrator := NewMigrator()
+	state, err := migrator.MigrateJSON(data)
+	if err != nil {
+		return nil, fmt.Errorf("error migrating state: %w", err)
+	}
+
+	// Validate state
+	validator := NewValidator(false) // Non-strict mode for backwards compatibility
+	result := validator.Validate(state)
+	if !result.Valid {
+		// Try to repair
+		_, repaired := validator.ValidateAndRepair(state)
+		if repaired {
+			fmt.Printf("Warning: State file had issues that were automatically repaired\n")
+		}
+	}
+
+	m.state = state
+	return m.state, nil
+}
+
+// SaveStateWithCompression saves state with optional compression
+func (m *EnhancedManager) SaveStateWithCompression(ctx context.Context, state *types.State) error {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	// Check if context is canceled
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
+	// Create backup if file exists
+	if err := m.createBackup(); err != nil {
+		return fmt.Errorf("failed to create backup: %w", err)
+	}
+
+	// Create directory if it doesn't exist
+	dir := filepath.Dir(m.stateFile)
+	if err := os.MkdirAll(dir, 0750); err != nil {
+		return fmt.Errorf("error creating directory: %w", err)
+	}
+
+	// Update timestamp and version
+	state.LastRun = time.Now()
+	if state.Version == 0 {
+		state.Version = 1 // Set to latest version if not set
+	}
+
+	// Use compression manager
+	compMgr := NewCompressionManager(DefaultCompressionConfig())
+	data, err := compMgr.CompressState(state)
+	if err != nil {
+		return fmt.Errorf("error compressing state: %w", err)
+	}
+
+	// Write to temporary file first
+	tempFile := m.stateFile + ".tmp"
+	if err := os.WriteFile(tempFile, data, 0600); err != nil {
+		return fmt.Errorf("error writing temporary state file: %w", err)
+	}
+
+	// Atomic rename
+	if err := os.Rename(tempFile, m.stateFile); err != nil {
+		// Clean up temp file, ignore error as we're already in error state
+		_ = os.Remove(tempFile)
+		return fmt.Errorf("error renaming state file: %w", err)
+	}
+
+	m.state = state
+
+	// Cleanup old backups
+	if err := m.cleanupOldBackups(); err != nil {
+		// Log error but don't fail the save operation
+		fmt.Printf("Warning: failed to cleanup old backups: %v\n", err)
+	}
+
+	return nil
+}
+
+// RotateResults applies rotation policy to state
+func (m *EnhancedManager) RotateResults() (*RotationStats, error) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	if m.state == nil {
+		return nil, fmt.Errorf("state not loaded")
+	}
+
+	rotMgr := NewRotationManager(DefaultRotationPolicy())
+	stats, err := rotMgr.RotateState(m.state)
+	if err != nil {
+		return stats, fmt.Errorf("error rotating results: %w", err)
+	}
+
+	return stats, nil
+}
+
+// ValidateState performs comprehensive validation on current state
+func (m *EnhancedManager) ValidateState(strictMode bool) *ValidationResult {
+	m.mutex.RLock()
+	defer m.mutex.RUnlock()
+
+	if m.state == nil {
+		return &ValidationResult{
+			Valid:  false,
+			Errors: []ValidationError{{Field: "State", Message: "state not loaded"}},
+		}
+	}
+
+	validator := NewValidator(strictMode)
+	return validator.Validate(m.state)
+}
+
+// GetCompressionStats returns compression statistics for current state
+func (m *EnhancedManager) GetCompressionStats() (*CompressionStats, error) {
+	m.mutex.RLock()
+	defer m.mutex.RUnlock()
+
+	if m.state == nil {
+		return nil, fmt.Errorf("state not loaded")
+	}
+
+	compMgr := NewCompressionManager(DefaultCompressionConfig())
+	return compMgr.GetStats(m.state)
+}
+
+// DeduplicateResults removes duplicate results from state
+func (m *EnhancedManager) DeduplicateResults() (int, error) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	if m.state == nil {
+		return 0, fmt.Errorf("state not loaded")
+	}
+
+	rotMgr := NewRotationManager(DefaultRotationPolicy())
+	return rotMgr.DeduplicateResults(m.state), nil
+}

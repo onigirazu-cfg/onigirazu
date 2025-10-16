@@ -11,22 +11,46 @@ import (
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 
+	"github.com/onigirazu-cfg/onigirazu/internal/logger"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
+
+// Logger interface for dependency injection
+type Logger interface {
+	Debug(format string, args ...interface{})
+	Info(format string, args ...interface{})
+	Error(format string, args ...interface{})
+	Warn(format string, args ...interface{})
+}
 
 // Client wraps SSH connection functionality
 type Client struct {
 	client *ssh.Client
 	host   types.Host
+	logger Logger
 }
 
 // NewClient creates a new SSH client for the given host
 func NewClient(host types.Host) (*Client, error) {
-	return NewClientWithHostKeyManager(host, NewHostKeyManagerWithInsecure("", false, host.InsecureIgnoreHostKey))
+	return NewClientWithLogger(host, logger.New(false))
 }
 
-// NewClientWithHostKeyManager creates a new SSH client with custom host key manager
+// NewClientWithLogger creates a new SSH client with a custom logger
+func NewClientWithLogger(host types.Host, lg Logger) (*Client, error) {
+	return NewClientWithHostKeyManagerAndLogger(host, NewHostKeyManagerWithInsecure("", false, host.InsecureIgnoreHostKey), lg)
+}
+
+// NewClientWithHostKeyManager creates a new SSH client with custom host key manager (deprecated, use NewClientWithHostKeyManagerAndLogger)
 func NewClientWithHostKeyManager(host types.Host, hostKeyManager *HostKeyManager) (*Client, error) {
+	return NewClientWithHostKeyManagerAndLogger(host, hostKeyManager, logger.New(false))
+}
+
+// NewClientWithHostKeyManagerAndLogger creates a new SSH client with custom host key manager and logger
+func NewClientWithHostKeyManagerAndLogger(host types.Host, hostKeyManager *HostKeyManager, lg Logger) (*Client, error) {
+	if lg == nil {
+		lg = logger.New(false)
+	}
+
 	// Apply defaults if not specified
 	if host.User == "" {
 		host.User = os.Getenv("USER")
@@ -35,7 +59,7 @@ func NewClientWithHostKeyManager(host types.Host, hostKeyManager *HostKeyManager
 		}
 	}
 
-	fmt.Printf("[DEBUG SSH] NewClientWithHostKeyManager called for host: %s, Address: %s, User: %s, KeyFile: %s\n",
+	lg.Debug("NewClientWithHostKeyManager called for host: %s, Address: %s, User: %s, KeyFile: %s",
 		host.Name, host.Address, host.User, host.KeyFile)
 
 	var auth []ssh.AuthMethod
@@ -49,16 +73,16 @@ func NewClientWithHostKeyManager(host types.Host, hostKeyManager *HostKeyManager
 	}
 
 	if keyFile != "" {
-		fmt.Printf("[DEBUG SSH] Reading key file: %s\n", keyFile)
+		lg.Debug("Reading key file: %s", keyFile)
 		key, err := os.ReadFile(keyFile) // #nosec G304 - keyFile is from trusted inventory configuration
 		if err != nil {
 			// If explicitly specified key file fails, return error
 			if !useDefaultKey {
 				return nil, fmt.Errorf("unable to read private key: %v", err)
 			}
-			fmt.Printf("[DEBUG SSH] Failed to read default key file: %v\n", err)
+			lg.Debug("Failed to read default key file: %v", err)
 		} else {
-			fmt.Printf("[DEBUG SSH] Key file read successfully, size: %d bytes\n", len(key))
+			lg.Debug("Key file read successfully, size: %d bytes", len(key))
 
 			signer, err := ssh.ParsePrivateKey(key)
 			if err != nil {
@@ -66,28 +90,28 @@ func NewClientWithHostKeyManager(host types.Host, hostKeyManager *HostKeyManager
 				if !useDefaultKey {
 					return nil, fmt.Errorf("unable to parse private key: %v", err)
 				}
-				fmt.Printf("[DEBUG SSH] Failed to parse default private key: %v\n", err)
+				lg.Debug("Failed to parse default private key: %v", err)
 			} else {
-				fmt.Printf("[DEBUG SSH] Private key parsed successfully\n")
+				lg.Debug("Private key parsed successfully")
 				auth = append(auth, ssh.PublicKeys(signer))
 			}
 		}
 	} else {
-		fmt.Printf("[DEBUG SSH] No KeyFile specified for host %s\n", host.Name)
+		lg.Debug("No KeyFile specified for host %s", host.Name)
 	}
 
 	// Add password authentication if available
 	if host.Password != "" {
 		auth = append(auth, ssh.Password(host.Password))
-		fmt.Printf("[DEBUG SSH] Password authentication added\n")
+		lg.Debug("Password authentication added")
 	}
 
 	if len(auth) == 0 {
-		fmt.Printf("[DEBUG SSH] ERROR: No authentication methods available for host %s\n", host.Name)
+		lg.Debug("ERROR: No authentication methods available for host %s", host.Name)
 		return nil, fmt.Errorf("no authentication method available for host %s", host.Name)
 	}
 
-	fmt.Printf("[DEBUG SSH] Total authentication methods: %d\n", len(auth))
+	lg.Debug("Total authentication methods: %d", len(auth))
 
 	config := &ssh.ClientConfig{
 		User:            host.User,
@@ -103,17 +127,18 @@ func NewClientWithHostKeyManager(host types.Host, hostKeyManager *HostKeyManager
 	}
 
 	address := fmt.Sprintf("%s:%d", host.Address, port)
-	fmt.Printf("[DEBUG SSH] Attempting to connect to %s as user %s\n", address, host.User)
+	lg.Debug("Attempting to connect to %s as user %s", address, host.User)
 	client, err := ssh.Dial("tcp", address, config)
 	if err != nil {
-		fmt.Printf("[DEBUG SSH] Connection failed: %v\n", err)
+		lg.Debug("Connection failed: %v", err)
 		return nil, fmt.Errorf("failed to connect to %s: %v", address, err)
 	}
-	fmt.Printf("[DEBUG SSH] Connection established successfully to %s\n", address)
+	lg.Debug("Connection established successfully to %s", address)
 
 	return &Client{
 		client: client,
 		host:   host,
+		logger: lg,
 	}, nil
 }
 
