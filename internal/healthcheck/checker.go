@@ -477,7 +477,7 @@ func (c *Checker) checkCPU(ctx context.Context, host types.Host, result *HealthC
 	result.Details["threshold"] = c.config.CPUThreshold
 
 	result.Status = StatusHealthy
-	result.Message = fmt.Sprintf("CPU load normal")
+	result.Message = "CPU load normal"
 }
 
 // checkServices checks if critical services are running
