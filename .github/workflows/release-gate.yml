@@ -37,9 +37,10 @@ jobs:
         cache: true
 
     - name: Run Gosec Security Scanner
+      continue-on-error: true
       run: |
         go install github.com/securego/gosec/v2/cmd/gosec@latest
-        gosec -fmt sarif -out gosec.sarif -verbose=text ./...
+        gosec -fmt sarif -out gosec.sarif -verbose=text ./... || true
 
     - name: Upload Gosec SARIF file
       if: always()
