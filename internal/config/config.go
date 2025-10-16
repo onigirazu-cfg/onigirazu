@@ -55,12 +55,13 @@ type Config struct {
 	EnableProfiling bool   `yaml:"enable_profiling" json:"enable_profiling"`
 
 	// SSH/Connection
-	SSHTimeout        time.Duration `yaml:"ssh_timeout" json:"ssh_timeout"`
-	SSHKeepAlive      time.Duration `yaml:"ssh_keepalive" json:"ssh_keepalive"`
-	SSHMaxSessions    int           `yaml:"ssh_max_sessions" json:"ssh_max_sessions"`
-	ConnectionReuse   bool          `yaml:"connection_reuse" json:"connection_reuse"`
-	SSHStrictHostKey  bool          `yaml:"ssh_strict_host_key" json:"ssh_strict_host_key"`
-	SSHKnownHostsFile string        `yaml:"ssh_known_hosts_file" json:"ssh_known_hosts_file"`
+	SSHTimeout                   time.Duration `yaml:"ssh_timeout" json:"ssh_timeout"`
+	SSHKeepAlive                 time.Duration `yaml:"ssh_keepalive" json:"ssh_keepalive"`
+	SSHMaxSessions               int           `yaml:"ssh_max_sessions" json:"ssh_max_sessions"`
+	ConnectionReuse              bool          `yaml:"connection_reuse" json:"connection_reuse"`
+	SSHStrictHostKey             bool          `yaml:"ssh_strict_host_key" json:"ssh_strict_host_key"`
+	SSHKnownHostsFile            string        `yaml:"ssh_known_hosts_file" json:"ssh_known_hosts_file"`
+	DefaultInsecureIgnoreHostKey bool          `yaml:"default_insecure_ignore_host_key" json:"default_insecure_ignore_host_key"`
 
 	// Vault integration
 	VaultEnabled bool   `yaml:"vault_enabled" json:"vault_enabled"`
@@ -80,44 +81,45 @@ func NewConfig() *Config {
 // DefaultConfig returns a configuration with sensible defaults
 func DefaultConfig() *Config {
 	return &Config{
-		MaxConcurrency:        getEnvInt("ONIGIRAZU_MAX_CONCURRENCY", 10),
-		DefaultTimeout:        getEnvDuration("ONIGIRAZU_TIMEOUT", 30*time.Second),
-		RetryAttempts:         getEnvInt("ONIGIRAZU_RETRY_ATTEMPTS", 3),
-		RetryDelay:            getEnvDuration("ONIGIRAZU_RETRY_DELAY", 5*time.Second),
-		StateFile:             getEnvString("ONIGIRAZU_STATE_FILE", ".onigirazu-state"),
-		ConfigFile:            getEnvString("ONIGIRAZU_CONFIG_FILE", "onigirazu.yml"),
-		LogLevel:              getEnvString("ONIGIRAZU_LOG_LEVEL", "info"),
-		LogFormat:             getEnvString("ONIGIRAZU_LOG_FORMAT", "text"),
-		AllowShellCommands:    getEnvBool("ONIGIRAZU_ALLOW_SHELL", true),
-		BlockedCommands:       []string{"rm -rf", "format", "mkfs", "dd if=", ":(){ :|:& };:"},
-		EnableCaching:         getEnvBool("ONIGIRAZU_ENABLE_CACHE", true),
-		CacheTTL:              getEnvDuration("ONIGIRAZU_CACHE_TTL", 5*time.Minute),
-		EnableChecksum:        getEnvBool("ONIGIRAZU_ENABLE_CHECKSUM", true),
-		EnableParallel:        getEnvBool("ONIGIRAZU_ENABLE_PARALLEL", false),
-		ParallelStrategy:      getEnvString("ONIGIRAZU_PARALLEL_STRATEGY", "linear"),
-		DryRun:                getEnvBool("ONIGIRAZU_DRY_RUN", false),
-		CheckMode:             getEnvBool("ONIGIRAZU_CHECK_MODE", false),
-		Verbose:               getEnvBool("ONIGIRAZU_VERBOSE", false),
-		ShowDiff:              getEnvBool("ONIGIRAZU_SHOW_DIFF", false),
-		ColorOutput:           getEnvBool("ONIGIRAZU_COLOR_OUTPUT", true),
-		ProgressBar:           getEnvBool("ONIGIRAZU_PROGRESS_BAR", true),
-		InteractiveMode:       getEnvBool("ONIGIRAZU_INTERACTIVE", false),
-		OutputFormat:          getEnvString("ONIGIRAZU_OUTPUT_FORMAT", "text"),
-		EnableMetrics:         getEnvBool("ONIGIRAZU_ENABLE_METRICS", false),
-		MetricsPort:           getEnvInt("ONIGIRAZU_METRICS_PORT", 9090),
-		MetricsPath:           getEnvString("ONIGIRAZU_METRICS_PATH", "/metrics"),
-		EnableProfiling:       getEnvBool("ONIGIRAZU_ENABLE_PROFILING", false),
-		SSHTimeout:            getEnvDuration("ONIGIRAZU_SSH_TIMEOUT", 30*time.Second),
-		SSHKeepAlive:          getEnvDuration("ONIGIRAZU_SSH_KEEPALIVE", 60*time.Second),
-		SSHMaxSessions:        getEnvInt("ONIGIRAZU_SSH_MAX_SESSIONS", 10),
-		ConnectionReuse:       getEnvBool("ONIGIRAZU_CONNECTION_REUSE", true),
-		SSHStrictHostKey:      getEnvBool("ONIGIRAZU_SSH_STRICT_HOST_KEY", false),
-		SSHKnownHostsFile:     getEnvString("ONIGIRAZU_SSH_KNOWN_HOSTS_FILE", ""),
-		VaultEnabled:          getEnvBool("ONIGIRAZU_VAULT_ENABLED", false),
-		VaultAddress:          getEnvString("ONIGIRAZU_VAULT_ADDRESS", ""),
-		VaultToken:            getEnvString("ONIGIRAZU_VAULT_TOKEN", ""),
-		PreferredModuleSyntax: getEnvString("ONIGIRAZU_PREFERRED_MODULE_SYNTAX", "nested"),
-		EnforceModuleSyntax:   getEnvBool("ONIGIRAZU_ENFORCE_MODULE_SYNTAX", false),
+		MaxConcurrency:               getEnvInt("ONIGIRAZU_MAX_CONCURRENCY", 10),
+		DefaultTimeout:               getEnvDuration("ONIGIRAZU_TIMEOUT", 30*time.Second),
+		RetryAttempts:                getEnvInt("ONIGIRAZU_RETRY_ATTEMPTS", 3),
+		RetryDelay:                   getEnvDuration("ONIGIRAZU_RETRY_DELAY", 5*time.Second),
+		StateFile:                    getEnvString("ONIGIRAZU_STATE_FILE", ".onigirazu-state"),
+		ConfigFile:                   getEnvString("ONIGIRAZU_CONFIG_FILE", "onigirazu.yml"),
+		LogLevel:                     getEnvString("ONIGIRAZU_LOG_LEVEL", "info"),
+		LogFormat:                    getEnvString("ONIGIRAZU_LOG_FORMAT", "text"),
+		AllowShellCommands:           getEnvBool("ONIGIRAZU_ALLOW_SHELL", true),
+		BlockedCommands:              []string{"rm -rf", "format", "mkfs", "dd if=", ":(){ :|:& };:"},
+		EnableCaching:                getEnvBool("ONIGIRAZU_ENABLE_CACHE", true),
+		CacheTTL:                     getEnvDuration("ONIGIRAZU_CACHE_TTL", 5*time.Minute),
+		EnableChecksum:               getEnvBool("ONIGIRAZU_ENABLE_CHECKSUM", true),
+		EnableParallel:               getEnvBool("ONIGIRAZU_ENABLE_PARALLEL", false),
+		ParallelStrategy:             getEnvString("ONIGIRAZU_PARALLEL_STRATEGY", "linear"),
+		DryRun:                       getEnvBool("ONIGIRAZU_DRY_RUN", false),
+		CheckMode:                    getEnvBool("ONIGIRAZU_CHECK_MODE", false),
+		Verbose:                      getEnvBool("ONIGIRAZU_VERBOSE", false),
+		ShowDiff:                     getEnvBool("ONIGIRAZU_SHOW_DIFF", false),
+		ColorOutput:                  getEnvBool("ONIGIRAZU_COLOR_OUTPUT", true),
+		ProgressBar:                  getEnvBool("ONIGIRAZU_PROGRESS_BAR", true),
+		InteractiveMode:              getEnvBool("ONIGIRAZU_INTERACTIVE", false),
+		OutputFormat:                 getEnvString("ONIGIRAZU_OUTPUT_FORMAT", "text"),
+		EnableMetrics:                getEnvBool("ONIGIRAZU_ENABLE_METRICS", false),
+		MetricsPort:                  getEnvInt("ONIGIRAZU_METRICS_PORT", 9090),
+		MetricsPath:                  getEnvString("ONIGIRAZU_METRICS_PATH", "/metrics"),
+		EnableProfiling:              getEnvBool("ONIGIRAZU_ENABLE_PROFILING", false),
+		SSHTimeout:                   getEnvDuration("ONIGIRAZU_SSH_TIMEOUT", 30*time.Second),
+		SSHKeepAlive:                 getEnvDuration("ONIGIRAZU_SSH_KEEPALIVE", 60*time.Second),
+		SSHMaxSessions:               getEnvInt("ONIGIRAZU_SSH_MAX_SESSIONS", 10),
+		ConnectionReuse:              getEnvBool("ONIGIRAZU_CONNECTION_REUSE", true),
+		SSHStrictHostKey:             getEnvBool("ONIGIRAZU_SSH_STRICT_HOST_KEY", false),
+		SSHKnownHostsFile:            getEnvString("ONIGIRAZU_SSH_KNOWN_HOSTS_FILE", ""),
+		DefaultInsecureIgnoreHostKey: getEnvBool("ONIGIRAZU_DEFAULT_INSECURE_IGNORE_HOST_KEY", false),
+		VaultEnabled:                 getEnvBool("ONIGIRAZU_VAULT_ENABLED", false),
+		VaultAddress:                 getEnvString("ONIGIRAZU_VAULT_ADDRESS", ""),
+		VaultToken:                   getEnvString("ONIGIRAZU_VAULT_TOKEN", ""),
+		PreferredModuleSyntax:        getEnvString("ONIGIRAZU_PREFERRED_MODULE_SYNTAX", "nested"),
+		EnforceModuleSyntax:          getEnvBool("ONIGIRAZU_ENFORCE_MODULE_SYNTAX", false),
 	}
 }
 
@@ -357,4 +359,8 @@ func (c *Config) IsSSHStrictHostKeyEnabled() bool {
 
 func (c *Config) GetSSHKnownHostsFile() string {
 	return c.SSHKnownHostsFile
+}
+
+func (c *Config) GetDefaultInsecureIgnoreHostKey() bool {
+	return c.DefaultInsecureIgnoreHostKey
 }
