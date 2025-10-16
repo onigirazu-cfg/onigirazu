@@ -367,8 +367,8 @@ func (r *Reporter) generateMarkdownReport() (string, error) {
 		totalFailed += record.FailedTasks
 	}
 
-	buf.WriteString(fmt.Sprintf("| Metric | Value |\n"))
-	buf.WriteString(fmt.Sprintf("|--------|-------|\n"))
+	buf.WriteString("| Metric | Value |\n")
+	buf.WriteString("|--------|-------|\n")
 	buf.WriteString(fmt.Sprintf("| Total Executions | %d |\n", len(r.records)))
 	buf.WriteString(fmt.Sprintf("| Successful | %d |\n", successCount))
 	buf.WriteString(fmt.Sprintf("| Failed | %d |\n", failureCount))
@@ -471,7 +471,7 @@ func (r *Reporter) GenerateDetailedReport(recordID string, format FormatType) (s
 		}
 
 		buf.WriteString("\n## Task Summary\n\n")
-		buf.WriteString(fmt.Sprintf("| Status | Count |\n|--------|-------|\n"))
+		buf.WriteString("| Status | Count |\n|--------|-------|\n")
 		buf.WriteString(fmt.Sprintf("| Successful | %d |\n", record.SuccessfulTasks))
 		buf.WriteString(fmt.Sprintf("| Failed | %d |\n", record.FailedTasks))
 		buf.WriteString(fmt.Sprintf("| Skipped | %d |\n", record.SkippedTasks))

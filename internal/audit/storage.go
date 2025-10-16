@@ -3,7 +3,6 @@ package audit
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sort"
@@ -56,7 +55,7 @@ func (s *Storage) SaveRecord(record *ExecutionRecord) error {
 		return fmt.Errorf("failed to marshal record: %w", err)
 	}
 
-	err = ioutil.WriteFile(recordPath, data, 0600)
+	err = os.WriteFile(recordPath, data, 0600)
 	if err != nil {
 		return fmt.Errorf("failed to write record file: %w", err)
 	}
@@ -81,7 +80,7 @@ func (s *Storage) SaveRecord(record *ExecutionRecord) error {
 		return fmt.Errorf("failed to marshal metadata: %w", err)
 	}
 
-	err = ioutil.WriteFile(metadataPath, metadataData, 0600)
+	err = os.WriteFile(metadataPath, metadataData, 0600)
 	if err != nil {
 		return fmt.Errorf("failed to write metadata file: %w", err)
 	}
@@ -94,7 +93,7 @@ func (s *Storage) SaveRecord(record *ExecutionRecord) error {
 func (s *Storage) LoadRecord(recordID string) (*ExecutionRecord, error) {
 	recordPath := filepath.Join(s.path, recordID, "record.json")
 
-	data, err := ioutil.ReadFile(recordPath)
+	data, err := os.ReadFile(recordPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read record file: %w", err)
 	}
@@ -110,7 +109,7 @@ func (s *Storage) LoadRecord(recordID string) (*ExecutionRecord, error) {
 
 // ListRecords lists all available execution records
 func (s *Storage) ListRecords(filter FilterOptions) ([]ExecutionRecord, error) {
-	entries, err := ioutil.ReadDir(s.path)
+	entries, err := os.ReadDir(s.path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read storage directory: %w", err)
 	}
@@ -327,7 +326,7 @@ func (s *Storage) GetHostStatistics(host string) (*HostAuditStatistics, error) {
 
 // DeleteOldRecords deletes records older than retention days
 func (s *Storage) DeleteOldRecords(retentionDays int) (int, error) {
-	entries, err := ioutil.ReadDir(s.path)
+	entries, err := os.ReadDir(s.path)
 	if err != nil {
 		return 0, fmt.Errorf("failed to read storage directory: %w", err)
 	}

@@ -300,7 +300,7 @@ var auditClearCmd = &cobra.Command{
 			var response string
 			fmt.Scanln(&response)
 			if strings.ToLower(response) != "y" {
-				fmt.Println("Cancelled.")
+				fmt.Println("Canceled.")
 				return nil
 			}
 		}

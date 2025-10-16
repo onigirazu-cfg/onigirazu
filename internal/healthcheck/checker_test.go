@@ -18,7 +18,7 @@ func TestNewChecker(t *testing.T) {
 	checker := NewChecker(hosts, config, logger)
 
 	if checker == nil {
-		t.Error("NewChecker returned nil")
+		t.Fatal("NewChecker returned nil")
 	}
 	if len(checker.hosts) != 1 {
 		t.Errorf("Expected 1 host, got %d", len(checker.hosts))
@@ -32,7 +32,7 @@ func TestNewCheckConfig(t *testing.T) {
 	config := NewCheckConfig()
 
 	if config == nil {
-		t.Error("NewCheckConfig returned nil")
+		t.Fatal("NewCheckConfig returned nil")
 	}
 	if len(config.CheckTypes) == 0 {
 		t.Error("CheckTypes should not be empty")
@@ -83,7 +83,7 @@ func TestCheckAll(t *testing.T) {
 		t.Errorf("CheckAll failed: %v", err)
 	}
 	if report == nil {
-		t.Error("CheckAll returned nil report")
+		t.Fatal("CheckAll returned nil report")
 	}
 	if len(report.HostReports) != 1 {
 		t.Errorf("Expected 1 host report, got %d", len(report.HostReports))
@@ -106,7 +106,7 @@ func TestCheckHost(t *testing.T) {
 		t.Errorf("CheckHost failed: %v", err)
 	}
 	if report == nil {
-		t.Error("CheckHost returned nil report")
+		t.Fatal("CheckHost returned nil report")
 	}
 	if report.Host.Name != "localhost" {
 		t.Errorf("Expected host name 'localhost', got %s", report.Host.Name)
@@ -196,7 +196,7 @@ func TestBuildReport(t *testing.T) {
 	report := checker.buildReport(hostReports, 5*time.Second)
 
 	if report == nil {
-		t.Error("buildReport returned nil")
+		t.Fatal("buildReport returned nil")
 	}
 	if len(report.HostReports) != 2 {
 		t.Errorf("Expected 2 host reports, got %d", len(report.HostReports))
@@ -223,7 +223,7 @@ func TestContextTimeout(t *testing.T) {
 
 	checker := NewChecker(hosts, config, &noOpLogger{})
 
-	// Create a context that's already cancelled
+	// Create a context that's already canceled
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
@@ -231,7 +231,7 @@ func TestContextTimeout(t *testing.T) {
 
 	// Should handle the context cancellation gracefully
 	if report == nil {
-		t.Error("CheckAll returned nil report even with cancelled context")
+		t.Error("CheckAll returned nil report even with canceled context")
 	}
 }
 

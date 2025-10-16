@@ -65,7 +65,7 @@ func (c *Checker) CheckAll(ctx context.Context) (*HealthCheckReport, error) {
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
-			// Check if context is cancelled
+			// Check if context is canceled
 			select {
 			case <-ctx.Done():
 				errsChan <- ctx.Err()
