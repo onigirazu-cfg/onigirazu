@@ -58,7 +58,7 @@ sudo mv onigirazu /usr/local/bin/
 
 **Available for**: Linux (amd64, arm64, arm), macOS (amd64, arm64), Windows (amd64), FreeBSD (amd64)
 
-### 🍺 Homebrew
+### 🍺 Homebrew (under construction)
 
 ```bash
 brew tap onigirazu-cfg/tap
@@ -68,10 +68,10 @@ brew install onigirazu
 ### 🐳 Docker
 
 ```bash
-# Docker Hub
+# Docker Hub (under construction)
 docker run --rm onigirazu/onigirazu:latest --version
 
-# GitHub Container Registry
+# GitHub Container Registry (working one)
 docker run --rm ghcr.io/onigirazu-cfg/onigirazu:latest --version
 ```
 

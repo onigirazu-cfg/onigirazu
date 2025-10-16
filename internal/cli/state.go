@@ -141,7 +141,11 @@ func runStateList(cmd *cobra.Command, args []string) error {
 	// Filter results if needed
 	var filteredResults []types.PlayResult
 	for _, result := range stateData.Results {
-		if filter == "" || matchesFilter(result.PlayName, filter) {
+		playName := result.Name
+		if playName == "" {
+			playName = result.PlayName
+		}
+		if filter == "" || matchesFilter(playName, filter) {
 			filteredResults = append(filteredResults, result)
 		}
 	}
@@ -180,8 +184,8 @@ func runStateShow(cmd *cobra.Command, args []string) error {
 	var foundResult *types.PlayResult
 	var foundHost *types.HostResult
 	for _, result := range stateData.Results {
-		// Check if play name matches
-		if result.PlayName == resourceName {
+		// Check if play name matches (check both Name and PlayName)
+		if result.Name == resourceName || result.PlayName == resourceName {
 			foundResult = &result
 			break
 		}
@@ -195,6 +199,17 @@ func runStateShow(cmd *cobra.Command, args []string) error {
 		}
 		if foundResult != nil {
 			break
+		}
+	}
+
+	// Debug: print what we loaded if not found
+	if foundResult == nil && os.Getenv("DEBUG_STATE") != "" {
+		fmt.Fprintf(os.Stderr, "DEBUG: Looking for '%s'\n", resourceName)
+		for i, result := range stateData.Results {
+			fmt.Fprintf(os.Stderr, "DEBUG: Result[%d] Name='%s' PlayName='%s' Hosts=%d\n", i, result.Name, result.PlayName, len(result.Hosts))
+			for _, h := range result.Hosts {
+				fmt.Fprintf(os.Stderr, "DEBUG:   Host='%s'\n", h.Host)
+			}
 		}
 	}
 
@@ -257,7 +272,11 @@ func outputTable(results []types.PlayResult, stateData *types.State, verbose boo
 		if !result.Success {
 			status = "❌"
 		}
-		fmt.Printf("%s Play: %s\n", status, result.PlayName)
+		playName := result.Name
+		if playName == "" {
+			playName = result.PlayName
+		}
+		fmt.Printf("%s Play: %s\n", status, playName)
 		fmt.Printf("   Duration: %v\n", result.EndTime.Sub(result.StartTime).Round(time.Millisecond))
 		fmt.Printf("   Hosts: %d\n", len(result.Hosts))
 
@@ -364,7 +383,11 @@ func outputResourceDetails(result *types.PlayResult, host *types.HostResult, sta
 		}
 	} else {
 		// Show play details
-		fmt.Printf("Play: %s\n", result.PlayName)
+		playName := result.Name
+		if playName == "" {
+			playName = result.PlayName
+		}
+		fmt.Printf("Play: %s\n", playName)
 		status := "Success"
 		if !result.Success {
 			status = "Failed"
