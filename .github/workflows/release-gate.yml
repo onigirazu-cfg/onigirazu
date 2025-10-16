@@ -39,7 +39,7 @@ jobs:
     - name: Run Gosec Security Scanner
       run: |
         go install github.com/securego/gosec/v2/cmd/gosec@latest
-        gosec -fmt sarif -out gosec.sarif -stdout -verbose=text ./...
+        gosec -fmt sarif -out gosec.sarif -verbose=text ./...
 
     - name: Upload Gosec SARIF file
       if: always()

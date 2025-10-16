@@ -115,7 +115,7 @@ jobs:
 
     - name: Run security scan
       run: |
-        go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest
+        go install github.com/securego/gosec/v2/cmd/gosec@latest
         gosec ./...
       continue-on-error: true
 
