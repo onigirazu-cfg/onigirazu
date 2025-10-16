@@ -3,7 +3,6 @@ package types
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"time"
 )
 
@@ -240,9 +239,6 @@ func (t *Task) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	}
 	if become, ok := taskMap["become"].(bool); ok {
 		t.Become = become
-		fmt.Printf("[DEBUG YAML] Task '%s' parsed become=%v\n", t.Name, become)
-	} else if becomeVal, exists := taskMap["become"]; exists {
-		fmt.Printf("[DEBUG YAML] Task '%s' has become field but wrong type: %T = %v\n", t.Name, becomeVal, becomeVal)
 	}
 	if becomeUser, ok := taskMap["become_user"].(string); ok {
 		t.BecomeUser = becomeUser

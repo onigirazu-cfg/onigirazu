@@ -207,12 +207,7 @@ func (e *CoreEngine) executePlay(play *types.Play, host types.Host, checkMode bo
 
 	// Execute tasks
 	var playErr error
-	fmt.Printf("[DEBUG CORE] Play has %d tasks\n", len(play.Tasks))
 	for i := range play.Tasks {
-		fmt.Printf("[DEBUG CORE] Task %d in play.Tasks: '%s' with Become=%v, BecomeUser=%s, BecomeMethod=%s\n",
-			i, play.Tasks[i].Name, play.Tasks[i].Become, play.Tasks[i].BecomeUser, play.Tasks[i].BecomeMethod)
-		fmt.Printf("[DEBUG CORE] About to execute task '%s' with Become=%v, BecomeUser=%s, BecomeMethod=%s\n",
-			play.Tasks[i].Name, play.Tasks[i].Become, play.Tasks[i].BecomeUser, play.Tasks[i].BecomeMethod)
 		taskResult, err := e.executeTask(play.Tasks[i], host, checkMode, currentState)
 		if err != nil {
 			e.logger.Error("Task '%s' on host '%s' failed: %v", play.Tasks[i].Name, host.Name, err)
