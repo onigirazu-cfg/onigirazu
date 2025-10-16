@@ -15,6 +15,7 @@ type RollbackExecutor struct {
 	snapshotManager *SnapshotManager
 	moduleRegistry  interfaces.ModuleRegistry
 	logger          interfaces.Logger
+	maxConcurrency  int
 }
 
 // NewRollbackExecutor creates a new rollback executor
@@ -27,7 +28,14 @@ func NewRollbackExecutor(
 		snapshotManager: snapshotManager,
 		moduleRegistry:  moduleRegistry,
 		logger:          logger,
+		maxConcurrency:  5, // default value
 	}
+}
+
+// WithMaxConcurrency sets the maximum concurrency for rollback operations
+func (re *RollbackExecutor) WithMaxConcurrency(maxConcurrency int) *RollbackExecutor {
+	re.maxConcurrency = maxConcurrency
+	return re
 }
 
 // RollbackResult represents the result of a rollback operation

@@ -24,6 +24,7 @@ var (
 	driftList       bool
 	driftInfo       bool
 	driftReportID   string
+	driftParallel   int
 )
 
 func newDriftCmd() *cobra.Command {
@@ -72,6 +73,7 @@ Examples:
 	cmd.Flags().BoolVar(&driftList, "list", false, "List all drift reports")
 	cmd.Flags().BoolVar(&driftInfo, "info", false, "Show detailed drift report information")
 	cmd.Flags().StringVar(&driftReportID, "report", "", "Drift report ID")
+	cmd.Flags().IntVarP(&driftParallel, "parallel", "f", 5, "Number of parallel executions")
 
 	return cmd
 }
@@ -86,7 +88,7 @@ func runDrift(cmd *cobra.Command, args []string) error {
 	reportDir := filepath.Join(homeDir, ".onigirazu", "drift-reports")
 
 	// Create logger
-	log := logger.New(verbose)
+	log := logger.New(showDebug)
 
 	// Create snapshot manager
 	sm := rollback.NewSnapshotManager(snapshotDir)
@@ -96,9 +98,10 @@ func runDrift(cmd *cobra.Command, args []string) error {
 
 	// Create drift config
 	config := &drift.DriftConfig{
-		Enabled: true,
-		AutoFix: driftAutoFix,
-		DryRun:  driftDryRun,
+		Enabled:        true,
+		AutoFix:        driftAutoFix,
+		DryRun:         driftDryRun,
+		MaxConcurrency: driftParallel,
 		Resources: []drift.DriftType{
 			drift.DriftTypeFile,
 			drift.DriftTypePackage,

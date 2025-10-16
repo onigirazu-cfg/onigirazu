@@ -98,6 +98,7 @@ type DriftConfig struct {
 	AutoFix         bool            `yaml:"auto_fix" json:"auto_fix"`
 	AutoFixSeverity []DriftSeverity `yaml:"auto_fix_severity" json:"auto_fix_severity"`
 	DryRun          bool            `yaml:"dry_run" json:"dry_run"`
+	MaxConcurrency  int             `yaml:"max_concurrency" json:"max_concurrency"`
 
 	// Notification settings
 	Notifications NotificationConfig `yaml:"notifications" json:"notifications"`

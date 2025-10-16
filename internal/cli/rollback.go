@@ -22,6 +22,7 @@ var (
 	rollbackInfo       bool
 	rollbackCleanup    bool
 	rollbackMaxAge     string
+	rollbackParallel   int
 )
 
 var rollbackCmd = &cobra.Command{
@@ -58,6 +59,7 @@ func init() {
 	rollbackCmd.Flags().BoolVar(&rollbackInfo, "info", false, "Show detailed information about a snapshot")
 	rollbackCmd.Flags().BoolVar(&rollbackCleanup, "cleanup", false, "Cleanup old snapshots")
 	rollbackCmd.Flags().StringVar(&rollbackMaxAge, "max-age", "30d", "Maximum age for snapshots (e.g., 7d, 24h)")
+	rollbackCmd.Flags().IntVarP(&rollbackParallel, "parallel", "f", 5, "Number of parallel executions")
 }
 
 func runRollback(cmd *cobra.Command, args []string) error {
@@ -69,7 +71,7 @@ func runRollback(cmd *cobra.Command, args []string) error {
 	snapshotDir := filepath.Join(homeDir, ".onigirazu", "snapshots")
 
 	// Create logger
-	log := logger.New(verbose)
+	log := logger.New(showDebug)
 
 	// Create snapshot manager
 	sm := rollback.NewSnapshotManager(snapshotDir)
@@ -78,7 +80,7 @@ func runRollback(cmd *cobra.Command, args []string) error {
 	registry := modules.NewRegistry()
 
 	// Create rollback executor
-	executor := rollback.NewRollbackExecutor(sm, registry, log)
+	executor := rollback.NewRollbackExecutor(sm, registry, log).WithMaxConcurrency(rollbackParallel)
 
 	// Handle different operations
 	if rollbackList {
