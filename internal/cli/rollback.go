@@ -59,7 +59,7 @@ func init() {
 	rollbackCmd.Flags().BoolVar(&rollbackInfo, "info", false, "Show detailed information about a snapshot")
 	rollbackCmd.Flags().BoolVar(&rollbackCleanup, "cleanup", false, "Cleanup old snapshots")
 	rollbackCmd.Flags().StringVar(&rollbackMaxAge, "max-age", "30d", "Maximum age for snapshots (e.g., 7d, 24h)")
-	rollbackCmd.Flags().IntVarP(&rollbackParallel, "parallel", "f", 5, "Number of parallel executions")
+	rollbackCmd.Flags().IntVarP(&rollbackParallel, "parallel", "f", 10, "Number of parallel executions")
 }
 
 func runRollback(cmd *cobra.Command, args []string) error {

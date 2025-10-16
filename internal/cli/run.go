@@ -149,7 +149,7 @@ Examples:
 	cmd.Flags().BoolVar(&check, "check", false, "Check mode (dry-run, don't make changes)")
 	cmd.Flags().BoolVar(&diff, "diff", false, "Show differences when changing files")
 	cmd.Flags().DurationVar(&timeout, "timeout", 30*time.Second, "Execution timeout per host")
-	cmd.Flags().IntVarP(&parallel, "parallel", "f", 5, "Number of parallel executions")
+	cmd.Flags().IntVarP(&parallel, "parallel", "f", 10, "Number of parallel executions")
 
 	// Output option flags
 	cmd.Flags().StringVarP(&output, "output", "o", "text", "Output format (text, json, yaml, table)")

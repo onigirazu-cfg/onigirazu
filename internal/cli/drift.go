@@ -73,7 +73,7 @@ Examples:
 	cmd.Flags().BoolVar(&driftList, "list", false, "List all drift reports")
 	cmd.Flags().BoolVar(&driftInfo, "info", false, "Show detailed drift report information")
 	cmd.Flags().StringVar(&driftReportID, "report", "", "Drift report ID")
-	cmd.Flags().IntVarP(&driftParallel, "parallel", "f", 5, "Number of parallel executions")
+	cmd.Flags().IntVarP(&driftParallel, "parallel", "f", 10, "Number of parallel executions")
 
 	return cmd
 }

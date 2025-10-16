@@ -39,7 +39,7 @@ func NewApplyCommand() *cobra.Command {
 		logLevel      string
 		logFormat     string
 		outputFormat  string
-		maxWorkers    int
+		parallel      int
 		timeout       time.Duration
 		interactive   bool
 	)
@@ -109,8 +109,8 @@ Examples:
 			if outputFormat != "text" {
 				cfg.OutputFormat = outputFormat
 			}
-			if maxWorkers != 10 {
-				cfg.MaxConcurrency = maxWorkers
+			if parallel != 10 {
+				cfg.MaxConcurrency = parallel
 			}
 			if statePath != ".onigirazu-state" {
 				cfg.StateFile = statePath
@@ -366,7 +366,7 @@ Examples:
 	cmd.Flags().StringVarP(&logLevel, "log-level", "l", "info", "Log level (debug, info, warn, error)")
 	cmd.Flags().StringVar(&logFormat, "log-format", "text", "Log format (text, json)")
 	cmd.Flags().StringVarP(&outputFormat, "output", "o", "text", "Output format (text, json, yaml)")
-	cmd.Flags().IntVarP(&maxWorkers, "max-workers", "w", 10, "Maximum number of worker threads")
+	cmd.Flags().IntVarP(&parallel, "parallel", "f", 10, "Number of parallel executions")
 	cmd.Flags().DurationVarP(&timeout, "timeout", "t", 30*time.Minute, "Execution timeout")
 	cmd.Flags().BoolVar(&interactive, "interactive", false, "Interactive mode")
 
