@@ -17,6 +17,7 @@ var (
 	statePath     string
 	verbose       bool
 	noColor       bool
+	showDebug     bool
 
 	// Legacy flags for backward compatibility
 	playbookPath string
@@ -52,6 +53,7 @@ across your infrastructure with a focus on simplicity and reliability.`,
 	rootCmd.PersistentFlags().StringVarP(&statePath, "state", "s", ".onigirazu-state", "Path to state file")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Verbose output")
 	rootCmd.PersistentFlags().BoolVar(&noColor, "no-color", false, "Disable colored output")
+	rootCmd.PersistentFlags().BoolVar(&showDebug, "show-debug", false, "Show debug and info messages")
 
 	// Legacy flags for backward compatibility (hidden from help)
 	rootCmd.PersistentFlags().StringVarP(&playbookPath, "playbook", "p", "", "Path to playbook file (legacy)")
