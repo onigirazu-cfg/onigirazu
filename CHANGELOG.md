@@ -2,6 +2,31 @@
 
 ## [Unreleased]
 
+## [1.39.0] - 2025-02-03
+
+### 🐛 Bug Fixes
+
+- **SSH Debug Logging Integration**: Fully integrated `--show-debug` flag with SSH package logger
+  - SSH connection pool now respects debug flags (`--verbose`, `--show-debug`, `-V`)
+  - Debug SSH logs properly controlled and disabled by default
+  - User has full control over SSH debugging output
+  - Applied to both `apply` and `run` (ad-hoc) commands
+
+### 🔧 Internal Improvements
+
+- **SSH Pool Logger Initialization**:
+  - Added `InitializeGlobalPoolWithLogger()` function for custom logger passing
+  - Maintains backward compatibility with existing `InitializeGlobalPool()`
+  - Proper logger propagation through SSH connection pipeline
+  - All three verbose flags now work together: `verbose OR verboseMode OR showDebug`
+
+### 🧪 Testing & Quality
+
+- Code compilation: ✅ All checks passing
+- SSH package tests: ✅ 50+ tests passing
+- CLI integration: ✅ Both apply and run commands tested
+- Backward compatibility: ✅ Verified - existing code continues to work
+
 ## [1.37.0] - 2025-02-02
 
 ### 🏗️ Architecture Improvements
