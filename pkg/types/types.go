@@ -505,6 +505,8 @@ type Play struct {
 	AnyErrorsFatal    bool                   `yaml:"any_errors_fatal,omitempty"`
 	IgnoreErrors      bool                   `yaml:"ignore_errors,omitempty"`
 	GatherFacts       bool                   `yaml:"gather_facts,omitempty"`
+	Roles             []RoleReference        `yaml:"roles,omitempty"` // NEW: List of roles to execute
+	RoleObjects       []*Role                `yaml:"-" json:"-"`      // NEW: Loaded role objects (internal)
 }
 
 // Playbook represents a complete playbook
@@ -699,4 +701,180 @@ type Group struct {
 	Children  []string               `yaml:"children,omitempty" json:"children,omitempty"`
 	Variables map[string]interface{} `yaml:"vars,omitempty" json:"vars,omitempty"`
 	Vars      map[string]interface{} `yaml:"-" json:"-"` // Alias for Variables
+}
+
+// Role represents a reusable role
+type Role struct {
+	Name        string                 `yaml:"name"`
+	Path        string                 // Filesystem path
+	Description string                 `yaml:"description"`
+	Version     string                 `yaml:"version"`
+	Author      string                 `yaml:"author"`
+	Tasks       []Task                 `yaml:"tasks"`
+	Handlers    []Task                 `yaml:"handlers"`
+	Defaults    map[string]interface{} `yaml:"defaults"`
+	Vars        map[string]interface{} `yaml:"vars"`
+	Files       map[string]string      // Built-in files: filename -> content
+	Templates   map[string]string      // Built-in templates: filename -> content
+	Meta        RoleMeta               `yaml:"meta"`
+	PreTasks    []Task                 `yaml:"pre_tasks"`
+	PostTasks   []Task                 `yaml:"post_tasks"`
+}
+
+// RoleMeta contains role metadata
+type RoleMeta struct {
+	Dependencies        []RoleDependency        `yaml:"dependencies"`
+	MinVersion          string                  `yaml:"min_version"`
+	MaxVersion          string                  `yaml:"max_version"`
+	Tags                []string                `yaml:"tags"`
+	Platforms           []string                `yaml:"platforms"`
+	Parameters          map[string]ParameterDef `yaml:"parameters,omitempty"`            // Role parameter schema
+	CrossParameterRules []CrossParameterRule    `yaml:"cross_parameter_rules,omitempty"` // Cross-parameter validation rules
+	SchemaVersion       int                     `yaml:"schema_version,omitempty"`        // Current schema version (default: 1)
+	Migrations          []SchemaMigration       `yaml:"migrations,omitempty"`            // Schema migrations
+}
+
+// RoleDependency specifies a role dependency
+type RoleDependency struct {
+	Name string                 `yaml:"name"`
+	Vars map[string]interface{} `yaml:"vars,omitempty"`
+}
+
+// RoleReference is used in playbooks to reference roles
+type RoleReference struct {
+	Name string                 `yaml:"name"`
+	Vars map[string]interface{} `yaml:"vars"`
+	Path string                 `yaml:"path"`
+	Tags []string               `yaml:"tags"`
+	When string                 `yaml:"when,omitempty"` // Conditional execution
+}
+
+// ConditionalRequirement specifies when a parameter is required
+type ConditionalRequirement struct {
+	Condition   string `yaml:"condition"`             // Condition expression (e.g., "enable_auth=true")
+	Description string `yaml:"description,omitempty"` // Why this parameter is required under condition
+	ErrorMsg    string `yaml:"error,omitempty"`       // Custom error message
+}
+
+// CustomValidationRule defines a custom validation function for a parameter
+type CustomValidationRule struct {
+	Name        string      `yaml:"name"`                  // Validator name (e.g., "file_readable", "custom_check")
+	Description string      `yaml:"description,omitempty"` // What this validator checks
+	ErrorMsg    string      `yaml:"error,omitempty"`       // Custom error message
+	Timeout     interface{} `yaml:"timeout,omitempty"`     // Timeout in milliseconds (default: 5000)
+	Config      interface{} `yaml:"config,omitempty"`      // Validator-specific configuration
+}
+
+// ParameterDef defines a role parameter schema
+type ParameterDef struct {
+	Type                   string                  `yaml:"type"`                    // Parameter type: string, integer, boolean, array, object
+	Required               bool                    `yaml:"required"`                // Whether parameter is always required
+	ConditionalRequirement *ConditionalRequirement `yaml:"required_when,omitempty"` // Conditional requirement
+	Default                interface{}             `yaml:"default,omitempty"`       // Default value
+	Description            string                  `yaml:"description,omitempty"`   // Parameter description
+	Constraints            ParameterConstraints    `yaml:"constraints,omitempty"`   // Type-specific constraints
+	Validators             []CustomValidationRule  `yaml:"validators,omitempty"`    // Custom validators
+}
+
+// ParameterConstraints holds type-specific validation constraints
+type ParameterConstraints struct {
+	// For string type
+	Pattern   string        `yaml:"pattern,omitempty"`    // Regex pattern
+	MinLength int           `yaml:"min_length,omitempty"` // Minimum length
+	MaxLength int           `yaml:"max_length,omitempty"` // Maximum length
+	Enum      []interface{} `yaml:"enum,omitempty"`       // Allowed values
+
+	// For numeric types (integer, float)
+	Minimum    interface{} `yaml:"minimum,omitempty"`     // Minimum value
+	Maximum    interface{} `yaml:"maximum,omitempty"`     // Maximum value
+	MultipleOf interface{} `yaml:"multiple_of,omitempty"` // Value must be multiple of this
+
+	// For array type
+	ItemsType   string `yaml:"items_type,omitempty"`   // Type of array items: string, integer, etc.
+	MinItems    int    `yaml:"min_items,omitempty"`    // Minimum array length
+	MaxItems    int    `yaml:"max_items,omitempty"`    // Maximum array length
+	UniqueItems bool   `yaml:"unique_items,omitempty"` // Array items must be unique
+
+	// For object type
+	RequiredFields []string `yaml:"required_fields,omitempty"` // Required object fields
+}
+
+// ParameterValidationError represents a parameter validation error
+type ParameterValidationError struct {
+	Parameter string      // Parameter name
+	Error     string      // Error message
+	Value     interface{} // The invalid value
+}
+
+// ValidationResult holds the result of parameter validation
+type ValidationResult struct {
+	Valid            bool
+	Errors           []ParameterValidationError
+	CrossParamErrors []CrossParameterValidationError `json:"cross_param_errors,omitempty"`
+}
+
+// CrossParameterRule defines a rule that validates multiple parameters together
+type CrossParameterRule struct {
+	Rule        string `yaml:"rule"`                  // The rule expression (e.g., "port=80 && service=http")
+	Description string `yaml:"description,omitempty"` // Human-readable description
+	ErrorMsg    string `yaml:"error"`                 // Error message when rule is violated
+	Severity    string `yaml:"severity,omitempty"`    // "error" or "warning" (default: "error")
+}
+
+// CrossParameterValidationError represents a cross-parameter validation error
+type CrossParameterValidationError struct {
+	Rule     string                 `json:"rule"`      // The rule that failed
+	Error    string                 `json:"error"`     // Error message
+	ErrorMsg string                 `json:"error_msg"` // Custom error message from rule
+	Details  map[string]interface{} `json:"details"`   // Details about the violation
+}
+
+// MigrationRuleType represents the type of migration rule
+type MigrationRuleType string
+
+const (
+	MigrationRuleTypeRename     MigrationRuleType = "rename"
+	MigrationRuleTypeTransform  MigrationRuleType = "transform"
+	MigrationRuleTypeDeprecate  MigrationRuleType = "deprecate"
+	MigrationRuleTypeRemove     MigrationRuleType = "remove"
+	MigrationRuleTypeAddDefault MigrationRuleType = "add_default"
+)
+
+// MigrationRule defines a single schema migration rule
+type MigrationRule struct {
+	Type        MigrationRuleType      `yaml:"type"`        // Type of migration rule
+	OldParam    string                 `yaml:"old_param"`   // Old parameter name (for rename)
+	NewParam    string                 `yaml:"new_param"`   // New parameter name (for rename/transform)
+	FromType    string                 `yaml:"from_type"`   // Original type (for transform)
+	ToType      string                 `yaml:"to_type"`     // New type (for transform)
+	Description string                 `yaml:"description"` // Migration description
+	Default     interface{}            `yaml:"default"`     // Default value for new parameter
+	Transformer map[string]interface{} `yaml:"transformer"` // Custom transformation rules
+	Reason      string                 `yaml:"reason"`      // Why this migration was needed
+}
+
+// SchemaMigration defines migration rules from one version to another
+type SchemaMigration struct {
+	From  int             `yaml:"from"`            // From schema version
+	To    int             `yaml:"to"`              // To schema version
+	Rules []MigrationRule `yaml:"rules"`           // Migration rules
+	Notes string          `yaml:"notes,omitempty"` // Migration notes
+	Date  string          `yaml:"date,omitempty"`  // Migration date
+	Error string          `yaml:"error,omitempty"` // Error message if failed
+}
+
+// SchemaVersionInfo holds information about schema versioning
+type SchemaVersionInfo struct {
+	Current    int               `yaml:"current"`              // Current schema version
+	Supported  []int             `yaml:"supported"`            // Supported versions
+	Migrations []SchemaMigration `yaml:"migrations,omitempty"` // Available migrations
+	Deprecated bool              `yaml:"deprecated"`           // Whether current version is deprecated
+}
+
+// MigrationError represents a migration error
+type MigrationError struct {
+	From    int
+	To      int
+	Error   string
+	Details map[string]interface{}
 }

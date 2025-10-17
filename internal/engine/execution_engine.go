@@ -10,6 +10,7 @@ import (
 	"github.com/onigirazu-cfg/onigirazu/internal/facts"
 	"github.com/onigirazu-cfg/onigirazu/internal/interfaces"
 	"github.com/onigirazu-cfg/onigirazu/internal/metrics"
+	"github.com/onigirazu-cfg/onigirazu/internal/parser"
 	"github.com/onigirazu-cfg/onigirazu/internal/security"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
@@ -28,6 +29,7 @@ type ExecutionEngine struct {
 	metricsManager    *metrics.Metrics
 	securityValidator *security.SecurityValidator
 	factsGatherer     *facts.Gatherer
+	roleLoader        *parser.RoleLoader
 
 	// Execution context
 	variables map[string]interface{}
@@ -88,6 +90,7 @@ func NewExecutionEngine(
 		metricsManager:    metrics.NewMetrics(),
 		securityValidator: security.NewSecurityValidator(security.DefaultSecurityConfig()),
 		factsGatherer:     facts.NewGatherer(),
+		roleLoader:        parser.NewRoleLoader(logger, "playbooks/roles"),
 		variables:         make(map[string]interface{}),
 		facts:             make(map[string]map[string]interface{}),
 		stats: &ExecutionStats{
@@ -230,6 +233,64 @@ func (e *ExecutionEngine) executePlay(ctx context.Context, play *types.Play) (*t
 		}
 		// Merge rendered vars back
 		playVars = e.mergeVariables(e.variables, renderedPlayVars)
+	}
+
+	// Execute roles (with conditional and dependency support)
+	if len(play.Roles) > 0 || len(play.RoleObjects) > 0 {
+		e.logger.Debug("Executing roles for play '%s'", play.Name)
+
+		// Use Roles (RoleReference) if available, otherwise fallback to RoleObjects
+		var roleRefs []types.RoleReference
+		if len(play.Roles) > 0 {
+			roleRefs = play.Roles
+		} else {
+			// Convert RoleObjects back to RoleReferences for consistency
+			for _, role := range play.RoleObjects {
+				roleRefs = append(roleRefs, types.RoleReference{Name: role.Name, Path: role.Path})
+			}
+		}
+
+		for i, roleRef := range roleRefs {
+			e.logger.Debug("Processing role %d/%d: %s", i+1, len(roleRefs), roleRef.Name)
+
+			// Check conditional execution
+			if roleRef.When != "" {
+				skip, err := e.evaluateCondition(ctx, roleRef.When, playVars)
+				if err != nil {
+					e.logger.Warn("Failed to evaluate condition for role '%s': %v", roleRef.Name, err)
+				} else if skip {
+					e.logger.Debug("Skipping role '%s' due to condition", roleRef.Name)
+					continue
+				}
+			}
+
+			// Load role if using RoleReference
+			var role *types.Role
+			if len(play.Roles) > 0 {
+				var err error
+				role, err = e.roleLoader.LoadRole(ctx, roleRef)
+				if err != nil {
+					e.logger.Error("Failed to load role '%s': %v", roleRef.Name, err)
+					if !play.IgnoreErrors {
+						return result, fmt.Errorf("failed to load role '%s': %w", roleRef.Name, err)
+					}
+					result.Success = false
+					continue
+				}
+			} else {
+				// Use pre-loaded RoleObject
+				role = play.RoleObjects[i]
+			}
+
+			// Execute role with dependencies
+			if err := e.executeRoleWithDependencies(ctx, role, hosts, playVars, result); err != nil {
+				e.logger.Error("Role '%s' failed: %v", role.Name, err)
+				if !play.IgnoreErrors {
+					return result, fmt.Errorf("role '%s' failed: %w", role.Name, err)
+				}
+				result.Success = false
+			}
+		}
 	}
 
 	// Execute pre-tasks
@@ -782,6 +843,107 @@ func (e *ExecutionEngine) getLoopItems(loop *types.Loop, variables map[string]in
 	}
 
 	return nil, fmt.Errorf("loop must specify either items or range")
+}
+
+// executeRole executes a role with its tasks, handlers, and dependencies
+func (e *ExecutionEngine) executeRole(ctx context.Context, role *types.Role, hosts []types.Host,
+	variables map[string]interface{}, playResult *types.PlayResult) error {
+	if role == nil {
+		return fmt.Errorf("role is nil")
+	}
+
+	e.logger.Debug("Starting role execution: %s", role.Name)
+
+	// Merge role variables with play variables
+	// Priority: RoleVars > PlayVars > Defaults (handled by roleLoader)
+	roleVars := e.mergeRoleVariables(role, variables)
+
+	// Execute role pre_tasks if defined
+	if len(role.PreTasks) > 0 {
+		e.logger.Debug("Executing %d pre-tasks for role '%s'", len(role.PreTasks), role.Name)
+		if err := e.executeTaskList(ctx, role.PreTasks, hosts, roleVars, playResult); err != nil {
+			return fmt.Errorf("role pre-tasks failed: %w", err)
+		}
+	}
+
+	// Execute role main tasks if defined
+	if len(role.Tasks) > 0 {
+		e.logger.Debug("Executing %d main tasks for role '%s'", len(role.Tasks), role.Name)
+		if err := e.executeTaskListWithRetry(ctx, role.Tasks, hosts, roleVars, playResult); err != nil {
+			e.logger.Warn("Role main tasks failed: %v", err)
+			// Continue to handlers even if tasks fail
+		}
+	}
+
+	// Execute role handlers if defined
+	if len(role.Handlers) > 0 {
+		e.logger.Debug("Executing %d handlers for role '%s'", len(role.Handlers), role.Name)
+		if err := e.executeTaskList(ctx, role.Handlers, hosts, roleVars, playResult); err != nil {
+			e.logger.Warn("Role handlers failed: %v", err)
+		}
+	}
+
+	// Execute role post_tasks if defined
+	if len(role.PostTasks) > 0 {
+		e.logger.Debug("Executing %d post-tasks for role '%s'", len(role.PostTasks), role.Name)
+		if err := e.executeTaskList(ctx, role.PostTasks, hosts, roleVars, playResult); err != nil {
+			e.logger.Warn("Role post-tasks failed: %v", err)
+		}
+	}
+
+	e.logger.Debug("Completed role execution: %s", role.Name)
+	return nil
+}
+
+// executeRoleWithDependencies executes a role and all its dependencies in correct order
+func (e *ExecutionEngine) executeRoleWithDependencies(ctx context.Context, role *types.Role, hosts []types.Host,
+	variables map[string]interface{}, playResult *types.PlayResult) error {
+	if role == nil {
+		return fmt.Errorf("role is nil")
+	}
+
+	// Resolve dependency execution order (topological sort)
+	roleOrder, err := e.roleLoader.ResolveDependencyOrder(ctx, role)
+	if err != nil {
+		e.logger.Error("Failed to resolve dependencies for role '%s': %v", role.Name, err)
+		return fmt.Errorf("failed to resolve dependencies: %w", err)
+	}
+
+	e.logger.Debug("Resolved role execution order for '%s': %v", role.Name, len(roleOrder))
+
+	// Execute all dependencies first, then the main role
+	for i, depRole := range roleOrder {
+		isMainRole := (i == len(roleOrder)-1)
+		roleType := "dependency"
+		if isMainRole {
+			roleType = "main"
+		}
+
+		e.logger.Debug("Executing %s role %d/%d: %s", roleType, i+1, len(roleOrder), depRole.Name)
+
+		// Execute the role
+		if err := e.executeRole(ctx, depRole, hosts, variables, playResult); err != nil {
+			e.logger.Error("Role '%s' (%s) failed: %v", depRole.Name, roleType, err)
+			return err
+		}
+	}
+
+	e.logger.Debug("Completed role with dependencies: %s", role.Name)
+	return nil
+}
+
+// mergeRoleVariables merges role variables with play variables using correct precedence:
+// RoleVars > OverrideVars > PlayVars > Defaults
+func (e *ExecutionEngine) mergeRoleVariables(role *types.Role, playVars map[string]interface{}) map[string]interface{} {
+	if role == nil {
+		return playVars
+	}
+
+	// Use the role loader's merge function for proper precedence handling
+	// This ensures: RoleVars > OverrideVars > PlayVars > Defaults
+	// Note: overrideVars are empty here; they should be passed from RoleReference if available
+	overrideVars := make(map[string]interface{})
+	return e.roleLoader.MergeVariables(role.Defaults, role.Vars, playVars, overrideVars)
 }
 
 // mergeVariables merges multiple variable maps (later maps take precedence)

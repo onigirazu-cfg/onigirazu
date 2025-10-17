@@ -19,6 +19,7 @@ type EnhancedParser struct {
 	logger          interfaces.Logger
 	variables       map[string]interface{}
 	inventoryParser *InventoryParser
+	roleLoader      *RoleLoader // NEW: For loading roles
 }
 
 // NewEnhancedParser creates a new enhanced parser
@@ -30,6 +31,8 @@ func NewEnhancedParser(templateEngine interfaces.TemplateEngine, logger interfac
 	}
 	// Create inventory parser
 	parser.inventoryParser = NewInventoryParser(logger)
+	// Create role loader (default roles path: playbooks/roles)
+	parser.roleLoader = NewRoleLoader(logger, "playbooks/roles")
 	return parser
 }
 
@@ -65,6 +68,11 @@ func (p *EnhancedParser) ParsePlaybook(ctx context.Context, filePath string) (*t
 	// Process includes and imports
 	if err := p.processIncludes(ctx, &playbook, filepath.Dir(filePath)); err != nil {
 		return nil, fmt.Errorf("failed to process includes in playbook %s: %w", filePath, err)
+	}
+
+	// Load roles for each play (NEW v1.42.0)
+	if err := p.processRoles(ctx, &playbook, filepath.Dir(filePath)); err != nil {
+		return nil, fmt.Errorf("failed to process roles in playbook %s: %w", filePath, err)
 	}
 
 	p.logger.Info("Successfully parsed playbook: %s (%d plays)", filePath, len(playbook.Plays))
@@ -367,4 +375,127 @@ func (p *EnhancedParser) ValidateFile(filePath string) error {
 	}
 
 	return nil
+}
+
+// processRoles loads roles for each play in the playbook (NEW v1.42.0)
+func (p *EnhancedParser) processRoles(ctx context.Context, playbook *types.Playbook, baseDir string) error {
+	for i, play := range playbook.Plays {
+		if len(play.Roles) == 0 {
+			continue // No roles to process
+		}
+
+		p.logger.Debug("Loading %d roles for play %d: %s", len(play.Roles), i, play.Name)
+
+		// Update role loader's path if playbook has custom path
+		p.roleLoader.rolesPath = filepath.Join(baseDir, "roles")
+
+		// Load each role
+		for _, roleRef := range play.Roles {
+			role, err := p.roleLoader.LoadRole(ctx, roleRef)
+			if err != nil {
+				return fmt.Errorf("failed to load role %s: %w", roleRef.Name, err)
+			}
+			playbook.Plays[i].RoleObjects = append(playbook.Plays[i].RoleObjects, role)
+		}
+
+		p.logger.Debug("Loaded %d roles for play %d", len(playbook.Plays[i].RoleObjects), i)
+	}
+	return nil
+}
+
+// parseRoleReference parses a role reference from various formats
+// Supports:
+//   - String: "rolename"
+//   - Map: { name: rolename, vars: {...} }
+//   - Map: { role: rolename, vars: {...} } (alternative syntax)
+func (p *EnhancedParser) parseRoleReference(roleData interface{}) (types.RoleReference, error) {
+	ref := types.RoleReference{
+		Vars: make(map[string]interface{}),
+	}
+
+	switch data := roleData.(type) {
+	case string:
+		// Simple string syntax: "rolename"
+		ref.Name = data
+
+	case map[string]interface{}:
+		// Complex syntax: { name: rolename, vars: {...} }
+		if name, ok := data["name"].(string); ok {
+			ref.Name = name
+		} else if role, ok := data["role"].(string); ok {
+			// Alternative syntax: role: rolename
+			ref.Name = role
+		}
+
+		if vars, ok := data["vars"].(map[string]interface{}); ok {
+			ref.Vars = vars
+		}
+
+		if path, ok := data["path"].(string); ok {
+			ref.Path = path
+		}
+
+		if tags, ok := data["tags"]; ok {
+			if tagSlice, ok := tags.([]interface{}); ok {
+				ref.Tags = make([]string, len(tagSlice))
+				for i, tag := range tagSlice {
+					if tagStr, ok := tag.(string); ok {
+						ref.Tags[i] = tagStr
+					}
+				}
+			}
+		}
+
+	case map[interface{}]interface{}:
+		// YAML unmarshals to map[interface{}]interface{} by default
+		// Convert to map[string]interface{}
+		for k, v := range data {
+			if keyStr, ok := k.(string); ok {
+				switch keyStr {
+				case "name":
+					if nameStr, ok := v.(string); ok {
+						ref.Name = nameStr
+					}
+				case "role":
+					if roleStr, ok := v.(string); ok {
+						ref.Name = roleStr
+					}
+				case "path":
+					if pathStr, ok := v.(string); ok {
+						ref.Path = pathStr
+					}
+				case "vars":
+					if varsMap, ok := v.(map[string]interface{}); ok {
+						ref.Vars = varsMap
+					} else if varsMapInterface, ok := v.(map[interface{}]interface{}); ok {
+						// Convert nested map[interface{}]interface{}
+						ref.Vars = make(map[string]interface{})
+						for vk, vv := range varsMapInterface {
+							if vkStr, ok := vk.(string); ok {
+								ref.Vars[vkStr] = vv
+							}
+						}
+					}
+				case "tags":
+					if tagSlice, ok := v.([]interface{}); ok {
+						ref.Tags = make([]string, len(tagSlice))
+						for i, tag := range tagSlice {
+							if tagStr, ok := tag.(string); ok {
+								ref.Tags[i] = tagStr
+							}
+						}
+					}
+				}
+			}
+		}
+
+	default:
+		return ref, fmt.Errorf("invalid role reference format: %T", roleData)
+	}
+
+	if ref.Name == "" {
+		return ref, fmt.Errorf("role name is required")
+	}
+
+	return ref, nil
 }
