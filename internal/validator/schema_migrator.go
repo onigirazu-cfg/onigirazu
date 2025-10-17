@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"strconv"
 	"strings"
 
@@ -400,15 +401,27 @@ func transformToInteger(value interface{}, fromType string) (interface{}, error)
 	case int32:
 		return int(v), nil
 	case int64:
+		if v > math.MaxInt || v < math.MinInt {
+			return nil, fmt.Errorf("value %d out of range for int", v)
+		}
 		return int(v), nil
 	case float32:
+		if v > math.MaxInt || v < math.MinInt {
+			return nil, fmt.Errorf("value %g out of range for int", v)
+		}
 		return int(v), nil
 	case float64:
+		if v > math.MaxInt || v < math.MinInt {
+			return nil, fmt.Errorf("value %g out of range for int", v)
+		}
 		return int(v), nil
 	case string:
 		i, err := strconv.ParseInt(v, 10, 64)
 		if err != nil {
 			return nil, fmt.Errorf("cannot convert string %q to integer", v)
+		}
+		if i > math.MaxInt || i < math.MinInt {
+			return nil, fmt.Errorf("value %d out of range for int", i)
 		}
 		return int(i), nil
 	case bool:
