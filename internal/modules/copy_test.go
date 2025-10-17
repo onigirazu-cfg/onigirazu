@@ -479,3 +479,169 @@ func TestCopyModule_GetName(t *testing.T) {
 		t.Errorf("GetName() = %q, want %q", name, "copy")
 	}
 }
+
+// TestCopyModule_EdgeCases tests edge cases for copy operations
+func TestCopyModule_EdgeCases(t *testing.T) {
+	module := NewCopyModule()
+
+	tests := []struct {
+		name    string
+		args    map[string]interface{}
+		wantErr bool
+	}{
+		{
+			name: "empty_content",
+			args: map[string]interface{}{
+				"name":    "copy_task",
+				"content": "",
+				"dest":    "/tmp/test.txt",
+			},
+			wantErr: false,
+		},
+		{
+			name: "content_with_special_chars",
+			args: map[string]interface{}{
+				"name":    "copy_task",
+				"content": "Line1\nLine2\n\tTabbed\nUnicode: 日本語",
+				"dest":    "/tmp/test.txt",
+			},
+			wantErr: false,
+		},
+		{
+			name: "mode_octal_string",
+			args: map[string]interface{}{
+				"name":    "copy_task",
+				"content": "test",
+				"dest":    "/tmp/test.txt",
+				"mode":    "0755",
+			},
+			wantErr: false,
+		},
+		{
+			name: "mode_numeric",
+			args: map[string]interface{}{
+				"name":    "copy_task",
+				"content": "test",
+				"dest":    "/tmp/test.txt",
+				"mode":    0755,
+			},
+			wantErr: false,
+		},
+		{
+			name: "with_owner",
+			args: map[string]interface{}{
+				"name":    "copy_task",
+				"content": "test",
+				"dest":    "/tmp/test.txt",
+				"owner":   "root",
+			},
+			wantErr: false,
+		},
+		{
+			name: "with_group",
+			args: map[string]interface{}{
+				"name":    "copy_task",
+				"content": "test",
+				"dest":    "/tmp/test.txt",
+				"group":   "root",
+			},
+			wantErr: false,
+		},
+		{
+			name: "with_both_owner_and_group",
+			args: map[string]interface{}{
+				"name":    "copy_task",
+				"content": "test",
+				"dest":    "/tmp/test.txt",
+				"owner":   "root",
+				"group":   "root",
+			},
+			wantErr: false,
+		},
+		{
+			name: "backup_enabled",
+			args: map[string]interface{}{
+				"name":    "copy_task",
+				"content": "test",
+				"dest":    "/tmp/test.txt",
+				"backup":  true,
+			},
+			wantErr: false,
+		},
+		{
+			name: "force_disabled",
+			args: map[string]interface{}{
+				"name":    "copy_task",
+				"content": "test",
+				"dest":    "/tmp/test.txt",
+				"force":   false,
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := module.Validate(tt.args)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+// TestCopyModule_ValidateMissingRequired tests validation with missing required args
+func TestCopyModule_ValidateMissingRequired(t *testing.T) {
+	module := NewCopyModule()
+
+	tests := []struct {
+		name    string
+		args    map[string]interface{}
+		wantErr bool
+	}{
+		{
+			name: "missing_dest",
+			args: map[string]interface{}{
+				"name":    "task",
+				"content": "test",
+			},
+			wantErr: true,
+		},
+		{
+			name: "missing_both_src_and_content",
+			args: map[string]interface{}{
+				"name": "task",
+				"dest": "/tmp/test.txt",
+			},
+			wantErr: true,
+		},
+		{
+			name: "src_and_content_both",
+			args: map[string]interface{}{
+				"name":    "task",
+				"src":     "/tmp/source.txt",
+				"content": "test",
+				"dest":    "/tmp/test.txt",
+			},
+			wantErr: true,
+		},
+		{
+			name: "valid_content_only",
+			args: map[string]interface{}{
+				"name":    "task",
+				"content": "test",
+				"dest":    "/tmp/test.txt",
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := module.Validate(tt.args)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}

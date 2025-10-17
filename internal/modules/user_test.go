@@ -2,6 +2,7 @@ package modules
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -573,5 +574,136 @@ func TestUserModule_IsIdempotent(t *testing.T) {
 
 	if !module.IsIdempotent() {
 		t.Error("IsIdempotent() should return true for user module")
+	}
+}
+
+// TestUserModule_Execute_AbsentState2 tests user deletion (absent state) - additional test
+func TestUserModule_Execute_AbsentState2(t *testing.T) {
+	module := NewUserModuleFixed()
+
+	host := types.Host{
+		Name:    "localhost",
+		Address: "127.0.0.1",
+		Vars:    make(map[string]interface{}),
+	}
+
+	args := map[string]interface{}{
+		"name":  "testuser",
+		"state": "absent",
+	}
+
+	ctx := context.Background()
+	result, _ := module.Execute(ctx, host, args)
+
+	// Result might fail on local machine if user doesn't exist or permission denied
+	// But structure should be valid
+	if result.TaskName != "testuser" {
+		t.Errorf("Expected task name 'testuser', got '%s'", result.TaskName)
+	}
+
+	if result.Host != "localhost" {
+		t.Errorf("Expected host 'localhost', got '%s'", result.Host)
+	}
+
+	if result.Duration == 0 {
+		t.Error("Expected non-zero duration")
+	}
+}
+
+// TestUserModule_ValidateEdgeCases tests validation edge cases
+func TestUserModule_ValidateEdgeCases(t *testing.T) {
+	module := NewUserModuleFixed()
+
+	tests := []struct {
+		name    string
+		args    map[string]interface{}
+		wantErr bool
+		errMsg  string
+	}{
+		{
+			name: "missing_name",
+			args: map[string]interface{}{
+				"state": "present",
+			},
+			wantErr: true,
+			errMsg:  "name",
+		},
+		{
+			name: "missing_state",
+			args: map[string]interface{}{
+				"name": "testuser",
+			},
+			wantErr: true,
+			errMsg:  "state",
+		},
+		{
+			name: "invalid_state_value",
+			args: map[string]interface{}{
+				"name":  "testuser",
+				"state": "unknown",
+			},
+			wantErr: true,
+			errMsg:  "state",
+		},
+		{
+			name: "name_wrong_type",
+			args: map[string]interface{}{
+				"name":  123,
+				"state": "present",
+			},
+			wantErr: true,
+			errMsg:  "name",
+		},
+		{
+			name: "state_wrong_type",
+			args: map[string]interface{}{
+				"name":  "testuser",
+				"state": 123,
+			},
+			wantErr: true,
+			errMsg:  "state",
+		},
+		{
+			name: "uid_string_valid",
+			args: map[string]interface{}{
+				"name":  "testuser",
+				"state": "present",
+				"uid":   "1000",
+			},
+			wantErr: false,
+		},
+		{
+			name: "uid_float_valid",
+			args: map[string]interface{}{
+				"name":  "testuser",
+				"state": "present",
+				"uid":   1000.0,
+			},
+			wantErr: false,
+		},
+		{
+			name: "gid_string_valid",
+			args: map[string]interface{}{
+				"name":  "testuser",
+				"state": "present",
+				"gid":   "1000",
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := module.Validate(tt.args)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if err != nil && tt.errMsg != "" {
+				if !strings.Contains(err.Error(), tt.errMsg) {
+					t.Errorf("Validate() error message does not contain '%s': %v", tt.errMsg, err)
+				}
+			}
+		})
 	}
 }

@@ -2,6 +2,7 @@ package modules
 
 import (
 	"context"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -450,4 +451,223 @@ func TestFileModuleIdempotency(t *testing.T) {
 
 	// Note: The current implementation might not be fully idempotent
 	// This is something that could be improved
+}
+
+// TestFileModule_Execute_AbsentState tests file removal (absent state)
+func TestFileModule_Execute_AbsentState(t *testing.T) {
+	module := NewFileModule()
+
+	// Create temporary file for testing
+	tempDir := t.TempDir()
+	testFile := filepath.Join(tempDir, "testfile.txt")
+
+	// Create the file first
+	if err := ioutil.WriteFile(testFile, []byte("test content"), 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	// Verify file exists
+	if _, err := os.Stat(testFile); err != nil {
+		t.Fatalf("Test file not created: %v", err)
+	}
+
+	host := types.Host{
+		Name:    "localhost",
+		Address: "127.0.0.1",
+	}
+
+	args := map[string]interface{}{
+		"name":  "remove-test-file",
+		"path":  testFile,
+		"state": "absent",
+	}
+
+	ctx := context.Background()
+	result, err := module.Execute(ctx, host, args)
+
+	if err != nil {
+		t.Errorf("Expected no error, got: %v", err)
+	}
+
+	if !result.Success {
+		t.Errorf("Expected successful execution: %s", result.Error)
+	}
+
+	// File should be removed
+	if _, err := os.Stat(testFile); err == nil {
+		t.Error("Expected file to be removed")
+	}
+}
+
+// TestFileModule_Execute_DirectoryState tests directory creation
+func TestFileModule_Execute_DirectoryState(t *testing.T) {
+	module := NewFileModule()
+
+	tempDir := t.TempDir()
+	testDir := filepath.Join(tempDir, "testdir")
+
+	host := types.Host{
+		Name:    "localhost",
+		Address: "127.0.0.1",
+	}
+
+	args := map[string]interface{}{
+		"name":  "create-test-dir",
+		"path":  testDir,
+		"state": "directory",
+	}
+
+	ctx := context.Background()
+	result, err := module.Execute(ctx, host, args)
+
+	if err != nil {
+		t.Errorf("Expected no error, got: %v", err)
+	}
+
+	if !result.Success {
+		t.Errorf("Expected successful execution: %s", result.Error)
+	}
+
+	// Directory should be created
+	if info, err := os.Stat(testDir); err != nil || !info.IsDir() {
+		t.Error("Expected directory to be created")
+	}
+}
+
+// TestFileModule_Execute_InvalidState tests invalid state handling
+func TestFileModule_Execute_InvalidState(t *testing.T) {
+	module := NewFileModule()
+
+	tempDir := t.TempDir()
+	testFile := filepath.Join(tempDir, "testfile.txt")
+
+	host := types.Host{
+		Name:    "localhost",
+		Address: "127.0.0.1",
+	}
+
+	args := map[string]interface{}{
+		"name":  "invalid-state",
+		"path":  testFile,
+		"state": "invalid_state",
+	}
+
+	ctx := context.Background()
+	result, _ := module.Execute(ctx, host, args)
+
+	if result.Success {
+		t.Error("Expected execution to fail for invalid state")
+	}
+}
+
+// TestFileModule_ValidateState tests state validation
+func TestFileModule_ValidateState(t *testing.T) {
+	module := NewFileModule()
+
+	tests := []struct {
+		name    string
+		args    map[string]interface{}
+		wantErr bool
+	}{
+		{
+			name: "valid_present",
+			args: map[string]interface{}{
+				"name":  "task",
+				"path":  "/tmp/test",
+				"state": "present",
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid_absent",
+			args: map[string]interface{}{
+				"name":  "task",
+				"path":  "/tmp/test",
+				"state": "absent",
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid_directory",
+			args: map[string]interface{}{
+				"name":  "task",
+				"path":  "/tmp/test",
+				"state": "directory",
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid_touch",
+			args: map[string]interface{}{
+				"name":  "task",
+				"path":  "/tmp/test",
+				"state": "touch",
+			},
+			wantErr: false,
+		},
+		{
+			name: "invalid_state",
+			args: map[string]interface{}{
+				"name":  "task",
+				"path":  "/tmp/test",
+				"state": "invalid",
+			},
+			wantErr: true,
+		},
+		{
+			name: "missing_path",
+			args: map[string]interface{}{
+				"name":  "task",
+				"state": "present",
+			},
+			wantErr: true,
+		},
+		{
+			name: "missing_state",
+			args: map[string]interface{}{
+				"name": "task",
+				"path": "/tmp/test",
+			},
+			wantErr: true,
+		},
+		{
+			name: "with_mode",
+			args: map[string]interface{}{
+				"name":  "task",
+				"path":  "/tmp/test",
+				"state": "present",
+				"mode":  "0755",
+			},
+			wantErr: false,
+		},
+		{
+			name: "with_owner",
+			args: map[string]interface{}{
+				"name":  "task",
+				"path":  "/tmp/test",
+				"state": "present",
+				"owner": "root",
+			},
+			wantErr: false,
+		},
+		{
+			name: "with_group",
+			args: map[string]interface{}{
+				"name":  "task",
+				"path":  "/tmp/test",
+				"state": "present",
+				"group": "root",
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := module.Validate(tt.args)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
 }
