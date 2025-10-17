@@ -177,3 +177,24 @@ type CommandSanitizer interface {
 	IsAllowed(command string) bool
 	SanitizeArgs(args []string) ([]string, error)
 }
+
+// StateBackend defines the interface for state storage backends
+type StateBackend interface {
+	// LoadState loads the current state
+	LoadState(ctx context.Context) (*types.State, error)
+
+	// SaveState persists the state
+	SaveState(ctx context.Context, state *types.State) error
+
+	// DeleteState removes the state
+	DeleteState(ctx context.Context) error
+
+	// GetPath returns the backend storage path/location
+	GetPath() string
+
+	// GetStats returns backend-specific statistics
+	GetStats() map[string]interface{}
+
+	// Migrate performs any necessary migrations for the backend
+	Migrate(ctx context.Context) error
+}

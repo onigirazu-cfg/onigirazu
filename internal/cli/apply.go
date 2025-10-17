@@ -21,6 +21,7 @@ import (
 	"github.com/onigirazu-cfg/onigirazu/internal/parser"
 	"github.com/onigirazu-cfg/onigirazu/internal/plugins"
 	"github.com/onigirazu-cfg/onigirazu/internal/progress"
+	"github.com/onigirazu-cfg/onigirazu/internal/rollback"
 	sshpkg "github.com/onigirazu-cfg/onigirazu/internal/ssh"
 	"github.com/onigirazu-cfg/onigirazu/internal/state"
 	"github.com/onigirazu-cfg/onigirazu/internal/template"
@@ -202,6 +203,22 @@ Examples:
 				templateEngine = template.NewEngine()
 			}
 
+			// Initialize state backend based on configuration
+			stateConfig := state.NewDefaultConfig()
+			// You can customize this based on environment or config file
+			// stateConfig.Backend = state.BackendTypeSQLite
+
+			backendFactory := state.NewBackendFactory(stateConfig)
+			stateBackend, err := backendFactory.CreateBackend(cfg.StateFile)
+			if err != nil {
+				log.Warn("Failed to create state backend: %v, falling back to file backend", err)
+				// Fallback to file backend
+				stateBackend, _ = backendFactory.CreateFileBackend(cfg.StateFile)
+			}
+
+			log.Info("Using state backend: %v", stateConfig.Backend)
+
+			// Also keep the enhanced manager for compatibility with execution engine
 			stateManager := state.NewEnhancedManager(cfg.StateFile, log)
 
 			// Load existing state before execution
@@ -319,9 +336,14 @@ Examples:
 				}
 
 				if err := stateManager.SaveState(ctx, currentState); err != nil {
-					log.Warn("Failed to save state after failure: %v", err)
+					log.Warn("Failed to save state after failure (manager): %v", err)
+				}
+
+				// Also save to backend
+				if err := stateBackend.SaveState(ctx, currentState); err != nil {
+					log.Warn("Failed to save state to backend: %v", err)
 				} else {
-					log.Info("State file saved (failure recorded)")
+					log.Info("State file saved to backend (failure recorded)")
 				}
 
 				return fmt.Errorf("playbook execution failed")
@@ -329,6 +351,63 @@ Examples:
 
 			log.Info("Playbook execution successful")
 			displayExecutionSummary(log, result)
+
+			// Create snapshot for rollback capability
+			homeDir, err := os.UserHomeDir()
+			if err == nil {
+				snapshotDir := filepath.Join(homeDir, ".onigirazu", "snapshots")
+				snapshotMgr := rollback.NewSnapshotManager(snapshotDir)
+
+				// Create snapshot
+				snapshot, err := snapshotMgr.CreateSnapshot(playbook.Name, "Auto-created snapshot after playbook execution")
+				if err == nil {
+					// Add task results as resource snapshots
+					for _, play := range result.Plays {
+						for _, task := range play.Tasks {
+							if task.Changed {
+								// Add resource snapshot for each changed task
+								resourceSnapshot := rollback.ResourceSnapshot{
+									Type:       task.Module,
+									TaskName:   task.TaskName,
+									Host:       task.Host,
+									State:      make(map[string]interface{}),
+									Action:     "modified",
+									Module:     task.Module,
+									Reversible: isModuleReversible(task.Module),
+								}
+
+								// Try to extract resource identifier from output
+								if task.Output != nil {
+									// Copy output as state
+									resourceSnapshot.State = task.Output
+
+									// Extract resource identifier
+									if name, ok := task.Output["name"]; ok {
+										resourceSnapshot.Identifier = fmt.Sprintf("%v", name)
+									} else if path, ok := task.Output["path"]; ok {
+										resourceSnapshot.Identifier = fmt.Sprintf("%v", path)
+									} else if pkg, ok := task.Output["package"]; ok {
+										resourceSnapshot.Identifier = fmt.Sprintf("%v", pkg)
+									} else if dest, ok := task.Output["dest"]; ok {
+										resourceSnapshot.Identifier = fmt.Sprintf("%v", dest)
+									}
+								}
+
+								snapshotMgr.AddResourceSnapshot(snapshot, resourceSnapshot)
+							}
+						}
+					}
+
+					// Save snapshot
+					if err := snapshotMgr.SaveSnapshot(snapshot); err != nil {
+						log.Warn("Failed to save snapshot: %v", err)
+					} else {
+						log.Info("Snapshot created successfully: %s", snapshot.ID)
+					}
+				} else {
+					log.Warn("Failed to create snapshot: %v", err)
+				}
+			}
 
 			// Save final state with playbook results
 			currentState := &types.State{
@@ -348,9 +427,15 @@ Examples:
 
 			log.Info("Saving state to: %s", cfg.StateFile)
 			if err := stateManager.SaveState(ctx, currentState); err != nil {
-				log.Warn("Failed to save final state: %v", err)
+				log.Warn("Failed to save final state (manager): %v", err)
+			}
+
+			// Also save to backend
+			if err := stateBackend.SaveState(ctx, currentState); err != nil {
+				log.Warn("Failed to save final state to backend: %v", err)
 			} else {
-				log.Info("State file successfully saved with %d play results", len(currentState.Results))
+				log.Info("State file successfully saved to backend with %d play results", len(currentState.Results))
+				log.Debug("State backend path: %s", stateBackend.GetPath())
 			}
 
 			log.Info("Onigirazu execution completed successfully")
@@ -371,6 +456,28 @@ Examples:
 	cmd.Flags().BoolVar(&interactive, "interactive", false, "Interactive mode")
 
 	return cmd
+}
+
+// isModuleReversible checks if a module's changes can be reversed
+func isModuleReversible(module string) bool {
+	reversibleModules := map[string]bool{
+		"file":       true,
+		"copy":       true,
+		"template":   true,
+		"lineinfile": true,
+		"package":    true,
+		"service":    true,
+		"user":       true,
+		"group":      true,
+		"git":        true,
+		"systemd":    true,
+		"cron":       true,
+		"command":    false, // shell commands can't be automatically reversed
+		"shell":      false,
+		"debug":      false,
+	}
+
+	return reversibleModules[module]
 }
 
 // displayExecutionSummary displays a summary of the execution results

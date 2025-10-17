@@ -1,0 +1,72 @@
+{
+  "version": 0,
+  "last_run": "2025-10-17T22:56:43.270075+02:00",
+  "playbook": "/tmp/test-playbook.yml",
+  "results": [
+    {
+      "duration_ms": 1052,
+      "name": "Test Snapshot Creation",
+      "play_name": "",
+      "host": "",
+      "hosts": [
+        {
+          "host": "localhost",
+          "tasks": [
+            {
+              "duration_ms": 347,
+              "task_name": "Create test file",
+              "host": "localhost",
+              "module": "file",
+              "success": true,
+              "failed": false,
+              "changed": true,
+              "skipped": false,
+              "output": {
+                "message": "File /tmp/test-snapshot.txt created"
+              },
+              "timestamp": "2025-10-17T22:56:42.210528+02:00"
+            },
+            {
+              "duration_ms": 344,
+              "task_name": "Display system info",
+              "host": "localhost",
+              "module": "command",
+              "success": true,
+              "failed": false,
+              "changed": true,
+              "skipped": false,
+              "output": {
+                "command": "uptime",
+                "message": "Command executed successfully",
+                "stdout": "22:56  up 17 days,  5:05, 9 users, load averages: 7.01 7.19 6.40\n"
+              },
+              "timestamp": "2025-10-17T22:56:42.55856+02:00"
+            },
+            {
+              "duration_ms": 358,
+              "task_name": "Create test directory",
+              "host": "localhost",
+              "module": "file",
+              "success": true,
+              "failed": false,
+              "changed": true,
+              "skipped": false,
+              "output": {
+                "message": "Directory /tmp/onigirazu-test-dir created"
+              },
+              "timestamp": "2025-10-17T22:56:42.904148+02:00"
+            }
+          ],
+          "success": true,
+          "failed": false
+        }
+      ],
+      "tasks": null,
+      "success": true,
+      "start_time": "2025-10-17T22:56:42.209862+02:00",
+      "end_time": "2025-10-17T22:56:43.262793+02:00"
+    }
+  ],
+  "variables": {},
+  "checksums": {}
+}

@@ -1,0 +1,8 @@
+{
+  "version": 0,
+  "last_run": "2025-10-17T22:56:10.271235+02:00",
+  "playbook": "/tmp/test-playbook.yml",
+  "results": null,
+  "variables": {},
+  "checksums": {}
+}
