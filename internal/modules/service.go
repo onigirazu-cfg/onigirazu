@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/onigirazu-cfg/onigirazu/internal/executor"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
@@ -42,7 +41,7 @@ type ServiceManagerFixed interface {
 	IsRunning(name string) (bool, error)
 	IsEnabled(name string) (bool, error)
 	GetStatus(name string) (ServiceStatus, error)
-	SetExecutor(executor *executor.CommandExecutor)
+	SetExecutor(executor ModuleExecutor)
 }
 
 // NewServiceModuleFixed creates a new service module
@@ -73,8 +72,8 @@ func (m *ServiceModuleFixed) Execute(ctx context.Context, host types.Host, args 
 		Timestamp: startTime,
 	}
 
-	// Create a fresh executor for this execution
-	exec, err := executor.NewCommandExecutor(host)
+	// Create a fresh module executor for this execution
+	exec, err := NewRealModuleExecutor(host)
 	if err != nil {
 		return m.failResult(result, fmt.Sprintf("failed to create executor: %v", err))
 	}
@@ -209,7 +208,7 @@ func (m *ServiceModuleFixed) Validate(args map[string]interface{}) error {
 
 // SystemdManagerFixed implements service management for systemd
 type SystemdManagerFixed struct {
-	executor *executor.CommandExecutor
+	executor ModuleExecutor
 }
 
 func (s *SystemdManagerFixed) Start(name string) error {
@@ -308,13 +307,13 @@ func (s *SystemdManagerFixed) runSystemctl(action, name string) error {
 	return err
 }
 
-func (s *SystemdManagerFixed) SetExecutor(executor *executor.CommandExecutor) {
+func (s *SystemdManagerFixed) SetExecutor(executor ModuleExecutor) {
 	s.executor = executor
 }
 
 // LaunchdManagerFixed implements service management for macOS launchd
 type LaunchdManagerFixed struct {
-	executor *executor.CommandExecutor
+	executor ModuleExecutor
 }
 
 func (l *LaunchdManagerFixed) Start(name string) error {
@@ -389,13 +388,13 @@ func (l *LaunchdManagerFixed) GetStatus(name string) (ServiceStatus, error) {
 	return status, nil
 }
 
-func (l *LaunchdManagerFixed) SetExecutor(executor *executor.CommandExecutor) {
+func (l *LaunchdManagerFixed) SetExecutor(executor ModuleExecutor) {
 	l.executor = executor
 }
 
 // SysVInitManagerFixed implements service management for SysV init
 type SysVInitManagerFixed struct {
-	executor *executor.CommandExecutor
+	executor ModuleExecutor
 }
 
 func (s *SysVInitManagerFixed) Start(name string) error {
@@ -477,13 +476,13 @@ func (s *SysVInitManagerFixed) GetStatus(name string) (ServiceStatus, error) {
 	return status, nil
 }
 
-func (s *SysVInitManagerFixed) SetExecutor(executor *executor.CommandExecutor) {
+func (s *SysVInitManagerFixed) SetExecutor(executor ModuleExecutor) {
 	s.executor = executor
 }
 
 // WindowsServiceManagerFixed implements service management for Windows
 type WindowsServiceManagerFixed struct {
-	executor *executor.CommandExecutor
+	executor ModuleExecutor
 }
 
 func (w *WindowsServiceManagerFixed) Start(name string) error {
@@ -564,13 +563,13 @@ func (w *WindowsServiceManagerFixed) GetStatus(name string) (ServiceStatus, erro
 	return status, nil
 }
 
-func (w *WindowsServiceManagerFixed) SetExecutor(executor *executor.CommandExecutor) {
+func (w *WindowsServiceManagerFixed) SetExecutor(executor ModuleExecutor) {
 	w.executor = executor
 }
 
 // GenericManagerFixed implements basic service management
 type GenericManagerFixed struct {
-	executor *executor.CommandExecutor
+	executor ModuleExecutor
 }
 
 func (g *GenericManagerFixed) Start(name string) error {
@@ -609,12 +608,12 @@ func (g *GenericManagerFixed) GetStatus(name string) (ServiceStatus, error) {
 	return ServiceStatus{Name: name}, fmt.Errorf("service management not supported on this platform")
 }
 
-func (g *GenericManagerFixed) SetExecutor(executor *executor.CommandExecutor) {
+func (g *GenericManagerFixed) SetExecutor(executor ModuleExecutor) {
 	g.executor = executor
 }
 
 // detectServiceManager detects the service manager on the remote host
-func (m *ServiceModuleFixed) detectServiceManager(exec *executor.CommandExecutor) (ServiceManagerFixed, error) {
+func (m *ServiceModuleFixed) detectServiceManager(exec ModuleExecutor) (ServiceManagerFixed, error) {
 	// Check for systemd
 	_, err := exec.Execute("test", "-d", "/run/systemd/system")
 	if err == nil {

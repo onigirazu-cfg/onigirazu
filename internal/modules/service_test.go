@@ -6,13 +6,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/onigirazu-cfg/onigirazu/internal/executor"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
 // MockServiceManager implements ServiceManagerFixed for testing
 type MockServiceManager struct {
-	executor      *executor.CommandExecutor
+	executor      ModuleExecutor
 	runningState  map[string]bool
 	enabledState  map[string]bool
 	startCalls    []string
@@ -121,7 +120,7 @@ func (m *MockServiceManager) GetStatus(name string) (ServiceStatus, error) {
 	}, nil
 }
 
-func (m *MockServiceManager) SetExecutor(executor *executor.CommandExecutor) {
+func (m *MockServiceManager) SetExecutor(executor ModuleExecutor) {
 	m.executor = executor
 }
 

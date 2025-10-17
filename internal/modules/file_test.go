@@ -2,7 +2,6 @@ package modules
 
 import (
 	"context"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -462,7 +461,7 @@ func TestFileModule_Execute_AbsentState(t *testing.T) {
 	testFile := filepath.Join(tempDir, "testfile.txt")
 
 	// Create the file first
-	if err := ioutil.WriteFile(testFile, []byte("test content"), 0644); err != nil {
+	if err := os.WriteFile(testFile, []byte("test content"), 0644); err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
 

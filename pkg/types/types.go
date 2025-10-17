@@ -528,8 +528,36 @@ type TaskResult struct {
 	Skipped   bool                   `json:"skipped"`
 	Output    map[string]interface{} `json:"output"`
 	Error     string                 `json:"error,omitempty"`
-	Duration  time.Duration          `json:"duration"`
+	Duration  time.Duration          `json:"duration_ms"` // Store as milliseconds for JSON compatibility
 	Timestamp time.Time              `json:"timestamp"`
+}
+
+// MarshalJSON implements custom JSON marshaling for TaskResult
+func (tr TaskResult) MarshalJSON() ([]byte, error) {
+	type Alias TaskResult
+	return json.Marshal(&struct {
+		Duration int64 `json:"duration_ms"`
+		*Alias
+	}{
+		Duration: tr.Duration.Milliseconds(),
+		Alias:    (*Alias)(&tr),
+	})
+}
+
+// UnmarshalJSON implements custom JSON unmarshaling for TaskResult
+func (tr *TaskResult) UnmarshalJSON(data []byte) error {
+	type Alias TaskResult
+	aux := &struct {
+		Duration int64 `json:"duration_ms"`
+		*Alias
+	}{
+		Alias: (*Alias)(tr),
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	tr.Duration = time.Duration(aux.Duration) * time.Millisecond
+	return nil
 }
 
 // PlayResult represents the result of play execution
@@ -540,9 +568,37 @@ type PlayResult struct {
 	Hosts     []HostResult  `json:"hosts"`
 	Tasks     []TaskResult  `json:"tasks"`
 	Success   bool          `json:"success"`
-	Duration  time.Duration `json:"duration"`
+	Duration  time.Duration `json:"duration_ms"` // Store as milliseconds for JSON compatibility
 	StartTime time.Time     `json:"start_time"`
 	EndTime   time.Time     `json:"end_time"`
+}
+
+// MarshalJSON implements custom JSON marshaling for PlayResult
+func (pr PlayResult) MarshalJSON() ([]byte, error) {
+	type Alias PlayResult
+	return json.Marshal(&struct {
+		Duration int64 `json:"duration_ms"`
+		*Alias
+	}{
+		Duration: pr.Duration.Milliseconds(),
+		Alias:    (*Alias)(&pr),
+	})
+}
+
+// UnmarshalJSON implements custom JSON unmarshaling for PlayResult
+func (pr *PlayResult) UnmarshalJSON(data []byte) error {
+	type Alias PlayResult
+	aux := &struct {
+		Duration int64 `json:"duration_ms"`
+		*Alias
+	}{
+		Alias: (*Alias)(pr),
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	pr.Duration = time.Duration(aux.Duration) * time.Millisecond
+	return nil
 }
 
 // HostResult represents the result for a specific host
@@ -649,7 +705,35 @@ type CacheEntry struct {
 	Value     interface{}   `json:"value"`
 	CreatedAt time.Time     `json:"created_at"`
 	ExpiresAt time.Time     `json:"expires_at"`
-	TTL       time.Duration `json:"ttl"`
+	TTL       time.Duration `json:"ttl_ms"` // Store as milliseconds for JSON compatibility
+}
+
+// MarshalJSON implements custom JSON marshaling for CacheEntry
+func (ce CacheEntry) MarshalJSON() ([]byte, error) {
+	type Alias CacheEntry
+	return json.Marshal(&struct {
+		TTL int64 `json:"ttl_ms"`
+		*Alias
+	}{
+		TTL:   ce.TTL.Milliseconds(),
+		Alias: (*Alias)(&ce),
+	})
+}
+
+// UnmarshalJSON implements custom JSON unmarshaling for CacheEntry
+func (ce *CacheEntry) UnmarshalJSON(data []byte) error {
+	type Alias CacheEntry
+	aux := &struct {
+		TTL int64 `json:"ttl_ms"`
+		*Alias
+	}{
+		Alias: (*Alias)(ce),
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	ce.TTL = time.Duration(aux.TTL) * time.Millisecond
+	return nil
 }
 
 // AuditEntry represents an audit log entry
@@ -662,8 +746,42 @@ type AuditEntry struct {
 	Task      string                 `json:"task,omitempty"`
 	Playbook  string                 `json:"playbook,omitempty"`
 	Result    *TaskResult            `json:"result,omitempty"`
-	Duration  time.Duration          `json:"duration,omitempty"`
+	Duration  time.Duration          `json:"duration_ms,omitempty"` // Store as milliseconds for JSON compatibility
 	Metadata  map[string]interface{} `json:"metadata,omitempty"`
+}
+
+// MarshalJSON implements custom JSON marshaling for AuditEntry
+func (ae AuditEntry) MarshalJSON() ([]byte, error) {
+	type Alias AuditEntry
+	durationMS := int64(0)
+	if ae.Duration != 0 {
+		durationMS = ae.Duration.Milliseconds()
+	}
+	return json.Marshal(&struct {
+		Duration int64 `json:"duration_ms,omitempty"`
+		*Alias
+	}{
+		Duration: durationMS,
+		Alias:    (*Alias)(&ae),
+	})
+}
+
+// UnmarshalJSON implements custom JSON unmarshaling for AuditEntry
+func (ae *AuditEntry) UnmarshalJSON(data []byte) error {
+	type Alias AuditEntry
+	aux := &struct {
+		Duration int64 `json:"duration_ms,omitempty"`
+		*Alias
+	}{
+		Alias: (*Alias)(ae),
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	if aux.Duration != 0 {
+		ae.Duration = time.Duration(aux.Duration) * time.Millisecond
+	}
+	return nil
 }
 
 // PlaybookResult represents the result of playbook execution
@@ -678,12 +796,40 @@ type PlaybookResult struct {
 	FailedTasks  int                    `json:"failed_tasks"`
 	SkippedTasks int                    `json:"skipped_tasks"`
 	ChangedTasks int                    `json:"changed_tasks"`
-	Duration     time.Duration          `json:"duration"`
+	Duration     time.Duration          `json:"duration_ms"` // Store as milliseconds for JSON compatibility
 	StartTime    time.Time              `json:"start_time"`
 	EndTime      time.Time              `json:"end_time"`
 	Variables    map[string]interface{} `json:"variables,omitempty"`
 	Stats        map[string]interface{} `json:"stats,omitempty"`
 	Error        string                 `json:"error,omitempty"`
+}
+
+// MarshalJSON implements custom JSON marshaling for PlaybookResult
+func (pbr PlaybookResult) MarshalJSON() ([]byte, error) {
+	type Alias PlaybookResult
+	return json.Marshal(&struct {
+		Duration int64 `json:"duration_ms"`
+		*Alias
+	}{
+		Duration: pbr.Duration.Milliseconds(),
+		Alias:    (*Alias)(&pbr),
+	})
+}
+
+// UnmarshalJSON implements custom JSON unmarshaling for PlaybookResult
+func (pbr *PlaybookResult) UnmarshalJSON(data []byte) error {
+	type Alias PlaybookResult
+	aux := &struct {
+		Duration int64 `json:"duration_ms"`
+		*Alias
+	}{
+		Alias: (*Alias)(pbr),
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	pbr.Duration = time.Duration(aux.Duration) * time.Millisecond
+	return nil
 }
 
 // Loop represents loop configuration for tasks

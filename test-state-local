@@ -1,0 +1,139 @@
+{
+  "version": 0,
+  "last_run": "2025-10-17T16:45:10.192761+02:00",
+  "playbook": "test-state-local.yml",
+  "results": [
+    {
+      "duration_ms": 104,
+      "name": "State File Test",
+      "play_name": "",
+      "host": "",
+      "hosts": [
+        {
+          "host": "localhost",
+          "tasks": [
+            {
+              "duration_ms": 0,
+              "task_name": "Test debug module",
+              "host": "localhost",
+              "module": "debug",
+              "success": true,
+              "failed": false,
+              "changed": false,
+              "skipped": false,
+              "output": {
+                "msg": "Testing state file serialization"
+              },
+              "timestamp": "2025-10-17T16:45:10.088421+02:00"
+            },
+            {
+              "duration_ms": 4,
+              "task_name": "Get current date",
+              "host": "localhost",
+              "module": "command",
+              "success": true,
+              "failed": false,
+              "changed": true,
+              "skipped": false,
+              "output": {
+                "command": "date",
+                "message": "Command executed successfully",
+                "stdout": "Fri Oct 17 16:45:10 CEST 2025\n"
+              },
+              "timestamp": "2025-10-17T16:45:10.088459+02:00"
+            },
+            {
+              "duration_ms": 27,
+              "task_name": "Create test file",
+              "host": "localhost",
+              "module": "file",
+              "success": true,
+              "failed": false,
+              "changed": true,
+              "skipped": false,
+              "output": {
+                "message": "File /tmp/onigirazu-state-test.txt created"
+              },
+              "timestamp": "2025-10-17T16:45:10.093107+02:00"
+            },
+            {
+              "duration_ms": 42,
+              "task_name": "Verify file exists",
+              "host": "localhost",
+              "module": "stat",
+              "success": true,
+              "failed": false,
+              "changed": false,
+              "skipped": false,
+              "output": {
+                "atime": 1760712310,
+                "ctime": 1760712310,
+                "executable": false,
+                "exists": true,
+                "isdir": false,
+                "islnk": false,
+                "isreg": true,
+                "mode": "644",
+                "mtime": 1760712310,
+                "path": "/tmp/onigirazu-state-test.txt",
+                "readable": true,
+                "size": 20,
+                "stat": {
+                  "executable": false,
+                  "exists": true,
+                  "isdir": false,
+                  "islnk": false,
+                  "isreg": true,
+                  "mode": "644",
+                  "mtime": 1760712310,
+                  "path": "/tmp/onigirazu-state-test.txt",
+                  "readable": true,
+                  "size": 20,
+                  "writable": true
+                },
+                "writable": true
+              },
+              "timestamp": "2025-10-17T16:45:10.120693+02:00"
+            },
+            {
+              "duration_ms": 0,
+              "task_name": "Display results",
+              "host": "localhost",
+              "module": "debug",
+              "success": true,
+              "failed": false,
+              "changed": false,
+              "skipped": false,
+              "output": {
+                "msg": "File exists: true"
+              },
+              "timestamp": "2025-10-17T16:45:10.163025+02:00"
+            },
+            {
+              "duration_ms": 29,
+              "task_name": "Cleanup",
+              "host": "localhost",
+              "module": "file",
+              "success": true,
+              "failed": false,
+              "changed": true,
+              "skipped": false,
+              "output": {
+                "message": "File /tmp/onigirazu-state-test.txt deleted"
+              },
+              "timestamp": "2025-10-17T16:45:10.163093+02:00"
+            }
+          ],
+          "success": true,
+          "failed": false
+        }
+      ],
+      "tasks": null,
+      "success": true,
+      "start_time": "2025-10-17T16:45:10.088333+02:00",
+      "end_time": "2025-10-17T16:45:10.19271+02:00"
+    }
+  ],
+  "variables": {},
+  "checksums": {}
+}

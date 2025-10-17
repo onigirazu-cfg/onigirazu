@@ -154,6 +154,11 @@ func (e *CommandExecutor) ExecuteWithContext(ctx context.Context, command string
 	}
 }
 
+// ExecuteContext is an alias for ExecuteWithContext for compatibility with ModuleExecutor interface
+func (e *CommandExecutor) ExecuteContext(ctx context.Context, command string, args ...string) (string, error) {
+	return e.ExecuteWithContext(ctx, command, args...)
+}
+
 // ExecuteWithTimeout runs a command with timeout
 func (e *CommandExecutor) ExecuteWithTimeout(command string, timeout time.Duration, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
