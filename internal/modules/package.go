@@ -539,10 +539,14 @@ func (m *UnifiedPackageModule) Execute(ctx context.Context, host types.Host, arg
 
 	// Add cache statistics
 	hits, misses := m.stateCache.Stats()
+	cacheRate := 0.0
+	if total := hits + misses; total > 0 {
+		cacheRate = float64(hits) / float64(total)
+	}
 	result.Output["cache_stats"] = map[string]interface{}{
 		"hits":   hits,
 		"misses": misses,
-		"rate":   float64(hits) / float64(hits+misses),
+		"rate":   cacheRate,
 	}
 
 	// Add metrics

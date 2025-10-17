@@ -646,11 +646,14 @@ func (mr *MetricsReporter) generatePerformanceSummary() map[string]interface{} {
 	summary["total_tasks"] = totalTasks
 	summary["successful_tasks"] = successfulTasks
 	summary["failed_tasks"] = failedTasks
-	summary["success_rate"] = float64(successfulTasks) / float64(totalTasks) * 100
 
+	// Calculate success rate, avoiding division by zero
+	successRate := 0.0
 	if totalTasks > 0 {
+		successRate = float64(successfulTasks) / float64(totalTasks) * 100
 		summary["average_task_duration"] = totalDuration / time.Duration(totalTasks)
 	}
+	summary["success_rate"] = successRate
 
 	return summary
 }
