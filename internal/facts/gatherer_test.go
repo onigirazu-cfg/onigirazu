@@ -317,3 +317,356 @@ func TestGetCacheStats(t *testing.T) {
 		t.Errorf("Expected 1 entry, got %d", stats.Entries)
 	}
 }
+
+// ============================================================================
+// EXTENDED OS RELEASE PARSING TESTS
+// ============================================================================
+
+func TestParseOSReleaseEdgeCases(t *testing.T) {
+	gatherer := NewGatherer()
+
+	tests := []struct {
+		name            string
+		content         string
+		expectedFamily  string
+		expectedDistrib string
+	}{
+		{
+			name:            "Empty content",
+			content:         "",
+			expectedFamily:  "",
+			expectedDistrib: "",
+		},
+		{
+			name:            "Only ID field",
+			content:         `ID=custom`,
+			expectedFamily:  "Linux",
+			expectedDistrib: "custom",
+		},
+		{
+			name: "Ubuntu with quotes",
+			content: `ID="ubuntu"
+VERSION_ID="24.04"`,
+			expectedDistrib: "ubuntu",
+			expectedFamily:  "Debian",
+		},
+		{
+			name: "Fedora with rhel-like",
+			content: `ID="fedora"
+ID_LIKE="rhel"`,
+			expectedDistrib: "fedora",
+			expectedFamily:  "RedHat",
+		},
+		{
+			name: "Alpine (unknown distro)",
+			content: `ID="alpine"
+VERSION_ID="3.18"`,
+			expectedDistrib: "alpine",
+			expectedFamily:  "Linux",
+		},
+		{
+			name: "Missing version ID",
+			content: `ID="ubuntu"
+ID_LIKE="debian"`,
+			expectedFamily: "Debian",
+		},
+		{
+			name: "Whitespace and special chars",
+			content: `   ID="ubuntu"
+		VERSION_ID="24.04"`,
+			expectedDistrib: "ubuntu",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			facts := &cache.SystemFacts{}
+			gatherer.parseOSRelease(tt.content, facts)
+
+			if tt.expectedDistrib != "" && facts.Distribution != tt.expectedDistrib {
+				t.Errorf("Expected distribution '%s', got '%s'", tt.expectedDistrib, facts.Distribution)
+			}
+
+			if tt.expectedFamily != "" && facts.OSFamily != tt.expectedFamily {
+				t.Errorf("Expected OS family '%s', got '%s'", tt.expectedFamily, facts.OSFamily)
+			}
+		})
+	}
+}
+
+// ============================================================================
+// EXTENDED LSB RELEASE PARSING TESTS
+// ============================================================================
+
+func TestParseLSBReleaseEdgeCases(t *testing.T) {
+	gatherer := NewGatherer()
+
+	tests := []struct {
+		name            string
+		content         string
+		expectedDistrib string
+		expectedFamily  string
+	}{
+		{
+			name:            "Empty content",
+			content:         "",
+			expectedDistrib: "",
+			expectedFamily:  "Linux",
+		},
+		{
+			name:            "Only distribution line",
+			content:         `Distributor ID:	CustomOS`,
+			expectedDistrib: "CustomOS",
+			expectedFamily:  "Linux",
+		},
+		{
+			name: "With Release line",
+			content: `Distributor ID:	RedHat
+Release:	8.5`,
+			expectedDistrib: "RedHat",
+			expectedFamily:  "RedHat",
+		},
+		{
+			name: "CentOS with various spacing",
+			content: `Distributor ID:CentOS
+Release:  7.9`,
+			expectedDistrib: "CentOS",
+			expectedFamily:  "RedHat",
+		},
+		{
+			name: "Unknown Distro",
+			content: `Distributor ID:	UnknownOS
+Release:	1.0`,
+			expectedFamily: "Linux",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			facts := &cache.SystemFacts{}
+			gatherer.parseLSBRelease(tt.content, facts)
+
+			if tt.expectedDistrib != "" && facts.Distribution != tt.expectedDistrib {
+				t.Errorf("Expected distribution '%s', got '%s'", tt.expectedDistrib, facts.Distribution)
+			}
+
+			if facts.OSFamily != tt.expectedFamily {
+				t.Errorf("Expected OS family '%s', got '%s'", tt.expectedFamily, facts.OSFamily)
+			}
+		})
+	}
+}
+
+// ============================================================================
+// EXTENDED RED HAT RELEASE PARSING TESTS
+// ============================================================================
+
+func TestParseRedHatReleaseEdgeCases(t *testing.T) {
+	gatherer := NewGatherer()
+
+	tests := []struct {
+		name     string
+		content  string
+		expected string
+	}{
+		{
+			name:     "Empty string",
+			content:  "",
+			expected: "RedHat",
+		},
+		{
+			name:     "Only spaces",
+			content:  "   ",
+			expected: "RedHat",
+		},
+		{
+			name:     "Whitespace with content",
+			content:  "  CentOS Linux release 8.5  ",
+			expected: "CentOS",
+		},
+		{
+			name:     "Mixed case",
+			content:  "rocky linux release 8.5",
+			expected: "RedHat", // Should not match Rocky due to case
+		},
+		{
+			name:     "Partial match - should not match",
+			content:  "Linux server release",
+			expected: "RedHat",
+		},
+		{
+			name:     "Multiple keywords - CentOS checked first",
+			content:  "Red Hat CentOS Fedora release",
+			expected: "CentOS", // CentOS is checked before RedHat in the code
+		},
+		{
+			name:     "AlmaLinux exact",
+			content:  "AlmaLinux release 9.0",
+			expected: "AlmaLinux",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := gatherer.parseRedHatRelease(tt.content)
+
+			if result != tt.expected {
+				t.Errorf("Expected '%s', got '%s'", tt.expected, result)
+			}
+		})
+	}
+}
+
+// ============================================================================
+// IPv4 VALIDATION - EXTENDED EDGE CASES
+// ============================================================================
+
+func TestIsValidIPv4ExtendedEdgeCases(t *testing.T) {
+	gatherer := NewGatherer()
+
+	tests := []struct {
+		name     string
+		ip       string
+		expected bool
+	}{
+		// Boundary values
+		{name: "All zeros", ip: "0.0.0.0", expected: true},
+		{name: "All max", ip: "255.255.255.255", expected: true},
+		{name: "Localhost", ip: "127.0.0.1", expected: true},
+		{name: "Common private", ip: "192.168.1.1", expected: true},
+		{name: "Another private", ip: "10.0.0.1", expected: true},
+		{name: "Class C private", ip: "172.16.0.1", expected: true},
+
+		// Invalid formats
+		{name: "Extra octet", ip: "192.168.1.1.1", expected: false},
+		{name: "Missing octet", ip: "192.168.1", expected: false},
+		{name: "Single number", ip: "192", expected: false},
+		{name: "Too many dots", ip: "192.168...1", expected: false},
+
+		// Out of range
+		{name: "First octet 256", ip: "256.168.1.1", expected: false},
+		{name: "Last octet 256", ip: "192.168.1.256", expected: false},
+		{name: "Negative first", ip: "-1.168.1.1", expected: false},
+		{name: "Negative last", ip: "192.168.1.-1", expected: false},
+
+		// Non-numeric
+		{name: "Letters", ip: "192.168.a.1", expected: false},
+		{name: "Special chars", ip: "192.168.1!1", expected: false},
+		{name: "Hexadecimal", ip: "0xC0.0xA8.0x01.0x01", expected: false},
+
+		// Whitespace
+		{name: "Leading space", ip: " 192.168.1.1", expected: false},
+		{name: "Trailing space", ip: "192.168.1.1 ", expected: false},
+		{name: "Middle space", ip: "192 .168.1.1", expected: false},
+		{name: "Empty", ip: "", expected: false},
+
+		// Special formats that shouldn't match
+		{name: "CIDR notation", ip: "192.168.1.0/24", expected: false},
+		{name: "IPv6-like", ip: "::1", expected: false},
+		{name: "Domain name", ip: "example.com", expected: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := gatherer.isValidIPv4(tt.ip)
+
+			if result != tt.expected {
+				t.Errorf("Expected %v for IP '%s', got %v", tt.expected, tt.ip, result)
+			}
+		})
+	}
+}
+
+// ============================================================================
+// CACHE OPERATIONS TESTS
+// ============================================================================
+
+func TestCacheMultipleHostsIndependence(t *testing.T) {
+	gatherer := NewGatherer()
+	gatherer.cache.Clear()
+
+	// Add facts for multiple hosts
+	facts1 := &cache.SystemFacts{
+		Hostname: "host1",
+		OSFamily: "Debian",
+	}
+	facts2 := &cache.SystemFacts{
+		Hostname: "host2",
+		OSFamily: "RedHat",
+	}
+
+	gatherer.cache.Set("host1", facts1)
+	gatherer.cache.Set("host2", facts2)
+
+	// Verify both are independent
+	retrieved1, found1 := gatherer.cache.Get("host1")
+	retrieved2, found2 := gatherer.cache.Get("host2")
+
+	if !found1 || !found2 {
+		t.Error("Expected both hosts to be cached")
+	}
+
+	if retrieved1.OSFamily != "Debian" {
+		t.Errorf("Expected host1 to have Debian family, got %s", retrieved1.OSFamily)
+	}
+
+	if retrieved2.OSFamily != "RedHat" {
+		t.Errorf("Expected host2 to have RedHat family, got %s", retrieved2.OSFamily)
+	}
+}
+
+func TestCacheInvalidateSpecificHost(t *testing.T) {
+	gatherer := NewGatherer()
+	gatherer.cache.Clear()
+
+	facts1 := &cache.SystemFacts{Hostname: "host1"}
+	facts2 := &cache.SystemFacts{Hostname: "host2"}
+
+	gatherer.cache.Set("host1", facts1)
+	gatherer.cache.Set("host2", facts2)
+
+	// Invalidate only host1
+	gatherer.InvalidateCache("host1")
+
+	_, found1 := gatherer.cache.Get("host1")
+	_, found2 := gatherer.cache.Get("host2")
+
+	if found1 {
+		t.Error("Expected host1 to be invalidated")
+	}
+
+	if !found2 {
+		t.Error("Expected host2 to still be cached")
+	}
+}
+
+func TestCacheStatsAfterMultipleOperations(t *testing.T) {
+	gatherer := NewGatherer()
+	gatherer.cache.Clear()
+
+	facts := &cache.SystemFacts{Hostname: "test"}
+	gatherer.cache.Set("test", facts)
+
+	// Perform operations
+	for i := 0; i < 5; i++ {
+		gatherer.cache.Get("test") // 5 hits
+	}
+
+	for i := 0; i < 3; i++ {
+		gatherer.cache.Get("non-existent") // 3 misses
+	}
+
+	stats := gatherer.GetCacheStats()
+
+	if stats.Hits != 5 {
+		t.Errorf("Expected 5 hits, got %d", stats.Hits)
+	}
+
+	if stats.Misses != 3 {
+		t.Errorf("Expected 3 misses, got %d", stats.Misses)
+	}
+
+	if stats.Entries != 1 {
+		t.Errorf("Expected 1 entry, got %d", stats.Entries)
+	}
+}

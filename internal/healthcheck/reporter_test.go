@@ -474,3 +474,154 @@ func TestReporterHandlesEmptyReport(t *testing.T) {
 		t.Error("Expected non-empty result even for empty report")
 	}
 }
+
+// ============================================================================
+// Extended Reporter Tests for Edge Cases and Complex Data
+// ============================================================================
+
+// TestReporterFormatJSONWithComplexData tests JSON formatting with complex data
+func TestReporterFormatJSONWithComplexData(t *testing.T) {
+	reporter := NewReporter(false)
+
+	now := time.Now()
+	report := &HealthCheckReport{
+		Timestamp:     now,
+		OverallStatus: StatusWarning,
+		HostReports: []HostHealthReport{
+			{
+				Host:   types.Host{Name: "host1", Address: "192.168.1.1", User: "admin", Port: 2222},
+				Status: StatusHealthy,
+				Checks: []HealthCheckResult{
+					{
+						CheckType: CheckDiskSpace,
+						Status:    StatusHealthy,
+						Message:   "Disk usage 45%",
+						Details: map[string]interface{}{
+							"disk_usage_percent": 45,
+							"threshold":          80,
+						},
+						Duration:  150 * time.Millisecond,
+						Timestamp: now,
+					},
+				},
+				Summary:  map[string]int{string(StatusHealthy): 1},
+				Duration: 150 * time.Millisecond,
+			},
+		},
+		Summary: map[string]int{"healthy": 1},
+		Statistics: HealthCheckStatistics{
+			TotalHosts:      1,
+			HealthyHosts:    1,
+			AverageDuration: 150.0,
+		},
+	}
+
+	result, err := reporter.FormatJSON(report)
+
+	if err != nil {
+		t.Fatalf("FormatJSON failed: %v", err)
+	}
+	if !strings.Contains(result, "disk_usage_percent") {
+		t.Error("Expected complex details in JSON")
+	}
+	if !strings.Contains(result, "admin") {
+		t.Error("Expected username in JSON")
+	}
+	if !strings.Contains(result, "2222") {
+		t.Error("Expected port number in JSON")
+	}
+}
+
+// TestReporterFormatHTMLWithMultipleStatus tests HTML formatting with various statuses
+func TestReporterFormatHTMLWithMultipleStatus(t *testing.T) {
+	reporter := NewReporter(true) // With color support
+
+	now := time.Now()
+	report := &HealthCheckReport{
+		Timestamp:     now,
+		OverallStatus: StatusCritical,
+		HostReports: []HostHealthReport{
+			{
+				Host:   types.Host{Name: "healthy-host", Address: "192.168.1.1"},
+				Status: StatusHealthy,
+				Checks: []HealthCheckResult{
+					{CheckType: CheckConnectivity, Status: StatusHealthy, Duration: 100 * time.Millisecond, Timestamp: now},
+				},
+			},
+			{
+				Host:   types.Host{Name: "warning-host", Address: "192.168.1.2"},
+				Status: StatusWarning,
+				Checks: []HealthCheckResult{
+					{CheckType: CheckDiskSpace, Status: StatusWarning, Duration: 200 * time.Millisecond, Timestamp: now},
+				},
+			},
+			{
+				Host:   types.Host{Name: "critical-host", Address: "192.168.1.3"},
+				Status: StatusCritical,
+				Checks: []HealthCheckResult{
+					{CheckType: CheckMemory, Status: StatusCritical, Duration: 300 * time.Millisecond, Timestamp: now},
+				},
+			},
+		},
+		Summary: map[string]int{
+			"healthy":  1,
+			"warning":  1,
+			"critical": 1,
+		},
+	}
+
+	result := reporter.FormatHTML(report)
+
+	if !strings.Contains(result, "healthy-host") {
+		t.Error("Expected 'healthy-host' in HTML")
+	}
+	if !strings.Contains(result, "warning-host") {
+		t.Error("Expected 'warning-host' in HTML")
+	}
+	if !strings.Contains(result, "critical-host") {
+		t.Error("Expected 'critical-host' in HTML")
+	}
+	if !strings.Contains(result, "<table>") || !strings.Contains(result, "</table>") {
+		t.Error("Expected HTML table structure")
+	}
+}
+
+// TestReporterFormatMarkdownWithStats tests Markdown formatting with statistics
+func TestReporterFormatMarkdownWithStats(t *testing.T) {
+	reporter := NewReporter(false)
+
+	now := time.Now()
+	report := &HealthCheckReport{
+		Timestamp:     now,
+		OverallStatus: StatusHealthy,
+		HostReports: []HostHealthReport{
+			{
+				Host:   types.Host{Name: "host1", Address: "192.168.1.1"},
+				Status: StatusHealthy,
+				Checks: []HealthCheckResult{
+					{CheckType: CheckConnectivity, Status: StatusHealthy, Duration: 100 * time.Millisecond, Timestamp: now},
+					{CheckType: CheckDiskSpace, Status: StatusHealthy, Duration: 50 * time.Millisecond, Timestamp: now},
+				},
+			},
+		},
+		Summary: map[string]int{"healthy": 2},
+		Statistics: HealthCheckStatistics{
+			TotalHosts:   1,
+			HealthyHosts: 1,
+			ChecksPerHost: map[CheckType]int{
+				CheckConnectivity: 1,
+				CheckDiskSpace:    1,
+			},
+			AverageDuration: 75.0,
+		},
+	}
+
+	result := reporter.FormatMarkdown(report)
+
+	if !strings.Contains(result, "# Health Check Report") {
+		t.Error("Expected header in markdown")
+	}
+	if !strings.Contains(result, "host1") {
+		t.Error("Expected host name in markdown")
+	}
+}
