@@ -1,0 +1,14 @@
+- hosts: all
+  name: Package Management Demo - Improved
+  tasks:
+    - name: Install essential development tools
+      package:
+        name:
+          - bashtop
+          - htop  # Added new package
+        state: present
+    - name: Remove unnecessary packages
+      package:
+        name:
+          - mc
+        state: absent

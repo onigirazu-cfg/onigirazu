@@ -141,9 +141,18 @@ func calculateDiffs(playbook *types.Playbook, currentState *types.State) map[str
 	// Build a map of previous task results by task ID
 	prevResults := make(map[string]*types.TaskResult)
 	for _, playResult := range currentState.Results {
+		// Check tasks in direct Tasks field (legacy format)
 		for _, taskResult := range playResult.Tasks {
 			taskID := generateTaskID(taskResult.TaskName, taskResult.Host)
 			prevResults[taskID] = &taskResult
+		}
+
+		// Also check tasks in Hosts[].Tasks field (new format)
+		for _, hostResult := range playResult.Hosts {
+			for _, taskResult := range hostResult.Tasks {
+				taskID := generateTaskID(taskResult.TaskName, taskResult.Host)
+				prevResults[taskID] = &taskResult
+			}
 		}
 	}
 

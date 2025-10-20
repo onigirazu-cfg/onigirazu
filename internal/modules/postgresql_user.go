@@ -15,9 +15,11 @@ type PostgreSQLUserModule struct {
 }
 
 func NewPostgreSQLUserModule() *PostgreSQLUserModule {
-	return &PostgreSQLUserModule{
+	m := &PostgreSQLUserModule{
 		BaseExecutorModule: NewBaseExecutorModule("postgresql_user"),
 	}
+	m.description = "Manage PostgreSQL users and roles"
+	return m
 }
 
 func (m *PostgreSQLUserModule) Execute(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {

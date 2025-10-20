@@ -3,6 +3,7 @@ package version
 import (
 	"fmt"
 	"runtime"
+	"sort"
 )
 
 // Build information. Populated at build-time via ldflags.
@@ -46,4 +47,27 @@ func GetFullVersion() string {
 		return "Onigirazu dev"
 	}
 	return fmt.Sprintf("Onigirazu %s", Version)
+}
+
+// FormatModulesList formats module information for display
+func FormatModulesList(moduleInfo []map[string]string) string {
+	if len(moduleInfo) == 0 {
+		return "No modules available"
+	}
+
+	// Sort modules by name
+	sort.Slice(moduleInfo, func(i, j int) bool {
+		return moduleInfo[i]["name"] < moduleInfo[j]["name"]
+	})
+
+	output := "\nAvailable Modules:\n"
+	output += "==================\n\n"
+
+	for _, module := range moduleInfo {
+		name := module["name"]
+		description := module["description"]
+		output += fmt.Sprintf("  • %-25s %s\n", name, description)
+	}
+
+	return output
 }

@@ -327,6 +327,19 @@ func (e *ExecutionEngine) executePlay(ctx context.Context, play *types.Play) (*t
 		}
 	}
 
+	// Execute handlers if any were triggered
+	if len(play.Handlers) > 0 {
+		triggeredHandlers := e.collectTriggeredHandlers(result)
+		if len(triggeredHandlers) > 0 {
+			if err := e.executeHandlers(ctx, play.Handlers, triggeredHandlers, hosts, playVars, result); err != nil {
+				e.logger.Error("Handlers failed: %v", err)
+				if !play.IgnoreErrors {
+					result.Success = false
+				}
+			}
+		}
+	}
+
 	result.EndTime = time.Now()
 	result.Duration = result.EndTime.Sub(result.StartTime)
 
@@ -566,6 +579,11 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 
 	// Update statistics
 	e.updateTaskStats(host.Name, task, result)
+
+	// Add notify handlers if task was successful
+	if result.Success && !result.Skipped && len(task.Notify) > 0 {
+		result.Notify = task.Notify
+	}
 
 	// Update play result
 	if playResult.Hosts == nil {
@@ -875,11 +893,13 @@ func (e *ExecutionEngine) executeRole(ctx context.Context, role *types.Role, hos
 		}
 	}
 
-	// Execute role handlers if defined
+	// Execute role handlers if any were triggered
 	if len(role.Handlers) > 0 {
-		e.logger.Debug("Executing %d handlers for role '%s'", len(role.Handlers), role.Name)
-		if err := e.executeTaskList(ctx, role.Handlers, hosts, roleVars, playResult); err != nil {
-			e.logger.Warn("Role handlers failed: %v", err)
+		triggeredHandlers := e.collectTriggeredHandlers(playResult)
+		if len(triggeredHandlers) > 0 {
+			if err := e.executeHandlers(ctx, role.Handlers, triggeredHandlers, hosts, roleVars, playResult); err != nil {
+				e.logger.Warn("Role handlers failed: %v", err)
+			}
 		}
 	}
 
@@ -1123,6 +1143,73 @@ func (e *ExecutionEngine) executeTaskWithRetryLogic(ctx context.Context, task *t
 	}
 
 	return fmt.Errorf("task failed after %d attempts: %w", maxRetries, lastErr)
+}
+
+// collectTriggeredHandlers collects all handler names that were triggered by tasks
+func (e *ExecutionEngine) collectTriggeredHandlers(playResult *types.PlayResult) []string {
+	triggered := make(map[string]bool) // Use map to avoid duplicates
+	var result []string
+
+	// Iterate through all hosts and their tasks
+	for _, hostResult := range playResult.Hosts {
+		for _, taskResult := range hostResult.Tasks {
+			// Check if task was successful and has notify directives
+			if taskResult.Success && len(taskResult.Notify) > 0 {
+				for _, notifyName := range taskResult.Notify {
+					if !triggered[notifyName] {
+						triggered[notifyName] = true
+						result = append(result, notifyName)
+					}
+				}
+			}
+		}
+	}
+
+	return result
+}
+
+// executeHandlers executes all handlers that were triggered
+func (e *ExecutionEngine) executeHandlers(ctx context.Context, handlers []types.Task,
+	triggeredNames []string, hosts []types.Host, variables map[string]interface{},
+	playResult *types.PlayResult) error {
+	if len(handlers) == 0 || len(triggeredNames) == 0 {
+		return nil
+	}
+
+	e.logger.Info("Executing %d handlers (triggered: %v)", len(handlers), len(triggeredNames))
+
+	// Create set of triggered handler names for quick lookup
+	triggeredSet := make(map[string]bool)
+	for _, name := range triggeredNames {
+		triggeredSet[name] = true
+	}
+
+	// Find and execute matching handlers
+	for _, handler := range handlers {
+		shouldExecute := false
+
+		// Check if handler matches by name (explicit notify)
+		if triggeredSet[handler.Name] {
+			shouldExecute = true
+		}
+
+		// Check if handler matches by listen directive
+		if handler.Listen != "" && triggeredSet[handler.Listen] {
+			shouldExecute = true
+		}
+
+		if shouldExecute {
+			e.logger.Debug("Executing handler: %s", handler.Name)
+			if err := e.executeTask(ctx, &handler, hosts, variables, playResult); err != nil {
+				e.logger.Error("Handler '%s' failed: %v", handler.Name, err)
+				if !handler.IgnoreErrors {
+					return fmt.Errorf("handler '%s' failed: %w", handler.Name, err)
+				}
+			}
+		}
+	}
+
+	return nil
 }
 
 // GetExecutionSummary returns a comprehensive execution summary

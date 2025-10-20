@@ -15,9 +15,11 @@ type MySQLUserModule struct {
 }
 
 func NewMySQLUserModule() *MySQLUserModule {
-	return &MySQLUserModule{
+	m := &MySQLUserModule{
 		BaseExecutorModule: NewBaseExecutorModule("mysql_user"),
 	}
+	m.description = "Manage MySQL users and permissions"
+	return m
 }
 
 func (m *MySQLUserModule) Execute(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {

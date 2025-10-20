@@ -110,15 +110,17 @@ func (e *CoreEngine) Run(playbookPath, inventoryPath string, checkMode bool, sta
 
 	// Execute playbook
 	results, err := e.executePlaybook(playbook, checkMode, currentState)
-	if err != nil {
-		return fmt.Errorf("error executing playbook: %w", err)
-	}
 
-	// Save state
+	// Save state ALWAYS - even if there were errors
 	currentState.Playbook = playbookPath
 	e.state.UpdateState(currentState, results)
-	if err := e.state.SaveState(currentState); err != nil {
-		e.logger.Warn("Error saving state: %v", err)
+	if saveErr := e.state.SaveState(currentState); saveErr != nil {
+		e.logger.Warn("Error saving state: %v", saveErr)
+	}
+
+	// Return error AFTER saving state
+	if err != nil {
+		return fmt.Errorf("error executing playbook: %w", err)
 	}
 
 	e.logger.Info("Execution completed successfully")

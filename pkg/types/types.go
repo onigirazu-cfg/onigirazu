@@ -163,6 +163,7 @@ type Task struct {
 	IgnoreErrors bool                   `yaml:"ignore_errors,omitempty"`
 	Tags         []string               `yaml:"tags,omitempty"`
 	Notify       []string               `yaml:"notify,omitempty"`
+	Listen       string                 `yaml:"listen,omitempty"`
 	Timeout      time.Duration          `yaml:"timeout,omitempty"`
 	Retries      int                    `yaml:"retries,omitempty"`
 	Delay        time.Duration          `yaml:"delay,omitempty"`
@@ -197,6 +198,7 @@ func (t *Task) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		"ignore_errors": true,
 		"tags":          true,
 		"notify":        true,
+		"listen":        true,
 		"timeout":       true,
 		"retries":       true,
 		"delay":         true,
@@ -269,6 +271,11 @@ func (t *Task) UnmarshalYAML(unmarshal func(interface{}) error) error {
 				}
 			}
 		}
+	}
+
+	// Handle listen
+	if listen, ok := taskMap["listen"].(string); ok {
+		t.Listen = listen
 	}
 
 	// Handle duration fields
@@ -455,6 +462,9 @@ func (t *Task) MarshalYAML() (interface{}, error) {
 	if len(t.Notify) > 0 {
 		result["notify"] = t.Notify
 	}
+	if t.Listen != "" {
+		result["listen"] = t.Listen
+	}
 	if t.Timeout > 0 {
 		result["timeout"] = t.Timeout.String()
 	}
@@ -555,6 +565,7 @@ type TaskResult struct {
 	Skipped   bool                   `json:"skipped"`
 	Output    map[string]interface{} `json:"output"`
 	Error     string                 `json:"error,omitempty"`
+	Notify    []string               `json:"notify,omitempty"`
 	Duration  time.Duration          `json:"duration_ms"` // Store as milliseconds for JSON compatibility
 	Timestamp time.Time              `json:"timestamp"`
 }

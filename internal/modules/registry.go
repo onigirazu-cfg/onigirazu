@@ -107,6 +107,18 @@ func (r *Registry) List() []string {
 	return r.ListModules()
 }
 
+// GetModuleInfo returns detailed information about all modules
+func (r *Registry) GetModuleInfo() []map[string]string {
+	var modules []map[string]string
+	for name, module := range r.modules {
+		modules = append(modules, map[string]string{
+			"name":        name,
+			"description": module.GetDescription(),
+		})
+	}
+	return modules
+}
+
 // Unregister removes a module (interface method)
 func (r *Registry) Unregister(name string) error {
 	if _, exists := r.modules[name]; !exists {
@@ -135,6 +147,10 @@ func (r *Registry) ExecuteTask(ctx context.Context, task *types.Task, host types
 	if _, exists := args["name"]; !exists {
 		args["name"] = task.Name
 	}
+
+	// Always add task name as special parameter (for diff/state tracking)
+	// This preserves the display name even when "name" is used as a parameter
+	args["_task_name"] = task.Name
 
 	// Add variables to args
 	for key, value := range variables {

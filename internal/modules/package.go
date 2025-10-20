@@ -414,8 +414,23 @@ func NewUnifiedPackageModule() *UnifiedPackageModule {
 // Execute manages system packages with all features
 func (m *UnifiedPackageModule) Execute(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
 	startTime := time.Now()
+
+	// Extract task name from special _task_name parameter (added by registry)
+	// This preserves the task's display name even when "name" is used as a module parameter
+	taskName := "package"
+	if taskNameVal, ok := args["_task_name"]; ok {
+		if taskNameStr, ok := taskNameVal.(string); ok {
+			taskName = taskNameStr
+		}
+	} else if nameVal, ok := args["name"]; ok {
+		// Fallback: try to use "name" if it's a string
+		if nameStr, ok := nameVal.(string); ok {
+			taskName = nameStr
+		}
+	}
+
 	result := types.TaskResult{
-		TaskName:  "package",
+		TaskName:  taskName,
 		Host:      host.Name,
 		Module:    m.GetName(),
 		Success:   true,

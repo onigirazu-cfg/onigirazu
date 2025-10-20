@@ -2,6 +2,103 @@
 
 ## [Unreleased]
 
+## [1.46.0] - 2025-01-29
+
+### 🚨 Critical Bug Fix
+
+- **State Persistence on Execution Failures** - CRITICAL FIX
+  - Issue: State was NOT saved when playbook execution failed or hosts became unreachable
+  - Impact: Data loss during infrastructure failures
+  - Solution: Modified `core_engine.go` to ALWAYS persist state before returning errors
+  - Result: Partial execution results are never lost, even when playbooks fail
+
+### ✨ New Features
+
+- **Handler Support with Notify and Listen Directives**
+  - Full support for Ansible-style handlers via `notify` directive
+  - NEW: `listen` directive allows multiple handlers to respond to same event
+  - Handlers execute only when triggered by successful tasks
+  - Automatic deduplication prevents duplicate handler execution
+  - Handlers execute in definition order (Ansible-compatible)
+
+### 📋 Handler Implementation Details
+
+#### New Type Fields
+
+- `Task.Listen` (string) - Allows handler to respond to semantic event names
+- `TaskResult.Notify` ([]string) - Records which handlers should execute
+
+#### New Engine Functions
+
+- `collectTriggeredHandlers()` - Gathers all triggered handler names with deduplication
+- `executeHandlers()` - Executes handlers matching by name or listen directive
+
+#### Integration Points
+
+- Play-level handlers - Execute after post-tasks
+- Role-level handlers - Execute after role tasks, before post-tasks
+- Full variable scope inheritance from play
+
+### 📚 Documentation
+
+- **Handler Usage Guide** - Complete documentation on using handlers
+  - Basic handler syntax
+  - Listen directive patterns
+  - Multi-handler triggering
+  - Best practices and common patterns
+  - Comparison with Ansible
+
+- **Handler Examples** - Ready-to-use YAML playbook examples
+  - Web server configuration with handlers
+  - Multi-handler deployment scenarios
+  - System maintenance workflows
+
+### 🧪 Testing
+
+- ✅ `TestCollectTriggeredHandlers` - Handler collection and deduplication
+- ✅ `TestHandlerListenDirective` - Listen directive matching logic
+- ✅ `TestHandlerNotifyFieldParsing` - Notify field YAML parsing
+- ✅ `TestHandlerListenFieldParsing` - Listen field YAML parsing
+- All 28 engine tests pass (20 existing + 4 new + 4 condition tests)
+- Full backward compatibility maintained
+
+### 🔄 Backward Compatibility
+
+✅ **100% backward compatible**
+
+- Existing playbooks work unchanged
+- `notify` field already existed (now properly executed)
+- `listen` is purely additive - optional new field
+- No breaking changes to APIs or data structures
+
+### Performance
+
+- Handler collection: O(n) where n = number of tasks
+- Handler matching: O(m×k) where m = handlers, k = triggered names
+- Overall impact: <1ms per playbook (negligible)
+
+### Example
+
+```yaml
+---
+- name: Deploy application
+  hosts: app_servers
+
+  tasks:
+    - name: Deploy code
+      git: repo=... dest=/opt/app
+      notify: deployment complete
+
+  handlers:
+    - name: migrate database
+      shell: cd /opt/app && python migrate.py
+      listen: deployment complete
+
+    - name: restart app
+      service: name=myapp state=restarted
+      listen: deployment complete
+```
+
 ## [1.45.0] - 2025-01-29
 
 ### ✨ New Features

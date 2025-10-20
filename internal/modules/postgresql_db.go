@@ -15,9 +15,11 @@ type PostgreSQLDBModule struct {
 }
 
 func NewPostgreSQLDBModule() *PostgreSQLDBModule {
-	return &PostgreSQLDBModule{
+	m := &PostgreSQLDBModule{
 		BaseExecutorModule: NewBaseExecutorModule("postgresql_db"),
 	}
+	m.description = "Manage PostgreSQL databases"
+	return m
 }
 
 func (m *PostgreSQLDBModule) Execute(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
