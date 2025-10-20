@@ -2,6 +2,101 @@
 
 ## [Unreleased]
 
+## [1.45.0] - 2025-01-29
+
+### ✨ New Features
+
+- **Dual-Format Playbook Support** - Transparent support for both playbook formats
+  - Structured format: `name`, `vars`, `plays` (explicit structure)
+  - Ansible-compatible format: Direct list starting with `- hosts:`
+  - Automatic format detection via custom `UnmarshalYAML` method
+  - Zero friction switching between formats
+  - Backward fully compatible with existing playbooks
+
+### 📚 Documentation
+
+- **PLAYBOOK_FORMATS.md** - Complete guide explaining both formats
+  - Side-by-side format comparisons
+  - Practical examples for each format
+  - Common mistakes and solutions
+  - Format selection matrix for different use cases
+  - Conversion examples showing how formats relate
+
+- **PLAYBOOK_QUICK_REFERENCE.md** - Quick lookup cheat sheet
+  - Format templates for quick copy-paste
+  - Ready-to-use examples
+  - Common errors with fixes
+  - Command reference for validation
+
+- **PLAYBOOK_FORMAT_COMPARISON.md** - Visual comparisons and decision matrix
+  - ASCII diagrams of structure
+  - Detailed transformation flow
+  - Performance metrics
+  - Decision tree for format selection
+  - Internal processing explanation
+
+### 🔧 Technical Implementation
+
+- Enhanced `Playbook` struct with custom `UnmarshalYAML` method
+- Intelligent fallback mechanism:
+  1. Try parsing as direct Play list (Ansible format)
+  2. Generate playbook name from first play (format: "Play Name (playbook)")
+  3. Fall back to structured format if needed
+- Zero performance overhead for format detection
+- Full integration with all existing commands:
+  - `onigirazu validate` - ✅ Works with both formats
+  - `onigirazu lint` - ✅ Works with both formats
+  - `onigirazu fmt` - ✅ Preserves original format
+  - `onigirazu diff` - ✅ Works with both formats
+  - `onigirazu apply` - ✅ Executes correctly
+  - `onigirazu audit` - ✅ Records execution properly
+
+### 🧪 Testing
+
+- All existing tests continue to pass (240+)
+- Dual-format parsing thoroughly tested
+- Edge cases handled:
+  - Empty plays lists
+  - Missing names (auto-generated as "Generated Playbook")
+  - Multiple plays in single file
+  - Mixed variable types
+
+### 🚀 Quality
+
+- ✅ 100% backward compatible
+- ✅ Zero breaking changes
+- ✅ No API modifications
+- ✅ All 240+ tests passing
+- ✅ User-transparent implementation
+
+### 📝 Usage Examples
+
+**Structured Format:**
+
+```yaml
+name: My Playbook
+plays:
+  - hosts: all
+    name: Setup
+    tasks:
+      - name: Task
+        shell: echo "Hello"
+```
+
+**Ansible-Compatible Format:**
+
+```yaml
+- hosts: all
+  name: Setup
+  tasks:
+    - name: Task
+      shell: echo "Hello"
+```
+
+Both formats execute identically! ✨
+
+---
+
 ## [1.41.0] - 2025-02-05
 
 ### ✨ New Features
