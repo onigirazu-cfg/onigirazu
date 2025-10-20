@@ -12,16 +12,13 @@ import (
 
 // SystemdModule implements systemd management
 type SystemdModule struct {
-	BaseModule
+	*BaseExecutorModule
 }
 
 // NewSystemdModule creates a new systemd module
 func NewSystemdModule() *SystemdModule {
 	return &SystemdModule{
-		BaseModule: BaseModule{
-			name:        "systemd",
-			description: "Manage systemd services, units, and timers",
-		},
+		BaseExecutorModule: NewBaseExecutorModule("systemd"),
 	}
 }
 
@@ -38,30 +35,36 @@ func (m *SystemdModule) Execute(ctx context.Context, host types.Host, args map[s
 		Timestamp: startTime,
 	}
 
-	// Create a fresh executor for this execution
-	exec, err := executor.NewCommandExecutor(host)
-	if err != nil {
-		return m.failResult(result, fmt.Sprintf("failed to create executor: %v", err))
-	}
-	defer exec.Close()
+	// Use WithExecutor to get fresh executor for this host
+	var execResult types.TaskResult = result
 
-	// Get operation type
-	operation := getStringArg(args, "operation", "service")
+	execErr := m.WithExecutor(host, func(exec *executor.CommandExecutor) error {
+		// Get operation type
+		operation := getStringArg(args, "operation", "service")
 
-	switch operation {
-	case "service":
-		return m.handleService(ctx, exec, host, args, result)
-	case "unit":
-		return m.handleUnit(ctx, exec, host, args, result)
-	case "timer":
-		return m.handleTimer(ctx, exec, host, args, result)
-	case "daemon-reload":
-		return m.handleDaemonReload(ctx, exec, host, args, result)
-	case "status":
-		return m.handleStatus(ctx, exec, host, args, result)
-	default:
-		return m.failResult(result, fmt.Sprintf("unknown operation: %s", operation))
+		var err error
+		switch operation {
+		case "service":
+			execResult, err = m.handleService(ctx, exec, host, args, result)
+		case "unit":
+			execResult, err = m.handleUnit(ctx, exec, host, args, result)
+		case "timer":
+			execResult, err = m.handleTimer(ctx, exec, host, args, result)
+		case "daemon-reload":
+			execResult, err = m.handleDaemonReload(ctx, exec, host, args, result)
+		case "status":
+			execResult, err = m.handleStatus(ctx, exec, host, args, result)
+		default:
+			execResult, err = m.failResult(result, fmt.Sprintf("unknown operation: %s", operation))
+		}
+		return err
+	})
+
+	if execErr != nil {
+		return result, execErr
 	}
+
+	return execResult, nil
 }
 
 // handleService manages systemd services

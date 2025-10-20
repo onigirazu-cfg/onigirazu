@@ -12,16 +12,13 @@ import (
 
 // CronModule implements cron job management
 type CronModule struct {
-	BaseModule
+	*BaseExecutorModule
 }
 
 // NewCronModule creates a new cron module
 func NewCronModule() *CronModule {
 	return &CronModule{
-		BaseModule: BaseModule{
-			name:        "cron",
-			description: "Manage cron jobs and crontab files",
-		},
+		BaseExecutorModule: NewBaseExecutorModule("cron"),
 	}
 }
 
@@ -38,12 +35,33 @@ func (m *CronModule) Execute(ctx context.Context, host types.Host, args map[stri
 		Timestamp: startTime,
 	}
 
-	// Create a fresh executor for this execution
-	exec, err := executor.NewCommandExecutor(host)
-	if err != nil {
-		return m.failResult(result, fmt.Sprintf("failed to create executor: %v", err))
+	// Use WithExecutor to get fresh executor for this host
+	var execResult types.TaskResult = result
+
+	execErr := m.WithExecutor(host, func(exec *executor.CommandExecutor) error {
+		var err error
+		execResult, err = m.executeCron(ctx, exec, host, args)
+		return err
+	})
+
+	if execErr != nil {
+		return result, execErr
 	}
-	defer exec.Close()
+
+	return execResult, nil
+}
+
+// executeCron performs the actual cron operations
+func (m *CronModule) executeCron(ctx context.Context, exec *executor.CommandExecutor, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
+	result := types.TaskResult{
+		TaskName:  "cron",
+		Host:      host.Name,
+		Module:    m.GetName(),
+		Success:   true,
+		Changed:   false,
+		Output:    make(map[string]interface{}),
+		Timestamp: time.Now(),
+	}
 
 	// Get operation type
 	operation := getStringArg(args, "operation", "job")

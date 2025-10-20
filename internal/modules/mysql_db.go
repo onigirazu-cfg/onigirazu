@@ -11,7 +11,7 @@ import (
 )
 
 type MySQLDBModule struct {
-	BaseModule
+	*BaseExecutorModule
 }
 
 type MySQLDBInfo struct {
@@ -23,10 +23,7 @@ type MySQLDBInfo struct {
 
 func NewMySQLDBModule() *MySQLDBModule {
 	return &MySQLDBModule{
-		BaseModule: BaseModule{
-			name:        "mysql_db",
-			description: "Manage MySQL databases",
-		},
+		BaseExecutorModule: NewBaseExecutorModule("mysql_db"),
 	}
 }
 
@@ -42,7 +39,8 @@ func (m *MySQLDBModule) Execute(ctx context.Context, host types.Host, args map[s
 		Timestamp: startTime,
 	}
 
-	exec, err := executor.NewCommandExecutor(host)
+	// Use CreateExecutor to get fresh executor for this host
+	exec, err := m.CreateExecutor(host)
 	if err != nil {
 		result.Success = false
 		result.Error = fmt.Sprintf("failed to create executor: %v", err)

@@ -25,7 +25,7 @@ type ServiceStatus struct {
 
 // ServiceModule implements service management
 type ServiceModuleFixed struct {
-	BaseModule
+	*BaseExecutorModule
 	// testServiceManager is used for testing only - if set, it will be used instead of detecting the service manager
 	testServiceManager ServiceManagerFixed
 }
@@ -47,10 +47,7 @@ type ServiceManagerFixed interface {
 // NewServiceModuleFixed creates a new service module
 func NewServiceModuleFixed() *ServiceModuleFixed {
 	return &ServiceModuleFixed{
-		BaseModule: BaseModule{
-			name:        "service",
-			description: "Manage system services",
-		},
+		BaseExecutorModule: NewBaseExecutorModule("service"),
 	}
 }
 
@@ -72,32 +69,38 @@ func (m *ServiceModuleFixed) Execute(ctx context.Context, host types.Host, args 
 		Timestamp: startTime,
 	}
 
-	// Create a fresh module executor for this execution
-	exec, err := NewRealModuleExecutor(host)
+	// Use CreateExecutor to get fresh executor for this host
+	exec, err := m.CreateExecutor(host)
 	if err != nil {
 		return m.failResult(result, fmt.Sprintf("failed to create executor: %v", err))
 	}
 	defer exec.Close()
 
+	// Create fresh module executor wrapper (NOT cached)
+	realExec, err := NewRealModuleExecutorFromCommandExecutor(exec, host)
+	if err != nil {
+		return m.failResult(result, fmt.Sprintf("failed to wrap executor: %v", err))
+	}
+
 	// Configure become (privilege escalation) if requested
 	if become, ok := args["_become"].(bool); ok && become {
 		becomeUser, _ := args["_become_user"].(string)
 		becomeMethod, _ := args["_become_method"].(string)
-		exec.SetBecome(true, becomeUser, becomeMethod)
+		realExec.SetBecome(true, becomeUser, becomeMethod)
 	}
 
 	// Use test service manager if set (for testing), otherwise detect it
 	var serviceManager ServiceManagerFixed
 	if m.testServiceManager != nil {
 		serviceManager = m.testServiceManager
-		serviceManager.SetExecutor(exec)
+		serviceManager.SetExecutor(realExec)
 	} else {
 		// Detect service manager for the remote host
-		serviceManager, err = m.detectServiceManager(exec)
+		serviceManager, err = m.detectServiceManager(realExec)
 		if err != nil {
 			return m.failResult(result, fmt.Sprintf("failed to detect service manager: %v", err))
 		}
-		serviceManager.SetExecutor(exec)
+		serviceManager.SetExecutor(realExec)
 	}
 
 	// Get required parameters

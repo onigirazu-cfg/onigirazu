@@ -12,9 +12,7 @@ import (
 
 // FirewallModule implements firewall management
 type FirewallModule struct {
-	BaseModule
-	executor *executor.CommandExecutor
-	manager  FirewallManager
+	*BaseExecutorModule
 }
 
 // FirewallManager interface for different firewall systems
@@ -38,10 +36,7 @@ type FirewallManager interface {
 // NewFirewallModule creates a new firewall module
 func NewFirewallModule() *FirewallModule {
 	return &FirewallModule{
-		BaseModule: BaseModule{
-			name:        "firewall",
-			description: "Manage firewall rules (UFW, firewalld, iptables)",
-		},
+		BaseExecutorModule: NewBaseExecutorModule("firewall"),
 	}
 }
 
@@ -58,63 +53,58 @@ func (m *FirewallModule) Execute(ctx context.Context, host types.Host, args map[
 		Timestamp: startTime,
 	}
 
-	// Initialize executor
-	if m.executor == nil {
-		exec, err := executor.NewCommandExecutor(host)
-		if err != nil {
-			return m.failResult(result, fmt.Sprintf("failed to create executor: %v", err))
-		}
-		m.executor = exec
+	// Use CreateExecutor to get fresh executor for this host (NO caching!)
+	exec, err := m.CreateExecutor(host)
+	if err != nil {
+		return m.failResult(result, fmt.Sprintf("failed to create executor: %v", err))
 	}
+	defer exec.Close()
 
-	// Detect and initialize firewall manager
-	if m.manager == nil {
-		manager, err := m.detectFirewall()
-		if err != nil {
-			return m.failResult(result, fmt.Sprintf("failed to detect firewall: %v", err))
-		}
-		m.manager = manager
-		m.manager.SetExecutor(m.executor)
-		result.Output["firewall_type"] = m.manager.GetType()
+	// Detect firewall manager for this host (fresh each time)
+	manager, err := m.detectFirewall(exec)
+	if err != nil {
+		return m.failResult(result, fmt.Sprintf("failed to detect firewall: %v", err))
 	}
+	manager.SetExecutor(exec)
+	result.Output["firewall_type"] = manager.GetType()
 
 	// Get operation type
 	operation := getStringArg(args, "operation", "rule")
 
 	switch operation {
 	case "enable":
-		return m.handleEnable(ctx, host, args, result)
+		return m.handleEnable(ctx, manager, host, args, result)
 	case "disable":
-		return m.handleDisable(ctx, host, args, result)
+		return m.handleDisable(ctx, manager, host, args, result)
 	case "rule":
-		return m.handleRule(ctx, host, args, result)
+		return m.handleRule(ctx, manager, host, args, result)
 	case "service":
-		return m.handleService(ctx, host, args, result)
+		return m.handleService(ctx, manager, host, args, result)
 	case "source":
-		return m.handleSource(ctx, host, args, result)
+		return m.handleSource(ctx, manager, host, args, result)
 	case "list":
-		return m.handleList(ctx, host, args, result)
+		return m.handleList(ctx, manager, host, args, result)
 	case "reload":
-		return m.handleReload(ctx, host, args, result)
+		return m.handleReload(ctx, manager, host, args, result)
 	default:
 		return m.failResult(result, fmt.Sprintf("unknown operation: %s", operation))
 	}
 }
 
 // detectFirewall detects which firewall system is available
-func (m *FirewallModule) detectFirewall() (FirewallManager, error) {
+func (m *FirewallModule) detectFirewall(exec *executor.CommandExecutor) (FirewallManager, error) {
 	// Check for UFW
-	if _, err := m.executor.Execute("which", "ufw"); err == nil {
+	if _, err := exec.Execute("which", "ufw"); err == nil {
 		return &UFWManager{}, nil
 	}
 
 	// Check for firewalld
-	if _, err := m.executor.Execute("which", "firewall-cmd"); err == nil {
+	if _, err := exec.Execute("which", "firewall-cmd"); err == nil {
 		return &FirewalldManager{}, nil
 	}
 
 	// Check for iptables
-	if _, err := m.executor.Execute("which", "iptables"); err == nil {
+	if _, err := exec.Execute("which", "iptables"); err == nil {
 		return &IptablesManager{}, nil
 	}
 
@@ -122,14 +112,14 @@ func (m *FirewallModule) detectFirewall() (FirewallManager, error) {
 }
 
 // handleEnable enables the firewall
-func (m *FirewallModule) handleEnable(ctx context.Context, host types.Host, args map[string]interface{}, result types.TaskResult) (types.TaskResult, error) {
-	enabled, err := m.manager.IsEnabled()
+func (m *FirewallModule) handleEnable(ctx context.Context, manager FirewallManager, host types.Host, args map[string]interface{}, result types.TaskResult) (types.TaskResult, error) {
+	enabled, err := manager.IsEnabled()
 	if err != nil {
 		return m.failResult(result, fmt.Sprintf("failed to check firewall status: %v", err))
 	}
 
 	if !enabled {
-		if err := m.manager.Enable(); err != nil {
+		if err := manager.Enable(); err != nil {
 			return m.failResult(result, fmt.Sprintf("failed to enable firewall: %v", err))
 		}
 		result.Changed = true
@@ -143,14 +133,14 @@ func (m *FirewallModule) handleEnable(ctx context.Context, host types.Host, args
 }
 
 // handleDisable disables the firewall
-func (m *FirewallModule) handleDisable(ctx context.Context, host types.Host, args map[string]interface{}, result types.TaskResult) (types.TaskResult, error) {
-	enabled, err := m.manager.IsEnabled()
+func (m *FirewallModule) handleDisable(ctx context.Context, manager FirewallManager, host types.Host, args map[string]interface{}, result types.TaskResult) (types.TaskResult, error) {
+	enabled, err := manager.IsEnabled()
 	if err != nil {
 		return m.failResult(result, fmt.Sprintf("failed to check firewall status: %v", err))
 	}
 
 	if enabled {
-		if err := m.manager.Disable(); err != nil {
+		if err := manager.Disable(); err != nil {
 			return m.failResult(result, fmt.Sprintf("failed to disable firewall: %v", err))
 		}
 		result.Changed = true
@@ -164,7 +154,7 @@ func (m *FirewallModule) handleDisable(ctx context.Context, host types.Host, arg
 }
 
 // handleRule manages firewall rules for ports
-func (m *FirewallModule) handleRule(ctx context.Context, host types.Host, args map[string]interface{}, result types.TaskResult) (types.TaskResult, error) {
+func (m *FirewallModule) handleRule(ctx context.Context, manager FirewallManager, host types.Host, args map[string]interface{}, result types.TaskResult) (types.TaskResult, error) {
 	port := getStringArg(args, "port", "")
 	protocol := getStringArg(args, "protocol", "tcp")
 	action := getStringArg(args, "action", "allow")
@@ -178,13 +168,13 @@ func (m *FirewallModule) handleRule(ctx context.Context, host types.Host, args m
 
 	if state == "present" {
 		if action == "allow" {
-			if err := m.manager.AllowPort(port, protocol); err != nil {
+			if err := manager.AllowPort(port, protocol); err != nil {
 				return m.failResult(result, fmt.Sprintf("failed to allow port: %v", err))
 			}
 			changed = true
 			result.Output["action"] = fmt.Sprintf("allowed_%s_%s", port, protocol)
 		} else if action == "deny" {
-			if err := m.manager.DenyPort(port, protocol); err != nil {
+			if err := manager.DenyPort(port, protocol); err != nil {
 				return m.failResult(result, fmt.Sprintf("failed to deny port: %v", err))
 			}
 			changed = true
@@ -192,7 +182,7 @@ func (m *FirewallModule) handleRule(ctx context.Context, host types.Host, args m
 		}
 	} else if state == "absent" {
 		rule := fmt.Sprintf("%s/%s", port, protocol)
-		if err := m.manager.DeleteRule(rule); err != nil {
+		if err := manager.DeleteRule(rule); err != nil {
 			return m.failResult(result, fmt.Sprintf("failed to delete rule: %v", err))
 		}
 		changed = true
@@ -205,7 +195,7 @@ func (m *FirewallModule) handleRule(ctx context.Context, host types.Host, args m
 }
 
 // handleService manages firewall rules for services
-func (m *FirewallModule) handleService(ctx context.Context, host types.Host, args map[string]interface{}, result types.TaskResult) (types.TaskResult, error) {
+func (m *FirewallModule) handleService(ctx context.Context, manager FirewallManager, host types.Host, args map[string]interface{}, result types.TaskResult) (types.TaskResult, error) {
 	service := getStringArg(args, "service", "")
 	action := getStringArg(args, "action", "allow")
 	state := getStringArg(args, "state", "present")
@@ -218,20 +208,20 @@ func (m *FirewallModule) handleService(ctx context.Context, host types.Host, arg
 
 	if state == "present" {
 		if action == "allow" {
-			if err := m.manager.AllowService(service); err != nil {
+			if err := manager.AllowService(service); err != nil {
 				return m.failResult(result, fmt.Sprintf("failed to allow service: %v", err))
 			}
 			changed = true
 			result.Output["action"] = fmt.Sprintf("allowed_service_%s", service)
 		} else if action == "deny" {
-			if err := m.manager.DenyService(service); err != nil {
+			if err := manager.DenyService(service); err != nil {
 				return m.failResult(result, fmt.Sprintf("failed to deny service: %v", err))
 			}
 			changed = true
 			result.Output["action"] = fmt.Sprintf("denied_service_%s", service)
 		}
 	} else if state == "absent" {
-		if err := m.manager.DeleteRule(service); err != nil {
+		if err := manager.DeleteRule(service); err != nil {
 			return m.failResult(result, fmt.Sprintf("failed to delete service rule: %v", err))
 		}
 		changed = true
@@ -244,7 +234,7 @@ func (m *FirewallModule) handleService(ctx context.Context, host types.Host, arg
 }
 
 // handleSource manages firewall rules for IP addresses/subnets
-func (m *FirewallModule) handleSource(ctx context.Context, host types.Host, args map[string]interface{}, result types.TaskResult) (types.TaskResult, error) {
+func (m *FirewallModule) handleSource(ctx context.Context, manager FirewallManager, host types.Host, args map[string]interface{}, result types.TaskResult) (types.TaskResult, error) {
 	source := getStringArg(args, "source", "")
 	action := getStringArg(args, "action", "allow")
 	state := getStringArg(args, "state", "present")
@@ -257,20 +247,20 @@ func (m *FirewallModule) handleSource(ctx context.Context, host types.Host, args
 
 	if state == "present" {
 		if action == "allow" {
-			if err := m.manager.AllowFrom(source); err != nil {
+			if err := manager.AllowFrom(source); err != nil {
 				return m.failResult(result, fmt.Sprintf("failed to allow from source: %v", err))
 			}
 			changed = true
 			result.Output["action"] = fmt.Sprintf("allowed_from_%s", source)
 		} else if action == "deny" {
-			if err := m.manager.DenyFrom(source); err != nil {
+			if err := manager.DenyFrom(source); err != nil {
 				return m.failResult(result, fmt.Sprintf("failed to deny from source: %v", err))
 			}
 			changed = true
 			result.Output["action"] = fmt.Sprintf("denied_from_%s", source)
 		}
 	} else if state == "absent" {
-		if err := m.manager.DeleteRule(source); err != nil {
+		if err := manager.DeleteRule(source); err != nil {
 			return m.failResult(result, fmt.Sprintf("failed to delete source rule: %v", err))
 		}
 		changed = true
@@ -283,8 +273,8 @@ func (m *FirewallModule) handleSource(ctx context.Context, host types.Host, args
 }
 
 // handleList lists firewall rules
-func (m *FirewallModule) handleList(ctx context.Context, host types.Host, args map[string]interface{}, result types.TaskResult) (types.TaskResult, error) {
-	rules, err := m.manager.ListRules()
+func (m *FirewallModule) handleList(ctx context.Context, manager FirewallManager, host types.Host, args map[string]interface{}, result types.TaskResult) (types.TaskResult, error) {
+	rules, err := manager.ListRules()
 	if err != nil {
 		return m.failResult(result, fmt.Sprintf("failed to list rules: %v", err))
 	}
@@ -296,8 +286,8 @@ func (m *FirewallModule) handleList(ctx context.Context, host types.Host, args m
 }
 
 // handleReload reloads firewall configuration
-func (m *FirewallModule) handleReload(ctx context.Context, host types.Host, args map[string]interface{}, result types.TaskResult) (types.TaskResult, error) {
-	if err := m.manager.Reload(); err != nil {
+func (m *FirewallModule) handleReload(ctx context.Context, manager FirewallManager, host types.Host, args map[string]interface{}, result types.TaskResult) (types.TaskResult, error) {
+	if err := manager.Reload(); err != nil {
 		return m.failResult(result, fmt.Sprintf("failed to reload firewall: %v", err))
 	}
 

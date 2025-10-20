@@ -2,6 +2,7 @@ package modules
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/onigirazu-cfg/onigirazu/internal/executor"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
@@ -50,6 +51,18 @@ func NewRealModuleExecutorWithoutPool(host types.Host) (*RealModuleExecutor, err
 	cmdExec, err := executor.NewCommandExecutorWithoutPool(host)
 	if err != nil {
 		return nil, err
+	}
+
+	return &RealModuleExecutor{
+		cmdExecutor: cmdExec,
+		host:        host,
+	}, nil
+}
+
+// NewRealModuleExecutorFromCommandExecutor wraps an existing CommandExecutor as a RealModuleExecutor
+func NewRealModuleExecutorFromCommandExecutor(cmdExec *executor.CommandExecutor, host types.Host) (*RealModuleExecutor, error) {
+	if cmdExec == nil {
+		return nil, fmt.Errorf("commandExecutor cannot be nil")
 	}
 
 	return &RealModuleExecutor{

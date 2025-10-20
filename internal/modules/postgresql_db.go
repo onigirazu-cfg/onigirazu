@@ -11,16 +11,12 @@ import (
 )
 
 type PostgreSQLDBModule struct {
-	BaseModule
-	executor *executor.CommandExecutor
+	*BaseExecutorModule
 }
 
 func NewPostgreSQLDBModule() *PostgreSQLDBModule {
 	return &PostgreSQLDBModule{
-		BaseModule: BaseModule{
-			name:        "postgresql_db",
-			description: "Manage PostgreSQL databases",
-		},
+		BaseExecutorModule: NewBaseExecutorModule("postgresql_db"),
 	}
 }
 
@@ -29,16 +25,6 @@ func (m *PostgreSQLDBModule) Execute(ctx context.Context, host types.Host, args 
 	result := types.TaskResult{
 		TaskName: "postgresql_db", Host: host.Name, Module: m.GetName(),
 		Success: true, Changed: false, Output: make(map[string]interface{}), Timestamp: startTime,
-	}
-
-	if m.executor == nil {
-		var err error
-		m.executor, err = executor.NewCommandExecutor(host)
-		if err != nil {
-			result.Success = false
-			result.Error = fmt.Sprintf("failed to create executor: %v", err)
-			return result, err
-		}
 	}
 
 	dbName, ok := args["name"].(string)
@@ -68,73 +54,85 @@ func (m *PostgreSQLDBModule) Execute(ctx context.Context, host types.Host, args 
 		loginPort = "5432"
 	}
 
-	exists, err := m.databaseExists(ctx, dbName, loginUser, loginHost, loginPort)
-	if err != nil {
+	// Use WithExecutor to get fresh executor for this host
+	err := m.WithExecutor(host, func(exec *executor.CommandExecutor) error {
+		exists, err := m.databaseExists(ctx, exec, dbName, loginUser, loginHost, loginPort)
+		if err != nil {
+			result.Success = false
+			result.Error = fmt.Sprintf("failed to check database: %v", err)
+			return err
+		}
+
+		switch state {
+		case "present":
+			if !exists {
+				owner, _ := args["owner"].(string)
+				encoding, _ := args["encoding"].(string)
+				if encoding == "" {
+					encoding = "UTF8"
+				}
+
+				if err := m.createDatabase(ctx, exec, dbName, owner, encoding, loginUser, loginHost, loginPort); err != nil {
+					result.Success = false
+					result.Error = fmt.Sprintf("failed to create database: %v", err)
+					return err
+				}
+				result.Changed = true
+				result.Output["action"] = "created"
+			}
+
+		case "absent":
+			if exists {
+				if err := m.dropDatabase(ctx, exec, dbName, loginUser, loginHost, loginPort); err != nil {
+					result.Success = false
+					result.Error = fmt.Sprintf("failed to drop database: %v", err)
+					return err
+				}
+				result.Changed = true
+				result.Output["action"] = "dropped"
+			}
+
+		case "dump":
+			target, _ := args["target"].(string)
+			if target == "" {
+				result.Success = false
+				result.Error = "target file is required for dump"
+				return fmt.Errorf("target file is required for dump")
+			}
+
+			if err := m.dumpDatabase(ctx, exec, dbName, target, loginUser, loginHost, loginPort); err != nil {
+				result.Success = false
+				result.Error = fmt.Sprintf("failed to dump database: %v", err)
+				return err
+			}
+			result.Changed = true
+			result.Output["action"] = "dumped"
+
+		case "restore":
+			target, _ := args["target"].(string)
+			if target == "" {
+				result.Success = false
+				result.Error = "target file is required for restore"
+				return fmt.Errorf("target file is required for restore")
+			}
+
+			if err := m.restoreDatabase(ctx, exec, dbName, target, loginUser, loginHost, loginPort); err != nil {
+				result.Success = false
+				result.Error = fmt.Sprintf("failed to restore database: %v", err)
+				return err
+			}
+			result.Changed = true
+			result.Output["action"] = "restored"
+		}
+
+		return nil
+	})
+
+	if err != nil && result.Success {
+		// WithExecutor failed
 		result.Success = false
-		result.Error = fmt.Sprintf("failed to check database: %v", err)
+		result.Error = fmt.Sprintf("executor error: %v", err)
 		return result, err
-	}
-
-	switch state {
-	case "present":
-		if !exists {
-			owner, _ := args["owner"].(string)
-			encoding, _ := args["encoding"].(string)
-			if encoding == "" {
-				encoding = "UTF8"
-			}
-
-			if err := m.createDatabase(ctx, dbName, owner, encoding, loginUser, loginHost, loginPort); err != nil {
-				result.Success = false
-				result.Error = fmt.Sprintf("failed to create database: %v", err)
-				return result, err
-			}
-			result.Changed = true
-			result.Output["action"] = "created"
-		}
-
-	case "absent":
-		if exists {
-			if err := m.dropDatabase(ctx, dbName, loginUser, loginHost, loginPort); err != nil {
-				result.Success = false
-				result.Error = fmt.Sprintf("failed to drop database: %v", err)
-				return result, err
-			}
-			result.Changed = true
-			result.Output["action"] = "dropped"
-		}
-
-	case "dump":
-		target, _ := args["target"].(string)
-		if target == "" {
-			result.Success = false
-			result.Error = "target file is required for dump"
-			return result, fmt.Errorf("target file is required for dump")
-		}
-
-		if err := m.dumpDatabase(ctx, dbName, target, loginUser, loginHost, loginPort); err != nil {
-			result.Success = false
-			result.Error = fmt.Sprintf("failed to dump database: %v", err)
-			return result, err
-		}
-		result.Changed = true
-		result.Output["action"] = "dumped"
-
-	case "restore":
-		target, _ := args["target"].(string)
-		if target == "" {
-			result.Success = false
-			result.Error = "target file is required for restore"
-			return result, fmt.Errorf("target file is required for restore")
-		}
-
-		if err := m.restoreDatabase(ctx, dbName, target, loginUser, loginHost, loginPort); err != nil {
-			result.Success = false
-			result.Error = fmt.Sprintf("failed to restore database: %v", err)
-			return result, err
-		}
-		result.Changed = true
-		result.Output["action"] = "restored"
 	}
 
 	result.Duration = time.Since(startTime)
@@ -155,11 +153,11 @@ func (m *PostgreSQLDBModule) buildPsqlCmd(loginUser, loginHost, loginPort string
 	return strings.Join(cmdParts, " ")
 }
 
-func (m *PostgreSQLDBModule) databaseExists(ctx context.Context, dbName, loginUser, loginHost, loginPort string) (bool, error) {
+func (m *PostgreSQLDBModule) databaseExists(ctx context.Context, exec *executor.CommandExecutor, dbName, loginUser, loginHost, loginPort string) (bool, error) {
 	baseCmd := m.buildPsqlCmd(loginUser, loginHost, loginPort)
 	cmd := fmt.Sprintf("%s -lqt | cut -d \\| -f 1 | grep -qw %s", baseCmd, dbName)
 
-	_, err := m.executor.Execute(cmd)
+	_, err := exec.Execute(cmd)
 	if err != nil {
 		return false, nil
 	}
@@ -167,7 +165,7 @@ func (m *PostgreSQLDBModule) databaseExists(ctx context.Context, dbName, loginUs
 	return err == nil, nil
 }
 
-func (m *PostgreSQLDBModule) createDatabase(ctx context.Context, dbName, owner, encoding, loginUser, loginHost, loginPort string) error {
+func (m *PostgreSQLDBModule) createDatabase(ctx context.Context, exec *executor.CommandExecutor, dbName, owner, encoding, loginUser, loginHost, loginPort string) error {
 	baseCmd := m.buildPsqlCmd(loginUser, loginHost, loginPort)
 	createCmd := fmt.Sprintf("CREATE DATABASE %s", dbName)
 
@@ -179,7 +177,7 @@ func (m *PostgreSQLDBModule) createDatabase(ctx context.Context, dbName, owner, 
 	}
 
 	cmd := fmt.Sprintf("%s -c \"%s\"", baseCmd, createCmd)
-	_, err := m.executor.Execute(cmd)
+	_, err := exec.Execute(cmd)
 	if err != nil {
 		return fmt.Errorf("failed to create database: %s", err.Error())
 	}
@@ -187,11 +185,11 @@ func (m *PostgreSQLDBModule) createDatabase(ctx context.Context, dbName, owner, 
 	return nil
 }
 
-func (m *PostgreSQLDBModule) dropDatabase(ctx context.Context, dbName, loginUser, loginHost, loginPort string) error {
+func (m *PostgreSQLDBModule) dropDatabase(ctx context.Context, exec *executor.CommandExecutor, dbName, loginUser, loginHost, loginPort string) error {
 	baseCmd := m.buildPsqlCmd(loginUser, loginHost, loginPort)
 	cmd := fmt.Sprintf("%s -c \"DROP DATABASE %s\"", baseCmd, dbName)
 
-	_, err := m.executor.Execute(cmd)
+	_, err := exec.Execute(cmd)
 	if err != nil {
 		return fmt.Errorf("failed to drop database: %s", err.Error())
 	}
@@ -199,7 +197,7 @@ func (m *PostgreSQLDBModule) dropDatabase(ctx context.Context, dbName, loginUser
 	return nil
 }
 
-func (m *PostgreSQLDBModule) dumpDatabase(ctx context.Context, dbName, target, loginUser, loginHost, loginPort string) error {
+func (m *PostgreSQLDBModule) dumpDatabase(ctx context.Context, exec *executor.CommandExecutor, dbName, target, loginUser, loginHost, loginPort string) error {
 	cmdParts := []string{"pg_dump"}
 	if loginUser != "" {
 		cmdParts = append(cmdParts, "-U", loginUser)
@@ -213,7 +211,7 @@ func (m *PostgreSQLDBModule) dumpDatabase(ctx context.Context, dbName, target, l
 	cmdParts = append(cmdParts, "-f", target, dbName)
 
 	cmd := strings.Join(cmdParts, " ")
-	_, err := m.executor.Execute(cmd)
+	_, err := exec.Execute(cmd)
 	if err != nil {
 		return fmt.Errorf("failed to dump database: %s", err.Error())
 	}
@@ -221,11 +219,11 @@ func (m *PostgreSQLDBModule) dumpDatabase(ctx context.Context, dbName, target, l
 	return nil
 }
 
-func (m *PostgreSQLDBModule) restoreDatabase(ctx context.Context, dbName, target, loginUser, loginHost, loginPort string) error {
+func (m *PostgreSQLDBModule) restoreDatabase(ctx context.Context, exec *executor.CommandExecutor, dbName, target, loginUser, loginHost, loginPort string) error {
 	baseCmd := m.buildPsqlCmd(loginUser, loginHost, loginPort)
 	cmd := fmt.Sprintf("%s -d %s -f %s", baseCmd, dbName, target)
 
-	_, err := m.executor.Execute(cmd)
+	_, err := exec.Execute(cmd)
 	if err != nil {
 		return fmt.Errorf("failed to restore database: %s", err.Error())
 	}

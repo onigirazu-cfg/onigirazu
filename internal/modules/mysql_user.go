@@ -11,15 +11,12 @@ import (
 )
 
 type MySQLUserModule struct {
-	BaseModule
+	*BaseExecutorModule
 }
 
 func NewMySQLUserModule() *MySQLUserModule {
 	return &MySQLUserModule{
-		BaseModule: BaseModule{
-			name:        "mysql_user",
-			description: "Manage MySQL users",
-		},
+		BaseExecutorModule: NewBaseExecutorModule("mysql_user"),
 	}
 }
 
@@ -35,7 +32,8 @@ func (m *MySQLUserModule) Execute(ctx context.Context, host types.Host, args map
 		Timestamp: startTime,
 	}
 
-	exec, err := executor.NewCommandExecutor(host)
+	// Use CreateExecutor to get fresh executor for this host
+	exec, err := m.CreateExecutor(host)
 	if err != nil {
 		result.Success = false
 		result.Error = fmt.Sprintf("failed to create executor: %v", err)

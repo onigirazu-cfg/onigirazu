@@ -132,10 +132,7 @@ func TestServiceModule_Execute_StartService(t *testing.T) {
 
 	// Create a mock executor to prevent real executor creation
 	module := &ServiceModuleFixed{
-		BaseModule: BaseModule{
-			name:        "service",
-			description: "Manage system services",
-		},
+		BaseExecutorModule: NewBaseExecutorModule("service"),
 		testServiceManager: mockManager, // Use test service manager for testing
 	}
 
@@ -181,10 +178,7 @@ func TestServiceModule_Execute_StopService(t *testing.T) {
 	mockManager.enabledState["nginx"] = true
 
 	module := &ServiceModuleFixed{
-		BaseModule: BaseModule{
-			name:        "service",
-			description: "Manage system services",
-		},
+		BaseExecutorModule: NewBaseExecutorModule("service"),
 		testServiceManager: mockManager,
 	}
 
@@ -229,10 +223,7 @@ func TestServiceModule_Execute_RestartService(t *testing.T) {
 	mockManager.runningState["nginx"] = true
 
 	module := &ServiceModuleFixed{
-		BaseModule: BaseModule{
-			name:        "service",
-			description: "Manage system services",
-		},
+		BaseExecutorModule: NewBaseExecutorModule("service"),
 		testServiceManager: mockManager,
 	}
 
@@ -273,10 +264,7 @@ func TestServiceModule_Execute_ReloadService(t *testing.T) {
 	mockManager.runningState["nginx"] = true
 
 	module := &ServiceModuleFixed{
-		BaseModule: BaseModule{
-			name:        "service",
-			description: "Manage system services",
-		},
+		BaseExecutorModule: NewBaseExecutorModule("service"),
 		testServiceManager: mockManager,
 	}
 
@@ -318,10 +306,7 @@ func TestServiceModule_Execute_EnableService(t *testing.T) {
 	mockManager.enabledState["nginx"] = false
 
 	module := &ServiceModuleFixed{
-		BaseModule: BaseModule{
-			name:        "service",
-			description: "Manage system services",
-		},
+		BaseExecutorModule: NewBaseExecutorModule("service"),
 		testServiceManager: mockManager,
 	}
 
@@ -368,10 +353,7 @@ func TestServiceModule_Execute_DisableService(t *testing.T) {
 	mockManager.enabledState["nginx"] = true
 
 	module := &ServiceModuleFixed{
-		BaseModule: BaseModule{
-			name:        "service",
-			description: "Manage system services",
-		},
+		BaseExecutorModule: NewBaseExecutorModule("service"),
 		testServiceManager: mockManager,
 	}
 
@@ -418,10 +400,7 @@ func TestServiceModule_Execute_NoChange(t *testing.T) {
 	mockManager.enabledState["nginx"] = true
 
 	module := &ServiceModuleFixed{
-		BaseModule: BaseModule{
-			name:        "service",
-			description: "Manage system services",
-		},
+		BaseExecutorModule: NewBaseExecutorModule("service"),
 		testServiceManager: mockManager,
 	}
 
@@ -466,10 +445,7 @@ func TestServiceModule_Execute_MissingName(t *testing.T) {
 	mockManager := NewMockServiceManager()
 
 	module := &ServiceModuleFixed{
-		BaseModule: BaseModule{
-			name:        "service",
-			description: "Manage system services",
-		},
+		BaseExecutorModule: NewBaseExecutorModule("service"),
 		testServiceManager: mockManager,
 	}
 
@@ -506,10 +482,7 @@ func TestServiceModule_Execute_StartFailure(t *testing.T) {
 	mockManager.shouldFailOn = "start"
 
 	module := &ServiceModuleFixed{
-		BaseModule: BaseModule{
-			name:        "service",
-			description: "Manage system services",
-		},
+		BaseExecutorModule: NewBaseExecutorModule("service"),
 		testServiceManager: mockManager,
 	}
 
@@ -546,10 +519,7 @@ func TestServiceModule_Execute_GetStatusFailure(t *testing.T) {
 	mockManager.shouldFailOn = "get_status"
 
 	module := &ServiceModuleFixed{
-		BaseModule: BaseModule{
-			name:        "service",
-			description: "Manage system services",
-		},
+		BaseExecutorModule: NewBaseExecutorModule("service"),
 		testServiceManager: mockManager,
 	}
 
@@ -579,10 +549,7 @@ func TestServiceModule_Execute_GetStatusFailure(t *testing.T) {
 // TestServiceModule_Validate tests argument validation
 func TestServiceModule_Validate(t *testing.T) {
 	module := &ServiceModuleFixed{
-		BaseModule: BaseModule{
-			name:        "service",
-			description: "Manage system services",
-		},
+		BaseExecutorModule: NewBaseExecutorModule("service"),
 	}
 
 	tests := []struct {
@@ -655,10 +622,7 @@ func TestServiceModule_Execute_WithTimeout(t *testing.T) {
 	mockManager.runningState["nginx"] = false
 
 	module := &ServiceModuleFixed{
-		BaseModule: BaseModule{
-			name:        "service",
-			description: "Manage system services",
-		},
+		BaseExecutorModule: NewBaseExecutorModule("service"),
 		testServiceManager: mockManager,
 	}
 
@@ -728,10 +692,7 @@ func BenchmarkServiceModule_Execute(b *testing.B) {
 	mockManager.runningState["nginx"] = false
 
 	module := &ServiceModuleFixed{
-		BaseModule: BaseModule{
-			name:        "service",
-			description: "Manage system services",
-		},
+		BaseExecutorModule: NewBaseExecutorModule("service"),
 		testServiceManager: mockManager,
 	}
 
