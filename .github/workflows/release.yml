@@ -130,6 +130,15 @@ jobs:
       with:
         fetch-depth: 0
 
+    - name: Checkout specific tag
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          TAG="${{ github.event.inputs.tag }}"
+        else
+          TAG="${{ needs.validate.outputs.tag }}"
+        fi
+        git checkout "refs/tags/$TAG"
+
     - name: Set up Go
       uses: actions/setup-go@v6
       with:
