@@ -27,6 +27,11 @@ func NewMySQLDBModule() *MySQLDBModule {
 	}
 }
 
+// GetDescription returns the module description
+func (m *MySQLDBModule) GetDescription() string {
+	return "Manage MySQL databases"
+}
+
 func (m *MySQLDBModule) Execute(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
 	startTime := time.Now()
 	result := types.TaskResult{

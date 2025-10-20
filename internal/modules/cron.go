@@ -22,6 +22,11 @@ func NewCronModule() *CronModule {
 	}
 }
 
+// GetDescription returns the module description
+func (m *CronModule) GetDescription() string {
+	return "Manage cron jobs and crontab files"
+}
+
 // Execute manages cron operations
 func (m *CronModule) Execute(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
 	startTime := time.Now()

@@ -40,6 +40,11 @@ func NewFirewallModule() *FirewallModule {
 	}
 }
 
+// GetDescription returns the module description
+func (m *FirewallModule) GetDescription() string {
+	return "Manage firewall rules (UFW, firewalld, iptables)"
+}
+
 // Execute manages firewall operations
 func (m *FirewallModule) Execute(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
 	startTime := time.Now()

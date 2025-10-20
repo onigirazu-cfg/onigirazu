@@ -56,6 +56,11 @@ func NewServiceModule() *ServiceModuleFixed {
 	return NewServiceModuleFixed()
 }
 
+// GetDescription returns the module description
+func (m *ServiceModuleFixed) GetDescription() string {
+	return "Manage system services"
+}
+
 // Execute manages system services
 func (m *ServiceModuleFixed) Execute(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
 	startTime := time.Now()

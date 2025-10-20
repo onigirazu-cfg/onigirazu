@@ -22,6 +22,11 @@ func NewSystemdModule() *SystemdModule {
 	}
 }
 
+// GetDescription returns the module description
+func (m *SystemdModule) GetDescription() string {
+	return "Manage systemd services, units, and timers"
+}
+
 // Execute manages systemd operations
 func (m *SystemdModule) Execute(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
 	startTime := time.Now()

@@ -20,6 +20,11 @@ func NewMongoDBModule() *MongoDBModule {
 	}
 }
 
+// GetDescription returns the module description
+func (m *MongoDBModule) GetDescription() string {
+	return "Manage MongoDB databases and users"
+}
+
 func (m *MongoDBModule) Execute(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
 	startTime := time.Now()
 	result := types.TaskResult{
@@ -101,10 +106,15 @@ func (m *MongoDBModule) Execute(ctx context.Context, host types.Host, args map[s
 		return nil
 	})
 
-	if err != nil && result.Success {
-		result.Success = false
-		result.Error = fmt.Sprintf("executor error: %v", err)
-		return result, err
+	if err != nil || !result.Success {
+		result.Duration = time.Since(startTime)
+		if err != nil {
+			return result, err
+		}
+		if result.Error != "" {
+			return result, fmt.Errorf("%s", result.Error)
+		}
+		return result, fmt.Errorf("operation failed")
 	}
 
 	result.Duration = time.Since(startTime)
