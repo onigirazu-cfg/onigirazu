@@ -517,6 +517,33 @@ type Playbook struct {
 	FilePath string                 `yaml:"-" json:"-"`
 }
 
+// UnmarshalYAML implements custom YAML unmarshaling for Playbook
+// Supports both formats:
+// 1. Structured: name: ..., plays: [...]
+// 2. Direct list: [- hosts: ..., name: ..., tasks: ...]
+func (pb *Playbook) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	// Try to unmarshal as a list of plays (Ansible format)
+	var plays []Play
+	if err := unmarshal(&plays); err == nil && len(plays) > 0 {
+		// Successfully unmarshaled as list - generate playbook name from first play
+		pb.Plays = plays
+		if plays[0].Name != "" {
+			pb.Name = plays[0].Name + " (playbook)"
+		} else {
+			pb.Name = "Generated Playbook"
+		}
+		return nil
+	}
+
+	// Fall back to structured format
+	type playbookAlias Playbook
+	if err := unmarshal((*playbookAlias)(pb)); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // TaskResult represents the result of task execution
 type TaskResult struct {
 	TaskName  string                 `json:"task_name"`

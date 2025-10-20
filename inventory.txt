@@ -1,0 +1,6 @@
+groups:
+  all:
+    hosts:
+      localhost:
+        onigirazu_connection: local
+        onigirazu_host: 127.0.0.1

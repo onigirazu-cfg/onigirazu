@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/signal"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/onigirazu-cfg/onigirazu/internal/audit"
 	"github.com/onigirazu-cfg/onigirazu/internal/cache"
 	"github.com/onigirazu-cfg/onigirazu/internal/config"
 	"github.com/onigirazu-cfg/onigirazu/internal/engine"
@@ -142,6 +144,27 @@ Examples:
 
 			log.Info("Starting Onigirazu configuration management tool")
 			log.Debug("Configuration loaded: max_concurrency=%d, log_level=%s", cfg.MaxConcurrency, cfg.LogLevel)
+
+			// Initialize audit recorder
+			homeDir, err := os.UserHomeDir()
+			if err != nil {
+				log.Warn("Failed to get home directory for audit: %v", err)
+			}
+			var auditRecorder *audit.Recorder
+			var executionID string
+			if homeDir != "" {
+				auditPath := filepath.Join(homeDir, ".onigirazu", "audit")
+				auditConfig := audit.AuditConfig{
+					Enabled:     true,
+					StoragePath: auditPath,
+				}
+				auditRecorder, err = audit.NewRecorder(auditConfig, log)
+				if err != nil {
+					log.Warn("Failed to initialize audit recorder: %v", err)
+				}
+			} else {
+				log.Warn("Audit recording disabled: cannot determine home directory")
+			}
 
 			// Initialize plugin system
 			var pluginManager *plugins.Manager
@@ -303,6 +326,16 @@ Examples:
 			progressTracker.StartTracking()
 			defer progressTracker.Stop()
 
+			// Start audit recording
+			if auditRecorder != nil {
+				executionID, err = auditRecorder.StartExecution(playbookPath, finalInventoryPath, []string{})
+				if err != nil {
+					log.Warn("Failed to start audit recording: %v", err)
+				} else {
+					log.Info("Audit recording started: execution_id=%s", executionID)
+				}
+			}
+
 			// Execute playbook
 			log.Info("Starting playbook execution")
 			startTime := time.Now()
@@ -316,6 +349,11 @@ Examples:
 
 			// Display results
 			log.Info("Playbook execution completed in %v", duration)
+
+			// Record plays and tasks in audit if recorder is available
+			if auditRecorder != nil && executionID != "" {
+				recordAuditResults(log, auditRecorder, result)
+			}
 
 			if result.Failed {
 				log.Error("Playbook execution failed")
@@ -346,6 +384,13 @@ Examples:
 					log.Info("State file saved to backend (failure recorded)")
 				}
 
+				// Complete audit with failure status
+				if auditRecorder != nil && executionID != "" {
+					if _, err := auditRecorder.CompleteExecution(audit.StatusFailure, 1, result.Error); err != nil {
+						log.Warn("Failed to complete audit recording: %v", err)
+					}
+				}
+
 				return fmt.Errorf("playbook execution failed")
 			}
 
@@ -353,8 +398,7 @@ Examples:
 			displayExecutionSummary(log, result)
 
 			// Create snapshot for rollback capability
-			homeDir, err := os.UserHomeDir()
-			if err == nil {
+			if homeDir != "" {
 				snapshotDir := filepath.Join(homeDir, ".onigirazu", "snapshots")
 				snapshotMgr := rollback.NewSnapshotManager(snapshotDir)
 
@@ -438,6 +482,13 @@ Examples:
 				log.Debug("State backend path: %s", stateBackend.GetPath())
 			}
 
+			// Complete audit with success status
+			if auditRecorder != nil && executionID != "" {
+				if _, err := auditRecorder.CompleteExecution(audit.StatusSuccess, 0, ""); err != nil {
+					log.Warn("Failed to complete audit recording: %v", err)
+				}
+			}
+
 			log.Info("Onigirazu execution completed successfully")
 			return nil
 		},
@@ -478,6 +529,76 @@ func isModuleReversible(module string) bool {
 	}
 
 	return reversibleModules[module]
+}
+
+// recordAuditResults records the execution results in the audit system
+func recordAuditResults(log *logger.EnhancedLogger, recorder *audit.Recorder, result *types.PlaybookResult) {
+	if recorder == nil || result == nil {
+		return
+	}
+
+	// Record plays from execution result
+	for playIdx, play := range result.Plays {
+		// Build list of hosts for this play
+		playHosts := []string{}
+		if len(play.Hosts) > 0 {
+			for _, hostResult := range play.Hosts {
+				playHosts = append(playHosts, hostResult.Host)
+			}
+		}
+
+		// Record play in audit
+		playRecorder := recorder.RecordPlay(play.Name, playIdx, playHosts)
+		if playRecorder != nil {
+			// Record all tasks in this play
+			for _, task := range play.Tasks {
+				taskStatus := audit.TaskStatusOk
+				if task.Failed {
+					taskStatus = audit.TaskStatusFailed
+				} else if task.Changed {
+					taskStatus = audit.TaskStatusChanged
+				} else if task.Skipped {
+					taskStatus = audit.TaskStatusSkipped
+				}
+
+				// Convert task output to JSON string for audit storage
+				output := ""
+				if task.Output != nil && len(task.Output) > 0 {
+					if jsonBytes, err := json.Marshal(task.Output); err == nil {
+						output = string(jsonBytes)
+					}
+				}
+
+				taskErr := ""
+				if task.Error != "" {
+					taskErr = task.Error
+				}
+
+				taskResult := audit.TaskResult{
+					Name:      task.TaskName,
+					Module:    task.Module,
+					Status:    taskStatus,
+					Host:      task.Host,
+					Duration:  task.Duration.Seconds(),
+					StartTime: task.Timestamp,
+					EndTime:   task.Timestamp.Add(task.Duration),
+					Output:    output,
+					Error:     taskErr,
+					Changed:   task.Changed,
+				}
+
+				if err := playRecorder.RecordTask(taskResult); err != nil {
+					log.Warn("Failed to record task in audit: %v", err)
+				}
+			}
+			// Complete the play
+			playStatus := audit.StatusSuccess
+			if !play.Success {
+				playStatus = audit.StatusFailure
+			}
+			playRecorder.Complete(playStatus)
+		}
+	}
 }
 
 // displayExecutionSummary displays a summary of the execution results
