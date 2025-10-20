@@ -563,7 +563,7 @@ func recordAuditResults(log *logger.EnhancedLogger, recorder *audit.Recorder, re
 
 				// Convert task output to JSON string for audit storage
 				output := ""
-				if task.Output != nil && len(task.Output) > 0 {
+				if len(task.Output) > 0 {
 					if jsonBytes, err := json.Marshal(task.Output); err == nil {
 						output = string(jsonBytes)
 					}
