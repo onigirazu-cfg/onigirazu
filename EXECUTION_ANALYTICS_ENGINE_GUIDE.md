@@ -14,6 +14,8 @@ The Execution Analytics Engine provides deep insights into Onigirazu execution p
 - Success rate tracking
 - Resource utilization insights
 
+**Important:** This engine queries historical execution data that was automatically recorded during `onigirazu apply` operations. It does NOT require any changes to how you execute playbooks - just analyze the data that's already being collected.
+
 ---
 
 ## 🏗️ Architecture
@@ -1040,6 +1042,24 @@ rootCmd.AddCommand(newAnalyticsCmd())
 ---
 
 ## 📊 Usage Examples
+
+### Running Playbooks (to generate audit data)
+
+```bash
+# Execute a playbook with inventory
+onigirazu apply production.yml --inventory hosts.yml
+
+# Execute with custom inventory and verbose output
+onigirazu apply production.yml --inventory inventory/prod.yml --verbose
+
+# Dry-run mode with inventory
+onigirazu apply production.yml --inventory hosts.yml --check
+
+# Show differences with inventory
+onigirazu apply production.yml --inventory hosts.yml --diff
+```
+
+### Analyzing Execution Data
 
 ```bash
 # Get task performance metrics (last 7 days)
