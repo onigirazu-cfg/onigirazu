@@ -595,3 +595,21 @@ func (p *InventoryParser) parseDynamicInventory(scriptPath string) (*types.Inven
 
 	return p.parseJsonInventory(output)
 }
+
+// ParseInventoryOrInline parses inventory from either a file path or inline specification.
+// If the input looks like a file path, it's parsed as a file.
+// If the input looks like an inline host specification (e.g., "192.168.1.1," or "host1,host2"),
+// it's parsed as inline inventory.
+func (p *InventoryParser) ParseInventoryOrInline(ctx context.Context, inventoryPath string) (*types.Inventory, error) {
+	detector := NewInlineInventoryDetector(p.logger)
+
+	// Check if this looks like inline inventory
+	if detector.IsInlineInventory(inventoryPath) {
+		p.logger.Debug("Detected inline inventory specification: %s", inventoryPath)
+		return detector.ParseInlineInventory(inventoryPath)
+	}
+
+	// Otherwise, treat it as a file path
+	p.logger.Debug("Treating as inventory file path: %s", inventoryPath)
+	return p.ParseInventoryFile(ctx, inventoryPath)
+}

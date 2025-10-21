@@ -79,14 +79,16 @@ func (p *EnhancedParser) ParsePlaybook(ctx context.Context, filePath string) (*t
 	return &playbook, nil
 }
 
-// ParseInventory parses an inventory file (supports YAML, TOML, and simple list formats)
+// ParseInventory parses an inventory file or inline specification
+// Supports file formats: YAML, TOML, JSON, INI, and simple list formats
+// Also supports inline host specifications like "192.168.1.1," or "host1,host2"
 func (p *EnhancedParser) ParseInventory(ctx context.Context, filePath string) (*types.Inventory, error) {
 	p.logger.Debug("Parsing inventory: %s", filePath)
 
-	// Use the new inventory parser for multi-format support
-	inventory, err := p.inventoryParser.ParseInventoryFile(ctx, filePath)
+	// Use the new inventory parser that handles both file-based and inline inventory
+	inventory, err := p.inventoryParser.ParseInventoryOrInline(ctx, filePath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse inventory file %s: %w", filePath, err)
+		return nil, fmt.Errorf("failed to parse inventory %s: %w", filePath, err)
 	}
 
 	// Validate inventory

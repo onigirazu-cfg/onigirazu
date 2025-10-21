@@ -101,11 +101,13 @@ func (p *Parser) ValidateTask(task *types.Task, playIndex, taskIndex int) error 
 	return nil
 }
 
-// ParseInventory parses inventory from file (supports YAML, TOML, and simple list formats)
+// ParseInventory parses inventory from file or inline specification
+// Supports file formats: YAML, TOML, JSON, INI, and simple list formats
+// Also supports inline host specifications like "192.168.1.1," or "host1,host2"
 func (p *Parser) ParseInventory(ctx context.Context, filePath string) (*types.Inventory, error) {
 	// Use new inventory parser if available
 	if p.inventoryParser != nil {
-		return p.inventoryParser.ParseInventoryFile(ctx, filePath)
+		return p.inventoryParser.ParseInventoryOrInline(ctx, filePath)
 	}
 
 	// Fallback to old YAML-only parsing for backward compatibility
