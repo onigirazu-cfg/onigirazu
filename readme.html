@@ -265,10 +265,25 @@ onigirazu apply playbook.yml --check
 # With tags (run only specific tasks)
 onigirazu apply playbook.yml --tags=setup,config
 
+# Discover available tags
+onigirazu apply playbook.yml --list-tags
+
+# Preview which tasks would run
+onigirazu apply playbook.yml --list-tasks --tags=setup
+
 # Verbose output
 onigirazu apply playbook.yml -v
 </code></pre>
 
+<p><strong>Tag Discovery Options:</strong></p>
+<ul>
+<li><code>--list-tags</code> - List all available tags in the playbook</li>
+<li><code>--list-tasks</code> - Show which tasks would execute with current filters</li>
+<li><code>--list-tasks --tags TAG1,TAG2</code> - Preview specific task tags</li>
+<li><code>--list-tasks --skip-tags TAG1</code> - Preview with tag exclusion</li>
+<li><code>--list-tasks --verbose</code> - Detailed task information</li>
+</ul>
+<p>📚 See <a href="docs/LIST_TAGS_TASKS_GUIDE.md">Tag and Task Discovery Guide</a> for detailed examples</p>
 <h4><code>validate</code> - Validate playbook syntax</h4>
 <pre class="codehilite"><code class="language-bash"># Validate a playbook
 onigirazu validate playbook.yml
