@@ -47,3 +47,10 @@ test-state.json
 # Docker test environment
 docker/ssh/
 vagrant/.vagrant/
+
+# Test files and artifacts
+test-build
+test-state-local*
+test-inventory-local.yml
+test_*.yml
+inventory.txt
