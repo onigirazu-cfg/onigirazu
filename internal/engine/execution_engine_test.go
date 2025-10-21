@@ -1178,7 +1178,7 @@ func TestGetLoopItems(t *testing.T) {
 			expectedError: false,
 		},
 		{
-			name: "loop with range",
+			name: "loop with numeric range",
 			loop: &types.Loop{
 				Range: "1-10",
 			},
@@ -1202,6 +1202,107 @@ func TestGetLoopItems(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 				assert.Len(t, items, tt.expectedItems)
+			}
+		})
+	}
+}
+
+// TestParseRange tests the parseRange method with various range formats
+func TestParseRange(t *testing.T) {
+	engine, _, _, _, _, _ := createTestEngine()
+
+	tests := []struct {
+		name          string
+		rangeStr      string
+		expected      []interface{}
+		expectedError bool
+	}{
+		{
+			name:     "numeric range 1-5",
+			rangeStr: "1-5",
+			expected: []interface{}{1, 2, 3, 4, 5},
+		},
+		{
+			name:     "numeric range 1-10",
+			rangeStr: "1-10",
+			expected: []interface{}{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
+		},
+		{
+			name:     "numeric range with step 1-10:2",
+			rangeStr: "1-10:2",
+			expected: []interface{}{1, 3, 5, 7, 9},
+		},
+		{
+			name:     "numeric range with step 0-10:3",
+			rangeStr: "0-10:3",
+			expected: []interface{}{0, 3, 6, 9},
+		},
+		{
+			name:     "character range a-e",
+			rangeStr: "a-e",
+			expected: []interface{}{"a", "b", "c", "d", "e"},
+		},
+		{
+			name:     "character range A-E",
+			rangeStr: "A-E",
+			expected: []interface{}{"A", "B", "C", "D", "E"},
+		},
+		{
+			name:     "character range with step a-z:5",
+			rangeStr: "a-z:5",
+			expected: []interface{}{"a", "f", "k", "p", "u", "z"},
+		},
+		{
+			name:     "numeric range reverse 10-1",
+			rangeStr: "10-1",
+			expected: []interface{}{10, 9, 8, 7, 6, 5, 4, 3, 2, 1},
+		},
+		{
+			name:     "numeric range reverse with step 10-1:2",
+			rangeStr: "10-1:2",
+			expected: []interface{}{10, 8, 6, 4, 2},
+		},
+		{
+			name:          "invalid range format - no dash",
+			rangeStr:      "1to10",
+			expectedError: true,
+		},
+		{
+			name:          "invalid range format - multiple dashes",
+			rangeStr:      "1-5-10",
+			expectedError: true,
+		},
+		{
+			name:          "invalid step - not a number",
+			rangeStr:      "1-10:abc",
+			expectedError: true,
+		},
+		{
+			name:          "invalid step - zero",
+			rangeStr:      "1-10:0",
+			expectedError: true,
+		},
+		{
+			name:          "invalid step - negative",
+			rangeStr:      "1-10:-1",
+			expectedError: true,
+		},
+		{
+			name:          "mixed types - character and number",
+			rangeStr:      "a-5",
+			expectedError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			items, err := engine.parseRange(tt.rangeStr)
+
+			if tt.expectedError {
+				assert.Error(t, err, "expected error for range '%s'", tt.rangeStr)
+			} else {
+				assert.NoError(t, err, "unexpected error for range '%s'", tt.rangeStr)
+				assert.Equal(t, tt.expected, items, "mismatch for range '%s'", tt.rangeStr)
 			}
 		})
 	}

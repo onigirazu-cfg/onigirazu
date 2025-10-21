@@ -158,9 +158,11 @@ Maintenance handlers triggered by configuration changes.
     - name: Update sysctl parameters
       sysctl: name={{ item.key }} value={{ item.value }} state=present
       loop:
-        - { key: "net.core.somaxconn", value: 65536 }
-        - { key: "net.ipv4.tcp_max_syn_backlog", value: 65536 }
+        items:
+          - { key: "net.core.somaxconn", value: 65536 }
+          - { key: "net.ipv4.tcp_max_syn_backlog", value: 65536 }
       notify: system configuration changed
+      # See LOOPS_GUIDE.md for comprehensive loop documentation
 
     - name: Configure log rotation
       template:
@@ -364,11 +366,13 @@ Firewall rules with validation handlers.
         proto: "{{ item.proto }}"
         state: enabled
       loop:
-        - { rule: 'allow', port: '22', proto: 'tcp' }
-        - { rule: 'allow', port: '80', proto: 'tcp' }
-        - { rule: 'allow', port: '443', proto: 'tcp' }
-        - { rule: 'allow', port: '8000', proto: 'tcp' }
+        items:
+          - { rule: 'allow', port: '22', proto: 'tcp' }
+          - { rule: 'allow', port: '80', proto: 'tcp' }
+          - { rule: 'allow', port: '443', proto: 'tcp' }
+          - { rule: 'allow', port: '8000', proto: 'tcp' }
       notify: firewall updated
+      # See LOOPS_GUIDE.md for comprehensive loop documentation
 
     - name: Configure iptables rules
       template:
@@ -396,7 +400,8 @@ Firewall rules with validation handlers.
         port: 22
         state: started
         timeout: 5
-      loop: "{{ groups['app_servers'] }}"
+      loop:
+        items: "{{ groups['app_servers'] }}"
       listen: firewall updated
 ```
 

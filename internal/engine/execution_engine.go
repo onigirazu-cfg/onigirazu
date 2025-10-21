@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -845,22 +846,105 @@ func (e *ExecutionEngine) evaluateCondition(ctx context.Context, condition strin
 }
 
 // getLoopItems gets items for loop execution
+// Supports formats:
+//   - "1-10" -> [1, 2, 3, ..., 10]
+//   - "1-10:2" -> [1, 3, 5, 7, 9]
+//   - "a-z" -> ['a', 'b', 'c', ..., 'z']
+//   - "0-3" -> [0, 1, 2, 3]
 func (e *ExecutionEngine) getLoopItems(loop *types.Loop, variables map[string]interface{}) ([]interface{}, error) {
 	if loop.Items != nil {
 		return loop.Items, nil
 	}
 
 	if loop.Range != "" {
-		// Parse range string (e.g., "1-10" or "1-10:2")
-		items := make([]interface{}, 0)
-		// For now, return a simple range - this would need proper parsing
-		for i := 1; i <= 10; i++ {
-			items = append(items, i)
+		return e.parseRange(loop.Range)
+	}
+
+	return nil, fmt.Errorf("loop must specify either items or range")
+}
+
+// parseRange parses range string and returns items
+// Supports formats:
+//   - Numeric ranges: "1-10" or "start-end:step"
+//   - Character ranges: "a-z", "A-Z"
+func (e *ExecutionEngine) parseRange(rangeStr string) ([]interface{}, error) {
+	items := make([]interface{}, 0)
+
+	// Check if it's a step range (contains colon)
+	step := 1
+	rangeWithoutStep := rangeStr
+	if idx := strings.Index(rangeStr, ":"); idx != -1 {
+		stepStr := rangeStr[idx+1:]
+		s, err := strconv.Atoi(stepStr)
+		if err != nil {
+			return nil, fmt.Errorf("invalid step in range '%s': %w", rangeStr, err)
+		}
+		if s <= 0 {
+			return nil, fmt.Errorf("step must be positive, got: %d", s)
+		}
+		step = s
+		rangeWithoutStep = rangeStr[:idx]
+	}
+
+	// Split by dash to get start and end
+	parts := strings.Split(rangeWithoutStep, "-")
+	if len(parts) != 2 {
+		return nil, fmt.Errorf("invalid range format '%s', expected 'start-end' or 'start-end:step'", rangeStr)
+	}
+
+	start, end := strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
+	if start == "" || end == "" {
+		return nil, fmt.Errorf("invalid range format '%s', start and end must not be empty", rangeStr)
+	}
+
+	// Try numeric range first
+	startNum, errStart := strconv.Atoi(start)
+	endNum, errEnd := strconv.Atoi(end)
+
+	if errStart == nil && errEnd == nil {
+		// Numeric range
+		if startNum <= endNum {
+			for i := startNum; i <= endNum; i += step {
+				items = append(items, i)
+			}
+		} else {
+			// Reverse order
+			for i := startNum; i >= endNum; i -= step {
+				items = append(items, i)
+			}
 		}
 		return items, nil
 	}
 
-	return nil, fmt.Errorf("loop must specify either items or range")
+	// Try character range
+	if len(start) == 1 && len(end) == 1 {
+		startChar := rune(start[0])
+		endChar := rune(end[0])
+
+		// Validate character range consistency
+		// Either both should be letters (a-z, A-Z) or both should be something else
+		startIsLetter := (startChar >= 'a' && startChar <= 'z') || (startChar >= 'A' && startChar <= 'Z')
+		endIsLetter := (endChar >= 'a' && endChar <= 'z') || (endChar >= 'A' && endChar <= 'Z')
+
+		// Don't allow mixing letters with digits or other characters
+		if startIsLetter != endIsLetter {
+			return nil, fmt.Errorf("range '%s' cannot mix letters and non-letters (got '%s' and '%s')", rangeStr, start, end)
+		}
+
+		if startChar <= endChar {
+			for i := startChar; i <= endChar; i += rune(step) {
+				items = append(items, string(i))
+			}
+		} else {
+			// Reverse order
+			for i := startChar; i >= endChar; i -= rune(step) {
+				items = append(items, string(i))
+			}
+		}
+		return items, nil
+	}
+
+	return nil, fmt.Errorf("range '%s' must be numeric (e.g., '1-10') or character (e.g., 'a-z'), not mixed", rangeStr)
 }
 
 // executeRole executes a role with its tasks, handlers, and dependencies
