@@ -7,10 +7,14 @@ Welcome to the Onigirazu documentation directory! This contains comprehensive do
 ### User Documentation
 
 - **[Quick Start Guide](quick-start.md)** - Get started with Onigirazu in minutes
+- **[Playbook Format & Examples](examples/README.md)** - Playbook structure, syntax, and real-world examples
+- **[Playbook Types Reference](api/pkg/types.md)** - Technical type definitions for playbooks and tasks
 - **[Variables Cheat Sheet](VARIABLES_CHEATSHEET.md)** - Quick reference for common variables ⚡
 - **[Variables and Configuration](VARIABLES_AND_CONFIGURATION.md)** - Complete reference for all configuration parameters and variables
-- **[Inventory Formats](inventory-formats.md)** - Supported inventory file formats
+- **[Inventory Formats](inventory-formats.md)** - Supported inventory file formats (YAML, TOML, JSON, INI, text)
+- **[Inline Inventory Guide](../INLINE_INVENTORY_GUIDE.md)** - Using inline host specifications without inventory files
 - **[Modules Reference](modules/README.md)** - Built-in modules documentation
+- **[Ad-hoc Commands Guide](ADHOC_GUIDE.md)** - Execute commands without playbooks (5 input formats)
 
 ### API Documentation
 
@@ -68,9 +72,9 @@ This will:
 
 ### Core Types (`pkg/types`)
 
-- **Playbook** - YAML playbook structure
-- **Task** - Individual task definition
-- **Host** - Target host configuration
+- **[Playbook](api/pkg/types.md#playbook)** - YAML playbook structure, see [Playbook Format Guide](examples/README.md)
+- **[Task](api/pkg/types.md#task)** - Individual task definition
+- **[Host](api/pkg/types.md#host)** - Target host configuration
 - **TaskResult** - Execution results
 - **ExecutionContext** - Runtime context
 
@@ -95,8 +99,9 @@ This will:
 ### Parser (`internal/parser`)
 
 - YAML parsing and validation
-- Playbook structure parsing
-- Variable interpolation
+- [Playbook structure parsing](examples/README.md) with validation
+- [Inline inventory parsing](../INLINE_INVENTORY_GUIDE.md) for direct host specifications
+- Variable interpolation and template processing
 
 ### Workflow (`internal/workflow`)
 
