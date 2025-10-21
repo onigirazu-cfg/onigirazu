@@ -15,7 +15,7 @@ plays:
     tasks:
       # System preparation
       - name: "Update package cache"
-        enhanced_package:
+        package:
           update_cache: true
 
       - name: "Install essential packages"
