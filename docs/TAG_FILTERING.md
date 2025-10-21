@@ -280,6 +280,44 @@ onigirazu apply test.yml --skip-tags test
 onigirazu apply test.yml --tags benchmark
 ```
 
+## Discovering Tags and Tasks
+
+### List Available Tags
+
+Before creating tag filters, discover what tags are available in your playbook:
+
+```bash
+# Show all tags in a playbook
+onigirazu apply playbook.yml --list-tags
+
+# Output:
+# Available tags in playbook.yml:
+#   - setup (used in 3 tasks)
+#   - security (used in 2 tasks)
+#   - deployment (used in 4 tasks)
+#   - debug (used in 1 task)
+#   - always (used in 1 task)
+#   - never (used in 1 task)
+```
+
+### List Tasks Before Execution
+
+Preview which tasks would run with your current tag filters:
+
+```bash
+# Show all tasks that would execute
+onigirazu apply playbook.yml --list-tasks
+
+# Show tasks with specific filters
+onigirazu apply playbook.yml --list-tasks --tags setup
+onigirazu apply playbook.yml --list-tasks --tags setup --skip-tags debug
+
+# Verbose output with more details
+onigirazu apply playbook.yml --list-tasks --tags setup --verbose
+```
+
+📚 **For detailed discovery features, see [List Tags and Tasks Guide](LIST_TAGS_TASKS_GUIDE.md)**
+
 ## Commands Supporting Tag Filtering
 
 ### apply

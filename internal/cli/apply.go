@@ -20,13 +20,16 @@ import (
 	"github.com/onigirazu-cfg/onigirazu/internal/inventory"
 	"github.com/onigirazu-cfg/onigirazu/internal/logger"
 	"github.com/onigirazu-cfg/onigirazu/internal/modules"
+	"github.com/onigirazu-cfg/onigirazu/internal/output"
 	"github.com/onigirazu-cfg/onigirazu/internal/parser"
 	"github.com/onigirazu-cfg/onigirazu/internal/plugins"
 	"github.com/onigirazu-cfg/onigirazu/internal/progress"
 	"github.com/onigirazu-cfg/onigirazu/internal/rollback"
 	sshpkg "github.com/onigirazu-cfg/onigirazu/internal/ssh"
 	"github.com/onigirazu-cfg/onigirazu/internal/state"
+	"github.com/onigirazu-cfg/onigirazu/internal/tagdiscovery"
 	"github.com/onigirazu-cfg/onigirazu/internal/tagfilter"
+	"github.com/onigirazu-cfg/onigirazu/internal/taskpreview"
 	"github.com/onigirazu-cfg/onigirazu/internal/template"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 	"github.com/onigirazu-cfg/onigirazu/pkg/utils"
@@ -48,6 +51,8 @@ func NewApplyCommand() *cobra.Command {
 		interactive   bool
 		tags          string
 		skipTags      string
+		listTags      bool
+		listTasks     bool
 	)
 
 	cmd := &cobra.Command{
@@ -325,6 +330,52 @@ Examples:
 
 			log.Info("Playbook parsed successfully: %s (%d plays)", playbook.Name, len(playbook.Plays))
 
+			// Handle --list-tags flag
+			if listTags {
+				tagsResult, err := tagdiscovery.DiscoverTags(playbook)
+				if err != nil {
+					return fmt.Errorf("failed to discover tags: %w", err)
+				}
+
+				// Format and display output
+				var result string
+				switch outputFormat {
+				case "json":
+					result = output.FormatTagsJSON(tagsResult)
+				case "yaml":
+					result = output.FormatTagsYAML(tagsResult)
+				case "csv":
+					result = output.FormatTagsCSV(tagsResult)
+				default:
+					result = output.FormatTagsText(tagsResult)
+				}
+				fmt.Print(result)
+				return nil
+			}
+
+			// Handle --list-tasks flag
+			if listTasks {
+				tasksResult, err := taskpreview.PreviewTasks(playbook, tags, skipTags)
+				if err != nil {
+					return fmt.Errorf("failed to preview tasks: %w", err)
+				}
+
+				// Format and display output
+				var result string
+				switch outputFormat {
+				case "json":
+					result = output.FormatTasksJSON(tasksResult)
+				case "yaml":
+					result = output.FormatTasksYAML(tasksResult)
+				case "csv":
+					result = output.FormatTasksCSV(tasksResult)
+				default:
+					result = output.FormatTasksText(tasksResult)
+				}
+				fmt.Print(result)
+				return nil
+			}
+
 			// Set check mode if specified
 			if cfg.IsCheckMode() {
 				if cfg.IsColorOutputEnabled() {
@@ -520,6 +571,8 @@ Examples:
 	cmd.Flags().BoolVar(&interactive, "interactive", false, "Interactive mode")
 	cmd.Flags().StringVar(&tags, "tags", "", "Only run tasks with these tags (comma-separated). Use 'tagged' for tasks with any tag, 'untagged' for tasks without tags, 'all' for default behavior")
 	cmd.Flags().StringVar(&skipTags, "skip-tags", "", "Skip tasks with these tags (comma-separated)")
+	cmd.Flags().BoolVar(&listTags, "list-tags", false, "List all available tags in the playbook without executing")
+	cmd.Flags().BoolVar(&listTasks, "list-tasks", false, "List tasks that would execute with current filters")
 
 	return cmd
 }
