@@ -43,6 +43,7 @@ Onigirazu is a modern, high-performance configuration management tool written in
 - **Flexible Inventory**: Multiple inventory formats (YAML, TOML, JSON, INI, text)
 - **Variable Interpolation**: Dynamic variable substitution
 - **Error Handling**: Comprehensive error handling and reporting
+- **Audit & Analytics**: Track execution history, performance metrics, and audit data with `audit` command
 
 ## Installation
 
@@ -619,6 +620,7 @@ All components implement well-defined interfaces for:
 - **[Inline Inventory Guide](docs/INLINE_INVENTORY_GUIDE.md)** - Using inline host specifications
 - **[Loop Guide](docs/LOOPS_GUIDE.md)** - Loop syntax and examples
 - **[Handlers Guide](docs/HANDLERS_GUIDE.md)** - Task notifications and handlers
+- **[Audit & Analytics Guide](../onigirazu_docs/features/AUDIT_AND_ANALYTICS_SYSTEM.md)** - Track execution history and analyze performance
 
 ### API Documentation
 
