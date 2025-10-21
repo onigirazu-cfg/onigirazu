@@ -33,6 +33,7 @@ Thumbs.db
 
 # Onigirazu specific
 .onigirazu-state
+.onigirazu-state.backup.*
 *.log
 
 # Generated files
