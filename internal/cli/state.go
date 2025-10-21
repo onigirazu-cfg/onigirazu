@@ -73,7 +73,7 @@ Shows:
 	}
 
 	// Add command-specific flags
-	cmd.Flags().StringP("state", "s", "onigirazu.state", "State file path")
+	cmd.Flags().StringP("state", "s", ".onigirazu-state", "State file path")
 	cmd.Flags().StringP("output", "o", "table", "Output format (table, json, yaml)")
 	cmd.Flags().String("filter", "", "Filter resources by name (supports wildcards)")
 
@@ -106,7 +106,7 @@ Displays:
 	}
 
 	// Add command-specific flags
-	cmd.Flags().StringP("state", "s", "onigirazu.state", "State file path")
+	cmd.Flags().StringP("state", "s", ".onigirazu-state", "State file path")
 	cmd.Flags().StringP("output", "o", "table", "Output format (table, json, yaml)")
 
 	return cmd

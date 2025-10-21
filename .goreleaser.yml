@@ -218,7 +218,7 @@ release:
     onigirazu --version
 
     # Run a playbook
-    onigirazu run playbook.yml -i inventory.yml
+    onigirazu apply playbook.yml -i inventory.yml
 
     # Get help
     onigirazu --help

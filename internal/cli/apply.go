@@ -100,8 +100,14 @@ Examples:
 				cancel()
 			}()
 
-			// Load configuration
-			cfg, err := config.LoadConfig(configPath)
+			// Determine playbook directory for discovery
+			playbookDir := filepath.Dir(playbookPath)
+
+			// Load configuration with priority-based discovery
+			// Priority 1: Explicitly specified path
+			// Priority 2: Config file in playbook directory
+			// Priority 3: Config file in /etc/onigirazu/
+			cfg, err := config.LoadConfigWithDiscovery(configPath, playbookDir)
 			if err != nil {
 				return fmt.Errorf("failed to load configuration: %w", err)
 			}

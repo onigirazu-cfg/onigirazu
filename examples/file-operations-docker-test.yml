@@ -1,0 +1,264 @@
+---
+# Example playbook demonstrating:
+# - Creating files with content
+# - File backups
+# - Text replacement
+# - File stats retrieval
+# - Running Docker containers for testing
+#
+# Usage:
+#   onigirazu run file-operations-docker-test.yml
+#   onigirazu run file-operations-docker-test.yml --tags backup
+#   onigirazu run file-operations-docker-test.yml --list-tags
+#   onigirazu run file-operations-docker-test.yml --list-tasks
+
+name: File Operations and Docker Testing
+hosts: localhost
+connection: local
+gather_facts: yes
+
+vars:
+  test_file: "{{ ansible_env.HOME }}/test-config.txt"
+  backup_file: "{{ ansible_env.HOME }}/test-config.txt.backup"
+  docker_image: "alpine:latest"
+  test_message: "Initial server configuration at localhost"
+
+tasks:
+  # ===== Task Group 1: File Creation =====
+
+  - name: "Create test file with initial content"
+    tags: [create, files]
+    block:
+      - name: "Create test file in home directory"
+        copy:
+          content: |
+            # Application Configuration
+            Server: localhost
+            Port: 8080
+            Environment: development
+            Database: localhost:5432
+            Cache: localhost:6379
+            Message: "Initial deployment"
+          dest: "{{ test_file }}"
+          mode: "0644"
+        register: file_created
+
+      - name: "Confirm file creation"
+        debug:
+          msg: "Test file created at {{ test_file }}"
+
+  # ===== Task Group 2: File Backup =====
+
+  - name: "Create backup of test file"
+    tags: [backup, files]
+    block:
+      - name: "Backup test file"
+        copy:
+          src: "{{ test_file }}"
+          dest: "{{ backup_file }}"
+          backup: yes
+          mode: "0644"
+        register: backup_result
+
+      - name: "Verify backup was created"
+        stat:
+          path: "{{ backup_file }}"
+        register: backup_stat
+
+      - name: "Display backup info"
+        debug:
+          msg: |
+            ✓ Backup created successfully
+            Location: {{ backup_file }}
+            Size: {{ backup_stat.stat.size }} bytes
+            Permissions: {{ backup_stat.stat.mode }}
+
+  # ===== Task Group 3: File Content Replacement =====
+
+  - name: "Replace words in test file"
+    tags: [replace, files]
+    block:
+      - name: "Replace localhost with example.com (Server)"
+        replace:
+          path: "{{ test_file }}"
+          regexp: '^Server: localhost$'
+          replace: 'Server: example.com'
+
+      - name: "Replace localhost with example.com (Database)"
+        replace:
+          path: "{{ test_file }}"
+          regexp: 'Database: localhost:'
+          replace: 'Database: example.com:'
+
+      - name: "Replace localhost with example.com (Cache)"
+        replace:
+          path: "{{ test_file }}"
+          regexp: 'Cache: localhost:'
+          replace: 'Cache: example.com:'
+
+      - name: "Update environment to production"
+        replace:
+          path: "{{ test_file }}"
+          regexp: 'Environment: development'
+          replace: 'Environment: production'
+
+      - name: "Update deployment message"
+        replace:
+          path: "{{ test_file }}"
+          regexp: 'Initial deployment'
+          replace: 'Updated production deployment'
+
+      - name: "Display updated file content"
+        command: "cat {{ test_file }}"
+        register: updated_content
+        changed_when: false
+
+      - name: "Show changes made"
+        debug:
+          msg: |
+            ✓ File content updated:
+            {{ updated_content.stdout }}
+
+  # ===== Task Group 4: File Statistics =====
+
+  - name: "Retrieve and display file statistics"
+    tags: [stats, files]
+    block:
+      - name: "Get original file stats"
+        stat:
+          path: "{{ test_file }}"
+        register: original_stats
+
+      - name: "Get backup file stats"
+        stat:
+          path: "{{ backup_file }}"
+        register: backup_file_stats
+
+      - name: "Display comprehensive file statistics"
+        debug:
+          msg: |
+            === ORIGINAL FILE STATS ===
+            File: {{ original_stats.stat.path }}
+            Size: {{ original_stats.stat.size }} bytes
+            Mode: {{ original_stats.stat.mode }}
+            Owner: {{ original_stats.stat.pw_name }} (UID: {{ original_stats.stat.uid }})
+            Group: {{ original_stats.stat.gr_name }} (GID: {{ original_stats.stat.gid }})
+            Created: {{ original_stats.stat.ctime | to_nice_datetime }}
+            Modified: {{ original_stats.stat.mtime | to_nice_datetime }}
+            Accessed: {{ original_stats.stat.atime | to_nice_datetime }}
+
+            === BACKUP FILE STATS ===
+            File: {{ backup_file_stats.stat.path }}
+            Size: {{ backup_file_stats.stat.size }} bytes
+            Mode: {{ backup_file_stats.stat.mode }}
+            Owner: {{ backup_file_stats.stat.pw_name }} (UID: {{ backup_file_stats.stat.uid }})
+            Group: {{ backup_file_stats.stat.gr_name }} (GID: {{ backup_file_stats.stat.gid }})
+            Created: {{ backup_file_stats.stat.ctime | to_nice_datetime }}
+            Modified: {{ backup_file_stats.stat.mtime | to_nice_datetime }}
+
+  # ===== Task Group 5: Docker Testing =====
+
+  - name: "Run Docker container tests"
+    tags: [docker, test]
+    block:
+      - name: "Pull Alpine Docker image"
+        command: "docker pull {{ docker_image }}"
+        register: docker_pull
+        changed_when: false
+        ignore_errors: yes
+
+      - name: "Run Docker container - System info"
+        command: "docker run --rm {{ docker_image }} uname -a"
+        register: docker_system_info
+        changed_when: false
+
+      - name: "Run Docker container - Alpine version"
+        command: "docker run --rm {{ docker_image }} cat /etc/os-release"
+        register: docker_version
+        changed_when: false
+
+      - name: "Run Docker container - Test file content"
+        block:
+          - name: "Copy test file into Docker container and verify"
+            command: |
+              docker run --rm \
+                -v {{ test_file }}:/config.txt:ro \
+                {{ docker_image }} \
+                sh -c 'echo "=== Configuration in Docker ===" && cat /config.txt && echo "" && echo "=== Verification ===" && grep -c "example.com" /config.txt && echo "Found example.com entries"'
+            register: docker_test_result
+            changed_when: false
+
+      - name: "Display Docker test results"
+        debug:
+          msg: |
+            ✓ Docker Container Test Results:
+
+            === System Information ===
+            {{ docker_system_info.stdout }}
+
+            === Alpine OS Info ===
+            {{ docker_version.stdout }}
+
+            === Configuration Test ===
+            {{ docker_test_result.stdout }}
+
+      - name: "Run Docker container - Advanced validation"
+        command: |
+          docker run --rm \
+            -v {{ test_file }}:/config.txt:ro \
+            {{ docker_image }} \
+            sh -c 'wc -l /config.txt && md5sum /config.txt'
+        register: docker_validation
+        changed_when: false
+
+      - name: "Display validation results"
+        debug:
+          msg: |
+            ✓ File Validation in Docker:
+            {{ docker_validation.stdout }}
+
+  # ===== Task Group 6: Summary and Cleanup Options =====
+
+  - name: "Display complete summary"
+    tags: [always]
+    block:
+      - name: "Show summary"
+        debug:
+          msg: |
+            ╔════════════════════════════════════════════════════╗
+            ║       FILE OPERATIONS & DOCKER TEST COMPLETE       ║
+            ╚════════════════════════════════════════════════════╝
+
+            ✓ Created: {{ test_file }}
+            ✓ Backed up: {{ backup_file }}
+            ✓ Updated: localhost → example.com
+            ✓ Updated: environment → production
+            ✓ Retrieved file statistics
+            ✓ Executed Docker container tests
+
+            Files are ready for review in your home directory.
+
+            To view files:
+              cat {{ test_file }}
+              cat {{ backup_file }}
+
+            To compare files:
+              diff {{ backup_file }} {{ test_file }}
+
+            To clean up (optional):
+              rm {{ test_file }} {{ backup_file }}
+
+  - name: "Optional cleanup (commented out)"
+    tags: [cleanup, never]
+    block:
+      - name: "Remove test file"
+        file:
+          path: "{{ test_file }}"
+          state: absent
+        when: false  # Change to true to enable cleanup
+
+      - name: "Remove backup file"
+        file:
+          path: "{{ backup_file }}"
+          state: absent
+        when: false  # Change to true to enable cleanup

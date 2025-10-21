@@ -36,33 +36,25 @@ func NewInventoryParser(logger interface {
 	}
 }
 
-// FindInventoryFile searches for inventory file in common locations
+// FindInventoryFile searches for inventory file in common locations with priority system:
+// Priority 2: playbook directory (baseDir)
+// Priority 3: /etc/onigirazu/
 func (p *InventoryParser) FindInventoryFile(baseDir string) (string, error) {
-	// List of common inventory file names
-	inventoryFiles := []string{
-		"inventory.yml",
-		"inventory.yaml",
-		"inventory.toml",
-		"inventory.json",
-		"inventory.ini",
-		"hosts",
-		"hosts.yml",
-		"hosts.yaml",
-		"hosts.toml",
-		"hosts.json",
-		"hosts.ini",
-		"inventory",
-	}
+	return p.FindInventoryFileWithPath("", baseDir)
+}
 
-	for _, filename := range inventoryFiles {
-		path := filepath.Join(baseDir, filename)
-		if _, err := os.Stat(path); err == nil {
-			p.logger.Debug("Found inventory file: %s", path)
-			return path, nil
-		}
+// FindInventoryFileWithPath searches for inventory file with priority system:
+// Priority 1: Explicitly specified path
+// Priority 2: playbook directory (baseDir)
+// Priority 3: /etc/onigirazu/
+func (p *InventoryParser) FindInventoryFileWithPath(explicitPath, baseDir string) (string, error) {
+	pathDiscovery := NewPathDiscovery(p.logger)
+	path, priority, err := pathDiscovery.DiscoverInventoryFilePathWithPriority(explicitPath, baseDir)
+	if err == nil {
+		p.logger.Info("Auto-detected inventory file at priority %d: %s", priority, path)
+		return path, nil
 	}
-
-	return "", fmt.Errorf("no inventory file found in %s (searched: %v)", baseDir, inventoryFiles)
+	return "", err
 }
 
 // ParseInventoryFile parses inventory file and auto-detects format

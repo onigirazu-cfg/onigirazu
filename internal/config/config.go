@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -158,18 +159,62 @@ func getEnvDuration(key string, defaultValue time.Duration) time.Duration {
 	return defaultValue
 }
 
+// DiscoverConfigFilePath discovers config file with priority system:
+// Priority 1: Explicitly specified path
+// Priority 2: File in playbook directory
+// Priority 3: File in /etc/onigirazu/
+// Returns: (path, priority, error)
+// Priority: 1 = explicit, 2 = playbook dir, 3 = /etc/onigirazu/, 0 = not found (no error)
+func DiscoverConfigFilePath(explicitPath, playbookDir string) (string, int) {
+	// Priority 1: Explicit path provided
+	if explicitPath != "" {
+		if _, err := os.Stat(explicitPath); err == nil {
+			return explicitPath, 1
+		}
+		// Explicit path doesn't exist, but we don't return it (caller should handle error)
+		return "", 0
+	}
+
+	configFileName := "onigirazu.yml"
+
+	// Priority 2: Check in playbook directory
+	if playbookDir != "" {
+		path := filepath.Join(playbookDir, configFileName)
+		if _, err := os.Stat(path); err == nil {
+			return path, 2
+		}
+	}
+
+	// Priority 3: Check in /etc/onigirazu/
+	etcPath := filepath.Join("/etc/onigirazu", configFileName)
+	if _, err := os.Stat(etcPath); err == nil {
+		return etcPath, 3
+	}
+
+	// No config file found (not an error - returns empty path)
+	return "", 0
+}
+
 // LoadConfig loads configuration from file or returns default config
+// Supports priority-based discovery:
+// Priority 1: Explicitly specified path
+// Priority 2: File in playbook directory (if playbookDir provided)
+// Priority 3: File in /etc/onigirazu/
 func LoadConfig(path string) (*Config, error) {
-	// If no path provided or file doesn't exist, return default config
-	if path == "" {
+	return LoadConfigWithDiscovery(path, "")
+}
+
+// LoadConfigWithDiscovery loads configuration with priority-based discovery
+func LoadConfigWithDiscovery(path, playbookDir string) (*Config, error) {
+	// First try explicit path or discovery
+	configPath, priority := DiscoverConfigFilePath(path, playbookDir)
+
+	// If no path found, return default config
+	if configPath == "" {
 		return DefaultConfig(), nil
 	}
 
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return DefaultConfig(), nil
-	}
-
-	data, err := os.ReadFile(path) // #nosec G304 -- path is provided by user as config file
+	data, err := os.ReadFile(configPath) // #nosec G304 -- path is from discovery or user
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
@@ -181,6 +226,11 @@ func LoadConfig(path string) (*Config, error) {
 
 	if err := config.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid configuration: %w", err)
+	}
+
+	if priority > 0 {
+		// Log which priority level was used (in a non-verbose way)
+		// The logger is not available in this package, so we'll let the caller log if needed
 	}
 
 	return config, nil

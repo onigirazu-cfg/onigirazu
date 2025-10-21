@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"sync"
@@ -902,6 +903,10 @@ func (e *ExecutionEngine) parseRange(rangeStr string) ([]interface{}, error) {
 		if s <= 0 {
 			return nil, fmt.Errorf("step must be positive, got: %d", s)
 		}
+		// Ensure step fits within rune (int32) bounds to prevent overflow
+		if s > math.MaxInt32 {
+			return nil, fmt.Errorf("step value %d exceeds maximum allowed value %d", s, math.MaxInt32)
+		}
 		step = s
 		rangeWithoutStep = rangeStr[:idx]
 	}
@@ -951,13 +956,16 @@ func (e *ExecutionEngine) parseRange(rangeStr string) ([]interface{}, error) {
 			return nil, fmt.Errorf("range '%s' cannot mix letters and non-letters (got '%s' and '%s')", rangeStr, start, end)
 		}
 
+		// Safe conversion: step already validated to fit in int32 bounds above
+		stepRune := rune(step)
+
 		if startChar <= endChar {
-			for i := startChar; i <= endChar; i += rune(step) {
+			for i := startChar; i <= endChar; i += stepRune {
 				items = append(items, string(i))
 			}
 		} else {
 			// Reverse order
-			for i := startChar; i >= endChar; i -= rune(step) {
+			for i := startChar; i >= endChar; i -= stepRune {
 				items = append(items, string(i))
 			}
 		}
