@@ -197,8 +197,25 @@ plays:
           path: "{{ item }}"
           state: directory
         loop:
-          - "{{ app_dir }}"
-          - "{{ backup_dir }}"
+          items:
+            - "{{ app_dir }}"
+            - "{{ backup_dir }}"
+
+      # For comprehensive loop documentation, see LOOPS_GUIDE.md
+      # Examples:
+      - name: Loop with numeric range
+        file:
+          path: "/data/vol{{ item }}"
+          state: directory
+        loop:
+          range: "1-10"
+
+      - name: Loop with character range
+        file:
+          path: "/mnt/{{ item }}"
+          state: directory
+        loop:
+          range: "a-z"
 ```
 
 ---

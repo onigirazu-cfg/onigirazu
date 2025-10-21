@@ -31,13 +31,13 @@ Playbooks are YAML files that describe the desired state of your infrastructure.
       package:
         name: nginx
         state: present
-    
+
     - name: Start nginx service
       service:
         name: nginx
         state: started
         enabled: true
-    
+
     - name: Create nginx configuration
       template:
         src: nginx.conf.j2
@@ -68,19 +68,19 @@ Playbooks are YAML files that describe the desired state of your infrastructure.
       package:
         update_cache: true
       when: ansible_os_family == "Debian"
-    
+
     - name: Install nginx
       package:
         name: nginx
         state: present
-    
+
     - name: Configure nginx
       template:
         src: nginx.conf.j2
         dest: /etc/nginx/nginx.conf
         backup: true
       notify: restart nginx
-    
+
     - name: Start nginx
       service:
         name: nginx
@@ -101,7 +101,7 @@ Playbooks are YAML files that describe the desired state of your infrastructure.
       package:
         name: mysql-server
         state: present
-    
+
     - name: Start mysql
       service:
         name: mysql
@@ -171,7 +171,7 @@ Playbooks are YAML files that describe the desired state of your infrastructure.
       package:
         name: nginx
         state: present
-    
+
     - name: Create web directory
       file:
         path: "{{ web_root }}"
@@ -179,14 +179,14 @@ Playbooks are YAML files that describe the desired state of your infrastructure.
         owner: "{{ nginx_user }}"
         group: "{{ nginx_user }}"
         mode: '0755'
-    
+
     - name: Configure nginx
       template:
         src: nginx.conf.j2
         dest: /etc/nginx/nginx.conf
         backup: true
       notify: restart nginx
-    
+
     - name: Start nginx
       service:
         name: nginx
@@ -218,27 +218,27 @@ Playbooks are YAML files that describe the desired state of your infrastructure.
       package:
         name: mysql-server
         state: present
-    
+
     - name: Start mysql
       service:
         name: mysql
         state: started
         enabled: true
-    
+
     - name: Set mysql root password
       mysql_user:
         name: root
         password: "{{ mysql_root_password }}"
         login_password: ""
         login_unix_socket: /var/run/mysqld/mysqld.sock
-    
+
     - name: Create database
       mysql_db:
         name: "{{ mysql_database }}"
         state: present
         login_user: root
         login_password: "{{ mysql_root_password }}"
-    
+
     - name: Create database user
       mysql_user:
         name: "{{ mysql_user }}"
@@ -269,7 +269,7 @@ Playbooks are YAML files that describe the desired state of your infrastructure.
         system: true
         shell: /bin/false
         home: "{{ app_dir }}"
-    
+
     - name: Create application directory
       file:
         path: "{{ app_dir }}"
@@ -277,13 +277,13 @@ Playbooks are YAML files that describe the desired state of your infrastructure.
         owner: "{{ app_user }}"
         group: "{{ app_user }}"
         mode: '0755'
-    
+
     - name: Download application
       get_url:
         url: "https://github.com/myorg/myapp/releases/download/v{{ app_version }}/myapp-{{ app_version }}.tar.gz"
         dest: "/tmp/myapp-{{ app_version }}.tar.gz"
         mode: '0644'
-    
+
     - name: Extract application
       unarchive:
         src: "/tmp/myapp-{{ app_version }}.tar.gz"
@@ -291,7 +291,7 @@ Playbooks are YAML files that describe the desired state of your infrastructure.
         owner: "{{ app_user }}"
         group: "{{ app_user }}"
         remote_src: true
-    
+
     - name: Configure application
       template:
         src: app.conf.j2
@@ -300,7 +300,7 @@ Playbooks are YAML files that describe the desired state of your infrastructure.
         group: "{{ app_user }}"
         mode: '0644'
       notify: restart application
-    
+
     - name: Start application
       service:
         name: "{{ app_name }}"
@@ -329,20 +329,20 @@ Playbooks are YAML files that describe the desired state of your infrastructure.
     # Simple variables
     app_name: myapp
     app_version: "1.0.0"
-    
+
     # Complex variables
     database:
       host: localhost
       port: 3306
       name: myapp
       user: myapp_user
-    
+
     # Lists
     packages:
       - nginx
       - mysql-server
       - php-fpm
-    
+
     # Dictionaries
     users:
       admin:
@@ -351,14 +351,14 @@ Playbooks are YAML files that describe the desired state of your infrastructure.
       user1:
         name: user1
         password: "{{ vault_user1_password }}"
-  
+
   tasks:
     - name: Install packages
       package:
         name: "{{ item }}"
         state: present
       loop: "{{ packages }}"
-    
+
     - name: Create users
       user:
         name: "{{ item.value.name }}"
@@ -379,13 +379,13 @@ Playbooks are YAML files that describe the desired state of your infrastructure.
         name: nginx
         state: present
       when: ansible_os_family == "Debian"
-    
+
     - name: Install nginx on RedHat
       package:
         name: nginx
         state: present
       when: ansible_os_family == "RedHat"
-    
+
     - name: Start nginx if installed
       service:
         name: nginx
@@ -394,6 +394,8 @@ Playbooks are YAML files that describe the desired state of your infrastructure.
 ```
 
 ### Loops
+
+> **📖 Full Reference**: See [LOOPS_GUIDE.md](../LOOPS_GUIDE.md) for comprehensive loop documentation
 
 ```yaml
 # Loop through items
@@ -411,18 +413,59 @@ Playbooks are YAML files that describe the desired state of your infrastructure.
       - name: user2
         shell: /bin/false
   tasks:
-    - name: Install packages
+    - name: Install packages (items loop)
       package:
         name: "{{ item }}"
         state: present
-      loop: "{{ packages }}"
-    
-    - name: Create users
+      loop:
+        items: "{{ packages }}"
+
+    - name: Create users (object loop)
       user:
         name: "{{ item.name }}"
         shell: "{{ item.shell }}"
-      loop: "{{ users }}"
+      loop:
+        items: "{{ users }}"
+
+    - name: Create directories using numeric range
+      file:
+        path: "/opt/app/dir{{ item }}"
+        state: directory
+      loop:
+        range: "1-10"
+
+    - name: Create files using character range
+      file:
+        path: "/tmp/file-{{ item }}"
+        state: touch
+      loop:
+        range: "a-z"
+
+    - name: Use custom loop variable name
+      package:
+        name: "{{ pkg }}"
+        state: present
+      loop:
+        items: ["nginx", "postgresql"]
+        var: "pkg"
 ```
+
+**Loop Types Supported**:
+
+- **Items**: `loop: { items: [item1, item2, item3] }`
+- **Numeric Range**: `loop: { range: "1-10" }` → [1, 2, 3, ..., 10]
+- **Range with Step**: `loop: { range: "1-10:2" }` → [1, 3, 5, 7, 9]
+- **Character Range**: `loop: { range: "a-z" }` → ['a', 'b', ..., 'z']
+- **Reverse Range**: `loop: { range: "10-1" }` → [10, 9, 8, ..., 1]
+
+**Loop Variables**:
+
+- `item` - Current item value
+- `loop.index` - 1-based iteration number
+- `loop.index0` - 0-based iteration number
+- `loop.first` - True if first iteration
+- `loop.last` - True if last iteration
+- `loop.length` - Total items count
 
 ### Handlers
 
@@ -437,7 +480,7 @@ Playbooks are YAML files that describe the desired state of your infrastructure.
         src: nginx.conf.j2
         dest: /etc/nginx/nginx.conf
       notify: restart nginx
-    
+
     - name: Configure apache
       template:
         src: apache.conf.j2
@@ -449,7 +492,7 @@ Playbooks are YAML files that describe the desired state of your infrastructure.
       service:
         name: nginx
         state: restarted
-    
+
     - name: restart apache
       service:
         name: apache2
@@ -477,7 +520,7 @@ Playbooks are YAML files that describe the desired state of your infrastructure.
     - name: Update system
       package:
         update_cache: true
-    
+
     - name: Install base packages
       package:
         name: "{{ item }}"
@@ -486,7 +529,7 @@ Playbooks are YAML files that describe the desired state of your infrastructure.
         - curl
         - wget
         - git
-    
+
     - name: Configure application
       template:
         src: app.conf.j2
@@ -514,12 +557,12 @@ Playbooks are YAML files that describe the desired state of your infrastructure.
         state: present
       ignore_errors: true
       register: install_result
-    
+
     - name: Check installation
       debug:
         msg: "Package installed successfully"
       when: install_result is succeeded
-    
+
     - name: Handle installation failure
       debug:
         msg: "Package installation failed"
@@ -542,7 +585,7 @@ Playbooks are YAML files that describe the desired state of your infrastructure.
       loop: "{{ packages }}"
       async: 30
       poll: 0
-    
+
     - name: Wait for package installation
       async_status:
         jid: "{{ ansible_job_id }}"
@@ -568,13 +611,13 @@ Playbooks are YAML files that describe the desired state of your infrastructure.
         name: nginx
         state: present
       tags: [nginx, packages]
-    
+
     - name: Configure nginx
       template:
         src: nginx.conf.j2
         dest: /etc/nginx/nginx.conf
       tags: [nginx, config]
-    
+
     - name: Start nginx
       service:
         name: nginx
@@ -596,12 +639,12 @@ Playbooks are YAML files that describe the desired state of your infrastructure.
           package:
             name: nginx
             state: present
-        
+
         - name: Configure nginx
           template:
             src: nginx.conf.j2
             dest: /etc/nginx/nginx.conf
-        
+
         - name: Start nginx
           service:
             name: nginx
@@ -627,11 +670,11 @@ Playbooks are YAML files that describe the desired state of your infrastructure.
   tasks:
     - name: Include common tasks
       include: common-tasks.yml
-    
+
     - name: Include web server tasks
       include: webserver-tasks.yml
       when: inventory_hostname in groups['webservers']
-    
+
     - name: Include database tasks
       include: database-tasks.yml
       when: inventory_hostname in groups['dbservers']
@@ -706,4 +749,3 @@ onigirazu apply playbook.yml -i inventory.yml --validate
 ---
 
 **📚 Playbooks make infrastructure management declarative and repeatable!**
-
