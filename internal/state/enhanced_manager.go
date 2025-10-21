@@ -14,21 +14,31 @@ import (
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
+// ExecutionState holds state for a single execution
+type ExecutionState struct {
+	TaskStates map[string]*types.TaskState
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+}
+
 // EnhancedManager provides thread-safe state management with advanced features
 type EnhancedManager struct {
-	stateFile   string
-	mutex       sync.RWMutex
-	state       *types.State
-	taskStates  map[string]*types.TaskState
-	autoSave    bool
-	backupCount int
+	stateFile     string
+	mutex         sync.RWMutex
+	state         *types.State
+	executions    map[string]*ExecutionState  // Per-execution isolation
+	taskStates    map[string]*types.TaskState // Legacy compatibility
+	currentExecID string                      // Track current execution
+	autoSave      bool
+	backupCount   int
 }
 
 // NewEnhanced creates a new enhanced state manager
 func NewEnhanced(stateFile string, autoSave bool, backupCount int) *EnhancedManager {
 	return &EnhancedManager{
 		stateFile:   stateFile,
-		taskStates:  make(map[string]*types.TaskState),
+		taskStates:  make(map[string]*types.TaskState), // Legacy compatibility
+		executions:  make(map[string]*ExecutionState),  // Per-execution isolation
 		autoSave:    autoSave,
 		backupCount: backupCount,
 	}
@@ -38,7 +48,8 @@ func NewEnhanced(stateFile string, autoSave bool, backupCount int) *EnhancedMana
 func NewEnhancedManager(stateFile string, logger interface{}) *EnhancedManager {
 	return &EnhancedManager{
 		stateFile:   stateFile,
-		taskStates:  make(map[string]*types.TaskState),
+		taskStates:  make(map[string]*types.TaskState), // Legacy compatibility
+		executions:  make(map[string]*ExecutionState),  // Per-execution isolation
 		autoSave:    true,
 		backupCount: 5,
 	}
@@ -178,20 +189,39 @@ func (m *EnhancedManager) HasChanged(filePath string) (bool, error) {
 	return checksum != lastChecksum, nil
 }
 
-// GetTaskState retrieves task state by ID
+// GetTaskState retrieves task state by ID from the current execution or legacy storage
 func (m *EnhancedManager) GetTaskState(taskID string) (*types.TaskState, bool) {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
 
+	// Check if we have a current execution with isolated state
+	if m.currentExecID != "" {
+		if execState, exists := m.executions[m.currentExecID]; exists {
+			if taskState, found := execState.TaskStates[taskID]; found {
+				return taskState, true
+			}
+		}
+	}
+
+	// Fall back to legacy global task states for backwards compatibility
 	taskState, exists := m.taskStates[taskID]
 	return taskState, exists
 }
 
-// SetTaskState stores task state
+// SetTaskState stores task state in the current execution or legacy storage
 func (m *EnhancedManager) SetTaskState(taskID string, taskState *types.TaskState) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
+	// Store in current execution's isolated state if available
+	if m.currentExecID != "" {
+		if execState, exists := m.executions[m.currentExecID]; exists {
+			execState.TaskStates[taskID] = taskState
+			execState.UpdatedAt = time.Now()
+		}
+	}
+
+	// Also store in legacy global state for backwards compatibility
 	m.taskStates[taskID] = taskState
 
 	// Auto-save if enabled
@@ -217,8 +247,107 @@ func (m *EnhancedManager) Clear() error {
 		LastRun:   time.Now(),
 	}
 	m.taskStates = make(map[string]*types.TaskState)
+	m.executions = make(map[string]*ExecutionState)
+	m.currentExecID = ""
 
 	return nil
+}
+
+// ==================== EXECUTION ISOLATION (Phase 1 Fix) ====================
+
+// BeginExecution creates a new isolated execution context
+// ExecutionID should be unique per playbook/deployment run
+func (m *EnhancedManager) BeginExecution(executionID string) error {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	if executionID == "" {
+		return fmt.Errorf("executionID cannot be empty")
+	}
+
+	// Check if this execution already exists
+	if _, exists := m.executions[executionID]; exists {
+		return fmt.Errorf("execution %s already exists", executionID)
+	}
+
+	// Create new isolated execution state
+	m.executions[executionID] = &ExecutionState{
+		TaskStates: make(map[string]*types.TaskState),
+		CreatedAt:  time.Now(),
+		UpdatedAt:  time.Now(),
+	}
+
+	// Set as current execution
+	m.currentExecID = executionID
+
+	return nil
+}
+
+// EndExecution marks an execution as complete and keeps it for auditing
+// If cleanup is true, removes the execution state to free resources
+func (m *EnhancedManager) EndExecution(executionID string, cleanup bool) error {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	if executionID == "" {
+		return fmt.Errorf("executionID cannot be empty")
+	}
+
+	// Verify execution exists
+	if _, exists := m.executions[executionID]; !exists {
+		return fmt.Errorf("execution %s not found", executionID)
+	}
+
+	// Clear current execution if it matches
+	if m.currentExecID == executionID {
+		m.currentExecID = ""
+	}
+
+	// Optionally cleanup
+	if cleanup {
+		delete(m.executions, executionID)
+	}
+
+	return nil
+}
+
+// GetExecutionTaskState retrieves task state from a specific execution
+func (m *EnhancedManager) GetExecutionTaskState(executionID, taskID string) (*types.TaskState, bool) {
+	m.mutex.RLock()
+	defer m.mutex.RUnlock()
+
+	execState, exists := m.executions[executionID]
+	if !exists {
+		return nil, false
+	}
+
+	taskState, found := execState.TaskStates[taskID]
+	return taskState, found
+}
+
+// ListExecutions returns a list of all active executions
+func (m *EnhancedManager) ListExecutions() []string {
+	m.mutex.RLock()
+	defer m.mutex.RUnlock()
+
+	execIDs := make([]string, 0, len(m.executions))
+	for execID := range m.executions {
+		execIDs = append(execIDs, execID)
+	}
+	return execIDs
+}
+
+// GetExecutionStats returns statistics for a specific execution
+func (m *EnhancedManager) GetExecutionStats(executionID string) (int, time.Time, time.Time, error) {
+	m.mutex.RLock()
+	defer m.mutex.RUnlock()
+
+	execState, exists := m.executions[executionID]
+	if !exists {
+		return 0, time.Time{}, time.Time{}, fmt.Errorf("execution %s not found", executionID)
+	}
+
+	return len(execState.TaskStates), execState.CreatedAt, execState.UpdatedAt, nil
 }
 
 // UpdateChecksum updates the checksum for a file
