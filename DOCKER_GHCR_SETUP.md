@@ -1,299 +1,299 @@
-# Настройка публикации Docker образов в GitHub Container Registry (GHCR)
+# Docker Image Publication to GitHub Container Registry (GHCR)
 
-## ✅ Что уже настроено
+## ✅ What's Already Configured
 
-Проект уже полностью настроен для публикации Docker образов в GHCR. Конфигурация включает:
+The project is fully configured to publish Docker images to GHCR. The configuration includes:
 
-1. **`.goreleaser.yml`** - настроена сборка Docker образов для GHCR
-2. **`.github/workflows/release.yml`** - настроен workflow для публикации
-3. **`Dockerfile`** - multi-stage сборка с минимальным образом
+1. **`.goreleaser.yml`** - configured to build Docker images for GHCR
+2. **`.github/workflows/release.yml`** - workflow configured for publication
+3. **`Dockerfile`** - multi-stage build with minimal image size
 
-## 🔑 Необходимые секреты GitHub
+## 🔑 Required GitHub Secrets
 
-Для публикации в GHCR нужно настроить следующие секреты в репозитории:
+To publish to GHCR, you need to configure the following secrets in the repository:
 
-### 1. GH_TOKEN (обязательно)
+### 1. GH_TOKEN (required)
 
-Это Personal Access Token (PAT) с правами на публикацию пакетов.
+This is a Personal Access Token (PAT) with package publication rights.
 
-**Как создать:**
+**How to create:**
 
-1. Перейдите в GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic)
-2. Нажмите "Generate new token (classic)"
-3. Дайте токену имя: `ONIGIRAZU_RELEASE_TOKEN`
-4. Выберите срок действия: `No expiration` (или на ваше усмотрение)
-5. Выберите следующие права (scopes):
+1. Go to GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic)
+2. Click "Generate new token (classic)"
+3. Give the token a name: `ONIGIRAZU_RELEASE_TOKEN`
+4. Set expiration: `No expiration` (or as you prefer)
+5. Select the following scopes:
    - ✅ `repo` (Full control of private repositories)
    - ✅ `write:packages` (Upload packages to GitHub Package Registry)
    - ✅ `read:packages` (Download packages from GitHub Package Registry)
    - ✅ `delete:packages` (Delete packages from GitHub Package Registry)
-6. Нажмите "Generate token"
-7. **ВАЖНО:** Скопируйте токен сразу, он больше не будет показан!
+6. Click "Generate token"
+7. **IMPORTANT:** Copy the token immediately, it won't be shown again!
 
-**Как добавить в репозиторий:**
+**How to add to the repository:**
 
-1. Перейдите в репозиторий → Settings → Secrets and variables → Actions
-2. Нажмите "New repository secret"
+1. Go to repository → Settings → Secrets and variables → Actions
+2. Click "New repository secret"
 3. Name: `GH_TOKEN`
-4. Secret: вставьте скопированный токен
-5. Нажмите "Add secret"
+4. Secret: paste the copied token
+5. Click "Add secret"
 
-### 2. DOCKERHUB_USERNAME и DOCKERHUB_TOKEN (опционально)
+### 2. DOCKERHUB_USERNAME and DOCKERHUB_TOKEN (optional)
 
-Эти секреты нужны только если вы хотите публиковать образы также в Docker Hub.
+These secrets are only needed if you want to publish images to Docker Hub as well.
 
-**Как создать Docker Hub токен:**
+**How to create Docker Hub token:**
 
-1. Войдите в Docker Hub
-2. Перейдите в Account Settings → Security → Access Tokens
-3. Нажмите "New Access Token"
-4. Дайте имя: `onigirazu-release`
-5. Выберите права: `Read, Write, Delete`
-6. Нажмите "Generate"
-7. Скопируйте токен
+1. Log in to Docker Hub
+2. Go to Account Settings → Security → Access Tokens
+3. Click "New Access Token"
+4. Name: `onigirazu-release`
+5. Select permissions: `Read, Write, Delete`
+6. Click "Generate"
+7. Copy the token
 
-**Как добавить в репозиторий:**
+**How to add to the repository:**
 
-1. Перейдите в репозиторий → Settings → Secrets and variables → Actions
-2. Добавьте два секрета:
-   - `DOCKERHUB_USERNAME` - ваш username в Docker Hub
-   - `DOCKERHUB_TOKEN` - скопированный токен
+1. Go to repository → Settings → Secrets and variables → Actions
+2. Add two secrets:
+   - `DOCKERHUB_USERNAME` - your Docker Hub username
+   - `DOCKERHUB_TOKEN` - the copied token
 
-### 3. COSIGN_PRIVATE_KEY и COSIGN_PASSWORD (опционально)
+### 3. COSIGN_PRIVATE_KEY and COSIGN_PASSWORD (optional)
 
-Эти секреты нужны для подписи артефактов с помощью cosign.
+These secrets are needed for signing artifacts with cosign.
 
-**Как создать:**
+**How to create:**
 
 ```bash
-# Установите cosign
+# Install cosign
 brew install cosign  # macOS
-# или
+# or
 go install github.com/sigstore/cosign/v2/cmd/cosign@latest
 
-# Создайте ключи
+# Create key pair
 cosign generate-key-pair
 
-# Это создаст два файла:
-# - cosign.key (приватный ключ)
-# - cosign.pub (публичный ключ)
+# This will create two files:
+# - cosign.key (private key)
+# - cosign.pub (public key)
 ```
 
-**Как добавить в репозиторий:**
+**How to add to the repository:**
 
-1. Перейдите в репозиторий → Settings → Secrets and variables → Actions
-2. Добавьте два секрета:
-   - `COSIGN_PRIVATE_KEY` - содержимое файла `cosign.key`
-   - `COSIGN_PASSWORD` - пароль, который вы указали при создании ключей
+1. Go to repository → Settings → Secrets and variables → Actions
+2. Add two secrets:
+   - `COSIGN_PRIVATE_KEY` - contents of the `cosign.key` file
+   - `COSIGN_PASSWORD` - the password you specified when creating the keys
 
-### 4. FURY_TOKEN (опционально)
+### 4. FURY_TOKEN (optional)
 
-Этот секрет нужен для публикации пакетов в Fury.io (альтернативный репозиторий пакетов).
+This secret is needed to publish packages to Fury.io (alternative package repository).
 
-## 📋 Проверка настроек
+## 📋 Verifying Configuration
 
-### 1. Проверьте права workflow
+### 1. Check workflow permissions
 
-В файле `.github/workflows/release.yml` должны быть указаны следующие права:
+The file `.github/workflows/release.yml` should have the following permissions:
 
 ```yaml
 permissions:
-  contents: write      # Для создания релизов
-  packages: write      # Для публикации в GHCR
-  id-token: write      # Для подписи артефактов
+  contents: write      # For creating releases
+  packages: write      # For publishing to GHCR
+  id-token: write      # For signing artifacts
 ```
 
-✅ **Уже настроено в проекте**
+✅ **Already configured in the project**
 
-### 2. Проверьте настройки репозитория
+### 2. Check repository settings
 
-1. Перейдите в Settings → Actions → General
-2. В разделе "Workflow permissions" выберите:
+1. Go to Settings → Actions → General
+2. In the "Workflow permissions" section, select:
    - ✅ "Read and write permissions"
    - ✅ "Allow GitHub Actions to create and approve pull requests"
 
-### 3. Проверьте видимость пакетов
+### 3. Check package visibility
 
-После первой публикации:
+After the first publication:
 
-1. Перейдите в профиль GitHub → Packages
-2. Найдите пакет `onigirazu`
-3. Нажмите на него → Package settings
-4. В разделе "Danger Zone" → "Change package visibility"
-5. Выберите "Public" (если хотите, чтобы образы были публичными)
+1. Go to GitHub profile → Packages
+2. Find the `onigirazu` package
+3. Click on it → Package settings
+4. In the "Danger Zone" section → "Change package visibility"
+5. Select "Public" (if you want the images to be public)
 
-## 🚀 Как опубликовать релиз
+## 🚀 How to Publish a Release
 
-### Автоматическая публикация (рекомендуется)
+### Automatic Publishing (recommended)
 
-Просто создайте и запушьте тег:
+Simply create and push a tag:
 
 ```bash
-# Создайте тег
+# Create tag
 git tag -a v1.0.0 -m "Release v1.0.0"
 
-# Запушьте тег
+# Push tag
 git push origin v1.0.0
 ```
 
-Это автоматически запустит workflow, который:
+This automatically runs the workflow, which:
 
-1. Запустит тесты
-2. Соберёт бинарники для всех платформ
-3. Создаст релиз на GitHub
-4. Соберёт и опубликует Docker образы в GHCR (и Docker Hub, если настроен)
+1. Runs tests
+2. Builds binaries for all platforms
+3. Creates a release on GitHub
+4. Builds and publishes Docker images to GHCR (and Docker Hub, if configured)
 
-### Ручная публикация
+### Manual Publishing
 
-Вы также можете запустить workflow вручную:
+You can also run the workflow manually:
 
-1. Перейдите в репозиторий → Actions → Release
-2. Нажмите "Run workflow"
-3. Введите тег (например, `v1.0.0`)
-4. Нажмите "Run workflow"
+1. Go to repository → Actions → Release
+2. Click "Run workflow"
+3. Enter the tag (e.g., `v1.0.0`)
+4. Click "Run workflow"
 
-## 🐳 Использование опубликованных образов
+## 🐳 Using Published Images
 
-После публикации образы будут доступны по следующим адресам:
+After publication, images will be available at:
 
 ### GitHub Container Registry (GHCR)
 
 ```bash
-# Последняя версия
+# Latest version
 docker pull ghcr.io/onigirazu-cfg/onigirazu:latest
 
-# Конкретная версия
+# Specific version
 docker pull ghcr.io/onigirazu-cfg/onigirazu:v1.0.0
 
-# Конкретная версия и архитектура
+# Specific version and architecture
 docker pull ghcr.io/onigirazu-cfg/onigirazu:v1.0.0-amd64
 docker pull ghcr.io/onigirazu-cfg/onigirazu:v1.0.0-arm64v8
 ```
 
-### Docker Hub (если настроен)
+### Docker Hub (if configured)
 
 ```bash
-# Последняя версия
+# Latest version
 docker pull onigirazu/onigirazu:latest
 
-# Конкретная версия
+# Specific version
 docker pull onigirazu/onigirazu:v1.0.0
 ```
 
-## 🔍 Проверка публикации
+## 🔍 Verifying Publication
 
-### 1. Проверьте GitHub Actions
+### 1. Check GitHub Actions
 
-1. Перейдите в репозиторий → Actions
-2. Найдите workflow "Release"
-3. Проверьте, что все шаги выполнены успешно:
+1. Go to repository → Actions
+2. Find the "Release" workflow
+3. Check that all steps completed successfully:
    - ✅ validate
    - ✅ test
    - ✅ release
    - ✅ docker
    - ✅ notify
 
-### 2. Проверьте релиз
+### 2. Check Release
 
-1. Перейдите в репозиторий → Releases
-2. Найдите созданный релиз
-3. Проверьте наличие всех артефактов:
-   - Бинарники для всех платформ
-   - Пакеты (DEB, RPM, APK, Arch)
+1. Go to repository → Releases
+2. Find the created release
+3. Verify all artifacts are present:
+   - Binaries for all platforms
+   - Packages (DEB, RPM, APK, Arch)
    - Checksums
-   - SBOM файлы
+   - SBOM files
 
-### 3. Проверьте Docker образы
+### 3. Check Docker Images
 
 ```bash
-# Проверьте, что образ доступен
+# Verify the image is available
 docker pull ghcr.io/onigirazu-cfg/onigirazu:latest
 
-# Проверьте версию
+# Check version
 docker run --rm ghcr.io/onigirazu-cfg/onigirazu:latest --version
 
-# Проверьте поддерживаемые архитектуры
+# Check supported architectures
 docker manifest inspect ghcr.io/onigirazu-cfg/onigirazu:latest
 ```
 
-### 4. Проверьте пакеты в GHCR
+### 4. Check GHCR Packages
 
-1. Перейдите в профиль GitHub → Packages
-2. Найдите пакет `onigirazu`
-3. Проверьте список версий
-4. Проверьте статистику скачиваний
+1. Go to GitHub profile → Packages
+2. Find the `onigirazu` package
+3. Check the list of versions
+4. Check download statistics
 
-## 🐛 Устранение проблем
+## 🐛 Troubleshooting
 
-### Ошибка: "Resource not accessible by integration"
+### Error: "Resource not accessible by integration"
 
-**Причина:** Недостаточно прав у workflow
+**Cause:** Workflow doesn't have sufficient permissions
 
-**Решение:**
+**Solution:**
 
-1. Проверьте права в `.github/workflows/release.yml`
-2. Проверьте настройки репозитория (Settings → Actions → General)
-3. Убедитесь, что выбрано "Read and write permissions"
+1. Check permissions in `.github/workflows/release.yml`
+2. Check repository settings (Settings → Actions → General)
+3. Make sure "Read and write permissions" is selected
 
-### Ошибка: "authentication required"
+### Error: "authentication required"
 
-**Причина:** Неправильный или отсутствующий токен
+**Cause:** Incorrect or missing token
 
-**Решение:**
+**Solution:**
 
-1. Проверьте, что секрет `GH_TOKEN` добавлен в репозиторий
-2. Проверьте, что токен имеет права `write:packages`
-3. Создайте новый токен, если старый истёк
+1. Verify that the `GH_TOKEN` secret is added to the repository
+2. Verify that the token has `write:packages` permission
+3. Create a new token if the old one has expired
 
-### Ошибка: "denied: permission_denied"
+### Error: "denied: permission_denied"
 
-**Причина:** Пакет существует, но у токена нет прав на запись
+**Cause:** Package exists but token doesn't have write permission
 
-**Решение:**
+**Solution:**
 
-1. Перейдите в профиль GitHub → Packages → onigirazu
+1. Go to GitHub profile → Packages → onigirazu
 2. Package settings → Manage Actions access
-3. Добавьте репозиторий с правами "Write"
+3. Add the repository with "Write" permission
 
-### Docker образы не собираются
+### Docker images are not being built
 
-**Причина:** Проблемы с Docker Buildx или платформами
+**Cause:** Issues with Docker Buildx or platforms
 
-**Решение:**
+**Solution:**
 
-1. Проверьте логи workflow
-2. Убедитесь, что runner поддерживает multi-arch сборку
-3. Проверьте, что Docker Buildx установлен и настроен
+1. Check workflow logs
+2. Make sure the runner supports multi-arch builds
+3. Verify that Docker Buildx is installed and configured
 
-### Образы публикуются только в GHCR, но не в Docker Hub
+### Images are published only to GHCR, not to Docker Hub
 
-**Причина:** Не настроены секреты Docker Hub
+**Cause:** Docker Hub secrets are not configured
 
-**Решение:**
+**Solution:**
 
-1. Это нормально, если вы не хотите публиковать в Docker Hub
-2. Если хотите - добавьте секреты `DOCKERHUB_USERNAME` и `DOCKERHUB_TOKEN`
+1. This is normal if you don't want to publish to Docker Hub
+2. If you do - add `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` secrets
 
-## 📚 Дополнительные ресурсы
+## 📚 Additional Resources
 
 - [GitHub Container Registry Documentation](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry)
 - [GoReleaser Docker Documentation](https://goreleaser.com/customization/docker/)
 - [Docker Buildx Documentation](https://docs.docker.com/buildx/working-with-buildx/)
 - [Cosign Documentation](https://docs.sigstore.dev/cosign/overview/)
 
-## ✅ Чеклист перед первым релизом
+## ✅ Pre-Release Checklist
 
-- [ ] Создан Personal Access Token с правами `repo` и `write:packages`
-- [ ] Токен добавлен в секреты репозитория как `GH_TOKEN`
-- [ ] Проверены права workflow в `.github/workflows/release.yml`
-- [ ] Проверены настройки репозитория (Actions → General → Workflow permissions)
-- [ ] (Опционально) Настроены секреты Docker Hub
-- [ ] (Опционально) Настроены ключи Cosign для подписи
-- [ ] Проверен Dockerfile
-- [ ] Проверена конфигурация `.goreleaser.yml`
-- [ ] Запущен локальный тест: `./scripts/test-release.sh`
-- [ ] Создан и запушен тестовый тег (например, `v0.1.0-beta.1`)
-- [ ] Проверена успешная публикация тестового релиза
-- [ ] Проверена доступность Docker образов
+- [ ] Created Personal Access Token with `repo` and `write:packages` permissions
+- [ ] Token added to repository secrets as `GH_TOKEN`
+- [ ] Verified workflow permissions in `.github/workflows/release.yml`
+- [ ] Verified repository settings (Actions → General → Workflow permissions)
+- [ ] (Optional) Configured Docker Hub secrets
+- [ ] (Optional) Configured Cosign keys for signing
+- [ ] Verified Dockerfile
+- [ ] Verified `.goreleaser.yml` configuration
+- [ ] Ran local test: `./scripts/test-release.sh`
+- [ ] Created and pushed test tag (e.g., `v0.1.0-beta.1`)
+- [ ] Verified successful test release publication
+- [ ] Verified Docker images are accessible
 
-После выполнения всех пунктов вы готовы к созданию стабильного релиза! 🎉
+After completing all items, you're ready to create a stable release! 🎉

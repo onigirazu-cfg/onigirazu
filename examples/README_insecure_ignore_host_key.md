@@ -374,6 +374,127 @@ Before using `insecure_ignore_host_key: true`, verify:
 - [ ] You have a plan to use proper host key verification in production
 - [ ] Your security team (if any) has approved this usage
 
+## FAQ
+
+### Q: Do I need to modify module code to use this setting?
+
+**A:** **NO!** If you use `BaseExecutorModule`, the setting is automatically applied. The executor handles it internally.
+
+```go
+type MyModule struct {
+    *modules.BaseExecutorModule
+}
+
+func (m *MyModule) Execute(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
+    // host.InsecureIgnoreHostKey is already set from inventory
+
+    // All these methods automatically use host.InsecureIgnoreHostKey:
+    output, err := m.WithExecutorResult(host, func(exec *executor.CommandExecutor) (string, error) {
+        return exec.Execute("hostname")
+    })
+
+    // Nothing extra needed!
+    return result, nil
+}
+```
+
+### Q: Can I use `insecure_ignore_host_key` with text-based inventory?
+
+**A:** **NO**, text format (`.txt`, `.ini`) **does not support** this parameter. Only structured formats (YAML, TOML, JSON) support it.
+
+**Doesn't work:**
+
+```text
+# inventory.txt
+192.168.1.10
+192.168.1.11:2222
+```
+
+**Use YAML instead:**
+
+```yaml
+# inventory.yml
+hosts:
+  server-01:
+    address: 192.168.1.10
+    insecure_ignore_host_key: true
+```
+
+See [Text Format Limitations](./inventory_text_format_limitations.md) for migration guide.
+
+### Q: What are the default settings?
+
+**A:** By default, `insecure_ignore_host_key` is `false` (secure mode).
+
+This means SSH verifies host keys against `~/.ssh/known_hosts`.
+
+### Q: How can I fix "Host key verification failed"?
+
+**A:** There are three approaches:
+
+**1. For development (quick, but risky):**
+
+```yaml
+hosts:
+  myhost:
+    insecure_ignore_host_key: true
+```
+
+**2. For production (correct approach):**
+
+```bash
+# Add host key to known_hosts
+ssh-keyscan -H hostname >> ~/.ssh/known_hosts
+```
+
+**3. If the key changed:**
+
+```bash
+# Remove old key
+ssh-keygen -R hostname
+# Add new key
+ssh-keyscan -H hostname >> ~/.ssh/known_hosts
+```
+
+### Q: Can I use different settings for different environments?
+
+**A:** Yes! Use separate inventory files:
+
+```bash
+inventory/
+  ├── dev.yml          # insecure_ignore_host_key: true
+  ├── staging.yml      # insecure_ignore_host_key: false
+  └── production.yml   # insecure_ignore_host_key: false (or not set)
+```
+
+**Usage:**
+
+```bash
+# Development
+onigirazu-cli run -i inventory/dev.yml playbook.yml
+
+# Staging
+onigirazu-cli run -i inventory/staging.yml playbook.yml
+
+# Production
+onigirazu-cli run -i inventory/production.yml playbook.yml
+```
+
+### Q: How do I verify this setting is working?
+
+**A:** Enable debug logging:
+
+```bash
+onigirazu-cli run -i inventory.yml playbook.yml --log-level debug
+```
+
+Look for in logs:
+
+```
+DEBUG: Host 'myhost' InsecureIgnoreHostKey: true
+DEBUG: Skipping host key verification for host 'myhost'
+```
+
 ## Summary
 
 | Aspect | Details |
