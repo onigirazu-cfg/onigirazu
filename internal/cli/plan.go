@@ -47,6 +47,8 @@ focused on planning and change preview.`,
 	cmd.Flags().StringP("limit", "l", "", "Limit execution to specific hosts (supports wildcards)")
 	cmd.Flags().Bool("detailed", false, "Show detailed task information")
 	cmd.Flags().StringP("state", "s", "", "State file path")
+	cmd.Flags().String("tags", "", "Only plan tasks with these tags (comma-separated). Use 'tagged' for tasks with any tag, 'untagged' for tasks without tags, 'all' for default behavior")
+	cmd.Flags().String("skip-tags", "", "Skip tasks with these tags (comma-separated)")
 
 	return cmd
 }

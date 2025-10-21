@@ -13,6 +13,7 @@ import (
 	"github.com/onigirazu-cfg/onigirazu/internal/metrics"
 	"github.com/onigirazu-cfg/onigirazu/internal/parser"
 	"github.com/onigirazu-cfg/onigirazu/internal/security"
+	"github.com/onigirazu-cfg/onigirazu/internal/tagfilter"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
@@ -31,6 +32,7 @@ type ExecutionEngine struct {
 	securityValidator *security.SecurityValidator
 	factsGatherer     *facts.Gatherer
 	roleLoader        *parser.RoleLoader
+	tagFilter         *tagfilter.Filter
 
 	// Execution context
 	variables map[string]interface{}
@@ -78,6 +80,9 @@ func NewExecutionEngine(
 	executionPool interfaces.ExecutionPool,
 	cacheManager interfaces.CacheManager,
 ) *ExecutionEngine {
+	// Create default tag filter (no filtering)
+	defaultFilter, _ := tagfilter.New("", "")
+
 	return &ExecutionEngine{
 		config:            config,
 		logger:            logger,
@@ -92,11 +97,19 @@ func NewExecutionEngine(
 		securityValidator: security.NewSecurityValidator(security.DefaultSecurityConfig()),
 		factsGatherer:     facts.NewGatherer(),
 		roleLoader:        parser.NewRoleLoader(logger, "playbooks/roles"),
+		tagFilter:         defaultFilter,
 		variables:         make(map[string]interface{}),
 		facts:             make(map[string]map[string]interface{}),
 		stats: &ExecutionStats{
 			HostStats: make(map[string]*HostStats),
 		},
+	}
+}
+
+// SetTagFilter sets the tag filter for this execution engine
+func (e *ExecutionEngine) SetTagFilter(filter *tagfilter.Filter) {
+	if filter != nil {
+		e.tagFilter = filter
 	}
 }
 
@@ -351,7 +364,14 @@ func (e *ExecutionEngine) executePlay(ctx context.Context, play *types.Play) (*t
 func (e *ExecutionEngine) executeTaskList(ctx context.Context, tasks []types.Task, hosts []types.Host,
 	variables map[string]interface{}, playResult *types.PlayResult) error {
 	for i, task := range tasks {
-		e.logger.Debug("Executing task %d/%d: %s", i+1, len(tasks), task.Name)
+		e.logger.Debug("Executing task %d/%d: %s (tags: %v)", i+1, len(tasks), task.Name, task.Tags)
+
+		// Check if task should be skipped based on tags
+		if e.tagFilter != nil && !e.tagFilter.ShouldRun(task.Tags) {
+			e.logger.Debug("Skipping task '%s' due to tag filter (%s), task tags: %v", task.Name, e.tagFilter.String(), task.Tags)
+			e.updateTaskStats("", &task, types.TaskResult{Skipped: true})
+			continue
+		}
 
 		// Check if task should be skipped based on conditions
 		if task.When != "" {
@@ -1146,7 +1166,14 @@ func (e *ExecutionEngine) GetMetrics() *metrics.Metrics {
 func (e *ExecutionEngine) executeTaskListWithRetry(ctx context.Context, tasks []types.Task, hosts []types.Host,
 	variables map[string]interface{}, playResult *types.PlayResult) error {
 	for i, task := range tasks {
-		e.logger.Debug("Executing task %d/%d: %s", i+1, len(tasks), task.Name)
+		e.logger.Debug("Executing task %d/%d: %s (tags: %v)", i+1, len(tasks), task.Name, task.Tags)
+
+		// Check if task should be skipped based on tags
+		if e.tagFilter != nil && !e.tagFilter.ShouldRun(task.Tags) {
+			e.logger.Debug("Skipping task '%s' due to tag filter (%s), task tags: %v", task.Name, e.tagFilter.String(), task.Tags)
+			e.metricsManager.IncrementTasksSkipped()
+			continue
+		}
 
 		// Check if task should be skipped based on conditions
 		if task.When != "" {

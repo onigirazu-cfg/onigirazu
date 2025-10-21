@@ -26,6 +26,7 @@ import (
 	"github.com/onigirazu-cfg/onigirazu/internal/rollback"
 	sshpkg "github.com/onigirazu-cfg/onigirazu/internal/ssh"
 	"github.com/onigirazu-cfg/onigirazu/internal/state"
+	"github.com/onigirazu-cfg/onigirazu/internal/tagfilter"
 	"github.com/onigirazu-cfg/onigirazu/internal/template"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 	"github.com/onigirazu-cfg/onigirazu/pkg/utils"
@@ -45,6 +46,8 @@ func NewApplyCommand() *cobra.Command {
 		parallel      int
 		timeout       time.Duration
 		interactive   bool
+		tags          string
+		skipTags      string
 	)
 
 	cmd := &cobra.Command{
@@ -277,6 +280,16 @@ Examples:
 				defer timeoutCancel()
 			}
 
+			// Set up tag filtering
+			if tags != "" || skipTags != "" {
+				tagFilter, err := tagfilter.New(tags, skipTags)
+				if err != nil {
+					return fmt.Errorf("failed to create tag filter: %w", err)
+				}
+				executionEngine.SetTagFilter(tagFilter)
+				log.Info("Tag filtering enabled: %s", tagFilter.String())
+			}
+
 			// Load inventory
 			var finalInventoryPath string
 			if inventoryPath != "" {
@@ -505,6 +518,8 @@ Examples:
 	cmd.Flags().IntVarP(&parallel, "parallel", "f", 10, "Number of parallel executions")
 	cmd.Flags().DurationVarP(&timeout, "timeout", "t", 30*time.Minute, "Execution timeout")
 	cmd.Flags().BoolVar(&interactive, "interactive", false, "Interactive mode")
+	cmd.Flags().StringVar(&tags, "tags", "", "Only run tasks with these tags (comma-separated). Use 'tagged' for tasks with any tag, 'untagged' for tasks without tags, 'all' for default behavior")
+	cmd.Flags().StringVar(&skipTags, "skip-tags", "", "Skip tasks with these tags (comma-separated)")
 
 	return cmd
 }

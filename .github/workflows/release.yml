@@ -32,7 +32,7 @@ jobs:
     if: github.event_name == 'workflow_run'
     outputs:
       should_release: ${{ steps.check.outputs.should_release }}
-      tag: ${{ steps.check.outputs.tag }}
+      tag: ${{ steps.extract-tag.outputs.tag }}
 
     steps:
     - name: Check quality gate result
@@ -47,9 +47,26 @@ jobs:
         echo "✅ Quality gate passed! Proceeding with release..."
         echo "should_release=true" >> $GITHUB_OUTPUT
 
-        # Extract tag from the workflow run
-        TAG="${{ github.event.workflow_run.head_branch }}"
+    - name: Checkout to get tag info
+      uses: actions/checkout@v5
+      with:
+        fetch-depth: 0
+
+    - name: Extract tag from commit
+      id: extract-tag
+      env:
+        COMMIT_SHA: ${{ github.event.workflow_run.head_commit.id }}
+      run: |
+        # Find the tag that matches this commit
+        TAG=$(git describe --tags --exact-match "$COMMIT_SHA" 2>/dev/null || echo "")
+
+        if [ -z "$TAG" ]; then
+          echo "❌ Could not find tag for commit $COMMIT_SHA"
+          exit 1
+        fi
+
         echo "tag=$TAG" >> $GITHUB_OUTPUT
+        echo "✅ Found tag: $TAG"
 
   validate:
     runs-on: ubuntu-latest

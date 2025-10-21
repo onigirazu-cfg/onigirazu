@@ -83,6 +83,8 @@ Output formats:
 	cmd.Flags().BoolVar(&showVars, "show-vars", false, "Show variable definitions and usage")
 	cmd.Flags().BoolVar(&showHandlers, "show-handlers", false, "Show handlers and notifications")
 	cmd.Flags().BoolVar(&compact, "compact", false, "Compact view with less details")
+	cmd.Flags().String("tags", "", "Only show tasks with these tags (comma-separated). Use 'tagged' for tasks with any tag, 'untagged' for tasks without tags, 'all' for default behavior")
+	cmd.Flags().String("skip-tags", "", "Skip tasks with these tags (comma-separated)")
 
 	return cmd
 }

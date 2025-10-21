@@ -1,0 +1,66 @@
+{
+  "version": 0,
+  "last_run": "2025-10-21T13:55:08.838465+02:00",
+  "playbook": "test_playbook.yml",
+  "results": [
+    {
+      "duration_ms": 0,
+      "name": "Test Server",
+      "play_name": "",
+      "host": "",
+      "hosts": [
+        {
+          "host": "localhost",
+          "tasks": [
+            {
+              "duration_ms": 0,
+              "task_name": "Task 6 - Health Check (always)",
+              "host": "localhost",
+              "module": "debug",
+              "success": true,
+              "failed": false,
+              "changed": false,
+              "skipped": false,
+              "output": {
+                "args": {
+                  "params": {
+                    "msg": "Executing health check"
+                  }
+                },
+                "message": "Task would be executed (dry-run mode)"
+              },
+              "timestamp": "2025-10-21T13:55:08.834028+02:00"
+            },
+            {
+              "duration_ms": 0,
+              "task_name": "Task 8 - General Task (no tags)",
+              "host": "localhost",
+              "module": "debug",
+              "success": true,
+              "failed": false,
+              "changed": false,
+              "skipped": false,
+              "output": {
+                "args": {
+                  "params": {
+                    "msg": "Executing general task"
+                  }
+                },
+                "message": "Task would be executed (dry-run mode)"
+              },
+              "timestamp": "2025-10-21T13:55:08.834073+02:00"
+            }
+          ],
+          "success": true,
+          "failed": false
+        }
+      ],
+      "tasks": null,
+      "success": true,
+      "start_time": "2025-10-21T13:55:08.833946+02:00",
+      "end_time": "2025-10-21T13:55:08.83408+02:00"
+    }
+  ],
+  "variables": {},
+  "checksums": {}
+}
