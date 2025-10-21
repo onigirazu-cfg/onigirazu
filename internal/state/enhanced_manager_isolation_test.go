@@ -204,7 +204,7 @@ func TestExecutionLifecycle(t *testing.T) {
 	}
 
 	// Execution should still exist
-	retrieved, exists = manager.GetExecutionTaskState(execID, "test-task")
+	_, exists = manager.GetExecutionTaskState(execID, "test-task")
 	if !exists {
 		t.Error("Execution was removed when it shouldn't have been")
 	}
