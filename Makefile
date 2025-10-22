@@ -1,4 +1,4 @@
-.PHONY: build test clean run-example install lint fmt vet security coverage release-test ci-setup ci-status ci-validate ci-pipeline ci-pre-check ci-release-prepare ci-release-create test-race test-coverage docs docs-generate docs-serve docs-open docs-clean vagrant-up vagrant-up-all vagrant-halt vagrant-halt-all vagrant-destroy vagrant-destroy-all vagrant-status vagrant-ssh vagrant-test vagrant-test-all vagrant-provision
+.PHONY: build test clean run-example install lint fmt vet security coverage release-test ci-setup ci-status ci-validate ci-pipeline ci-pre-check ci-release-prepare ci-release-create test-race test-coverage docs docs-generate docs-serve docs-open docs-clean vagrant-up vagrant-up-all vagrant-halt vagrant-halt-all vagrant-destroy vagrant-destroy-all vagrant-status vagrant-ssh vagrant-test vagrant-test-all vagrant-provision docker-setup docker-up docker-down docker-logs docker-build docker-run docker-test docker-test-all docker-test-comprehensive docker-test-quick docker-test-concurrent
 
 # Variables
 BINARY_NAME=onigirazu
@@ -228,8 +228,19 @@ help:
 	@echo "  release       - Create and push release tag"
 	@echo ""
 	@echo "Docker commands:"
-	@echo "  docker-build  - Build Docker image"
-	@echo "  docker-run    - Run Docker container"
+	@echo "  docker-build           - Build Docker image"
+	@echo "  docker-run             - Run Docker container"
+	@echo "  docker-setup           - Setup Docker test environment"
+	@echo "  docker-up              - Start Docker test containers"
+	@echo "  docker-down            - Stop Docker test containers"
+	@echo "  docker-logs            - Show Docker container logs"
+	@echo "  docker-test            - Run Docker ad-hoc tests"
+	@echo "  docker-test-all        - Run all Docker tests (legacy)"
+	@echo "  docker-test-quick      - Run quick test (master playbook)"
+	@echo "  docker-test-concurrent - Run concurrent execution tests (v1.49.0)"
+	@echo "  docker-test-comprehensive - Run full test suite with reports"
+	@echo "  docker-test-report     - Show test report"
+	@echo "  docker-test-report-json - Show JSON test report"
 	@echo ""
 	@echo "Development commands:"
 	@echo "  dev-setup     - Setup development environment"
@@ -376,3 +387,38 @@ docker-test: build docker-setup
 docker-test-all: build
 	@echo "Running comprehensive tests on all Docker containers..."
 	./scripts/docker-test.sh
+
+# Comprehensive Docker test suite with playbooks
+docker-test-comprehensive: build docker-setup
+	@echo "Running Comprehensive Docker Test Suite..."
+	@echo "This will test all modules and functionality across 9 container types"
+	./scripts/docker-test-comprehensive.sh
+
+# Quick Docker test (master playbook only)
+docker-test-quick: build docker-setup
+	@echo "Running Quick Docker Test..."
+	./bin/$(BINARY_NAME) apply docker/test-playbooks/00-master.yml \
+		-i docker/inventory.ini
+
+# Concurrent execution tests (v1.49.0 state isolation)
+docker-test-concurrent: build docker-setup
+	@echo "Running Concurrent Execution Tests..."
+	@echo "Testing v1.49.0 state isolation and concurrent execution..."
+	./bin/$(BINARY_NAME) apply docker/test-playbooks/01-concurrent-execution.yml \
+		-i docker/inventory.ini
+
+# Show test report
+docker-test-report:
+	@if [ -f /tmp/onigirazu-docker-test-report.txt ]; then \
+		cat /tmp/onigirazu-docker-test-report.txt; \
+	else \
+		echo "No test report found. Run 'make docker-test-comprehensive' first."; \
+	fi
+
+# Show JSON test report
+docker-test-report-json:
+	@if [ -f /tmp/onigirazu-docker-test-report.json ]; then \
+		cat /tmp/onigirazu-docker-test-report.json | python3 -m json.tool; \
+	else \
+		echo "No JSON test report found. Run 'make docker-test-comprehensive' first."; \
+	fi
