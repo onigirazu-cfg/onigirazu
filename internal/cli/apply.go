@@ -54,6 +54,7 @@ func NewApplyCommand() *cobra.Command {
 		skipTags      string
 		listTags      bool
 		listTasks     bool
+		verboseOutput bool
 	)
 
 	cmd := &cobra.Command{
@@ -150,6 +151,15 @@ Examples:
 			// Initialize logger
 			log := logger.NewEnhanced(cfg.LogLevel, logger.LogFormat(cfg.LogFormat), os.Stdout)
 
+			// Set display mode based on verbosity flag or log level
+			if verboseOutput || cfg.LogLevel == "debug" {
+				if cfg.LogLevel == "debug" {
+					log.SetMode(logger.LogModeDebug)
+				} else {
+					log.SetMode(logger.LogModeVerbose)
+				}
+			}
+
 			// Print startup banner
 			if cfg.IsColorOutputEnabled() {
 				fmt.Println(utils.Colors.Header("🍙 Starting Onigirazu Configuration Management Tool"))
@@ -160,6 +170,16 @@ Examples:
 			log.Info("Starting Onigirazu configuration management tool")
 			log.Debug("Configuration loaded: max_concurrency=%d, log_level=%s", cfg.MaxConcurrency, cfg.LogLevel)
 
+			// Print initialization phase with formatter
+			log.PrintInitialization(logger.InitConfig{
+				StateBackend:   cfg.StateFile,
+				MaxConcurrency: cfg.MaxConcurrency,
+				SSHStrictMode:  cfg.IsSSHStrictHostKeyEnabled(),
+				ConfigPath:     configPath,
+				LogLevel:       cfg.LogLevel,
+				ColorOutput:    cfg.IsColorOutputEnabled(),
+			})
+
 			// Initialize audit recorder
 			homeDir, err := os.UserHomeDir()
 			if err != nil {
@@ -167,6 +187,7 @@ Examples:
 			}
 			var auditRecorder *audit.Recorder
 			var executionID string
+			var auditEnabled bool
 			if homeDir != "" {
 				auditPath := filepath.Join(homeDir, ".onigirazu", "audit")
 				auditConfig := audit.AuditConfig{
@@ -176,13 +197,29 @@ Examples:
 				auditRecorder, err = audit.NewRecorder(auditConfig, log)
 				if err != nil {
 					log.Warn("Failed to initialize audit recorder: %v", err)
+					auditEnabled = false
+				} else {
+					auditEnabled = true
 				}
 			} else {
 				log.Warn("Audit recording disabled: cannot determine home directory")
+				auditEnabled = false
+			}
+
+			// Update initialization config with audit info if available
+			initConfig := logger.InitConfig{
+				StateBackend:   cfg.StateFile,
+				MaxConcurrency: cfg.MaxConcurrency,
+				SSHStrictMode:  cfg.IsSSHStrictHostKeyEnabled(),
+				ConfigPath:     configPath,
+				LogLevel:       cfg.LogLevel,
+				ColorOutput:    cfg.IsColorOutputEnabled(),
+				AuditEnabled:   auditEnabled,
 			}
 
 			// Initialize plugin system
 			var pluginManager *plugins.Manager
+			var pluginInfos []logger.PluginInfo
 			if pluginsConfig != "" {
 				log.Info("Loading plugins from configuration: %s", pluginsConfig)
 				pluginConfig, err := plugins.LoadConfig(pluginsConfig)
@@ -200,7 +237,18 @@ Examples:
 						log.Info("Continuing without plugins")
 						pluginManager = nil
 					} else {
-						log.Info("Plugins loaded successfully: %d plugins registered", len(pluginManager.List("")))
+						allPlugins := pluginManager.ListAll()
+						totalPlugins := 0
+						for _, pluginList := range allPlugins {
+							totalPlugins += len(pluginList)
+							for _, plugin := range pluginList {
+								pluginInfos = append(pluginInfos, logger.PluginInfo{
+									Name:    plugin.GetName(),
+									Version: plugin.GetVersion(),
+								})
+							}
+						}
+						log.Info("Plugins loaded successfully: %d plugins registered", totalPlugins)
 					}
 				}
 			} else {
@@ -218,12 +266,26 @@ Examples:
 								log.Warn("Failed to load auto-detected plugins: %v", err)
 								pluginManager = nil
 							} else {
-								log.Info("Auto-detected plugins loaded: %d plugins registered", len(pluginManager.List("")))
+								allPlugins := pluginManager.ListAll()
+								totalPlugins := 0
+								for _, pluginList := range allPlugins {
+									totalPlugins += len(pluginList)
+									for _, plugin := range pluginList {
+										pluginInfos = append(pluginInfos, logger.PluginInfo{
+											Name:    plugin.GetName(),
+											Version: plugin.GetVersion(),
+										})
+									}
+								}
+								log.Info("Auto-detected plugins loaded: %d plugins registered", totalPlugins)
 							}
 						}
 					}
 				}
 			}
+
+			// Add plugins to init config
+			initConfig.Plugins = pluginInfos
 
 			// Initialize components
 			cacheManager := cache.NewManager(5 * time.Minute) // Default TTL of 5 minutes
@@ -326,6 +388,22 @@ Examples:
 				if err := inventoryManager.LoadInventory(ctx, finalInventoryPath); err != nil {
 					return fmt.Errorf("failed to load inventory: %w", err)
 				}
+
+				// Print inventory info with formatter using stats
+				stats := inventoryManager.GetInventoryStats()
+				hostCount := 0
+				groupCount := 0
+				if groupsCnt, ok := stats["groups"].(int); ok {
+					groupCount = groupsCnt
+				}
+				if hostsCnt, ok := stats["total_hosts"].(int); ok {
+					hostCount = hostsCnt
+				}
+				log.PrintInventoryLoaded(logger.InventoryInfo{
+					Path:       finalInventoryPath,
+					GroupCount: groupCount,
+					HostCount:  hostCount,
+				})
 			}
 
 			// Parse playbook
@@ -336,6 +414,13 @@ Examples:
 			}
 
 			log.Info("Playbook parsed successfully: %s (%d plays)", playbook.Name, len(playbook.Plays))
+
+			// Print playbook info with formatter
+			log.PrintPlaybookLoaded(logger.PlaybookInfo{
+				Path:      playbookPath,
+				PlayCount: len(playbook.Plays),
+				Name:      playbook.Name,
+			})
 
 			// Handle --list-tags flag
 			if listTags {
@@ -404,8 +489,12 @@ Examples:
 					log.Warn("Failed to start audit recording: %v", err)
 				} else {
 					log.Info("Audit recording started: execution_id=%s", executionID)
+					initConfig.ExecutionID = executionID
 				}
 			}
+
+			// Print execution start with formatter
+			log.PrintExecutionStart()
 
 			// Execute playbook
 			log.Info("Starting playbook execution")
@@ -426,9 +515,34 @@ Examples:
 				recordAuditResults(log, auditRecorder, result)
 			}
 
+			// Prepare execution summary
+			summary := logger.ExecutionSummary{
+				TotalDuration: duration,
+				PlayCount:     len(result.Plays),
+				Stats:         result.Stats,
+			}
+
+			// Calculate task counts from plays
+			for _, play := range result.Plays {
+				for _, task := range play.Tasks {
+					summary.TaskCount++
+					if task.Failed {
+						summary.FailedCount++
+					} else if task.Changed {
+						summary.ChangedCount++
+					} else if task.Skipped {
+						summary.SkippedCount++
+					} else {
+						summary.SuccessCount++
+					}
+				}
+			}
+
 			if result.Failed {
 				log.Error("Playbook execution failed")
 				displayExecutionSummary(log, result)
+				// Print formatted execution end
+				log.PrintExecutionEnd(summary)
 
 				// Still save state even on failure for audit trail
 				currentState := &types.State{
@@ -467,6 +581,8 @@ Examples:
 
 			log.Info("Playbook execution successful")
 			displayExecutionSummary(log, result)
+			// Print formatted execution end
+			log.PrintExecutionEnd(summary)
 
 			// Create snapshot for rollback capability
 			if homeDir != "" {
@@ -580,6 +696,7 @@ Examples:
 	cmd.Flags().StringVar(&skipTags, "skip-tags", "", "Skip tasks with these tags (comma-separated)")
 	cmd.Flags().BoolVar(&listTags, "list-tags", false, "List all available tags in the playbook without executing")
 	cmd.Flags().BoolVar(&listTasks, "list-tasks", false, "List tasks that would execute with current filters")
+	cmd.Flags().BoolVar(&verboseOutput, "verbose-output", false, "Use verbose output formatting (more details)")
 
 	return cmd
 }

@@ -58,6 +58,10 @@ type EnhancedLogger struct {
 	mutex     sync.RWMutex
 	fields    map[string]interface{}
 
+	// Display formatting
+	mode      LogMode
+	formatter DisplayFormatter
+
 	// Performance metrics
 	logCount  map[LogLevel]int64
 	startTime time.Time
@@ -85,6 +89,22 @@ func NewEnhanced(level string, format LogFormat, output io.Writer) *EnhancedLogg
 	logLevel := parseLogLevel(level)
 	useColors := format == FormatText && isTerminal(output)
 
+	// Determine display mode and formatter
+	var mode LogMode
+	var formatter DisplayFormatter
+
+	if logLevel == LevelDebug {
+		mode = LogModeDebug
+		formatter = NewDebugFormatter(output)
+	} else if logLevel <= LevelDebug && level != "info" {
+		// Verbose mode when user explicitly asks for it (will add --verbose flag handling)
+		mode = LogModeVerbose
+		formatter = NewVerboseFormatter(useColors, output)
+	} else {
+		mode = LogModeNormal
+		formatter = NewNormalFormatter(useColors, output)
+	}
+
 	logger := &EnhancedLogger{
 		level:      logLevel,
 		format:     format,
@@ -92,6 +112,8 @@ func NewEnhanced(level string, format LogFormat, output io.Writer) *EnhancedLogg
 		logger:     log.New(output, "", 0),
 		useColors:  useColors,
 		fields:     make(map[string]interface{}),
+		mode:       mode,
+		formatter:  formatter,
 		logCount:   make(map[LogLevel]int64),
 		startTime:  time.Now(),
 		buffer:     make([]LogEntry, 0),
@@ -677,4 +699,95 @@ func (l *EnhancedLogger) Retry(taskName, hostName string, attempt, maxAttempts i
 		"type":         "retry",
 	}).Warn("Task '%s' on host '%s' failed (attempt %d/%d), retrying in %v: %v",
 		taskName, hostName, attempt, maxAttempts, delay, err)
+}
+
+// SetMode changes the display mode
+func (l *EnhancedLogger) SetMode(mode LogMode) {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	l.mode = mode
+
+	// Create appropriate formatter based on mode
+	switch mode {
+	case LogModeVerbose:
+		l.formatter = NewVerboseFormatter(l.useColors, l.output)
+	case LogModeDebug:
+		l.formatter = NewDebugFormatter(l.output)
+	default:
+		l.formatter = NewNormalFormatter(l.useColors, l.output)
+	}
+}
+
+// GetMode returns the current display mode
+func (l *EnhancedLogger) GetMode() LogMode {
+	l.mutex.RLock()
+	defer l.mutex.RUnlock()
+	return l.mode
+}
+
+// PrintInitialization prints initialization phase with formatter
+func (l *EnhancedLogger) PrintInitialization(config InitConfig) {
+	if l.formatter != nil {
+		fmt.Fprint(l.output, l.formatter.FormatInitialization(config))
+	}
+}
+
+// PrintInventoryLoaded prints inventory loaded with formatter
+func (l *EnhancedLogger) PrintInventoryLoaded(inventory InventoryInfo) {
+	if l.formatter != nil {
+		fmt.Fprint(l.output, l.formatter.FormatInventoryLoaded(inventory))
+	}
+}
+
+// PrintPlaybookLoaded prints playbook loaded with formatter
+func (l *EnhancedLogger) PrintPlaybookLoaded(playbook PlaybookInfo) {
+	if l.formatter != nil {
+		fmt.Fprint(l.output, l.formatter.FormatPlaybookLoaded(playbook))
+	}
+}
+
+// PrintExecutionStart prints execution start with formatter
+func (l *EnhancedLogger) PrintExecutionStart() {
+	if l.formatter != nil {
+		fmt.Fprint(l.output, l.formatter.FormatExecutionStart())
+	}
+}
+
+// PrintPlayStart prints play start with formatter
+func (l *EnhancedLogger) PrintPlayStart(playName string, playIndex int, hostCount int) {
+	if l.formatter != nil {
+		fmt.Fprint(l.output, l.formatter.FormatPlayStart(playName, playIndex, hostCount))
+	}
+}
+
+// PrintTaskStart prints task start with formatter
+func (l *EnhancedLogger) PrintTaskStart(taskName, host string) {
+	if l.formatter != nil {
+		output := l.formatter.FormatTaskStart(taskName, host)
+		if output != "" {
+			fmt.Fprint(l.output, output)
+		}
+	}
+}
+
+// PrintTaskEnd prints task end with formatter
+func (l *EnhancedLogger) PrintTaskEnd(task TaskResult) {
+	if l.formatter != nil {
+		fmt.Fprint(l.output, l.formatter.FormatTaskEnd(task))
+	}
+}
+
+// PrintExecutionEnd prints execution end with formatter
+func (l *EnhancedLogger) PrintExecutionEnd(summary ExecutionSummary) {
+	if l.formatter != nil {
+		fmt.Fprint(l.output, l.formatter.FormatExecutionEnd(summary))
+	}
+}
+
+// PrintError prints error with formatter
+func (l *EnhancedLogger) PrintError(err string, context map[string]interface{}) {
+	if l.formatter != nil {
+		fmt.Fprint(l.output, l.formatter.FormatError(err, context))
+	}
 }
