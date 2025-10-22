@@ -598,6 +598,51 @@ Access nested object properties:
         description: "MySQL blocked"
 ```
 
+### Looping with Registered Variables and Find Module
+
+**NEW in v1.51.0** - Loop over results from the `find:` module for advanced file operations:
+
+```yaml
+- name: "Find and process log files"
+  hosts: "servers"
+  tasks:
+    - name: "Discover all log files"
+      find:
+        path: "/var/log"
+        pattern: "*.log"
+        type: "file"
+        limit: 100
+      register: "log_files"
+
+    - name: "Archive each log file"
+      command:
+        cmd: "gzip -9 {{ item.path }}"
+      loop: "{{ log_files.files }}"
+      ignore_errors: true
+
+    - name: "Find temporary files for cleanup"
+      find:
+        path: "/tmp"
+        pattern: "*.tmp"
+        type: "file"
+      register: "tmp_files"
+
+    - name: "Remove temporary files"
+      file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ tmp_files.files }}"
+      when: "tmp_files.matched > 0"
+```
+
+**Key Points**:
+
+- Use `register:` to capture `find:` module results
+- Access the file list via `{{ variable_name.files }}`
+- Each file object contains: `path`, `name`, `size`, `mode`, `mtime`, type flags
+- Combine with `when:` to check if files were found before processing
+- Use `ignore_errors: true` to continue if individual file operations fail
+
 ### Combining Indices and Values
 
 Use both `loop.index` and `item`:

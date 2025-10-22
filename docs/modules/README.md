@@ -6,6 +6,7 @@ This document provides comprehensive documentation for all built-in modules in O
 
 - [Module Overview](#module-overview)
 - [System Modules](#system-modules)
+- [File System Modules](#-file-system-modules)
 - [Configuration Modules](#configuration-modules)
 - [Service Modules](#service-modules)
 - [Package Modules](#package-modules)
@@ -276,6 +277,124 @@ Copy files to target hosts.
       }
     dest: "/etc/nginx/sites-available/default"
     mode: "0644"
+```
+
+### find
+
+Discover files on target hosts using glob patterns and file type filtering. Returns structured results for use in loops and conditionals.
+
+**NEW in v1.51.0** ✨ - Native file discovery replaces shell-based find commands.
+
+#### Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `path` | string | - | Directory path to search (required) |
+| `pattern` | string | `*` | Glob pattern for file names |
+| `type` | string | - | Filter by file type |
+| `limit` | integer | `0` | Maximum files to return (0 = unlimited) |
+
+#### File Types
+
+- `file`: Regular files only
+- `directory`: Directories only
+- `link`: Symbolic links only
+- `socket`: Socket files only
+- `pipe`: Named pipes (FIFOs) only
+- `block`: Block devices only
+- `char`: Character devices only
+
+#### Example
+
+```yaml
+- name: "Find all log files"
+  find:
+    path: "/var/log"
+    pattern: "*.log"
+    type: "file"
+    limit: 100
+  register: "log_files"
+
+- name: "Process each log file"
+  copy:
+    src: "{{ item.path }}"
+    dest: "./logs/{{ item.name }}"
+  loop: "{{ log_files.files }}"
+  ignore_errors: true
+
+- name: "Find all directories in /home"
+  find:
+    path: "/home"
+    type: "directory"
+    limit: 50
+  register: "directories"
+
+- name: "Delete old temporary files"
+  file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ (find_result.files | selectattr('name', 'match', '^temp_.*') | list) }}"
+  ignore_errors: true
+```
+
+#### Return Values
+
+```json
+{
+  "files": [
+    {
+      "path": "/var/log/syslog",
+      "name": "syslog",
+      "size": 1024576,
+      "mode": "0644",
+      "mtime": "2023-10-01T10:30:00Z",
+      "is_file": true,
+      "is_dir": false,
+      "is_link": false,
+      "is_socket": false,
+      "is_pipe": false,
+      "is_block": false,
+      "is_char": false
+    }
+  ],
+  "matched": 1,
+  "rc": 0
+}
+```
+
+#### Use Cases
+
+- **Log Management**: Find and process log files by pattern
+- **Backup Operations**: Locate files for backup with size filtering
+- **Cleanup Tasks**: Find and remove temporary files
+- **Deployment**: Discover configuration files across directories
+- **Monitoring**: Locate specific file types for analysis
+
+#### Common Patterns
+
+```yaml
+# Find all Python files
+- find:
+    path: "/opt/app"
+    pattern: "*.py"
+    type: "file"
+
+# Find all configuration directories
+- find:
+    path: "/etc"
+    type: "directory"
+    limit: 20
+
+# Find files and process with loop
+- find:
+    path: "/tmp"
+    pattern: "*.tmp"
+  register: "tmp_files"
+
+- file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ tmp_files.files }}"
 ```
 
 ### template

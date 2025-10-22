@@ -35,6 +35,7 @@ func NewRegistry() *Registry {
 	registry.RegisterModule(NewDebugModule())
 	registry.RegisterModule(NewSetFactModule())
 	registry.RegisterModule(NewStatModule())
+	registry.RegisterModule(NewFindModule())
 	registry.RegisterModule(NewLineinfileModule())
 	registry.RegisterModule(NewSystemdModule())
 	registry.RegisterModule(NewCronModule())
