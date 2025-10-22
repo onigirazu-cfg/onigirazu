@@ -603,7 +603,7 @@ Examples:
 			}
 
 			// Interactive mode: Display with keyboard controls
-			if interactive || (backgroundMode == false && tmuxMode == false) {
+			if interactive || (!backgroundMode && !tmuxMode) {
 				// Initialize display formatter for interactive mode
 				displayMode := execution.DisplayNormal
 				if verboseOutput || cfg.LogLevel == "debug" {

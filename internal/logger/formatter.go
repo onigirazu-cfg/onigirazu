@@ -283,7 +283,7 @@ func (f *VerboseFormatter) FormatInitialization(config InitConfig) string {
 	}
 
 	if config.AuditEnabled && config.ExecutionID != "" {
-		sb.WriteString(fmt.Sprintf("✓ Audit recording: enabled\n"))
+		sb.WriteString("✓ Audit recording: enabled\n")
 		sb.WriteString(fmt.Sprintf("  └─ Execution ID: %s\n", config.ExecutionID))
 	}
 

@@ -169,17 +169,14 @@ func (im *InteractiveMode) handleKeypress(key byte) {
 
 // handleDisplayUpdates processes display mode changes
 func (im *InteractiveMode) handleDisplayUpdates() {
-	for {
-		select {
-		case mode := <-im.displayUpdateChan:
-			im.mutex.RLock()
-			if im.currentExecution != nil && im.currentExecution.ExecutionID != "" {
-				displayer := NewDisplayer(mode, im.useColors)
-				displayer.DisplayExecution(im.currentExecution)
-				im.printControlsFooter()
-			}
-			im.mutex.RUnlock()
+	for mode := range im.displayUpdateChan {
+		im.mutex.RLock()
+		if im.currentExecution != nil && im.currentExecution.ExecutionID != "" {
+			displayer := NewDisplayer(mode, im.useColors)
+			displayer.DisplayExecution(im.currentExecution)
+			im.printControlsFooter()
 		}
+		im.mutex.RUnlock()
 	}
 }
 
