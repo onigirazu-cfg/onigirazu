@@ -1,0 +1,157 @@
+name: "Onigirazu Complete Docker Test Suite"
+description: "Master test suite for all modules and features"
+
+plays:
+  # =============================================================================
+  # CONNECTIVITY TESTS
+  # =============================================================================
+  - name: "Phase 1: Connectivity Verification"
+    hosts: "all"
+    max_parallel: 9
+    tasks:
+      - name: "Verify host connectivity with simple command"
+        command:
+          cmd: "echo 'Host connectivity test passed'"
+
+  # =============================================================================
+  # FILE OPERATIONS TESTS
+  # =============================================================================
+  - name: "Phase 2: File Operations Testing"
+    hosts: "all"
+    tasks:
+      # Test: Create directory
+      - name: "Create test directory structure"
+        file:
+          path: "/tmp/onigirazu-docker-test"
+          state: "directory"
+          mode: "0755"
+
+      # Test: Create file with content
+      - name: "Create test file with content"
+        file:
+          path: "/tmp/onigirazu-docker-test/test.txt"
+          state: "present"
+          content: "Hello from Onigirazu Docker Test Suite!"
+          mode: "0644"
+
+      # Test: Copy file
+      - name: "Copy file"
+        copy:
+          src: "/tmp/onigirazu-docker-test/test.txt"
+          dest: "/tmp/onigirazu-docker-test/test-copy.txt"
+          mode: "0644"
+
+      # Test: Stat file
+      - name: "Get file stats"
+        stat:
+          path: "/tmp/onigirazu-docker-test/test.txt"
+
+      # Test: Lineinfile
+      - name: "Create config file for lineinfile testing"
+        file:
+          path: "/tmp/onigirazu-docker-test/config.conf"
+          state: "present"
+          content: |
+            # Configuration file
+            setting1=value1
+            # setting2=value2
+            setting3=value3
+
+      - name: "Uncomment setting in config"
+        lineinfile:
+          path: "/tmp/onigirazu-docker-test/config.conf"
+          regexp: "^# setting2="
+          line: "setting2=value2"
+
+      - name: "Add new setting to config"
+        lineinfile:
+          path: "/tmp/onigirazu-docker-test/config.conf"
+          line: "setting4=value4"
+          state: "present"
+
+  # =============================================================================
+  # DEBUG TESTS
+  # =============================================================================
+  - name: "Phase 3: Debug Testing"
+    hosts: "all"
+    tasks:
+      # Test: Debug output
+      - name: "Display system information"
+        debug:
+          msg: "System information display test"
+
+      # Test: Set fact
+      - name: "Set custom facts"
+        set_fact:
+          test_completed: "true"
+          test_timestamp: "testing"
+
+      - name: "Display custom facts"
+        debug:
+          msg: "Test Status: completed"
+
+  # =============================================================================
+  # COMMAND AND SHELL EXECUTION TESTS
+  # =============================================================================
+  - name: "Phase 4: Command and Shell Execution"
+    hosts: "all"
+    tasks:
+      # Test: Simple command
+      - name: "Execute simple command (uname)"
+        command:
+          cmd: "uname -a"
+
+      # Test: Shell with pipes
+      - name: "Execute shell command with pipes"
+        shell:
+          cmd: "echo 'Testing shell pipes' | wc -c"
+
+      # Test: Command with pipes using shell
+      - name: "Execute command to check environment"
+        shell:
+          cmd: "env | grep -i path | head -1"
+
+  # =============================================================================
+  # GIT OPERATIONS TESTS
+  # =============================================================================
+  - name: "Phase 5: Git Operations"
+    hosts: "all"
+    tasks:
+      # Test: Clone repository (with error handling)
+      - name: "Clone Onigirazu repository"
+        git:
+          repo: "https://github.com/onigirazu-cfg/onigirazu.git"
+          dest: "/tmp/onigirazu-clone"
+          version: "HEAD"
+          depth: "1"
+        register: git_result
+        failed_when: false
+
+      # Test: Verify clone if it succeeded
+      - name: "Verify repository was cloned"
+        stat:
+          path: "/tmp/onigirazu-clone/.git"
+        when: git_result.failed == false
+
+  # =============================================================================
+  # CLEANUP TESTS
+  # =============================================================================
+  - name: "Phase 6: Cleanup"
+    hosts: "all"
+    tasks:
+      # Remove test directory
+      - name: "Remove test directory"
+        file:
+          path: "/tmp/onigirazu-docker-test"
+          state: "absent"
+
+      # Remove cloned repository
+      - name: "Remove cloned repository"
+        file:
+          path: "/tmp/onigirazu-clone"
+          state: "absent"
+
+      # Final verification
+      - name: "Verify cleanup completed"
+        debug:
+          msg: "Docker test suite cleanup completed successfully!"

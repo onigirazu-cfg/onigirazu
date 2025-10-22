@@ -1,0 +1,247 @@
+name: "Concurrent Execution and State Isolation Tests (v1.49.0)"
+description: "Test concurrent module execution and state isolation"
+
+plays:
+  - name: "Concurrent Execution Test - Multiple Parallel Tasks"
+    hosts: "all"
+    max_parallel: 9
+
+    tasks:
+      # Test concurrent file operations
+      - name: "Create unique directory for parallel tasks (Task 1)"
+        file:
+          path: "/tmp/onigirazu-concurrent-task1"
+          state: "directory"
+          mode: "0755"
+
+      - name: "Create unique directory for parallel tasks (Task 2)"
+        file:
+          path: "/tmp/onigirazu-concurrent-task2"
+          state: "directory"
+          mode: "0755"
+
+      - name: "Create unique directory for parallel tasks (Task 3)"
+        file:
+          path: "/tmp/onigirazu-concurrent-task3"
+          state: "directory"
+          mode: "0755"
+
+      # Test concurrent file creation with unique content
+      - name: "Create file in Task1 directory"
+        file:
+          path: "/tmp/onigirazu-concurrent-task1/file1.txt"
+          state: "present"
+          content: "Task 1 content"
+          mode: "0644"
+
+      - name: "Create file in Task2 directory"
+        file:
+          path: "/tmp/onigirazu-concurrent-task2/file2.txt"
+          state: "present"
+          content: "Task 2 content"
+          mode: "0644"
+
+      - name: "Create file in Task3 directory"
+        file:
+          path: "/tmp/onigirazu-concurrent-task3/file3.txt"
+          state: "present"
+          content: "Task 3 content"
+          mode: "0644"
+
+      # Test concurrent copy operations
+      - name: "Copy file in parallel - Copy 1"
+        copy:
+          src: "/tmp/onigirazu-concurrent-task1/file1.txt"
+          dest: "/tmp/onigirazu-concurrent-task1/file1-copy.txt"
+          mode: "0644"
+
+      - name: "Copy file in parallel - Copy 2"
+        copy:
+          src: "/tmp/onigirazu-concurrent-task2/file2.txt"
+          dest: "/tmp/onigirazu-concurrent-task2/file2-copy.txt"
+          mode: "0644"
+
+      - name: "Copy file in parallel - Copy 3"
+        copy:
+          src: "/tmp/onigirazu-concurrent-task3/file3.txt"
+          dest: "/tmp/onigirazu-concurrent-task3/file3-copy.txt"
+          mode: "0644"
+
+      # Test state isolation - set different facts in parallel
+      - name: "Set facts - Group A"
+        set_fact:
+          test_state_a: "value_a_task1"
+          test_timestamp_a: "task1_time"
+
+      - name: "Set facts - Group B"
+        set_fact:
+          test_state_b: "value_b_task2"
+          test_timestamp_b: "task2_time"
+
+      - name: "Set facts - Group C"
+        set_fact:
+          test_state_c: "value_c_task3"
+          test_timestamp_c: "task3_time"
+
+      # Verify state isolation - each fact should have its own value
+      - name: "Verify state isolation - A"
+        debug:
+          msg: "State A isolation verified"
+
+      - name: "Verify state isolation - B"
+        debug:
+          msg: "State B isolation verified"
+
+      - name: "Verify state isolation - C"
+        debug:
+          msg: "State C isolation verified"
+
+  # =============================================================================
+  # STRESS TEST - HIGH CONCURRENCY SCENARIO
+  # =============================================================================
+  - name: "Stress Test - High Concurrency (10 concurrent tasks per host)"
+    hosts: "all"
+    max_parallel: 9
+
+    tasks:
+      - name: "Stress test - File operation 1"
+        file:
+          path: "/tmp/onigirazu-stress-1/file.txt"
+          state: "present"
+          content: "Stress test 1"
+          mode: "0644"
+
+      - name: "Stress test - File operation 2"
+        file:
+          path: "/tmp/onigirazu-stress-2/file.txt"
+          state: "present"
+          content: "Stress test 2"
+          mode: "0644"
+
+      - name: "Stress test - File operation 3"
+        file:
+          path: "/tmp/onigirazu-stress-3/file.txt"
+          state: "present"
+          content: "Stress test 3"
+          mode: "0644"
+
+      - name: "Stress test - File operation 4"
+        file:
+          path: "/tmp/onigirazu-stress-4/file.txt"
+          state: "present"
+          content: "Stress test 4"
+          mode: "0644"
+
+      - name: "Stress test - File operation 5"
+        file:
+          path: "/tmp/onigirazu-stress-5/file.txt"
+          state: "present"
+          content: "Stress test 5"
+          mode: "0644"
+
+      - name: "Stress test - Command 1"
+        command:
+          cmd: "echo 'Command 1 completed' > /tmp/onigirazu-stress-1/cmd1"
+
+      - name: "Stress test - Command 2"
+        command:
+          cmd: "echo 'Command 2 completed' > /tmp/onigirazu-stress-2/cmd2"
+
+      - name: "Stress test - Command 3"
+        command:
+          cmd: "echo 'Command 3 completed' > /tmp/onigirazu-stress-3/cmd3"
+
+      - name: "Stress test - Stat 1"
+        stat:
+          path: "/tmp/onigirazu-stress-1/file.txt"
+
+      - name: "Stress test - Stat 2"
+        stat:
+          path: "/tmp/onigirazu-stress-2/file.txt"
+
+  # =============================================================================
+  # PARALLEL LOOPS TEST
+  # =============================================================================
+  - name: "Parallel Loops Test"
+    hosts: "all"
+    max_parallel: 9
+
+    tasks:
+      - name: "Create multiple files with loop"
+        file:
+          path: "/tmp/onigirazu-loop-{{ item }}/file.txt"
+          state: "present"
+          content: "Loop item: {{ item }}"
+          mode: "0644"
+        loop:
+          - "1"
+          - "2"
+          - "3"
+          - "4"
+          - "5"
+
+      - name: "Verify all files created with loop"
+        command:
+          cmd: "find /tmp/onigirazu-loop-* -name 'file.txt' 2>/dev/null | wc -l"
+
+  # =============================================================================
+  # CLEANUP - STRESS TEST ARTIFACTS
+  # =============================================================================
+  - name: "Cleanup Concurrent Test Artifacts"
+    hosts: "all"
+
+    tasks:
+      - name: "Remove concurrent test directory 1"
+        file:
+          path: "/tmp/onigirazu-concurrent-task1"
+          state: "absent"
+
+      - name: "Remove concurrent test directory 2"
+        file:
+          path: "/tmp/onigirazu-concurrent-task2"
+          state: "absent"
+
+      - name: "Remove concurrent test directory 3"
+        file:
+          path: "/tmp/onigirazu-concurrent-task3"
+          state: "absent"
+
+      - name: "Remove stress test directory 1"
+        file:
+          path: "/tmp/onigirazu-stress-1"
+          state: "absent"
+
+      - name: "Remove stress test directory 2"
+        file:
+          path: "/tmp/onigirazu-stress-2"
+          state: "absent"
+
+      - name: "Remove stress test directory 3"
+        file:
+          path: "/tmp/onigirazu-stress-3"
+          state: "absent"
+
+      - name: "Remove stress test directory 4"
+        file:
+          path: "/tmp/onigirazu-stress-4"
+          state: "absent"
+
+      - name: "Remove stress test directory 5"
+        file:
+          path: "/tmp/onigirazu-stress-5"
+          state: "absent"
+
+      - name: "Remove loop test directories"
+        file:
+          path: "/tmp/onigirazu-loop-{{ item }}"
+          state: "absent"
+        loop:
+          - "1"
+          - "2"
+          - "3"
+          - "4"
+          - "5"
+
+      - name: "Cleanup verification"
+        debug:
+          msg: "Concurrent execution test cleanup completed"

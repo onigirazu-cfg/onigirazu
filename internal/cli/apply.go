@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -675,39 +676,169 @@ func recordAuditResults(log *logger.EnhancedLogger, recorder *audit.Recorder, re
 	}
 }
 
-// displayExecutionSummary displays a summary of the execution results
+// displayExecutionSummary displays a summary of the execution results using beautiful formatting
 func displayExecutionSummary(log *logger.EnhancedLogger, result *types.PlaybookResult) {
-	log.Info("=== Execution Summary ===")
-	log.Info("Playbook: %s", result.Name)
-	log.Info("Duration: %v", result.Duration)
-	log.Info("Plays executed: %d", len(result.Plays))
+	// Build aggregated results from the last play
+	if len(result.Plays) == 0 {
+		// Fallback for when plays aren't available (e.g., during early errors)
+		var sb strings.Builder
+		sb.WriteString(fmt.Sprintf("\n📋 Playbook: %s\n", result.Name))
+		sb.WriteString(fmt.Sprintf("⏱️  Total Duration: %v\n", result.Duration))
+		if result.Stats != nil && result.Stats["total_tasks"] != nil {
+			sb.WriteString(fmt.Sprintf("📦 Tasks: %v total", result.Stats["total_tasks"]))
+			if result.Stats["successful_tasks"] != nil {
+				sb.WriteString(fmt.Sprintf(" | ✓ %v successful", result.Stats["successful_tasks"]))
+			}
+			if result.Stats["failed_tasks"] != nil && result.Stats["failed_tasks"] != 0 {
+				sb.WriteString(fmt.Sprintf(" | ✗ %v failed", result.Stats["failed_tasks"]))
+			}
+			if result.Stats["changed_tasks"] != nil && result.Stats["changed_tasks"] != 0 {
+				sb.WriteString(fmt.Sprintf(" | ⚡ %v changed", result.Stats["changed_tasks"]))
+			}
+			sb.WriteString("\n")
+		}
+		log.Info("%s", sb.String())
 
-	if result.Stats != nil {
-		if totalTasks, exists := result.Stats["total_tasks"]; exists {
-			log.Info("Total tasks: %v", totalTasks)
+		// Show error if available
+		if result.Error != "" && result.Failed {
+			log.Error("\n🔍 ERROR ANALYSIS")
+			log.Error("=================\n")
+			errorAnalyzer := output.NewErrorAnalyzer()
+			errType, suggestions := errorAnalyzer.AnalyzeError(result.Error)
+			log.Error("❌ Error Type: %s", errType)
+			log.Error("   Message: %s", result.Error)
+			if len(suggestions) > 0 {
+				log.Error("   💡 Suggestions:")
+				for _, suggestion := range suggestions {
+					log.Error("      • %s", suggestion)
+				}
+			}
 		}
-		if successfulTasks, exists := result.Stats["successful_tasks"]; exists {
-			log.Info("Successful tasks: %v", successfulTasks)
-		}
-		if failedTasks, exists := result.Stats["failed_tasks"]; exists {
-			log.Info("Failed tasks: %v", failedTasks)
-		}
-		if changedTasks, exists := result.Stats["changed_tasks"]; exists {
-			log.Info("Changed tasks: %v", changedTasks)
-		}
-		if skippedTasks, exists := result.Stats["skipped_tasks"]; exists {
-			log.Info("Skipped tasks: %v", skippedTasks)
-		}
+		return
 	}
 
-	// Display per-host results
-	if len(result.Plays) > 0 {
-		for hostIndex, hostResult := range result.Plays[len(result.Plays)-1].Hosts {
-			status := "OK"
-			if hostResult.Failed {
-				status = "FAILED"
+	lastPlay := result.Plays[len(result.Plays)-1]
+
+	// Aggregate results
+	aggregator := output.NewResultAggregator()
+	errorAnalyzer := output.NewErrorAnalyzer()
+	var failedErrors []string
+	var failedHosts []string
+
+	for _, hostResult := range lastPlay.Hosts {
+		host := output.AggregatedHost{
+			Name:    hostResult.Host,
+			Details: make(map[string]interface{}),
+		}
+
+		// Aggregate task statistics
+		var totalDuration time.Duration
+		var changedTasks int
+		var errorMsg string
+
+		for _, task := range hostResult.Tasks {
+			totalDuration += task.Duration
+			if task.Changed {
+				changedTasks++
 			}
-			log.Info("Host %d: %s (%d tasks)", hostIndex, status, len(hostResult.Tasks))
+			if task.Failed && errorMsg == "" {
+				errorMsg = task.Error
+			}
+		}
+
+		host.Duration = totalDuration
+
+		// Determine status
+		if hostResult.Failed {
+			host.Status = output.StatusFailed
+			host.ErrorMessage = errorMsg
+			if errorMsg != "" {
+				failedErrors = append(failedErrors, errorMsg)
+				failedHosts = append(failedHosts, hostResult.Host)
+				// Analyze the error
+				errType, suggestions := errorAnalyzer.AnalyzeError(errorMsg)
+				host.Suggestions = suggestions
+				host.Details["error_type"] = errType
+			}
+		} else if changedTasks > 0 {
+			host.Status = output.StatusChanged
+			host.Changed = true
+		} else {
+			host.Status = output.StatusSuccess
+		}
+
+		host.Details["tasks_count"] = len(hostResult.Tasks)
+		host.Details["changed_tasks"] = changedTasks
+
+		aggregator.Add(host)
+	}
+
+	// Format results
+	formatter := output.NewConsoleFormatter(os.Getenv("NO_COLOR") != "")
+	aggregated := aggregator.Aggregate()
+	metrics := aggregator.GetMetrics()
+
+	// Create header with playbook info
+	var headerBuilder strings.Builder
+	headerBuilder.WriteString(fmt.Sprintf("\n📋 Playbook: %s\n", result.Name))
+	headerBuilder.WriteString(fmt.Sprintf("⏱️  Total Duration: %v\n", result.Duration))
+	if result.Stats != nil && result.Stats["total_tasks"] != nil {
+		headerBuilder.WriteString(fmt.Sprintf("📦 Tasks: %v total", result.Stats["total_tasks"]))
+		if result.Stats["successful_tasks"] != nil {
+			headerBuilder.WriteString(fmt.Sprintf(" | ✓ %v successful", result.Stats["successful_tasks"]))
+		}
+		if result.Stats["failed_tasks"] != nil && result.Stats["failed_tasks"] != 0 {
+			headerBuilder.WriteString(fmt.Sprintf(" | ✗ %v failed", result.Stats["failed_tasks"]))
+		}
+		if result.Stats["changed_tasks"] != nil && result.Stats["changed_tasks"] != 0 {
+			headerBuilder.WriteString(fmt.Sprintf(" | ⚡ %v changed", result.Stats["changed_tasks"]))
+		}
+		headerBuilder.WriteString("\n")
+	}
+
+	// Output formatted results
+	log.Info("%s", headerBuilder.String())
+	log.Info("%s", formatter.FormatAggregatedResults(aggregated, metrics))
+
+	// If there are errors, show detailed error analysis
+	if len(failedErrors) > 0 {
+		log.Error("\n🔍 ERROR ANALYSIS")
+		log.Error("=================\n")
+
+		// Analyze all errors together for summary
+		errorSummary := errorAnalyzer.SummarizeErrors(failedErrors)
+
+		for i, host := range failedHosts {
+			if i < len(failedErrors) {
+				analyzed := errorAnalyzer.AnalyzeHostError(host, failedErrors[i])
+
+				log.Error("❌ Host: %s", analyzed.Host)
+				log.Error("   Error Type: %s", analyzed.Type)
+				log.Error("   Message: %s", analyzed.Message)
+
+				if len(analyzed.Suggestions) > 0 {
+					log.Error("   💡 Suggestions:")
+					for _, suggestion := range analyzed.Suggestions {
+						log.Error("      • %s", suggestion)
+					}
+				}
+
+				if analyzed.RetryAdvice != "" {
+					log.Error("   🔄 Retry Advice: %s", analyzed.RetryAdvice)
+				}
+				log.Error("")
+			}
+		}
+
+		if errorSummary.Total > 1 {
+			log.Error("📊 Error Summary:")
+			log.Error("   Total Errors: %d", errorSummary.Total)
+			if len(errorSummary.ByType) > 0 {
+				log.Error("   By Type:")
+				for errType, count := range errorSummary.ByType {
+					log.Error("      • %s: %d", errType, count)
+				}
+			}
 		}
 	}
 }
