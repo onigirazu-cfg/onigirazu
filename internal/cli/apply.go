@@ -40,21 +40,23 @@ import (
 func NewApplyCommand() *cobra.Command {
 	var (
 		// Command-specific flags
-		check         bool
-		diff          bool
-		dryRun        bool
-		pluginsConfig string
-		logLevel      string
-		logFormat     string
-		outputFormat  string
-		parallel      int
-		timeout       time.Duration
-		interactive   bool
-		tags          string
-		skipTags      string
-		listTags      bool
-		listTasks     bool
-		verboseOutput bool
+		check          bool
+		diff           bool
+		dryRun         bool
+		pluginsConfig  string
+		logLevel       string
+		logFormat      string
+		outputFormat   string
+		parallel       int
+		timeout        time.Duration
+		interactive    bool
+		tags           string
+		skipTags       string
+		listTags       bool
+		listTasks      bool
+		verboseOutput  bool
+		backgroundMode bool
+		tmuxMode       bool
 	)
 
 	cmd := &cobra.Command{
@@ -515,6 +517,125 @@ Examples:
 				recordAuditResults(log, auditRecorder, result)
 			}
 
+			// === PHASE 2A: Cache Execution Results ===
+			// Save results to cache for later retrieval without re-execution
+			if homeDir != "" {
+				cacheDir := filepath.Join(homeDir, ".onigirazu", "cache", "executions")
+				cacheMgr, err := execution.NewCacheManagerWithPath(cacheDir)
+				if err == nil {
+					// Count successes and failures from results
+					totalSuccess := 0
+					totalFailed := 0
+					totalChanged := 0
+					totalSkipped := 0
+
+					for _, play := range result.Plays {
+						for _, task := range play.Tasks {
+							if task.Failed {
+								totalFailed++
+							} else if task.Changed {
+								totalChanged++
+							} else if task.Skipped {
+								totalSkipped++
+							} else {
+								totalSuccess++
+							}
+						}
+					}
+
+					// Build execution result for caching
+					execResult := &execution.ExecutionResult{
+						ExecutionID:    fmt.Sprintf("exec-%d", time.Now().Unix()),
+						PlaybookName:   filepath.Base(playbookPath),
+						PlaybookPath:   playbookPath,
+						Status:         "completed",
+						StartTime:      startTime,
+						EndTime:        time.Now(),
+						Duration:       duration,
+						TotalSuccess:   totalSuccess,
+						TotalFailed:    totalFailed,
+						TotalChanged:   totalChanged,
+						TotalSkipped:   totalSkipped,
+						TotalHosts:     len(result.Stats),
+						PlaybookResult: result,
+					}
+
+					// Save to cache
+					if err := cacheMgr.Save(execResult); err != nil {
+						log.Warn("Failed to cache execution results: %v", err)
+					} else {
+						log.Debug("Execution results cached: %s", execResult.ExecutionID)
+					}
+				}
+			}
+
+			// === PHASE 2B: Handle Execution Modes ===
+			// Background mode: Return execution ID immediately
+			if backgroundMode {
+				execID := fmt.Sprintf("exec-%d", time.Now().Unix())
+				fmt.Printf("\n✓ Playbook started in background\n")
+				fmt.Printf("Execution ID: %s\n", execID)
+				fmt.Printf("\nView results with:\n")
+				fmt.Printf("  onigirazu show-execution %s\n", execID)
+				fmt.Printf("  onigirazu show-execution %s --verbose\n", execID)
+				fmt.Printf("  onigirazu show-execution %s --debug\n", execID)
+				return nil
+			}
+
+			// Tmux mode: Start tmux session if available
+			if tmuxMode {
+				available, instructions := execution.CheckTmuxInstallation()
+				if available {
+					tm := execution.NewTmuxManager()
+					_, err := tm.Start()
+					if err != nil {
+						log.Warn("Failed to start tmux session: %v, falling back to normal mode", err)
+					} else {
+						// Tmux session started, execution is displayed there
+						return nil
+					}
+				} else {
+					// Tmux not available, show instructions and fall back to interactive
+					fmt.Printf("\n%s\n", execution.GetFallbackInstructions())
+					fmt.Printf("Installation instructions: %s\n", instructions)
+					interactive = true // Fall back to interactive mode
+				}
+			}
+
+			// Interactive mode: Display with keyboard controls
+			if interactive || (backgroundMode == false && tmuxMode == false) {
+				// Initialize display formatter for interactive mode
+				displayMode := execution.DisplayNormal
+				if verboseOutput || cfg.LogLevel == "debug" {
+					if cfg.LogLevel == "debug" {
+						displayMode = execution.DisplayDebug
+					} else {
+						displayMode = execution.DisplayVerbose
+					}
+				}
+
+				useColors := cfg.IsColorOutputEnabled() && utils.IsColorTerminal()
+				displayer := execution.NewDisplayer(displayMode, useColors)
+
+				// Create and display execution result
+				if homeDir != "" {
+					cacheDir := filepath.Join(homeDir, ".onigirazu", "cache", "executions")
+					cacheMgr, err := execution.NewCacheManagerWithPath(cacheDir)
+					if err == nil {
+						latestResult, err := cacheMgr.LoadLatest()
+						if err == nil && latestResult != nil {
+							displayer.DisplayExecution(latestResult)
+						}
+					}
+				}
+
+				// Set up interactive mode if requested
+				if interactive {
+					interactiveMode := execution.NewInteractiveMode(useColors)
+					interactiveMode.Start()
+				}
+			}
+
 			// Prepare execution summary
 			summary := logger.ExecutionSummary{
 				TotalDuration: duration,
@@ -697,6 +818,8 @@ Examples:
 	cmd.Flags().BoolVar(&listTags, "list-tags", false, "List all available tags in the playbook without executing")
 	cmd.Flags().BoolVar(&listTasks, "list-tasks", false, "List tasks that would execute with current filters")
 	cmd.Flags().BoolVar(&verboseOutput, "verbose-output", false, "Use verbose output formatting (more details)")
+	cmd.Flags().BoolVar(&backgroundMode, "background", false, "Run in background mode (returns immediately, use show-execution to view results)")
+	cmd.Flags().BoolVar(&tmuxMode, "tmux", false, "Run in tmux session with interactive controls (requires tmux installed)")
 
 	return cmd
 }

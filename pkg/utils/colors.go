@@ -153,6 +153,11 @@ func EnableColors(enable bool) {
 	ColorsEnabled = enable
 }
 
+// IsColorTerminal returns whether the terminal supports colors
+func IsColorTerminal() bool {
+	return isTerminal()
+}
+
 // Colorize applies color to text based on the type
 func Colorize(text, colorType string) string {
 	if !ColorsEnabled {

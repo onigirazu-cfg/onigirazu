@@ -85,6 +85,11 @@ across your infrastructure with a focus on simplicity and reliability.`,
 	rootCmd.AddCommand(healthcheckCmd)
 	rootCmd.AddCommand(auditCmd)
 
+	// Three-mode execution system commands
+	rootCmd.AddCommand(NewShowExecutionCommand())
+	rootCmd.AddCommand(NewShowLastExecutionCommand())
+	rootCmd.AddCommand(NewListExecutionsCommand())
+
 	return rootCmd
 }
 

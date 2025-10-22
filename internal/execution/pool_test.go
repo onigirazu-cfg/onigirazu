@@ -523,7 +523,7 @@ func TestPool_ConcurrentExecution(t *testing.T) {
 	host := types.Host{Name: "testhost"}
 
 	// Submit 10 tasks
-	var resultChans []<-chan ExecutionResult
+	var resultChans []<-chan PoolExecutionResult
 	for i := 0; i < 10; i++ {
 		resultChans = append(resultChans, pool.Execute(task, host, map[string]interface{}{}, module))
 	}

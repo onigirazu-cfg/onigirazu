@@ -27,11 +27,11 @@ type TaskExecution struct {
 	Host      types.Host
 	Variables map[string]interface{}
 	Module    interfaces.ModuleExecutor
-	Result    chan ExecutionResult
+	Result    chan PoolExecutionResult
 }
 
-// ExecutionResult represents the result of task execution
-type ExecutionResult struct {
+// PoolExecutionResult represents the result of task execution
+type PoolExecutionResult struct {
 	TaskResult types.TaskResult
 	Error      error
 	Duration   time.Duration
@@ -100,7 +100,7 @@ func (p *Pool) processExecution(workerID int, execution TaskExecution) {
 
 	// Send result back
 	select {
-	case execution.Result <- ExecutionResult{
+	case execution.Result <- PoolExecutionResult{
 		TaskResult: result,
 		Error:      err,
 		Duration:   duration,
@@ -114,8 +114,8 @@ func (p *Pool) processExecution(workerID int, execution TaskExecution) {
 }
 
 // Execute submits a task for execution
-func (p *Pool) Execute(task *types.Task, host types.Host, variables map[string]interface{}, module interfaces.ModuleExecutor) <-chan ExecutionResult {
-	resultChan := make(chan ExecutionResult, 1)
+func (p *Pool) Execute(task *types.Task, host types.Host, variables map[string]interface{}, module interfaces.ModuleExecutor) <-chan PoolExecutionResult {
+	resultChan := make(chan PoolExecutionResult, 1)
 
 	execution := TaskExecution{
 		Task:      task,
@@ -134,7 +134,7 @@ func (p *Pool) Execute(task *types.Task, host types.Host, variables map[string]i
 		// Pool is shutting down
 		p.wg.Done()
 		go func() {
-			resultChan <- ExecutionResult{
+			resultChan <- PoolExecutionResult{
 				Error: p.ctx.Err(),
 			}
 		}()
@@ -151,7 +151,7 @@ func (p *Pool) ExecuteParallel(tasks []*types.Task, hosts []types.Host, variable
 
 	totalTasks := len(tasks) * len(hosts)
 	results := make([]types.TaskResult, 0, totalTasks)
-	resultChans := make([]<-chan ExecutionResult, 0, totalTasks)
+	resultChans := make([]<-chan PoolExecutionResult, 0, totalTasks)
 
 	// Submit all tasks
 	for _, task := range tasks {
