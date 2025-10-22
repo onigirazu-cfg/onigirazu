@@ -62,7 +62,7 @@ builds:
 
 archives:
   - id: onigirazu
-    builds:
+    ids:
       - onigirazu
     name_template: >-
       {{ .ProjectName }}_
@@ -73,7 +73,7 @@ archives:
       {{- if .Arm }}v{{ .Arm }}{{ end }}
     format_overrides:
       - goos: windows
-        format: zip
+        formats: [ zip ]
     files:
       - README.md
       - LICENSE*
@@ -102,7 +102,7 @@ checksum:
 #     artifacts: source
 
 snapshot:
-  name_template: "{{ incpatch .Version }}-next"
+  version_template: "{{ incpatch .Version }}-next"
 
 changelog:
   sort: asc
