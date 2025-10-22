@@ -109,6 +109,9 @@ func (m *FindModule) findFiles(exec *executor.CommandExecutor, path, pattern, fi
 		// Get file stats
 		if fileInfo, err := getFileStats(exec, line); err == nil {
 			files = append(files, fileInfo)
+		} else {
+			// Silently skip files where we can't get stats
+			_ = err
 		}
 	}
 
