@@ -249,7 +249,7 @@ func TestFindModuleExecute(t *testing.T) {
 		args := map[string]interface{}{
 			"pattern": "*.txt",
 		}
-		result, err := module.Execute(context.Background(), host, args)
+		result, _ := module.Execute(context.Background(), host, args)
 		if !result.Failed {
 			t.Errorf("expected failed result for missing path argument")
 		}
@@ -261,7 +261,7 @@ func TestFindModuleExecute(t *testing.T) {
 			"pattern": "*",
 			"type":    "invalid_type",
 		}
-		result, err := module.Execute(context.Background(), host, args)
+		result, _ := module.Execute(context.Background(), host, args)
 		if !result.Failed {
 			t.Errorf("expected failed result for invalid type")
 		}
