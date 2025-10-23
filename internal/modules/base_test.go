@@ -241,11 +241,46 @@ func TestGetBoolArg(t *testing.T) {
 			expected:     true,
 		},
 		{
-			name:         "wrong type",
-			args:         map[string]interface{}{"key": "true"},
+			name:         "wrong type (integer)",
+			args:         map[string]interface{}{"key": 1},
 			key:          "key",
 			defaultValue: false,
 			expected:     false,
+		},
+		{
+			name:         "string 'true'",
+			args:         map[string]interface{}{"key": "true"},
+			key:          "key",
+			defaultValue: false,
+			expected:     true,
+		},
+		{
+			name:         "string 'false'",
+			args:         map[string]interface{}{"key": "false"},
+			key:          "key",
+			defaultValue: true,
+			expected:     false,
+		},
+		{
+			name:         "string 'yes'",
+			args:         map[string]interface{}{"key": "yes"},
+			key:          "key",
+			defaultValue: false,
+			expected:     true,
+		},
+		{
+			name:         "string 'no'",
+			args:         map[string]interface{}{"key": "no"},
+			key:          "key",
+			defaultValue: true,
+			expected:     false,
+		},
+		{
+			name:         "string '1'",
+			args:         map[string]interface{}{"key": "1"},
+			key:          "key",
+			defaultValue: false,
+			expected:     true,
 		},
 	}
 
