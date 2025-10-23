@@ -267,6 +267,7 @@ func checkTaskListNames(tasks []types.Task, section, playName, filename string, 
 
 func checkModuleArgs(playbook *types.Playbook, filename string, result *LintResult) {
 	knownModules := map[string][]string{
+		// Core modules
 		"shell":    {"cmd", "chdir", "creates", "removes"},
 		"command":  {"cmd", "chdir", "creates", "removes"},
 		"copy":     {"src", "dest", "content", "mode", "owner", "group", "backup"},
@@ -277,10 +278,37 @@ func checkModuleArgs(playbook *types.Playbook, filename string, result *LintResu
 		"user":     {"name", "state", "uid", "group", "groups", "home", "shell", "password"},
 		"group":    {"name", "state", "gid"},
 		"debug":    {"msg", "var"},
-		"set_fact": {},
+		"set_fact": {"cacheable"},
 		"fetch":    {"src", "dest", "flat"},
-		"stat":     {"path"},
+		"stat":     {"path", "follow"},
 		"get_url":  {"url", "dest", "mode", "checksum"},
+
+		// File search and manipulation
+		"find":       {"path", "pattern", "type", "limit"},
+		"lineinfile": {"path", "line", "regexp", "insertbefore", "insertafter", "state", "backup"},
+
+		// System modules
+		"ping":     {},
+		"systemd":  {"name", "state", "enabled", "daemon_reload"},
+		"cron":     {"name", "minute", "hour", "day", "month", "weekday", "job", "state", "user", "special_time"},
+		"firewall": {"service", "state", "permanent", "immediate"},
+		"config":   {"path", "key", "value", "state"},
+
+		// Git module
+		"git": {"repo", "dest", "version", "depth", "recursive", "force", "key_file", "accept_hostkey"},
+
+		// Docker/Container modules
+		"docker_container": {"name", "image", "state", "command", "ports", "volumes", "env", "networks"},
+		"docker_image":     {"name", "state", "build", "path", "pull", "force_pull", "tag"},
+		"docker_compose":   {"project_src", "state", "files", "services"},
+		"podman":           {"name", "image", "state", "command", "ports", "volumes", "env"},
+
+		// Database modules
+		"mysql_db":        {"name", "login_user", "login_password", "login_host", "state", "collation", "encoding"},
+		"mysql_user":      {"name", "password", "login_user", "login_password", "login_host", "state", "host", "priv"},
+		"postgresql_db":   {"name", "login_user", "login_password", "login_host", "state", "encoding", "locale", "owner"},
+		"postgresql_user": {"name", "password", "login_user", "login_password", "login_host", "state", "groups", "role_attr_flags"},
+		"mongodb":         {"name", "login_user", "login_password", "login_host", "state", "database"},
 	}
 
 	for _, play := range playbook.Plays {
@@ -372,6 +400,73 @@ func checkTaskListModules(tasks []types.Task, playName, filename string, knownMo
 			}
 			if _, hasDest := task.Args["dest"]; !hasDest {
 				result.addError("module-args", "get_url module requires 'dest' argument", filename, 0, playName, taskName)
+			}
+
+		case "find":
+			// find module doesn't require specific args (uses defaults), but warn if both path and pattern are missing
+			if _, hasPath := task.Args["path"]; !hasPath {
+				if _, hasPattern := task.Args["pattern"]; !hasPattern {
+					result.addInfo("module-args", "find module with no 'path' or 'pattern' will search current directory with '*' pattern", filename, 0, playName, taskName)
+				}
+			}
+
+		case "lineinfile":
+			if _, hasPath := task.Args["path"]; !hasPath {
+				result.addError("module-args", "lineinfile module requires 'path' argument", filename, 0, playName, taskName)
+			}
+			if _, hasLine := task.Args["line"]; !hasLine {
+				if _, hasRegexp := task.Args["regexp"]; !hasRegexp {
+					result.addWarning("module-args", "lineinfile module should have either 'line' or 'regexp'", filename, 0, playName, taskName)
+				}
+			}
+
+		case "git":
+			if _, hasRepo := task.Args["repo"]; !hasRepo {
+				result.addError("module-args", "git module requires 'repo' argument", filename, 0, playName, taskName)
+			}
+			if _, hasDest := task.Args["dest"]; !hasDest {
+				result.addError("module-args", "git module requires 'dest' argument", filename, 0, playName, taskName)
+			}
+
+		case "cron":
+			if _, hasName := task.Args["name"]; !hasName {
+				result.addError("module-args", "cron module requires 'name' argument", filename, 0, playName, taskName)
+			}
+			if _, hasJob := task.Args["job"]; !hasJob {
+				if _, hasState := task.Args["state"]; hasState {
+					state, _ := task.Args["state"]
+					if state != "absent" {
+						result.addWarning("module-args", "cron module should have 'job' argument when state is not 'absent'", filename, 0, playName, taskName)
+					}
+				}
+			}
+
+		case "docker_container":
+			if _, hasName := task.Args["name"]; !hasName {
+				result.addError("module-args", "docker_container module requires 'name' argument", filename, 0, playName, taskName)
+			}
+			if _, hasImage := task.Args["image"]; !hasImage {
+				if _, hasState := task.Args["state"]; hasState {
+					state, _ := task.Args["state"]
+					if state != "absent" {
+						result.addWarning("module-args", "docker_container module should have 'image' argument when state is not 'absent'", filename, 0, playName, taskName)
+					}
+				}
+			}
+
+		case "docker_image":
+			if _, hasName := task.Args["name"]; !hasName {
+				result.addError("module-args", "docker_image module requires 'name' argument", filename, 0, playName, taskName)
+			}
+
+		case "mysql_db", "postgresql_db":
+			if _, hasName := task.Args["name"]; !hasName {
+				result.addError("module-args", fmt.Sprintf("%s module requires 'name' argument", task.Module), filename, 0, playName, taskName)
+			}
+
+		case "mysql_user", "postgresql_user":
+			if _, hasName := task.Args["name"]; !hasName {
+				result.addError("module-args", fmt.Sprintf("%s module requires 'name' argument", task.Module), filename, 0, playName, taskName)
 			}
 		}
 	}
@@ -477,6 +572,19 @@ func checkBestPractices(playbook *types.Playbook, filename string, result *LintR
 			taskName := task.Name
 			if taskName == "" {
 				taskName = fmt.Sprintf("unnamed task (%s)", task.Module)
+			}
+
+			// Check loop syntax
+			if task.Loop != nil {
+				if len(task.Loop.Items) == 0 && task.Loop.Range == "" {
+					result.addWarning("best-practices", "Loop defined but has no items or range", filename, 0, playName, taskName)
+				}
+				if task.Loop.Range != "" {
+					// Validate range syntax (should be like "1-100" or "start-end")
+					if !isValidRange(task.Loop.Range) {
+						result.addWarning("best-practices", fmt.Sprintf("Loop range '%s' may have invalid format, expected 'start-end' (e.g., '1-100')", task.Loop.Range), filename, 0, playName, taskName)
+					}
+				}
 			}
 
 			// Recommend using package module instead of apt/yum
@@ -630,5 +738,28 @@ func shouldRunRule(rule string, enabledRules, disabledRules map[string]bool) boo
 		return enabledRules[rule]
 	}
 	// Otherwise, run all rules
+	return true
+}
+
+// isValidRange validates loop range syntax (e.g., "1-100", "0-50")
+func isValidRange(rangeStr string) bool {
+	parts := strings.Split(strings.TrimSpace(rangeStr), "-")
+	if len(parts) != 2 {
+		return false
+	}
+
+	// Check if both parts are numeric
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			return false
+		}
+		// Check if it's a valid number
+		for _, ch := range part {
+			if ch < '0' || ch > '9' {
+				return false
+			}
+		}
+	}
 	return true
 }
