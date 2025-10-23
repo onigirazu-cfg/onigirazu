@@ -1,6 +1,10 @@
-# Quick Start: Onigirazu Configuration Setup
+# Quick Start: Onigirazu Configuration Setup - v1.52.0
 
 **Get Onigirazu running in 5 minutes - with proper security configuration**
+
+**Release:** v1.52.0
+**Date:** January 29, 2025
+**Setup Time:** 5 minutes ⏱️
 
 ---
 

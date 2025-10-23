@@ -1,8 +1,11 @@
-# Onigirazu Documentation
+# Onigirazu Documentation - v1.52.0
+
+**Current Release:** v1.52.0
+**Documentation Status:** Complete & Production-Ready ✅
 
 Welcome to the Onigirazu documentation directory! This contains comprehensive documentation for the Onigirazu automation tool.
 
-## 📚 Documentation Structure
+## 📚 Documentation Structure - v1.52.0
 
 ### User Documentation
 
@@ -15,6 +18,13 @@ Welcome to the Onigirazu documentation directory! This contains comprehensive do
 - **[Inline Inventory Guide](../INLINE_INVENTORY_GUIDE.md)** - Using inline host specifications without inventory files
 - **[Modules Reference](modules/README.md)** - Built-in modules documentation
 - **[Ad-hoc Commands Guide](ADHOC_GUIDE.md)** - Execute commands without playbooks (5 input formats)
+
+### New in v1.52.0: Complete Configuration & Security Documentation
+
+- **[Configuration Reference](CONFIGURATION_REFERENCE.md)** ⭐ NEW - Complete guide to all 35+ configuration options
+- **[Security Policy Guide](SECURITY_POLICY_GUIDE.md)** ⭐ NEW - Complete guide to all 13+ security options
+- **[Quick Start Configuration](QUICK_START_CONFIGURATION.md)** ⭐ NEW - 5-minute setup guide (fixes common errors)
+- **[Configuration & Security Index](INDEX_CONFIGURATION_SECURITY.md)** ⭐ NEW - Navigation guide by role and problem type
 
 ### API Documentation
 

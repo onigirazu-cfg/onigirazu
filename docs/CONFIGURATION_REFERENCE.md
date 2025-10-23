@@ -1,6 +1,10 @@
-# Onigirazu Configuration Reference
+# Onigirazu Configuration Reference - v1.52.0
 
 **Complete guide to all Onigirazu configuration options for end users**
+
+**Release:** v1.52.0
+**Date:** January 29, 2025
+**Documentation Complete:** Yes ✅
 
 ---
 
