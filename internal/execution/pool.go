@@ -248,6 +248,16 @@ func (p *Pool) Close() error {
 	return nil
 }
 
+// StopAll gracefully stops all workers and prevents new task submissions
+func (p *Pool) StopAll() {
+	p.cancel()
+}
+
+// KillAll forcefully stops all workers and prevents new task submissions
+func (p *Pool) KillAll() {
+	p.cancel()
+}
+
 // Stats returns pool statistics
 func (p *Pool) Stats() PoolStats {
 	return PoolStats{

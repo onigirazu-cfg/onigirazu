@@ -5,11 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
-	"os/signal"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -97,9 +94,8 @@ Examples:
 					return nil
 				}
 
-				// Create tmux session
+				// Create and initialize tmux session
 				tm := execution.NewTmuxManager()
-				sessionName := tm.GetSessionName()
 
 				// Build the current command without --tmux to avoid recursion
 				var cmdParts []string
@@ -140,19 +136,19 @@ Examples:
 					cmdParts = append(cmdParts, "--no-color")
 				}
 
-				// Create tmux window and run command
+				// Create the tmux session (this creates panes and displays help)
 				fullCmd := strings.Join(cmdParts, " ")
-				if err := tm.SendCommand(fullCmd); err != nil {
-					fmt.Printf("Failed to send command to tmux: %v\n", err)
+				if _, err := tm.Start(); err != nil {
+					fmt.Printf("Failed to initialize tmux session: %v\n", err)
 					return err
 				}
 
-				// Attach to the tmux session
-				attachCmd := exec.Command("tmux", "attach-session", "-t", sessionName)
-				attachCmd.Stdin = os.Stdin
-				attachCmd.Stdout = os.Stdout
-				attachCmd.Stderr = os.Stderr
-				_ = attachCmd.Run()
+				// Send the command to the main pane
+				if err := tm.SendCommand(fullCmd); err != nil {
+					fmt.Printf("Failed to send command to tmux: %v\n", err)
+					tm.Kill() // Clean up on failure
+					return err
+				}
 
 				return nil
 			}
@@ -163,17 +159,14 @@ Examples:
 			}
 
 			// Create context with cancellation
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
+			ctx := context.Background()
 
-			// Handle signals for graceful shutdown
-			sigChan := make(chan os.Signal, 1)
-			signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-			go func() {
-				<-sigChan
-				fmt.Println("\nReceived interrupt signal, shutting down gracefully...")
-				cancel()
-			}()
+			// Create signal handler with 10-second graceful shutdown timeout
+			signalHandler := execution.NewSignalHandler(ctx, 10*time.Second)
+			defer signalHandler.Close()
+
+			// Use the signal handler's context for execution
+			ctx = signalHandler.Context()
 
 			// Determine playbook directory for discovery
 			playbookDir := filepath.Dir(playbookPath)
@@ -563,6 +556,63 @@ Examples:
 					}
 				}()
 			}
+
+			// Set up signal handler callbacks for graceful shutdown
+			signalHandler.SetCancelCallbacks(
+				// onConfirm callback - graceful shutdown with state saving
+				func(saveState bool) error {
+					// Stop all running tasks via execution pool
+					executionPool.StopAll()
+
+					// Record execution interruption in audit
+					if auditRecorder != nil && executionID != "" {
+						if saveState {
+							_ = auditRecorder.SetMetadata("interrupt_status", "saved")
+						} else {
+							_ = auditRecorder.SetMetadata("interrupt_status", "discarded")
+						}
+					}
+
+					// Save state if requested
+					if saveState && stateManager != nil {
+						fmt.Println("Saving state...")
+						// Load current state first
+						currentState, err := stateManager.LoadState(ctx)
+						if err != nil {
+							log.Warn("Failed to load state: %v", err)
+							currentState = &types.State{
+								Variables: make(map[string]interface{}),
+								Checksums: make(map[string]string),
+							}
+						}
+						// Save state with loaded data
+						if err := stateManager.SaveState(ctx, currentState); err != nil {
+							log.Warn("Failed to save state: %v", err)
+						} else {
+							fmt.Println("✓ State saved successfully")
+						}
+					} else {
+						fmt.Println("State discarded as requested")
+					}
+
+					return nil
+				},
+				// onForce callback - immediate shutdown
+				func() error {
+					// Force stop all tasks immediately
+					executionPool.KillAll()
+
+					// Try to record force termination in audit
+					if auditRecorder != nil && executionID != "" {
+						_ = auditRecorder.SetMetadata("execution_force_terminated", map[string]interface{}{
+							"timestamp": time.Now(),
+							"reason":    "force_interrupt",
+						})
+					}
+
+					return nil
+				},
+			)
 
 			// Execute playbook
 			log.Info("Starting playbook execution")

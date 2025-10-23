@@ -3,9 +3,7 @@ package execution
 import (
 	"fmt"
 	"os"
-	"os/signal"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
@@ -78,14 +76,8 @@ func (im *InteractiveModeObserver) Start() error {
 		return fmt.Errorf("failed to enable interactive mode: %w", err)
 	}
 
-	// Handle signals
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-
-	go func() {
-		<-sigChan
-		im.Stop()
-	}()
+	// NOTE: Signal handling is done by the main signal handler (signal_handler.go)
+	// Don't set up duplicate signal handlers here
 
 	// Start keyboard input handler
 	go im.handleKeyboardInput()
