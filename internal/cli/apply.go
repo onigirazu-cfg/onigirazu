@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"strings"
@@ -85,6 +86,76 @@ Examples:
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			playbookPath := args[0]
+
+			// Handle tmux mode - run entire command inside tmux
+			if tmuxMode {
+				// Check if tmux is available
+				available, instructions := execution.CheckTmuxInstallation()
+				if !available {
+					fmt.Printf("⚠️  Tmux is not installed\n")
+					fmt.Printf("Installation instructions: %s\n", instructions)
+					return nil
+				}
+
+				// Create tmux session
+				tm := execution.NewTmuxManager()
+				sessionName := tm.GetSessionName()
+
+				// Build the current command without --tmux to avoid recursion
+				var cmdParts []string
+				cmdParts = append(cmdParts, "onigirazu", "apply", playbookPath)
+
+				// Add all other flags that were provided
+				if check || dryRun {
+					cmdParts = append(cmdParts, "--check")
+				}
+				if diff {
+					cmdParts = append(cmdParts, "--diff")
+				}
+				if interactive {
+					cmdParts = append(cmdParts, "--interactive")
+				}
+				if verbose {
+					cmdParts = append(cmdParts, "--verbose")
+				}
+				if logLevel != "info" {
+					cmdParts = append(cmdParts, "--log-level", logLevel)
+				}
+				if configPath != "" {
+					cmdParts = append(cmdParts, "--config", configPath)
+				}
+				if inventoryPath != "" {
+					cmdParts = append(cmdParts, "--inventory", inventoryPath)
+				}
+				if tags != "" {
+					cmdParts = append(cmdParts, "--tags", tags)
+				}
+				if skipTags != "" {
+					cmdParts = append(cmdParts, "--skip-tags", skipTags)
+				}
+				if statePath != ".onigirazu-state" {
+					cmdParts = append(cmdParts, "--state", statePath)
+				}
+				if noColor {
+					cmdParts = append(cmdParts, "--no-color")
+				}
+
+				// Create tmux window and run command
+				fullCmd := strings.Join(cmdParts, " ")
+				if err := tm.SendCommand(fullCmd); err != nil {
+					fmt.Printf("Failed to send command to tmux: %v\n", err)
+					return err
+				}
+
+				// Attach to the tmux session
+				attachCmd := exec.Command("tmux", "attach-session", "-t", sessionName)
+				attachCmd.Stdin = os.Stdin
+				attachCmd.Stdout = os.Stdout
+				attachCmd.Stderr = os.Stderr
+				_ = attachCmd.Run()
+
+				return nil
+			}
 
 			// Configure colors
 			if noColor {
@@ -498,6 +569,21 @@ Examples:
 			// Print execution start with formatter
 			log.PrintExecutionStart()
 
+			// Initialize interactive mode observer if requested
+			var interactiveModeObserver *execution.InteractiveModeObserver
+			if interactive {
+				useColors := cfg.IsColorOutputEnabled() && utils.IsColorTerminal()
+				interactiveModeObserver = execution.NewInteractiveModeObserver(useColors)
+				// Attach observer to execution engine to receive live events
+				executionEngine.AttachObserver(interactiveModeObserver)
+				// Start interactive mode in a goroutine
+				go func() {
+					if err := interactiveModeObserver.Start(); err != nil {
+						log.Warn("Failed to start interactive mode: %v", err)
+					}
+				}()
+			}
+
 			// Execute playbook
 			log.Info("Starting playbook execution")
 			startTime := time.Now()
@@ -505,6 +591,11 @@ Examples:
 			result, err := executionEngine.ExecutePlaybook(ctx, playbook)
 			if err != nil {
 				return fmt.Errorf("playbook execution failed: %w", err)
+			}
+
+			// Wait for interactive mode to finish if it's running
+			if interactiveModeObserver != nil {
+				interactiveModeObserver.WaitForExit()
 			}
 
 			duration := time.Since(startTime)
@@ -582,29 +673,8 @@ Examples:
 				return nil
 			}
 
-			// Tmux mode: Start tmux session if available
-			if tmuxMode {
-				available, instructions := execution.CheckTmuxInstallation()
-				if available {
-					tm := execution.NewTmuxManager()
-					_, err := tm.Start()
-					if err != nil {
-						log.Warn("Failed to start tmux session: %v, falling back to normal mode", err)
-					} else {
-						// Tmux session started, execution is displayed there
-						return nil
-					}
-				} else {
-					// Tmux not available, show instructions and fall back to interactive
-					fmt.Printf("\n%s\n", execution.GetFallbackInstructions())
-					fmt.Printf("Installation instructions: %s\n", instructions)
-					interactive = true // Fall back to interactive mode
-				}
-			}
-
-			// Interactive mode: Display with keyboard controls
-			if interactive || (!backgroundMode && !tmuxMode) {
-				// Initialize display formatter for interactive mode
+			// Display results if not in interactive mode (interactive mode handles its own display)
+			if !interactive {
 				displayMode := execution.DisplayNormal
 				if verboseOutput || cfg.LogLevel == "debug" {
 					if cfg.LogLevel == "debug" {
@@ -627,12 +697,6 @@ Examples:
 							displayer.DisplayExecution(latestResult)
 						}
 					}
-				}
-
-				// Set up interactive mode if requested
-				if interactive {
-					interactiveMode := execution.NewInteractiveMode(useColors)
-					interactiveMode.Start()
 				}
 			}
 

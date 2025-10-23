@@ -18,6 +18,17 @@ import (
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
+// ExecutionObserverI is the interface for execution observers (import cycle avoidance)
+type ExecutionObserverI interface {
+	OnExecutionStart(playbookName string, playCount int)
+	OnPlayStart(playName string, playIndex int, totalPlays int)
+	OnPlayEnd(playName string, playIndex int, success bool, duration time.Duration)
+	OnTaskStart(taskName string, hostName string)
+	OnTaskEnd(taskResult *types.TaskResult)
+	OnExecutionEnd(result *types.PlaybookResult, duration time.Duration)
+	OnError(taskName string, hostName string, error string)
+}
+
 // ExecutionEngine is the main engine for executing playbooks
 type ExecutionEngine struct {
 	config            interfaces.Config
@@ -42,6 +53,9 @@ type ExecutionEngine struct {
 
 	// Statistics
 	stats *ExecutionStats
+
+	// Observers for execution events
+	observers []ExecutionObserverI
 }
 
 // ExecutionStats holds execution statistics
@@ -104,6 +118,7 @@ func NewExecutionEngine(
 		stats: &ExecutionStats{
 			HostStats: make(map[string]*HostStats),
 		},
+		observers: make([]ExecutionObserverI, 0),
 	}
 }
 
@@ -111,6 +126,62 @@ func NewExecutionEngine(
 func (e *ExecutionEngine) SetTagFilter(filter *tagfilter.Filter) {
 	if filter != nil {
 		e.tagFilter = filter
+	}
+}
+
+// AttachObserver attaches an observer to receive execution events
+func (e *ExecutionEngine) AttachObserver(observer ExecutionObserverI) {
+	if observer != nil {
+		e.observers = append(e.observers, observer)
+	}
+}
+
+// notifyExecutionStart notifies observers of execution start
+func (e *ExecutionEngine) notifyExecutionStart(playbookName string, playCount int) {
+	for _, obs := range e.observers {
+		obs.OnExecutionStart(playbookName, playCount)
+	}
+}
+
+// notifyPlayStart notifies observers of play start
+func (e *ExecutionEngine) notifyPlayStart(playName string, playIndex int, totalPlays int) {
+	for _, obs := range e.observers {
+		obs.OnPlayStart(playName, playIndex, totalPlays)
+	}
+}
+
+// notifyPlayEnd notifies observers of play end
+func (e *ExecutionEngine) notifyPlayEnd(playName string, playIndex int, success bool, duration time.Duration) {
+	for _, obs := range e.observers {
+		obs.OnPlayEnd(playName, playIndex, success, duration)
+	}
+}
+
+// notifyTaskStart notifies observers of task start
+func (e *ExecutionEngine) notifyTaskStart(taskName string, hostName string) {
+	for _, obs := range e.observers {
+		obs.OnTaskStart(taskName, hostName)
+	}
+}
+
+// notifyTaskEnd notifies observers of task end
+func (e *ExecutionEngine) notifyTaskEnd(taskResult *types.TaskResult) {
+	for _, obs := range e.observers {
+		obs.OnTaskEnd(taskResult)
+	}
+}
+
+// notifyExecutionEnd notifies observers of execution end
+func (e *ExecutionEngine) notifyExecutionEnd(result *types.PlaybookResult, duration time.Duration) {
+	for _, obs := range e.observers {
+		obs.OnExecutionEnd(result, duration)
+	}
+}
+
+// notifyError notifies observers of an error
+func (e *ExecutionEngine) notifyError(taskName string, hostName string, error string) {
+	for _, obs := range e.observers {
+		obs.OnError(taskName, hostName, error)
 	}
 }
 
@@ -136,10 +207,16 @@ func (e *ExecutionEngine) ExecutePlaybook(ctx context.Context, playbook *types.P
 		Plays:     make([]types.PlayResult, 0, len(playbook.Plays)),
 	}
 
+	// Notify observers of execution start
+	e.notifyExecutionStart(playbook.Name, len(playbook.Plays))
+
 	// Execute each play
 	for i, play := range playbook.Plays {
 		playStartTime := time.Now()
 		e.logger.PlayStart(play.Name, i+1, len(playbook.Plays))
+
+		// Notify observers of play start
+		e.notifyPlayStart(play.Name, i+1, len(playbook.Plays))
 
 		// Record play execution start
 		e.metricsManager.IncrementPlaysExecuted()
@@ -168,6 +245,9 @@ func (e *ExecutionEngine) ExecutePlaybook(ctx context.Context, playbook *types.P
 			result.Failed = true
 		}
 
+		// Notify observers of play end
+		e.notifyPlayEnd(play.Name, i+1, playResult.Success, time.Since(playStartTime))
+
 		e.logger.PlayEnd(play.Name, "", playResult.Success, time.Since(playStartTime))
 	}
 
@@ -179,6 +259,9 @@ func (e *ExecutionEngine) ExecutePlaybook(ctx context.Context, playbook *types.P
 	// Record playbook execution metrics
 	e.metricsManager.AddExecutionTime(time.Since(playbookStartTime))
 	e.metricsManager.IncrementPlaybooksExecuted()
+
+	// Notify observers of execution end
+	e.notifyExecutionEnd(result, result.Duration)
 
 	e.logger.Info("Playbook execution completed: %s (duration: %v, success: %t)",
 		playbook.Name, result.Duration, !result.Failed)
@@ -463,6 +546,9 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 	variables map[string]interface{}, playResult *types.PlayResult) error {
 	e.logger.TaskStart(task.Name, host.Name)
 
+	// Notify observers of task start
+	e.notifyTaskStart(task.Name, host.Name)
+
 	// Merge variables in order of precedence (later overrides earlier):
 	// 1. Play variables
 	// 2. Global variables (from set_fact and register)
@@ -698,7 +784,11 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 		e.mutex.Unlock()
 	}
 
+	// Notify observers of task completion
+	e.notifyTaskEnd(&result)
+
 	if result.Failed && !task.IgnoreErrors {
+		e.notifyError(task.Name, host.Name, result.Error)
 		return fmt.Errorf("task failed: %s", result.Error)
 	}
 
