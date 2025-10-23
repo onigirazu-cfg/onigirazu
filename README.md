@@ -1,5 +1,7 @@
 # Onigirazu
 
+**Current Release:** v1.52.0 — [Comprehensive Documentation Release](https://github.com/onigirazu-cfg/onigirazu/releases/tag/v1.52.0)
+
 Onigirazu is a modern, high-performance configuration management tool written in Go, inspired by Ansible. It provides a simple yet powerful way to automate infrastructure configuration, application deployment, and system administration tasks.
 
 ## ✨ Key Highlights
@@ -12,6 +14,7 @@ Onigirazu is a modern, high-performance configuration management tool written in
 - **📊 State Management**: Track changes and system state with rollback support
 - **🎯 5 Ad-hoc Input Formats**: Including unique natural language support
 - **📚 22+ Built-in Modules**: Comprehensive automation capabilities
+- **📖 Complete Documentation**: 2,500+ lines of guides for configuration, security, and testing (v1.52.0+)
 
 ## Features
 
@@ -40,10 +43,13 @@ Onigirazu is a modern, high-performance configuration management tool written in
 - **Module System**: Extensible architecture with 22+ built-in modules
 - **Plugin System**: Extensible plugin architecture (modules, callbacks, filters, inventory)
 - **Secrets Management**: Bitwarden integration for secure credential management
+- **Security Policies**: File operation restrictions and access control on control machine
 - **Flexible Inventory**: Multiple inventory formats (YAML, TOML, JSON, INI, text)
 - **Variable Interpolation**: Dynamic variable substitution
 - **Error Handling**: Comprehensive error handling and reporting
 - **Audit & Analytics**: Track execution history, performance metrics, and audit data with `audit` command
+- **Complete Configuration Reference**: 35+ configuration options fully documented (v1.52.0+)
+- **Security Policy Guide**: 13+ security options fully documented (v1.52.0+)
 
 ## Installation
 
@@ -217,6 +223,28 @@ plays:
 
 ## CLI Commands
 
+### All Available Commands
+
+**Quick Reference:**
+
+| Command | Purpose | Use Case |
+|---------|---------|----------|
+| `apply` | Execute playbooks | Run your automation playbooks |
+| `run` | Ad-hoc commands | Quick one-off tasks without playbooks |
+| `plan` | Preview changes | Dry-run before executing |
+| `validate` | Check playbook syntax | Validate playbook structure |
+| `lint` | Check best practices | Find errors and style issues |
+| `fmt` | Format playbook files | Auto-format YAML |
+| `graph` | Visualize playbook | Show playbook structure |
+| `audit` | Audit & analytics | Track execution history |
+| `diff` | Show differences | Compare playbook vs current state |
+| `drift` | Detect & fix drift | Find and fix configuration drift |
+| `healthcheck` | Check host health | Verify inventory hosts are reachable |
+| `inventory` | Manage inventory | Query and manage hosts |
+| `state` | Manage state | View, clear, or export state |
+| `rollback` | Rollback changes | Revert to previous snapshots |
+| `completion` | Shell completion | Generate autocompletion script |
+
 ### Core Commands
 
 #### `apply` - Execute playbooks
@@ -251,15 +279,23 @@ onigirazu apply playbook.yml -v
 
 📚 See [Tag and Task Discovery Guide](docs/LIST_TAGS_TASKS_GUIDE.md) for detailed examples
 
-#### `validate` - Validate playbook syntax
+#### `run` - Execute ad-hoc commands
 
 ```bash
-# Validate a playbook
-onigirazu validate playbook.yml
+# Simple ping
+onigirazu run all -m ping -i inventory.yml
 
-# Validate with inventory
-onigirazu validate playbook.yml -i inventory.yml
+# Install package
+onigirazu run webservers -m package name=nginx state=present
+
+# Natural language command
+onigirazu run all "install nginx" -i inventory.yml
+
+# Run shell command
+onigirazu run all -m shell "ps aux | grep nginx"
 ```
+
+📚 See [Ad-hoc Commands Guide](docs/ADHOC_GUIDE.md) for all 5 input formats
 
 #### `plan` - Preview changes
 
@@ -271,7 +307,56 @@ onigirazu plan playbook.yml -i inventory.yml
 onigirazu plan playbook.yml --verbose
 ```
 
-### Development Tools
+#### `validate` - Validate playbook syntax
+
+```bash
+# Validate a playbook
+onigirazu validate playbook.yml
+
+# Validate with inventory
+onigirazu validate playbook.yml -i inventory.yml
+```
+
+#### `diff` - Show differences
+
+```bash
+# Show differences between playbook and current state
+onigirazu diff playbook.yml -i inventory.yml
+
+# Verbose output
+onigirazu diff playbook.yml --verbose
+```
+
+#### `inventory` - Manage inventory
+
+```bash
+# List all hosts
+onigirazu inventory list -i inventory.yml
+
+# List specific group
+onigirazu inventory list webservers -i inventory.yml
+
+# Show host details
+onigirazu inventory host web1 -i inventory.yml
+```
+
+#### `state` - Manage state
+
+```bash
+# Show current state
+onigirazu state show
+
+# Clear state
+onigirazu state clear
+
+# Export state
+onigirazu state export > state-backup.json
+
+# Import state
+onigirazu state import < state-backup.json
+```
+
+### Development & Analysis Tools
 
 #### `fmt` - Format playbook files
 
@@ -312,17 +397,123 @@ onigirazu graph --show-vars --show-handlers playbook.yml
 onigirazu graph --format=mermaid playbook.yml
 ```
 
-### State Management
+#### `audit` - Audit playbook executions
 
 ```bash
-# Show current state
-onigirazu state show
+# View execution history
+onigirazu audit list
 
-# Clear state
-onigirazu state clear
+# Show specific execution report
+onigirazu audit show <execution_id>
 
-# Export state
-onigirazu state export > state-backup.json
+# Export audit data
+onigirazu audit export > audit-report.json
+```
+
+📚 See [Audit & Analytics Guide](../onigirazu_docs/features/AUDIT_AND_ANALYTICS_SYSTEM.md)
+
+### Advanced Features
+
+#### `drift` - Detect and fix configuration drift
+
+```bash
+# Detect drift
+onigirazu drift detect playbook.yml -i inventory.yml
+
+# Fix drift automatically
+onigirazu drift fix playbook.yml -i inventory.yml
+```
+
+#### `rollback` - Rollback changes
+
+```bash
+# List available snapshots
+onigirazu rollback list
+
+# Rollback to specific snapshot
+onigirazu rollback restore <snapshot_id>
+
+# Rollback to previous execution
+onigirazu rollback restore --previous
+```
+
+#### `healthcheck` - Check host health
+
+```bash
+# Check all hosts
+onigirazu healthcheck all -i inventory.yml
+
+# Check specific group
+onigirazu healthcheck webservers -i inventory.yml
+```
+
+### Utility Commands
+
+#### `completion` - Generate shell completion
+
+```bash
+# Generate bash completion
+onigirazu completion bash > ~/.bash_completion.d/onigirazu
+
+# Generate zsh completion
+onigirazu completion zsh > ~/.zsh/completions/_onigirazu
+
+# Generate fish completion
+onigirazu completion fish > ~/.config/fish/completions/onigirazu.fish
+```
+
+#### `version` - Show version information
+
+```bash
+# Display version
+onigirazu version
+```
+
+#### `help` - Get command help
+
+```bash
+# Show general help
+onigirazu help
+
+# Show help for specific command
+onigirazu apply --help
+onigirazu run --help
+```
+
+### Global Flags & Options
+
+These flags work with all commands:
+
+```bash
+# Configuration and inventory
+-c, --config FILE        Path to configuration file
+-i, --inventory FILE     Path to inventory file or inline hosts (e.g., "ubuntu@host1,ubuntu@host2")
+-s, --state FILE         Path to state file (default: ".onigirazu-state")
+
+# Output control
+-v, --verbose            Verbose output (show more details)
+--show-debug            Show debug and info messages
+--no-color              Disable colored output
+
+# Help and version
+-h, --help              Show help for any command
+--version               Show version information
+```
+
+**Example usage:**
+
+```bash
+# Run with custom config and verbose output
+onigirazu apply playbook.yml -c /etc/onigirazu/config.yaml -v
+
+# Run with inline inventory and debug output
+onigirazu run all -m ping -i "ubuntu@web1,ubuntu@web2" --show-debug
+
+# Run without colors (useful for logs/CI)
+onigirazu apply playbook.yml -i inventory.yml --no-color
+
+# Use custom state file location
+onigirazu apply playbook.yml -s /var/lib/onigirazu/state.json
 ```
 
 ## 🚀 Ad-hoc Commands
@@ -606,6 +797,15 @@ All components implement well-defined interfaces for:
 - ✅ Configurability
 
 ## 📚 Documentation
+
+### Configuration & Security (⭐ NEW in v1.52.0)
+
+These comprehensive guides cover all configuration options and security policies:
+
+- **[Complete Configuration Reference](docs/CONFIGURATION_REFERENCE.md)** - All 35+ configuration options with examples
+- **[Security Policy Guide](docs/SECURITY_POLICY_GUIDE.md)** - All 13+ security policy options with real-world examples
+- **[Quick Start Configuration](docs/QUICK_START_CONFIGURATION.md)** - Get configured in 5 minutes
+- **[Configuration & Security Index](docs/INDEX_CONFIGURATION_SECURITY.md)** - Find answers by problem or role
 
 ### User Documentation
 
