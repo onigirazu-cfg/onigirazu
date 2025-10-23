@@ -283,31 +283,37 @@ Copy files to target hosts.
 
 Discover files on target hosts using glob patterns and file type filtering. Returns structured results for use in loops and conditionals.
 
-**NEW in v1.51.0** ✨ - Native file discovery replaces shell-based find commands.
+**Available since v1.51.0** ✨ - Native file discovery module with glob pattern support
 
 #### Parameters
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `path` | string | - | Directory path to search (required) |
-| `pattern` | string | `*` | Glob pattern for file names |
-| `type` | string | - | Filter by file type |
-| `limit` | integer | `0` | Maximum files to return (0 = unlimited) |
+| Parameter | Type | Default | Required | Description |
+|-----------|------|---------|----------|-------------|
+| `path` | string | - | **YES** | Directory path to search (must be non-empty) |
+| `pattern` | string | `*` | NO | Glob pattern for file names (e.g., `*.log`, `temp_*`) |
+| `type` | string | `file` | NO | Filter by file type: `file`, `directory`, `link`, `socket`, `pipe`, `block`, `char` |
+| `limit` | integer | `0` | NO | Maximum files to return (0 = unlimited, capped at 999999) |
 
 #### File Types
 
-- `file`: Regular files only
-- `directory`: Directories only
-- `link`: Symbolic links only
-- `socket`: Socket files only
-- `pipe`: Named pipes (FIFOs) only
-- `block`: Block devices only
-- `char`: Character devices only
+| Type Value | Description | Use Case |
+|-----------|-------------|----------|
+| `file` | Regular files | Most common - for log files, configs, scripts |
+| `directory` | Directories only | Finding subdirectories |
+| `link` | Symbolic links | Managing symlinks |
+| `socket` | Socket files | System file discovery |
+| `pipe` | Named pipes (FIFOs) | Advanced IPC mechanisms |
+| `block` | Block devices | Device file discovery |
+| `char` | Character devices | Device file discovery |
 
-#### Example
+**Important**: If `type` is not specified or is empty, the module defaults to `file` type (regular files only), **not** all file types.
+
+#### Examples
+
+**Find and Process Log Files:**
 
 ```yaml
-- name: "Find all log files"
+- name: "Find all log files in /var/log"
   find:
     path: "/var/log"
     pattern: "*.log"
@@ -315,25 +321,51 @@ Discover files on target hosts using glob patterns and file type filtering. Retu
     limit: 100
   register: "log_files"
 
+- name: "Display found log files"
+  debug:
+    msg: "Found {{ log_files.file_count }} log files"
+
 - name: "Process each log file"
   copy:
     src: "{{ item.path }}"
     dest: "./logs/{{ item.name }}"
   loop: "{{ log_files.files }}"
   ignore_errors: true
+```
 
-- name: "Find all directories in /home"
+**Find All Directories:**
+
+```yaml
+- name: "Find all directories in /etc"
   find:
-    path: "/home"
+    path: "/etc"
     type: "directory"
     limit: 50
   register: "directories"
 
-- name: "Delete old temporary files"
+- name: "List found directories"
+  debug:
+    msg: "Directory: {{ item.path }}"
+  loop: "{{ directories.files }}"
+  when: item.isdir
+```
+
+**Delete Temporary Files with Size Check:**
+
+```yaml
+- name: "Find and remove temporary files"
+  find:
+    path: "/tmp"
+    pattern: "*.tmp"
+    type: "file"
+  register: "tmp_files"
+
+- name: "Remove large temporary files (>10MB)"
   file:
     path: "{{ item.path }}"
     state: absent
-  loop: "{{ (find_result.files | selectattr('name', 'match', '^temp_.*') | list) }}"
+  loop: "{{ tmp_files.files }}"
+  when: "item.size | int > 10485760"  # Note: size is string, convert with | int
   ignore_errors: true
 ```
 
@@ -345,30 +377,49 @@ Discover files on target hosts using glob patterns and file type filtering. Retu
     {
       "path": "/var/log/syslog",
       "name": "syslog",
-      "size": 1024576,
+      "type": "file",
+      "isfile": true,
+      "isdir": false,
+      "islink": false,
+      "size": "1024576",
       "mode": "0644",
-      "mtime": "2023-10-01T10:30:00Z",
-      "is_file": true,
-      "is_dir": false,
-      "is_link": false,
-      "is_socket": false,
-      "is_pipe": false,
-      "is_block": false,
-      "is_char": false
+      "mtime": "1696086600"
     }
   ],
-  "matched": 1,
-  "rc": 0
+  "file_count": 1
 }
 ```
 
+**Field Definitions:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| **path** | string | Full absolute path to the file |
+| **name** | string | Filename only (basename) |
+| **type** | string | File type: `file`, `directory`, `link`, `socket`, `pipe`, `block`, `char`, `other` |
+| **isfile** | boolean | True if regular file (camelCase - not `is_file`) |
+| **isdir** | boolean | True if directory (camelCase - not `is_dir`) |
+| **islink** | boolean | True if symbolic link (camelCase - not `is_link`) |
+| **size** | string | File size in bytes (returned as **string**, convert with `\| int` for math) |
+| **mode** | string | File permissions in octal (e.g., `0644`) |
+| **mtime** | string | Modification time as Unix timestamp in seconds (e.g., `1696086600`) |
+| **file_count** | integer | Total number of files in results array |
+
+**Important Field Notes:**
+
+- **size**: Returned as STRING, not number. Use `{{ item.size \| int }}` for comparisons
+- **mtime**: Unix timestamp (seconds since epoch), not ISO8601 format
+- **Field names**: Boolean shortcuts use camelCase: `isfile`, `isdir`, `islink` (not snake_case)
+- **type**: For socket/pipe/block/char types, use: `{{ item.type == "socket" }}`
+- **Default type**: If not specified, only regular `file` type is returned, not all types
+
 #### Use Cases
 
-- **Log Management**: Find and process log files by pattern
-- **Backup Operations**: Locate files for backup with size filtering
-- **Cleanup Tasks**: Find and remove temporary files
-- **Deployment**: Discover configuration files across directories
-- **Monitoring**: Locate specific file types for analysis
+- **Log Management**: Find and process log files by pattern or size
+- **Backup Operations**: Locate files for backup with size filtering and pattern matching
+- **Cleanup Tasks**: Find and remove temporary or old files with conditional logic
+- **Deployment**: Discover configuration files across directories for verification
+- **Monitoring**: Locate specific file types for analysis and reporting
 
 #### Common Patterns
 
@@ -379,7 +430,7 @@ Discover files on target hosts using glob patterns and file type filtering. Retu
     pattern: "*.py"
     type: "file"
 
-# Find all configuration directories
+# Find configuration directories
 - find:
     path: "/etc"
     type: "directory"
@@ -395,7 +446,39 @@ Discover files on target hosts using glob patterns and file type filtering. Retu
     path: "{{ item.path }}"
     state: absent
   loop: "{{ tmp_files.files }}"
+
+# Find files by type and size
+- find:
+    path: "/home"
+    type: "file"
+  register: "files"
+
+- debug:
+    msg: "Large file: {{ item.name }} ({{ item.size | int / 1024 | int }}KB)"
+  loop: "{{ files.files }}"
+  when: "item.size | int > 102400"  # 100KB
 ```
+
+#### Troubleshooting
+
+**No files returned but expect results?**
+
+- Does the path exist? Module returns empty array for non-existent paths (no error)
+- Is the pattern correct? Use `*` to match everything
+- Check the type filter - default is `file` only, not all types
+
+**Field names not working (is_file vs isfile)?**
+
+- Use camelCase: `item.isfile` not `item.is_file`
+- Boolean shortcuts available for: `isfile`, `isdir`, `islink` only
+
+**Can't compare file sizes?**
+
+- Size is returned as STRING: `{{ item.size \| int > 1000000 }}`
+
+**Checking for socket/pipe/block/char types?**
+
+- Use the type field: `{{ item.type == "socket" }}`
 
 ### template
 
