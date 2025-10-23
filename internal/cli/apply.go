@@ -260,7 +260,6 @@ Examples:
 			}
 			var auditRecorder *audit.Recorder
 			var executionID string
-			var auditEnabled bool
 			if homeDir != "" {
 				auditPath := filepath.Join(homeDir, ".onigirazu", "audit")
 				auditConfig := audit.AuditConfig{
@@ -270,24 +269,9 @@ Examples:
 				auditRecorder, err = audit.NewRecorder(auditConfig, log)
 				if err != nil {
 					log.Warn("Failed to initialize audit recorder: %v", err)
-					auditEnabled = false
-				} else {
-					auditEnabled = true
 				}
 			} else {
 				log.Warn("Audit recording disabled: cannot determine home directory")
-				auditEnabled = false
-			}
-
-			// Update initialization config with audit info if available
-			initConfig := logger.InitConfig{
-				StateBackend:   cfg.StateFile,
-				MaxConcurrency: cfg.MaxConcurrency,
-				SSHStrictMode:  cfg.IsSSHStrictHostKeyEnabled(),
-				ConfigPath:     configPath,
-				LogLevel:       cfg.LogLevel,
-				ColorOutput:    cfg.IsColorOutputEnabled(),
-				AuditEnabled:   auditEnabled,
 			}
 
 			// Initialize plugin system
@@ -356,9 +340,6 @@ Examples:
 					}
 				}
 			}
-
-			// Add plugins to init config
-			initConfig.Plugins = pluginInfos
 
 			// Initialize components
 			cacheManager := cache.NewManager(5 * time.Minute) // Default TTL of 5 minutes
@@ -562,7 +543,6 @@ Examples:
 					log.Warn("Failed to start audit recording: %v", err)
 				} else {
 					log.Info("Audit recording started: execution_id=%s", executionID)
-					initConfig.ExecutionID = executionID
 				}
 			}
 
