@@ -314,19 +314,45 @@ func (t *Task) UnmarshalYAML(unmarshal func(interface{}) error) error {
 
 	// Handle loop
 	if loop, ok := taskMap["loop"]; ok {
-		if loopMap, ok := loop.(map[string]interface{}); ok {
+		var loopMap map[string]interface{}
+
+		// Try to extract loop as map[string]interface{} (standard YAML parsing)
+		if lm, ok := loop.(map[string]interface{}); ok {
+			loopMap = lm
+		} else if lmInterface, ok := loop.(map[interface{}]interface{}); ok {
+			// Convert map[interface{}]interface{} to map[string]interface{}
+			// This is the default YAML parser behavior
+			loopMap = make(map[string]interface{})
+			for k, v := range lmInterface {
+				if keyStr, ok := k.(string); ok {
+					loopMap[keyStr] = v
+				}
+			}
+		}
+
+		if loopMap != nil {
 			t.Loop = &Loop{}
+
+			// Extract items field
 			if items, ok := loopMap["items"]; ok {
 				if itemSlice, ok := items.([]interface{}); ok {
 					t.Loop.Items = itemSlice
 				}
 			}
-			if variable, ok := loopMap["variable"].(string); ok {
+
+			// Extract variable field (YAML tag says "var" but we accept both)
+			if variable, ok := loopMap["var"].(string); ok {
+				t.Loop.Variable = variable
+			} else if variable, ok := loopMap["variable"].(string); ok {
 				t.Loop.Variable = variable
 			}
+
+			// Extract range field
 			if loopRange, ok := loopMap["range"].(string); ok {
 				t.Loop.Range = loopRange
 			}
+
+			// Extract index field
 			if index, ok := loopMap["index"].(string); ok {
 				t.Loop.Index = index
 			}

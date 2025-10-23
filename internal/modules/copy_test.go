@@ -433,6 +433,24 @@ func TestCopyModule_Validate(t *testing.T) {
 			},
 			wantErr: false,
 		},
+		{
+			name: "valid with remote_src and non-existent file (remote validation deferred)",
+			args: map[string]interface{}{
+				"dest":       "/tmp/test.txt",
+				"src":        "/remote/non/existent/file",
+				"remote_src": true,
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid with remote_src and content (no src needed)",
+			args: map[string]interface{}{
+				"dest":       "/tmp/test.txt",
+				"content":    "test content",
+				"remote_src": true,
+			},
+			wantErr: false,
+		},
 	}
 
 	for _, tt := range tests {

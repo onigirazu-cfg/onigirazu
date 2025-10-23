@@ -88,6 +88,10 @@ func getBoolArg(args map[string]interface{}, key string, defaultValue bool) bool
 		if b, ok := val.(bool); ok {
 			return b
 		}
+		// Handle string values that might come from YAML
+		if s, ok := val.(string); ok {
+			return s == "true" || s == "True" || s == "TRUE" || s == "yes" || s == "Yes" || s == "YES" || s == "1"
+		}
 	}
 	return defaultValue
 }

@@ -60,6 +60,7 @@ func (m *CopyModule) Execute(ctx context.Context, host types.Host, args map[stri
 	dest, _ := args["dest"].(string)
 	backup := getBoolArg(args, "backup", false)
 	force := getBoolArg(args, "force", false)
+	remoteSrc := getBoolArg(args, "remote_src", false)
 	mode := getStringArg(args, "mode", "")
 	owner := getStringArg(args, "owner", "")
 	group := getStringArg(args, "group", "")
@@ -74,7 +75,20 @@ func (m *CopyModule) Execute(ctx context.Context, host types.Host, args map[stri
 		sourceData = []byte(content)
 		result.Output["source"] = "content"
 	} else if src != "" {
-		// Read from source file (always local)
+		// Check if we're working with a local or remote host
+		isLocal := sshpkg.IsLocal(host)
+
+		// If remote_src is true and host is remote, defer reading to executeRemote
+		if remoteSrc && !isLocal {
+			// Pass src path to be read from remote host
+			result.Output["source"] = src
+			result.Output["source_mode"] = "remote"
+			sourceChecksum := "" // Will be calculated after reading from remote
+
+			return m.executeRemote(host, dest, nil, backup, force, remoteSrc, mode, owner, group, src, sourceChecksum, result)
+		}
+
+		// Read from source file (local - either control machine or local host)
 		sourceData, err = os.ReadFile(src) // #nosec G304 -- src is validated by security validator
 		if err != nil {
 			result.Failed = true
@@ -99,7 +113,7 @@ func (m *CopyModule) Execute(ctx context.Context, host types.Host, args map[stri
 	if isLocal {
 		return m.executeLocal(dest, sourceData, backup, force, mode, owner, group, sourceChecksum, result)
 	} else {
-		return m.executeRemote(host, dest, sourceData, backup, force, mode, owner, group, sourceChecksum, result)
+		return m.executeRemote(host, dest, sourceData, backup, force, remoteSrc, mode, owner, group, "", sourceChecksum, result)
 	}
 }
 
@@ -201,7 +215,7 @@ func (m *CopyModule) executeLocal(dest string, sourceData []byte, backup, force 
 }
 
 // executeRemote handles file copying on remote host via SFTP
-func (m *CopyModule) executeRemote(host types.Host, dest string, sourceData []byte, backup, force bool, mode, owner, group, sourceChecksum string, result types.TaskResult) (types.TaskResult, error) {
+func (m *CopyModule) executeRemote(host types.Host, dest string, sourceData []byte, backup, force, remoteSrc bool, mode, owner, group, srcPath, sourceChecksum string, result types.TaskResult) (types.TaskResult, error) {
 	// Get SSH client from connection pool
 	pool := sshpkg.GetGlobalPool()
 	sshClient, err := pool.GetConnection(host)
@@ -211,6 +225,19 @@ func (m *CopyModule) executeRemote(host types.Host, dest string, sourceData []by
 		return result, err
 	}
 	defer pool.ReleaseConnection(host)
+
+	// If remote_src is true, read source file from remote host
+	if remoteSrc && sourceData == nil && srcPath != "" {
+		var err error
+		sourceData, err = sshClient.ReadFile(srcPath)
+		if err != nil {
+			result.Failed = true
+			result.Error = fmt.Sprintf("failed to read remote source file %s: %v", srcPath, err)
+			return result, err
+		}
+		sourceChecksum = fmt.Sprintf("%x", sha256.Sum256(sourceData))
+		result.Output["checksum"] = sourceChecksum
+	}
 
 	// Check if destination exists on remote host
 	destExists := true
@@ -331,11 +358,16 @@ func (m *CopyModule) Validate(args map[string]interface{}) error {
 		return fmt.Errorf("'src' and 'content' are mutually exclusive")
 	}
 
-	// If src is provided, check if it exists (locally)
+	// If src is provided, check if it exists (locally, unless remote_src is true)
 	if hasSrc && src != "" {
-		if _, err := os.Stat(src); os.IsNotExist(err) {
-			return fmt.Errorf("source file '%s' does not exist", src)
+		remoteSrc := getBoolArg(args, "remote_src", false)
+		if !remoteSrc {
+			// Only validate local file existence if remote_src is false
+			if _, err := os.Stat(src); os.IsNotExist(err) {
+				return fmt.Errorf("source file '%s' does not exist", src)
+			}
 		}
+		// If remote_src is true, the file existence will be validated when reading from remote
 	}
 
 	// Validate mode if provided (basic validation)
