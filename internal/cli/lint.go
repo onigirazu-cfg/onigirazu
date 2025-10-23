@@ -433,8 +433,8 @@ func checkTaskListModules(tasks []types.Task, playName, filename string, knownMo
 				result.addError("module-args", "cron module requires 'name' argument", filename, 0, playName, taskName)
 			}
 			if _, hasJob := task.Args["job"]; !hasJob {
-				if _, hasState := task.Args["state"]; hasState {
-					state, _ := task.Args["state"]
+				if stateVal, hasState := task.Args["state"]; hasState {
+					state := stateVal
 					if state != "absent" {
 						result.addWarning("module-args", "cron module should have 'job' argument when state is not 'absent'", filename, 0, playName, taskName)
 					}
@@ -446,8 +446,8 @@ func checkTaskListModules(tasks []types.Task, playName, filename string, knownMo
 				result.addError("module-args", "docker_container module requires 'name' argument", filename, 0, playName, taskName)
 			}
 			if _, hasImage := task.Args["image"]; !hasImage {
-				if _, hasState := task.Args["state"]; hasState {
-					state, _ := task.Args["state"]
+				if stateVal, hasState := task.Args["state"]; hasState {
+					state := stateVal
 					if state != "absent" {
 						result.addWarning("module-args", "docker_container module should have 'image' argument when state is not 'absent'", filename, 0, playName, taskName)
 					}

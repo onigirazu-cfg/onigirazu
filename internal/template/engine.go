@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"text/template"
 	"time"
@@ -239,9 +240,50 @@ func (e *Engine) renderValue(ctx context.Context, value interface{}, variables m
 
 // convertJinja2Syntax converts Jinja2-style syntax to Go template syntax
 func (e *Engine) convertJinja2Syntax(input string) (string, error) {
+	// First, handle arithmetic and comparison expressions: {{ var + 1 }}, {{ var - 2 }}, etc.
+	exprRegex := regexp.MustCompile(`\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*([\+\-\*/%]|==|!=|<=|>=|<|>)\s*([^\}]+)\}\}`)
+	result := exprRegex.ReplaceAllStringFunc(input, func(match string) string {
+		// Extract expression parts
+		matches := exprRegex.FindStringSubmatch(match)
+		if len(matches) >= 4 {
+			varName := strings.TrimSpace(matches[1])
+			operator := strings.TrimSpace(matches[2])
+			operand := strings.TrimSpace(matches[3])
+
+			// Map operators to function names
+			opMap := map[string]string{
+				"+":  "add",
+				"-":  "sub",
+				"*":  "mul",
+				"/":  "div",
+				"%":  "mod",
+				"==": "eq",
+				"!=": "ne",
+				"<":  "lt",
+				"<=": "le",
+				">":  "gt",
+				">=": "ge",
+			}
+
+			funcName := opMap[operator]
+			if funcName == "" {
+				return match
+			}
+
+			// Check if operand is a number or variable
+			operandPrefix := "."
+			if _, err := strconv.Atoi(operand); err == nil {
+				operandPrefix = ""
+			}
+
+			return "{{ " + funcName + " ." + varName + " " + operandPrefix + operand + " }}"
+		}
+		return match
+	})
+
 	// Convert {{ variable }} to {{ .variable }}
 	varRegex := regexp.MustCompile(`\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)\s*\}\}`)
-	result := varRegex.ReplaceAllStringFunc(input, func(match string) string {
+	result = varRegex.ReplaceAllStringFunc(result, func(match string) string {
 		// Extract variable name
 		varName := strings.Trim(match, "{} ")
 

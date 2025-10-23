@@ -721,6 +721,7 @@ func (e *ExecutionEngine) executeTaskWithLoop(ctx context.Context, task *types.T
 		// Create task copy with loop variables
 		taskCopy := *task
 		taskCopy.Name = fmt.Sprintf("%s (item %d)", task.Name, i+1)
+		taskCopy.Loop = nil // Clear loop to prevent infinite recursion
 
 		// Add loop variables
 		loopVars := e.mergeVariables(variables, map[string]interface{}{
