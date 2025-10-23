@@ -282,20 +282,20 @@ Loop through alphabetic character ranges.
 
 ## Loop Variables
 
-### Built-in Loop Variables
+### Available Loop Variables
 
-Within a loop, you have access to special variables:
+Within a loop, you have access to the following variables:
 
-#### `loop.index`
+#### `item`
 
-**Type**: Integer (1-based)
-**Description**: Current iteration number starting from 1
+**Type**: Depends on item type (string, number, object, etc.)
+**Description**: The current item value in the iteration
 
 ```yaml
-- name: "Print with 1-based index"
+- name: "Print each item"
   module: "command"
   args:
-    cmd: "echo Item #{{ loop.index }}: {{ item }}"
+    cmd: "echo Item: {{ item }}"
   loop:
     items: ["apple", "banana", "cherry"]
 ```
@@ -303,21 +303,23 @@ Within a loop, you have access to special variables:
 Output:
 
 ```
-Item #1: apple
-Item #2: banana
-Item #3: cherry
+Item: apple
+Item: banana
+Item: cherry
 ```
 
-#### `loop.index0`
+**Note**: The variable name can be customized using the `var:` field (see Custom Loop Variable Name section below).
+
+#### `item_index`
 
 **Type**: Integer (0-based)
-**Description**: Current iteration number starting from 0
+**Description**: Current iteration index starting from 0
 
 ```yaml
 - name: "Print with 0-based index"
   module: "command"
   args:
-    cmd: "echo Position {{ loop.index0 }}: {{ item }}"
+    cmd: "echo Position {{ item_index }}: {{ item }}"
   loop:
     items: ["first", "second", "third"]
 ```
@@ -330,46 +332,23 @@ Position 1: second
 Position 2: third
 ```
 
-#### `loop.first`
-
-**Type**: Boolean
-**Description**: True if this is the first iteration
+**Calculating 1-based index**: Use `{{ item_index + 1 }}` when you need 1-based numbering.
 
 ```yaml
-- name: "Special handling for first item"
+- name: "Print with 1-based index"
   module: "command"
   args:
-    cmd: "{% if loop.first %}echo 'Processing first item: {{ item }}'{% else %}echo '{{ item }}'{% endif %}"
+    cmd: "echo Item #{{ item_index + 1 }}: {{ item }}"
   loop:
-    items: ["primary", "secondary", "tertiary"]
+    items: ["apple", "banana", "cherry"]
 ```
 
-#### `loop.last`
+Output:
 
-**Type**: Boolean
-**Description**: True if this is the last iteration
-
-```yaml
-- name: "Special handling for last item"
-  module: "command"
-  args:
-    cmd: "{% if loop.last %}echo 'Last: {{ item }}'{% else %}echo '{{ item }},'{% endif %}"
-  loop:
-    items: ["a", "b", "c", "d"]
 ```
-
-#### `loop.length`
-
-**Type**: Integer
-**Description**: Total number of items in the loop
-
-```yaml
-- name: "Show progress"
-  module: "command"
-  args:
-    cmd: "echo Processing {{ loop.index }}/{{ loop.length }}: {{ item }}"
-  loop:
-    items: ["task1", "task2", "task3", "task4", "task5"]
+Item #1: apple
+Item #2: banana
+Item #3: cherry
 ```
 
 ### Custom Loop Variable Name
@@ -645,13 +624,13 @@ Access nested object properties:
 
 ### Combining Indices and Values
 
-Use both `loop.index` and `item`:
+Use both `item_index` and `item`. For 1-based indexing, use `item_index + 1`:
 
 ```yaml
 - name: "Create tiered storage"
   module: "file"
   args:
-    path: "/storage/tier{{ loop.index }}/{{ item }}"
+    path: "/storage/tier{{ item_index + 1 }}/{{ item }}"
     state: "directory"
   loop:
     items:
@@ -672,6 +651,102 @@ Use both `loop.index` and `item`:
 /storage/tier3/cache
 /storage/tier3/working
 /storage/tier3/archive
+```
+
+### Practical Real-World Loops
+
+#### Stress Testing and File Operations
+
+Large-scale file operations often require loops to manage hundreds or thousands of items efficiently:
+
+```yaml
+- name: "Stress Test Large File Operations"
+  hosts: localhost
+  tasks:
+    - name: "Generate 500 small files with loop"
+      copy:
+        dest: "/tmp/test_stress/small_file_{{ item }}.dat"
+        content: "Small file {{ item }}\n"
+        mode: "0755"
+      loop:
+        range: "1-500"
+
+    - name: "Copy files for backup (1-50)"
+      copy:
+        src: "/tmp/test_stress/small_file_{{ item }}.dat"
+        dest: "/tmp/test_stress/small_file_{{ item }}.dat.backup"
+      loop:
+        range: "1-50"
+
+    - name: "Replace content in files"
+      copy:
+        dest: "/tmp/test_stress/small_file_{{ item }}.dat"
+        content: "=== Modified item {{ item }} ===\n"
+        mode: "0644"
+      loop:
+        range: "1-50"
+
+    - name: "Find and delete files by pattern"
+      find:
+        path: "/tmp/test_stress"
+        pattern: "*.backup"
+      register: backup_files
+
+    - name: "Remove backup files one by one"
+      file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ backup_files.files }}"
+      ignore_errors: true
+
+    - name: "Count remaining files"
+      find:
+        path: "/tmp/test_stress"
+        type: "file"
+      register: remaining_files
+
+    - name: "Display final file count"
+      debug:
+        msg: "Remaining files: {{ remaining_files.files | length }}"
+```
+
+**Key Takeaways**:
+
+- Large ranges (like `1-500`) are efficiently processed without creating massive item lists
+- Use `find:` module with loop to process variable numbers of files dynamically
+- Combine `ignore_errors: true` with loops for resilient operations
+- Use `item_index` with arithmetic for sequential numbering in paths
+
+#### Complex Multi-Step Operations
+
+```yaml
+- name: "Database backup and rotation"
+  hosts: database_servers
+  tasks:
+    - name: "Create daily backups for multiple databases"
+      copy:
+        src: "/var/lib/db/{{ item }}.db"
+        dest: "/backups/{{ item }}_$(date +%Y%m%d).db"
+      loop:
+        - "users_db"
+        - "products_db"
+        - "orders_db"
+        - "analytics_db"
+      ignore_errors: true
+
+    - name: "Find old backup files"
+      find:
+        path: "/backups"
+        pattern: "*.db"
+        age: "7d"
+      register: old_backups
+
+    - name: "Delete backups older than 7 days"
+      file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ old_backups.files }}"
+      when: "old_backups.matched > 0"
 ```
 
 ---
@@ -858,12 +933,38 @@ type Loop struct {
     // Variable specifies the custom variable name (default: "item")
     Variable string `yaml:"var,omitempty" json:"var,omitempty"`
 
-    // Index specifies the index variable name
+    // Index specifies the index variable name (reserved for future use)
     Index string `yaml:"index,omitempty" json:"index,omitempty"`
 
     // Range specifies a range to iterate over (e.g., "1-10" or "a-z")
     Range string `yaml:"range,omitempty" json:"range,omitempty"`
 }
+```
+
+### Loop Execution Variables
+
+When a task executes with a loop, the following variables are available in the task context:
+
+| Variable | Type | Description |
+|----------|------|-------------|
+| `item` | Varies | The current item value (or use custom name via `var:` field) |
+| `item_index` | Integer | 0-based index of current iteration |
+
+**Example usage in template expressions**:
+
+```yaml
+# Use item directly
+args:
+  name: "{{ item }}"
+
+# Calculate 1-based index
+args:
+  name: "item_{{ item_index + 1 }}"
+
+# Use item properties for complex objects
+args:
+  name: "{{ item.username }}"
+  shell: "{{ item.shell }}"
 ```
 
 ### Engine Methods
@@ -875,39 +976,57 @@ Retrieves all items for a loop.
 **Parameters**:
 
 - `loop`: Loop configuration
-- `variables`: Available template variables
+- `variables`: Available template variables (for future template variable expansion support)
 
 **Returns**:
 
 - Slice of items to iterate over
-- Error if loop is invalid
+- Error if loop configuration is invalid (neither `items` nor `range` specified)
+
+**Example**:
+
+```go
+items, err := engine.getLoopItems(task.Loop, variables)
+if err != nil {
+    // Handle error - loop must specify either items or range
+}
+// Now process each item
+for i, item := range items {
+    // Process item
+}
+```
 
 #### `parseRange(rangeStr string) ([]interface{}, error)`
 
-Parses range string into items.
+Parses range string into items array.
 
-**Supported Formats**:
-
-- Numeric: `"1-10"`, `"1-10:2"`
-- Character: `"a-z"`, `"A-Z:3"`
-- Reverse: `"10-1"`, `"z-a:2"`
-
-**Returns**:
-
-- Slice of items (integers for numeric, strings for character)
-- Error if format is invalid
-
-### Range Parsing Rules
+**Supported Range Formats**:
 
 | Format | Example | Result |
 |--------|---------|--------|
-| Numeric range | `"1-5"` | `[1, 2, 3, 4, 5]` |
-| With step | `"1-10:2"` | `[1, 3, 5, 7, 9]` |
-| Reverse numeric | `"10-1"` | `[10, 9, 8, 7, 6, 5, 4, 3, 2, 1]` |
-| Reverse with step | `"10-1:2"` | `[10, 8, 6, 4, 2]` |
-| Character range | `"a-z"` | `['a', 'b', ..., 'z']` |
-| Character step | `"a-z:3"` | `['a', 'd', 'g', 'j', 'm', 'p', 's', 'v', 'y']` |
-| Reverse character | `"z-a"` | `['z', 'y', ..., 'a']` |
+| Numeric ascending | `"1-5"` | `[1, 2, 3, 4, 5]` |
+| Numeric with step | `"1-10:2"` | `[1, 3, 5, 7, 9]` |
+| Numeric descending | `"5-1"` | `[5, 4, 3, 2, 1]` |
+| Character ascending | `"a-c"` | `["a", "b", "c"]` |
+| Character with step | `"a-z:3"` | `["a", "d", "g", "j", ...]` |
+| Character descending | `"z-a"` | `["z", "y", "x", ..., "a"]` |
+
+**Parameters**:
+
+- `rangeStr`: Range string (e.g., `"1-10"`, `"a-z:2"`, `"10-1"`)
+
+**Returns**:
+
+- Slice of items (integers for numeric ranges, strings for character ranges)
+- Error if range format is invalid
+
+**Error Cases**:
+
+- `"1..10"` - Invalid format, use single dash
+- `"1-10-20"` - Multiple dashes not allowed
+- `"a-5"` - Cannot mix letters and numbers
+- `"1-10:0"` - Step must be positive
+- `"1-10:-2"` - Negative steps not allowed (use reverse range instead)
 
 ---
 

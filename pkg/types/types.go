@@ -324,6 +324,12 @@ func (t *Task) UnmarshalYAML(unmarshal func(interface{}) error) error {
 			if variable, ok := loopMap["variable"].(string); ok {
 				t.Loop.Variable = variable
 			}
+			if loopRange, ok := loopMap["range"].(string); ok {
+				t.Loop.Range = loopRange
+			}
+			if index, ok := loopMap["index"].(string); ok {
+				t.Loop.Index = index
+			}
 		}
 	}
 
