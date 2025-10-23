@@ -34,7 +34,7 @@ func FormatTasksText(result *taskpreview.PreviewResult) string {
 		output.WriteString(fmt.Sprintf("Play %d: %s (Hosts: %s)\n", play.Index+1, play.Name, play.Hosts))
 
 		for _, task := range play.Tasks {
-			statusSymbol := "✓"
+			var statusSymbol string
 			statusText := ""
 
 			if task.Status == taskpreview.StatusExecute || task.Status == taskpreview.StatusUnconditional {
@@ -51,13 +51,6 @@ func FormatTasksText(result *taskpreview.PreviewResult) string {
 			tagsStr := ""
 			if len(task.Tags) > 0 {
 				tagsStr = "[" + strings.Join(task.Tags, ", ") + "] "
-			}
-
-			taskType := task.Type
-			if taskType == "pre_task" {
-				taskType = "pre"
-			} else if taskType == "post_task" {
-				taskType = "post"
 			}
 
 			// Apply color only if colors are enabled
