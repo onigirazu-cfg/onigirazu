@@ -1,6 +1,10 @@
-# Onigirazu Security Policy Guide
+# Onigirazu Security Policy Guide - v1.52.0
 
 **Complete reference for security policies and file operation restrictions**
+
+**Release:** v1.52.0
+**Date:** January 29, 2025
+**Documentation Complete:** Yes ✅
 
 ---
 

@@ -1,6 +1,10 @@
-# Onigirazu Configuration & Security Documentation Index
+# Onigirazu Configuration & Security Documentation Index - v1.52.0
 
 **Complete guide to all configuration and security policy documentation**
+
+**Release:** v1.52.0
+**Date:** January 29, 2025
+**Last Updated:** January 29, 2025
 
 ---
 
