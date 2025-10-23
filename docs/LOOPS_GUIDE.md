@@ -66,12 +66,17 @@ type Loop struct {
 
 ### Available Variables in Loop
 
-- **`item`** (or custom name via `var:`) - The current item value
-- **`loop.index`** - Current iteration index (1-based)
-- **`loop.index0`** - Current iteration index (0-based)
-- **`loop.first`** - Boolean, true if first iteration
-- **`loop.last`** - Boolean, true if last iteration
-- **`loop.length`** - Total number of items
+Currently implemented:
+
+- **`item`** - The current item value (accessible as `{{ item }}`)
+- **`item_index`** - Current iteration index (0-based, use `{{ item_index + 1 }}` for 1-based numbering)
+
+⚠️ **Reserved for Future Enhancement** (not yet implemented):
+
+- `loop.index` - 1-based iteration index
+- `loop.first` / `loop.last` - Boolean iteration markers
+- `loop.length` - Total iteration count
+- Custom variable names via `var:` field
 
 ---
 
@@ -749,6 +754,60 @@ Large-scale file operations often require loops to manage hundreds or thousands 
       when: "old_backups.matched > 0"
 ```
 
+#### Remote-to-Remote Copying with Loops (v1.51.4+)
+
+The `remote_src: true` parameter enables copying files between locations on the remote host itself without passing data through the control machine. This is particularly useful with loops for batch operations.
+
+```yaml
+- name: "Remote-to-remote file operations"
+  hosts: production_servers
+  tasks:
+    - name: "Extract archive on remote host"
+      unarchive:
+        src: "/tmp/archive.tar.gz"
+        dest: "/tmp"
+        remote_src: true
+
+    - name: "Copy extracted binaries to system location"
+      copy:
+        src: "/tmp/extracted/{{ item }}"
+        dest: "/usr/local/bin/{{ item }}"
+        mode: "0755"
+        owner: "root"
+        group: "root"
+        remote_src: true  # Source is on remote host
+      loop:
+        items:
+          - "binary1"
+          - "binary2"
+          - "binary3"
+
+    - name: "Batch copy configuration files"
+      copy:
+        src: "/etc/templates/{{ item }}.conf"
+        dest: "/etc/services/{{ item }}.conf"
+        backup: true
+        remote_src: true  # Both source and dest are on remote host
+      loop:
+        range: "1-20"  # Copy 20 configuration files
+
+    - name: "Mirror directory structure with numeric ranges"
+      copy:
+        src: "/mnt/source/dir{{ item }}/data.bin"
+        dest: "/mnt/backup/dir{{ item }}/data.bin"
+        mode: "0644"
+        remote_src: true
+      loop:
+        range: "1-100:10"  # Every 10th directory (1, 11, 21, ..., 91)
+```
+
+**Key Points**:
+
+- `remote_src: true` works reliably with all boolean parameter formats (since v1.51.4)
+- Supported in all module types that accept boolean parameters
+- Dramatically improves performance for remote-to-remote operations
+- No changes needed to existing playbooks - upgrade to v1.51.4+ for reliability
+
 ---
 
 ## Best Practices
@@ -842,6 +901,27 @@ Combine loops with error handling:
       - "postgresql"
   ignore_errors: true
 ```
+
+### 6. Boolean Parameters in Loops (v1.51.4+)
+
+Boolean parameters now work reliably with YAML formats:
+
+```yaml
+# All these formats are recognized correctly
+- name: "Task with boolean parameter"
+  module: "copy"
+  args:
+    src: "/tmp/{{ item }}"
+    dest: "/usr/local/bin/{{ item }}"
+    remote_src: true        # ✅ Works (native boolean)
+    # remote_src: "true"    # ✅ Works (YAML string)
+    # remote_src: "yes"     # ✅ Works (yes/no format)
+    # remote_src: "1"       # ✅ Works (numeric format)
+  loop:
+    range: "1-50"
+```
+
+The `getBoolArg()` function handles all formats transparently, so no special treatment is needed.
 
 ---
 

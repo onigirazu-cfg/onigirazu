@@ -1,25 +1,194 @@
----
-# Onigirazu configuration with nested syntax enabled
+# Onigirazu Configuration File
+#
+# This is an example configuration file showing all available options.
+# Copy this to one of these locations:
+#   - /etc/onigirazu/onigirazu.yml (system-wide)
+#   - ./onigirazu.yml (in playbook directory)
+#   - Custom path with: onigirazu -c /path/to/onigirazu.yml playbook.yml
+#
+# See CONFIGURATION_REFERENCE.md for detailed documentation
 
-# Enable nested module syntax as default
-preferred_module_syntax: "nested"
-enforce_module_syntax: false  # Set to true to enforce only nested syntax
+# ============================================================================
+# EXECUTION SETTINGS
+# ============================================================================
 
-# Logging configuration
-log_level: "info"
-log_format: "text"
+# Number of parallel tasks to run across hosts
+# Recommended: 1 for serial, 10 for default, 50+ for IO-heavy operations
+max_concurrency: 10
 
-# Execution settings
-parallel_execution: true
-max_parallel_tasks: 5
-task_timeout: "300s"  # 5 minutes
+# Default timeout for tasks (if not specified per-task)
+# Format: 30s, 5m, 1h
+default_timeout: 30s
 
-# Connection settings
-connection_timeout: "30s"
+# Number of times to retry failed tasks
 retry_attempts: 3
-retry_delay: "5s"
 
-# Output settings
-show_task_details: true
-show_timing: true
-colored_output: true
+# Delay between retry attempts
+retry_delay: 5s
+
+# ============================================================================
+# LOGGING
+# ============================================================================
+
+# Log level: error, warn, info, debug, trace
+log_level: info
+
+# Log format: text or json (json for log aggregation systems)
+log_format: text
+
+# ============================================================================
+# SECURITY
+# ============================================================================
+
+# Allow execution of command: and shell: modules
+allow_shell_commands: true
+
+# List of command patterns to block globally
+# These are checked in addition to security policy
+blocked_commands:
+  - "rm -rf"
+  - "format"
+  - "mkfs"
+  - "dd if="
+  - ":(){ :|:& };:"
+  - "shutdown"
+  - "reboot"
+  - "halt"
+  - "poweroff"
+
+# ============================================================================
+# PERFORMANCE TUNING
+# ============================================================================
+
+# Enable result caching (speeds up repeated runs)
+enable_caching: true
+
+# How long to keep cached results
+# Format: 30s, 5m, 1h
+cache_ttl: 5m
+
+# Enable checksum verification for file operations
+enable_checksum: true
+
+# Enable parallel execution of tasks
+enable_parallel: false
+
+# Parallel execution strategy: linear (synchronized) or free (independent)
+# linear:  Wait for all hosts to finish each task
+# free:    Hosts proceed independently
+parallel_strategy: linear
+
+# ============================================================================
+# EXECUTION MODES
+# ============================================================================
+
+# Simulate execution without making any changes
+dry_run: false
+
+# Only check syntax without executing
+check_mode: false
+
+# Enable verbose logging (same as log_level: debug)
+verbose: false
+
+# Show differences when files are modified
+show_diff: true
+
+# ============================================================================
+# USER INTERFACE
+# ============================================================================
+
+# Use colored output
+color_output: true
+
+# Show progress bar during execution
+progress_bar: true
+
+# Interactive mode with prompts
+interactive_mode: false
+
+# Output format: text, json, yaml
+output_format: text
+
+# ============================================================================
+# SSH/CONNECTION SETTINGS
+# ============================================================================
+
+# SSH connection timeout per host
+ssh_timeout: 30s
+
+# SSH keepalive interval (prevents timeout on slow/stable connections)
+ssh_keepalive: 60s
+
+# Maximum concurrent SSH sessions per host
+ssh_max_sessions: 10
+
+# Reuse SSH connections across tasks
+connection_reuse: true
+
+# Enable strict SSH host key verification
+# WARNING: Set to false for development only
+ssh_strict_host_key: false
+
+# Path to SSH known_hosts file (empty = system default)
+ssh_known_hosts_file: ""
+
+# Ignore SSH host key verification (INSECURE - development only)
+# WARNING: Never use in production!
+default_insecure_ignore_host_key: false
+
+# ============================================================================
+# MONITORING & METRICS
+# ============================================================================
+
+# Enable metrics collection
+enable_metrics: false
+
+# Port for metrics HTTP server
+metrics_port: 9090
+
+# HTTP path for metrics endpoint
+metrics_path: /metrics
+
+# Enable CPU and memory profiling
+enable_profiling: false
+
+# ============================================================================
+# VAULT INTEGRATION
+# ============================================================================
+
+# Enable Vault for secrets management
+vault_enabled: false
+
+# Vault server address
+vault_address: ""
+
+# Vault authentication token (better: use ONIGIRAZU_VAULT_TOKEN env var)
+vault_token: ""
+
+# ============================================================================
+# SYNTAX PREFERENCES
+# ============================================================================
+
+# Preferred module syntax: nested or flat
+# nested: module:\n  arg1: value1\n  arg2: value2
+# flat:   module: arg1=value1 arg2=value2
+preferred_module_syntax: nested
+
+# Enforce the preferred syntax (reject other styles)
+enforce_module_syntax: false
+
+# ============================================================================
+# ENVIRONMENT VARIABLE OVERRIDES
+# ============================================================================
+#
+# All these options can also be set via environment variables:
+#
+#   ONIGIRAZU_MAX_CONCURRENCY=20
+#   ONIGIRAZU_TIMEOUT=2m
+#   ONIGIRAZU_LOG_LEVEL=debug
+#   ONIGIRAZU_DRY_RUN=true
+#   etc.
+#
+# Environment variables override config file settings
+# Config file settings override defaults
