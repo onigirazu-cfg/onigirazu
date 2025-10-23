@@ -68,6 +68,7 @@
 <body>
     <a href="index.html" class="back-link">← Back to Documentation</a>
     <h1>Onigirazu</h1>
+<p><strong>Current Release:</strong> v1.52.0 — <a href="https://github.com/onigirazu-cfg/onigirazu/releases/tag/v1.52.0">Comprehensive Documentation Release</a></p>
 <p>Onigirazu is a modern, high-performance configuration management tool written in Go, inspired by Ansible. It provides a simple yet powerful way to automate infrastructure configuration, application deployment, and system administration tasks.</p>
 <h2>✨ Key Highlights</h2>
 <ul>
@@ -79,6 +80,7 @@
 <li><strong>📊 State Management</strong>: Track changes and system state with rollback support</li>
 <li><strong>🎯 5 Ad-hoc Input Formats</strong>: Including unique natural language support</li>
 <li><strong>📚 22+ Built-in Modules</strong>: Comprehensive automation capabilities</li>
+<li><strong>📖 Complete Documentation</strong>: 2,500+ lines of guides for configuration, security, and testing (v1.52.0+)</li>
 </ul>
 <h2>Features</h2>
 <h3>Core Features</h3>
@@ -106,10 +108,13 @@
 <li><strong>Module System</strong>: Extensible architecture with 22+ built-in modules</li>
 <li><strong>Plugin System</strong>: Extensible plugin architecture (modules, callbacks, filters, inventory)</li>
 <li><strong>Secrets Management</strong>: Bitwarden integration for secure credential management</li>
+<li><strong>Security Policies</strong>: File operation restrictions and access control on control machine</li>
 <li><strong>Flexible Inventory</strong>: Multiple inventory formats (YAML, TOML, JSON, INI, text)</li>
 <li><strong>Variable Interpolation</strong>: Dynamic variable substitution</li>
 <li><strong>Error Handling</strong>: Comprehensive error handling and reporting</li>
 <li><strong>Audit &amp; Analytics</strong>: Track execution history, performance metrics, and audit data with <code>audit</code> command</li>
+<li><strong>Complete Configuration Reference</strong>: 35+ configuration options fully documented (v1.52.0+)</li>
+<li><strong>Security Policy Guide</strong>: 13+ security options fully documented (v1.52.0+)</li>
 </ul>
 <h2>Installation</h2>
 <h3>📦 Pre-built Binaries (Recommended)</h3>
@@ -255,6 +260,94 @@ plays:
 </ul>
 <p>📚 <strong>For detailed examples, see <a href="docs/examples/README.md">docs/examples/README.md</a></strong></p>
 <h2>CLI Commands</h2>
+<h3>All Available Commands</h3>
+<p><strong>Quick Reference:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Purpose</th>
+<th>Use Case</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>apply</code></td>
+<td>Execute playbooks</td>
+<td>Run your automation playbooks</td>
+</tr>
+<tr>
+<td><code>run</code></td>
+<td>Ad-hoc commands</td>
+<td>Quick one-off tasks without playbooks</td>
+</tr>
+<tr>
+<td><code>plan</code></td>
+<td>Preview changes</td>
+<td>Dry-run before executing</td>
+</tr>
+<tr>
+<td><code>validate</code></td>
+<td>Check playbook syntax</td>
+<td>Validate playbook structure</td>
+</tr>
+<tr>
+<td><code>lint</code></td>
+<td>Check best practices</td>
+<td>Find errors and style issues</td>
+</tr>
+<tr>
+<td><code>fmt</code></td>
+<td>Format playbook files</td>
+<td>Auto-format YAML</td>
+</tr>
+<tr>
+<td><code>graph</code></td>
+<td>Visualize playbook</td>
+<td>Show playbook structure</td>
+</tr>
+<tr>
+<td><code>audit</code></td>
+<td>Audit &amp; analytics</td>
+<td>Track execution history</td>
+</tr>
+<tr>
+<td><code>diff</code></td>
+<td>Show differences</td>
+<td>Compare playbook vs current state</td>
+</tr>
+<tr>
+<td><code>drift</code></td>
+<td>Detect &amp; fix drift</td>
+<td>Find and fix configuration drift</td>
+</tr>
+<tr>
+<td><code>healthcheck</code></td>
+<td>Check host health</td>
+<td>Verify inventory hosts are reachable</td>
+</tr>
+<tr>
+<td><code>inventory</code></td>
+<td>Manage inventory</td>
+<td>Query and manage hosts</td>
+</tr>
+<tr>
+<td><code>state</code></td>
+<td>Manage state</td>
+<td>View, clear, or export state</td>
+</tr>
+<tr>
+<td><code>rollback</code></td>
+<td>Rollback changes</td>
+<td>Revert to previous snapshots</td>
+</tr>
+<tr>
+<td><code>completion</code></td>
+<td>Shell completion</td>
+<td>Generate autocompletion script</td>
+</tr>
+</tbody>
+</table>
 <h3>Core Commands</h3>
 <h4><code>apply</code> - Execute playbooks</h4>
 <pre class="codehilite"><code class="language-bash"># Run a playbook
@@ -285,14 +378,21 @@ onigirazu apply playbook.yml -v
 <li><code>--list-tasks --verbose</code> - Detailed task information</li>
 </ul>
 <p>📚 See <a href="docs/LIST_TAGS_TASKS_GUIDE.md">Tag and Task Discovery Guide</a> for detailed examples</p>
-<h4><code>validate</code> - Validate playbook syntax</h4>
-<pre class="codehilite"><code class="language-bash"># Validate a playbook
-onigirazu validate playbook.yml
+<h4><code>run</code> - Execute ad-hoc commands</h4>
+<pre class="codehilite"><code class="language-bash"># Simple ping
+onigirazu run all -m ping -i inventory.yml
 
-# Validate with inventory
-onigirazu validate playbook.yml -i inventory.yml
+# Install package
+onigirazu run webservers -m package name=nginx state=present
+
+# Natural language command
+onigirazu run all &quot;install nginx&quot; -i inventory.yml
+
+# Run shell command
+onigirazu run all -m shell &quot;ps aux | grep nginx&quot;
 </code></pre>
 
+<p>📚 See <a href="docs/ADHOC_GUIDE.md">Ad-hoc Commands Guide</a> for all 5 input formats</p>
 <h4><code>plan</code> - Preview changes</h4>
 <pre class="codehilite"><code class="language-bash"># Show what would change
 onigirazu plan playbook.yml -i inventory.yml
@@ -301,7 +401,48 @@ onigirazu plan playbook.yml -i inventory.yml
 onigirazu plan playbook.yml --verbose
 </code></pre>
 
-<h3>Development Tools</h3>
+<h4><code>validate</code> - Validate playbook syntax</h4>
+<pre class="codehilite"><code class="language-bash"># Validate a playbook
+onigirazu validate playbook.yml
+
+# Validate with inventory
+onigirazu validate playbook.yml -i inventory.yml
+</code></pre>
+
+<h4><code>diff</code> - Show differences</h4>
+<pre class="codehilite"><code class="language-bash"># Show differences between playbook and current state
+onigirazu diff playbook.yml -i inventory.yml
+
+# Verbose output
+onigirazu diff playbook.yml --verbose
+</code></pre>
+
+<h4><code>inventory</code> - Manage inventory</h4>
+<pre class="codehilite"><code class="language-bash"># List all hosts
+onigirazu inventory list -i inventory.yml
+
+# List specific group
+onigirazu inventory list webservers -i inventory.yml
+
+# Show host details
+onigirazu inventory host web1 -i inventory.yml
+</code></pre>
+
+<h4><code>state</code> - Manage state</h4>
+<pre class="codehilite"><code class="language-bash"># Show current state
+onigirazu state show
+
+# Clear state
+onigirazu state clear
+
+# Export state
+onigirazu state export &gt; state-backup.json
+
+# Import state
+onigirazu state import &lt; state-backup.json
+</code></pre>
+
+<h3>Development &amp; Analysis Tools</h3>
 <h4><code>fmt</code> - Format playbook files</h4>
 <pre class="codehilite"><code class="language-bash"># Format a playbook
 onigirazu fmt playbook.yml
@@ -335,15 +476,101 @@ onigirazu graph --show-vars --show-handlers playbook.yml
 onigirazu graph --format=mermaid playbook.yml
 </code></pre>
 
-<h3>State Management</h3>
-<pre class="codehilite"><code class="language-bash"># Show current state
-onigirazu state show
+<h4><code>audit</code> - Audit playbook executions</h4>
+<pre class="codehilite"><code class="language-bash"># View execution history
+onigirazu audit list
 
-# Clear state
-onigirazu state clear
+# Show specific execution report
+onigirazu audit show &lt;execution_id&gt;
 
-# Export state
-onigirazu state export &gt; state-backup.json
+# Export audit data
+onigirazu audit export &gt; audit-report.json
+</code></pre>
+
+<p>📚 See <a href="../onigirazu_docs/features/AUDIT_AND_ANALYTICS_SYSTEM.md">Audit &amp; Analytics Guide</a></p>
+<h3>Advanced Features</h3>
+<h4><code>drift</code> - Detect and fix configuration drift</h4>
+<pre class="codehilite"><code class="language-bash"># Detect drift
+onigirazu drift detect playbook.yml -i inventory.yml
+
+# Fix drift automatically
+onigirazu drift fix playbook.yml -i inventory.yml
+</code></pre>
+
+<h4><code>rollback</code> - Rollback changes</h4>
+<pre class="codehilite"><code class="language-bash"># List available snapshots
+onigirazu rollback list
+
+# Rollback to specific snapshot
+onigirazu rollback restore &lt;snapshot_id&gt;
+
+# Rollback to previous execution
+onigirazu rollback restore --previous
+</code></pre>
+
+<h4><code>healthcheck</code> - Check host health</h4>
+<pre class="codehilite"><code class="language-bash"># Check all hosts
+onigirazu healthcheck all -i inventory.yml
+
+# Check specific group
+onigirazu healthcheck webservers -i inventory.yml
+</code></pre>
+
+<h3>Utility Commands</h3>
+<h4><code>completion</code> - Generate shell completion</h4>
+<pre class="codehilite"><code class="language-bash"># Generate bash completion
+onigirazu completion bash &gt; ~/.bash_completion.d/onigirazu
+
+# Generate zsh completion
+onigirazu completion zsh &gt; ~/.zsh/completions/_onigirazu
+
+# Generate fish completion
+onigirazu completion fish &gt; ~/.config/fish/completions/onigirazu.fish
+</code></pre>
+
+<h4><code>version</code> - Show version information</h4>
+<pre class="codehilite"><code class="language-bash"># Display version
+onigirazu version
+</code></pre>
+
+<h4><code>help</code> - Get command help</h4>
+<pre class="codehilite"><code class="language-bash"># Show general help
+onigirazu help
+
+# Show help for specific command
+onigirazu apply --help
+onigirazu run --help
+</code></pre>
+
+<h3>Global Flags &amp; Options</h3>
+<p>These flags work with all commands:</p>
+<pre class="codehilite"><code class="language-bash"># Configuration and inventory
+-c, --config FILE        Path to configuration file
+-i, --inventory FILE     Path to inventory file or inline hosts (e.g., &quot;ubuntu@host1,ubuntu@host2&quot;)
+-s, --state FILE         Path to state file (default: &quot;.onigirazu-state&quot;)
+
+# Output control
+-v, --verbose            Verbose output (show more details)
+--show-debug            Show debug and info messages
+--no-color              Disable colored output
+
+# Help and version
+-h, --help              Show help for any command
+--version               Show version information
+</code></pre>
+
+<p><strong>Example usage:</strong></p>
+<pre class="codehilite"><code class="language-bash"># Run with custom config and verbose output
+onigirazu apply playbook.yml -c /etc/onigirazu/config.yaml -v
+
+# Run with inline inventory and debug output
+onigirazu run all -m ping -i &quot;ubuntu@web1,ubuntu@web2&quot; --show-debug
+
+# Run without colors (useful for logs/CI)
+onigirazu apply playbook.yml -i inventory.yml --no-color
+
+# Use custom state file location
+onigirazu apply playbook.yml -s /var/lib/onigirazu/state.json
 </code></pre>
 
 <h2>🚀 Ad-hoc Commands</h2>
@@ -581,6 +808,14 @@ onigirazu drift fix -p playbook.yml -i inventory.yml
 <li>✅ Configurability</li>
 </ul>
 <h2>📚 Documentation</h2>
+<h3>Configuration &amp; Security (⭐ NEW in v1.52.0)</h3>
+<p>These comprehensive guides cover all configuration options and security policies:</p>
+<ul>
+<li><strong><a href="docs/CONFIGURATION_REFERENCE.md">Complete Configuration Reference</a></strong> - All 35+ configuration options with examples</li>
+<li><strong><a href="docs/SECURITY_POLICY_GUIDE.md">Security Policy Guide</a></strong> - All 13+ security policy options with real-world examples</li>
+<li><strong><a href="docs/QUICK_START_CONFIGURATION.md">Quick Start Configuration</a></strong> - Get configured in 5 minutes</li>
+<li><strong><a href="docs/INDEX_CONFIGURATION_SECURITY.md">Configuration &amp; Security Index</a></strong> - Find answers by problem or role</li>
+</ul>
 <h3>User Documentation</h3>
 <ul>
 <li><strong><a href="docs/quick-start.md">Quick Start Guide</a></strong> - Get started in 5 minutes</li>
