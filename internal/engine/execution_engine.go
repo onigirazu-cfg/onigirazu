@@ -216,15 +216,15 @@ func (e *ExecutionEngine) ExecutePlaybook(ctx context.Context, playbook *types.P
 		// Check for context cancellation (graceful shutdown)
 		select {
 		case <-ctx.Done():
-			e.logger.Warn("Playbook execution cancelled: %v", ctx.Err())
+			e.logger.Warn("Playbook execution canceled: %v", ctx.Err())
 			result.Failed = true
-			result.Error = "execution cancelled: " + ctx.Err().Error()
+			result.Error = "execution canceled: " + ctx.Err().Error()
 			contextCancelled = true
 			break
 		default:
 		}
 
-		// Exit loop if context was cancelled
+		// Exit loop if context was canceled
 		if contextCancelled {
 			break
 		}
@@ -289,9 +289,9 @@ func (e *ExecutionEngine) ExecutePlaybook(ctx context.Context, playbook *types.P
 	e.logger.Info("Playbook execution completed: %s (duration: %v, success: %t)",
 		playbook.Name, result.Duration, !result.Failed)
 
-	// Return error if context was cancelled
+	// Return error if context was canceled
 	if contextCancelled {
-		return result, fmt.Errorf("task execution cancelled: %w", ctx.Err())
+		return result, fmt.Errorf("task execution canceled: %w", ctx.Err())
 	}
 
 	return result, nil
@@ -479,8 +479,8 @@ func (e *ExecutionEngine) executeTaskList(ctx context.Context, tasks []types.Tas
 		// Check for context cancellation (graceful shutdown)
 		select {
 		case <-ctx.Done():
-			e.logger.Debug("Task list execution cancelled: %v", ctx.Err())
-			return fmt.Errorf("task execution cancelled: %w", ctx.Err())
+			e.logger.Debug("Task list execution canceled: %v", ctx.Err())
+			return fmt.Errorf("task execution canceled: %w", ctx.Err())
 		default:
 		}
 
@@ -537,8 +537,8 @@ func (e *ExecutionEngine) executeTaskSerial(ctx context.Context, task *types.Tas
 		// Check for context cancellation (graceful shutdown)
 		select {
 		case <-ctx.Done():
-			e.logger.Debug("Serial task execution cancelled: %v", ctx.Err())
-			return fmt.Errorf("task execution cancelled: %w", ctx.Err())
+			e.logger.Debug("Serial task execution canceled: %v", ctx.Err())
+			return fmt.Errorf("task execution canceled: %w", ctx.Err())
 		default:
 		}
 
@@ -564,8 +564,8 @@ func (e *ExecutionEngine) executeTaskParallel(ctx context.Context, task *types.T
 		// Check for context cancellation before submitting new tasks
 		select {
 		case <-ctx.Done():
-			e.logger.Debug("Parallel task execution cancelled: %v", ctx.Err())
-			return fmt.Errorf("task execution cancelled: %w", ctx.Err())
+			e.logger.Debug("Parallel task execution canceled: %v", ctx.Err())
+			return fmt.Errorf("task execution canceled: %w", ctx.Err())
 		default:
 		}
 
@@ -853,7 +853,7 @@ func (e *ExecutionEngine) executeTaskWithLoop(ctx context.Context, task *types.T
 	// Check for context cancellation before processing loop
 	select {
 	case <-ctx.Done():
-		return fmt.Errorf("task execution cancelled: %w", ctx.Err())
+		return fmt.Errorf("task execution canceled: %w", ctx.Err())
 	default:
 	}
 
@@ -870,8 +870,8 @@ func (e *ExecutionEngine) executeTaskWithLoop(ctx context.Context, task *types.T
 		// Check for context cancellation (graceful shutdown)
 		select {
 		case <-ctx.Done():
-			e.logger.Debug("Loop execution cancelled: %v", ctx.Err())
-			return fmt.Errorf("task execution cancelled: %w", ctx.Err())
+			e.logger.Debug("Loop execution canceled: %v", ctx.Err())
+			return fmt.Errorf("task execution canceled: %w", ctx.Err())
 		default:
 		}
 
@@ -1052,7 +1052,7 @@ func (e *ExecutionEngine) parseRange(ctx context.Context, rangeStr string) ([]in
 	// Check for context cancellation
 	select {
 	case <-ctx.Done():
-		return nil, fmt.Errorf("range parsing cancelled: %w", ctx.Err())
+		return nil, fmt.Errorf("range parsing canceled: %w", ctx.Err())
 	default:
 	}
 
@@ -1099,7 +1099,7 @@ func (e *ExecutionEngine) parseRange(ctx context.Context, rangeStr string) ([]in
 				if len(items)%1000 == 0 && len(items) > 0 {
 					select {
 					case <-ctx.Done():
-						return nil, fmt.Errorf("range parsing cancelled: %w", ctx.Err())
+						return nil, fmt.Errorf("range parsing canceled: %w", ctx.Err())
 					default:
 					}
 				}
@@ -1112,7 +1112,7 @@ func (e *ExecutionEngine) parseRange(ctx context.Context, rangeStr string) ([]in
 				if len(items)%1000 == 0 && len(items) > 0 {
 					select {
 					case <-ctx.Done():
-						return nil, fmt.Errorf("range parsing cancelled: %w", ctx.Err())
+						return nil, fmt.Errorf("range parsing canceled: %w", ctx.Err())
 					default:
 					}
 				}
@@ -1146,7 +1146,7 @@ func (e *ExecutionEngine) parseRange(ctx context.Context, rangeStr string) ([]in
 				if len(items)%1000 == 0 && len(items) > 0 {
 					select {
 					case <-ctx.Done():
-						return nil, fmt.Errorf("range parsing cancelled: %w", ctx.Err())
+						return nil, fmt.Errorf("range parsing canceled: %w", ctx.Err())
 					default:
 					}
 				}
@@ -1159,7 +1159,7 @@ func (e *ExecutionEngine) parseRange(ctx context.Context, rangeStr string) ([]in
 				if len(items)%1000 == 0 && len(items) > 0 {
 					select {
 					case <-ctx.Done():
-						return nil, fmt.Errorf("range parsing cancelled: %w", ctx.Err())
+						return nil, fmt.Errorf("range parsing canceled: %w", ctx.Err())
 					default:
 					}
 				}
@@ -1374,8 +1374,8 @@ func (e *ExecutionEngine) executeTaskListWithRetry(ctx context.Context, tasks []
 		// Check for context cancellation (graceful shutdown)
 		select {
 		case <-ctx.Done():
-			e.logger.Debug("Task list with retry execution cancelled: %v", ctx.Err())
-			return fmt.Errorf("task execution cancelled: %w", ctx.Err())
+			e.logger.Debug("Task list with retry execution canceled: %v", ctx.Err())
+			return fmt.Errorf("task execution canceled: %w", ctx.Err())
 		default:
 		}
 
