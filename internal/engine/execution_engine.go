@@ -220,7 +220,6 @@ func (e *ExecutionEngine) ExecutePlaybook(ctx context.Context, playbook *types.P
 			result.Failed = true
 			result.Error = "execution canceled: " + ctx.Err().Error()
 			contextCancelled = true
-			break
 		default:
 		}
 
