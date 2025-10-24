@@ -67,9 +67,9 @@ func (m *CommandModuleFixed) Execute(ctx context.Context, host types.Host, args 
 	}
 
 	if shell {
-		return m.executeShellCommand(exec, command, result, startTime)
+		return m.executeShellCommand(exec, ctx, command, result, startTime)
 	} else {
-		return m.executeCommand(exec, command, result, startTime)
+		return m.executeCommand(exec, ctx, command, result, startTime)
 	}
 }
 
@@ -111,7 +111,7 @@ func (m *CommandModuleFixed) Validate(args map[string]interface{}) error {
 	return nil
 }
 
-func (m *CommandModuleFixed) executeCommand(exec *executor.CommandExecutor, command string, result types.TaskResult, startTime time.Time) (types.TaskResult, error) {
+func (m *CommandModuleFixed) executeCommand(exec *executor.CommandExecutor, ctx context.Context, command string, result types.TaskResult, startTime time.Time) (types.TaskResult, error) {
 	// Split command into parts for execution
 	parts := strings.Fields(command)
 	if len(parts) == 0 {
@@ -122,8 +122,8 @@ func (m *CommandModuleFixed) executeCommand(exec *executor.CommandExecutor, comm
 		return result, fmt.Errorf("command is empty")
 	}
 
-	// Execute using remote executor
-	output, err := exec.Execute(parts[0], parts[1:]...)
+	// Execute using remote executor with context for graceful shutdown support
+	output, err := exec.ExecuteWithContext(ctx, parts[0], parts[1:]...)
 
 	if err != nil {
 		result.Success = false
@@ -151,9 +151,9 @@ func (m *CommandModuleFixed) executeCommand(exec *executor.CommandExecutor, comm
 	return result, nil
 }
 
-func (m *CommandModuleFixed) executeShellCommand(exec *executor.CommandExecutor, command string, result types.TaskResult, startTime time.Time) (types.TaskResult, error) {
-	// Execute command through shell using remote executor
-	output, err := exec.Execute("sh", "-c", command)
+func (m *CommandModuleFixed) executeShellCommand(exec *executor.CommandExecutor, ctx context.Context, command string, result types.TaskResult, startTime time.Time) (types.TaskResult, error) {
+	// Execute command through shell using remote executor with context for graceful shutdown support
+	output, err := exec.ExecuteWithContext(ctx, "sh", "-c", command)
 
 	if err != nil {
 		result.Success = false

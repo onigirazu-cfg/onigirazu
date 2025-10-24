@@ -11,6 +11,7 @@ import (
 	"github.com/onigirazu-cfg/onigirazu/internal/adhoc"
 	"github.com/onigirazu-cfg/onigirazu/internal/cache"
 	"github.com/onigirazu-cfg/onigirazu/internal/config"
+	"github.com/onigirazu-cfg/onigirazu/internal/execution"
 	"github.com/onigirazu-cfg/onigirazu/internal/inventory"
 	"github.com/onigirazu-cfg/onigirazu/internal/logger"
 	"github.com/onigirazu-cfg/onigirazu/internal/modules"
@@ -207,8 +208,21 @@ func runAdHocCommand(
 	// Create inventory manager
 	inventoryMgr := inventory.NewManager(enhancedParser, log, cacheManager)
 
-	// Load inventory file
+	// Create context with graceful shutdown support
 	ctx := context.Background()
+	signalHandler := execution.NewSignalHandler(ctx, 10*time.Second)
+	defer signalHandler.Close()
+
+	// Use the signal handler's context for execution
+	ctx = signalHandler.Context()
+
+	// Register SSH pool cleanup
+	sshPool := sshpkg.GetGlobalPool()
+	signalHandler.RegisterCleanup(func() error {
+		return sshPool.CloseAll()
+	})
+
+	// Load inventory file
 	if err := inventoryMgr.LoadInventory(ctx, inventoryPath); err != nil {
 		return fmt.Errorf("failed to load inventory: %w", err)
 	}
@@ -264,9 +278,14 @@ func runAdHocCommand(
 		Variables: variables,
 	}
 
-	// Execute command
+	// Execute command with signal handling
 	summary, err := adhocExecutor.Execute(ctx, command, hostPattern, opts)
 	if err != nil {
+		// Check if error is due to context cancellation
+		if err == context.Canceled {
+			fmt.Fprintf(os.Stderr, "\n⚠️  Command execution interrupted by user\n")
+			os.Exit(130) // Standard exit code for SIGINT
+		}
 		return fmt.Errorf("execution failed: %w", err)
 	}
 

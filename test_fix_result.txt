@@ -1,0 +1,47 @@
+[DEBUG] Registering signal handlers for SIGINT and SIGTERM
+[DEBUG] Starting signal handler goroutine
+[DEBUG] Signal handler initialized
+[DEBUG] Signal handler goroutine started
+🍙 Starting Onigirazu Configuration Management Tool
+2025-10-24 13:17:34 [[32mINFO[0m] Starting Onigirazu configuration management tool
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 INITIALIZATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✓ State backend: .onigirazu-state
+✓ Max concurrency: 10
+✓ SSH strict mode: disabled
+
+2025-10-24 13:17:34 [[32mINFO[0m] Using state backend: file
+2025-10-24 13:17:34 [[32mINFO[0m] Loading inventory from: 127.0.0.1
+2025-10-24 13:17:34 [[32mINFO[0m] Parsed inline inventory: 1 hosts
+2025-10-24 13:17:34 [[32mINFO[0m] Successfully parsed inventory: 127.0.0.1 (1 groups, 1 hosts)
+2025-10-24 13:17:34 [[32mINFO[0m] Successfully loaded inventory: 1 groups, 1 hosts
+✓ Inventory: 127.0.0.1 (1 groups, 1 hosts)
+
+2025-10-24 13:17:34 [[32mINFO[0m] Parsing playbook: ../simple_long_test.yml
+2025-10-24 13:17:34 [[32mINFO[0m] Successfully parsed playbook: ../simple_long_test.yml (1 plays)
+2025-10-24 13:17:34 [[32mINFO[0m] Playbook parsed successfully: simple_long_test.yml (1 plays)
+✓ Playbook: ../simple_long_test.yml (1 plays)
+
+2025-10-24 13:17:34 [[32mINFO[0m] Audit: Started execution recording: f8f8c68e-415d-4135-9b45-18adf3ad1349
+2025-10-24 13:17:34 [[32mINFO[0m] Audit recording started: execution_id=f8f8c68e-415d-4135-9b45-18adf3ad1349
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🚀 EXECUTION START
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+2025-10-24 13:17:34 [[32mINFO[0m] Starting playbook execution
+2025-10-24 13:17:34 [[32mINFO[0m] Starting playbook execution: simple_long_test.yml
+2025-10-24 13:17:34 [[32mINFO[0m] === Starting play 1/1: 'Minimal Loop Test' === {play=Minimal Loop Test, play_index=1, total_plays=1, type=play_start}
+2025-10-24 13:17:34 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 1)' {type=task_start, host=Check disk usage (item 1), task=localhost}
+2025-10-24 13:17:36 [[32mINFO[0m] Task 'Check disk usage (item 1)' on host 'localhost': SUCCESS (changed) {host=localhost, task=Check disk usage (item 1), type=task_end, success=true, changed=true}
+2025-10-24 13:17:36 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 2)' {host=Check disk usage (item 2), task=localhost, type=task_start}
+[DEBUG] Signal received: interrupt
+[DEBUG] handleFirstInterrupt called
+
+╔══════════════════════════════════════════════════════════╗
+║         Interrupt Signal Received (Ctrl+C)              ║
+╚══════════════════════════════════════════════════════════╝
+
+Currently running tasks will be interrupted.
+
+Save state/audit data before exiting? [Y/n]: 

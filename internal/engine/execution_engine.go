@@ -211,7 +211,24 @@ func (e *ExecutionEngine) ExecutePlaybook(ctx context.Context, playbook *types.P
 	e.notifyExecutionStart(playbook.Name, len(playbook.Plays))
 
 	// Execute each play
+	contextCancelled := false
 	for i, play := range playbook.Plays {
+		// Check for context cancellation (graceful shutdown)
+		select {
+		case <-ctx.Done():
+			e.logger.Warn("Playbook execution cancelled: %v", ctx.Err())
+			result.Failed = true
+			result.Error = "execution cancelled: " + ctx.Err().Error()
+			contextCancelled = true
+			break
+		default:
+		}
+
+		// Exit loop if context was cancelled
+		if contextCancelled {
+			break
+		}
+
 		playStartTime := time.Now()
 		e.logger.PlayStart(play.Name, i+1, len(playbook.Plays))
 
@@ -227,6 +244,12 @@ func (e *ExecutionEngine) ExecutePlaybook(ctx context.Context, playbook *types.P
 			result.Failed = true
 			result.Error = err.Error()
 			e.metricsManager.IncrementTasksFailed()
+
+			// Check if error is due to context cancellation (graceful shutdown)
+			if err == context.Canceled || strings.Contains(err.Error(), "context canceled") {
+				contextCancelled = true
+				break
+			}
 
 			// Check if we should continue on failure
 			if !play.IgnoreErrors {
@@ -265,6 +288,11 @@ func (e *ExecutionEngine) ExecutePlaybook(ctx context.Context, playbook *types.P
 
 	e.logger.Info("Playbook execution completed: %s (duration: %v, success: %t)",
 		playbook.Name, result.Duration, !result.Failed)
+
+	// Return error if context was cancelled
+	if contextCancelled {
+		return result, fmt.Errorf("task execution cancelled: %w", ctx.Err())
+	}
 
 	return result, nil
 }
@@ -448,6 +476,14 @@ func (e *ExecutionEngine) executePlay(ctx context.Context, play *types.Play) (*t
 func (e *ExecutionEngine) executeTaskList(ctx context.Context, tasks []types.Task, hosts []types.Host,
 	variables map[string]interface{}, playResult *types.PlayResult) error {
 	for i, task := range tasks {
+		// Check for context cancellation (graceful shutdown)
+		select {
+		case <-ctx.Done():
+			e.logger.Debug("Task list execution cancelled: %v", ctx.Err())
+			return fmt.Errorf("task execution cancelled: %w", ctx.Err())
+		default:
+		}
+
 		e.logger.Debug("Executing task %d/%d: %s (tags: %v)", i+1, len(tasks), task.Name, task.Tags)
 
 		// Check if task should be skipped based on tags
@@ -498,6 +534,14 @@ func (e *ExecutionEngine) executeTask(ctx context.Context, task *types.Task, hos
 func (e *ExecutionEngine) executeTaskSerial(ctx context.Context, task *types.Task, hosts []types.Host,
 	variables map[string]interface{}, playResult *types.PlayResult) error {
 	for _, host := range hosts {
+		// Check for context cancellation (graceful shutdown)
+		select {
+		case <-ctx.Done():
+			e.logger.Debug("Serial task execution cancelled: %v", ctx.Err())
+			return fmt.Errorf("task execution cancelled: %w", ctx.Err())
+		default:
+		}
+
 		if err := e.executeTaskOnHost(ctx, task, &host, variables, playResult); err != nil {
 			if !task.IgnoreErrors {
 				return err
@@ -517,6 +561,14 @@ func (e *ExecutionEngine) executeTaskParallel(ctx context.Context, task *types.T
 	var firstError error
 
 	for _, host := range hosts {
+		// Check for context cancellation before submitting new tasks
+		select {
+		case <-ctx.Done():
+			e.logger.Debug("Parallel task execution cancelled: %v", ctx.Err())
+			return fmt.Errorf("task execution cancelled: %w", ctx.Err())
+		default:
+		}
+
 		wg.Add(1)
 
 		// Submit to execution pool
@@ -798,8 +850,15 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 // executeTaskWithLoop executes a task with loop
 func (e *ExecutionEngine) executeTaskWithLoop(ctx context.Context, task *types.Task, hosts []types.Host,
 	variables map[string]interface{}, playResult *types.PlayResult) error {
+	// Check for context cancellation before processing loop
+	select {
+	case <-ctx.Done():
+		return fmt.Errorf("task execution cancelled: %w", ctx.Err())
+	default:
+	}
+
 	// Get loop items
-	items, err := e.getLoopItems(task.Loop, variables)
+	items, err := e.getLoopItems(ctx, task.Loop, variables)
 	if err != nil {
 		return fmt.Errorf("failed to get loop items: %w", err)
 	}
@@ -808,6 +867,14 @@ func (e *ExecutionEngine) executeTaskWithLoop(ctx context.Context, task *types.T
 
 	// Execute task for each item
 	for i, item := range items {
+		// Check for context cancellation (graceful shutdown)
+		select {
+		case <-ctx.Done():
+			e.logger.Debug("Loop execution cancelled: %v", ctx.Err())
+			return fmt.Errorf("task execution cancelled: %w", ctx.Err())
+		default:
+		}
+
 		// Create task copy with loop variables
 		taskCopy := *task
 		taskCopy.Name = fmt.Sprintf("%s (item %d)", task.Name, i+1)
@@ -963,13 +1030,13 @@ func (e *ExecutionEngine) evaluateCondition(ctx context.Context, condition strin
 //   - "1-10:2" -> [1, 3, 5, 7, 9]
 //   - "a-z" -> ['a', 'b', 'c', ..., 'z']
 //   - "0-3" -> [0, 1, 2, 3]
-func (e *ExecutionEngine) getLoopItems(loop *types.Loop, variables map[string]interface{}) ([]interface{}, error) {
+func (e *ExecutionEngine) getLoopItems(ctx context.Context, loop *types.Loop, variables map[string]interface{}) ([]interface{}, error) {
 	if loop.Items != nil {
 		return loop.Items, nil
 	}
 
 	if loop.Range != "" {
-		return e.parseRange(loop.Range)
+		return e.parseRange(ctx, loop.Range)
 	}
 
 	return nil, fmt.Errorf("loop must specify either items or range")
@@ -979,8 +1046,15 @@ func (e *ExecutionEngine) getLoopItems(loop *types.Loop, variables map[string]in
 // Supports formats:
 //   - Numeric ranges: "1-10" or "start-end:step"
 //   - Character ranges: "a-z", "A-Z"
-func (e *ExecutionEngine) parseRange(rangeStr string) ([]interface{}, error) {
+func (e *ExecutionEngine) parseRange(ctx context.Context, rangeStr string) ([]interface{}, error) {
 	items := make([]interface{}, 0)
+
+	// Check for context cancellation
+	select {
+	case <-ctx.Done():
+		return nil, fmt.Errorf("range parsing cancelled: %w", ctx.Err())
+	default:
+	}
 
 	// Check if it's a step range (contains colon)
 	step := 1
@@ -1021,11 +1095,27 @@ func (e *ExecutionEngine) parseRange(rangeStr string) ([]interface{}, error) {
 		// Numeric range
 		if startNum <= endNum {
 			for i := startNum; i <= endNum; i += step {
+				// Check for context cancellation every 1000 items to avoid overhead
+				if len(items)%1000 == 0 && len(items) > 0 {
+					select {
+					case <-ctx.Done():
+						return nil, fmt.Errorf("range parsing cancelled: %w", ctx.Err())
+					default:
+					}
+				}
 				items = append(items, i)
 			}
 		} else {
 			// Reverse order
 			for i := startNum; i >= endNum; i -= step {
+				// Check for context cancellation every 1000 items to avoid overhead
+				if len(items)%1000 == 0 && len(items) > 0 {
+					select {
+					case <-ctx.Done():
+						return nil, fmt.Errorf("range parsing cancelled: %w", ctx.Err())
+					default:
+					}
+				}
 				items = append(items, i)
 			}
 		}
@@ -1052,11 +1142,27 @@ func (e *ExecutionEngine) parseRange(rangeStr string) ([]interface{}, error) {
 
 		if startChar <= endChar {
 			for i := startChar; i <= endChar; i += stepRune {
+				// Check for context cancellation every 1000 items to avoid overhead
+				if len(items)%1000 == 0 && len(items) > 0 {
+					select {
+					case <-ctx.Done():
+						return nil, fmt.Errorf("range parsing cancelled: %w", ctx.Err())
+					default:
+					}
+				}
 				items = append(items, string(i))
 			}
 		} else {
 			// Reverse order
 			for i := startChar; i >= endChar; i -= stepRune {
+				// Check for context cancellation every 1000 items to avoid overhead
+				if len(items)%1000 == 0 && len(items) > 0 {
+					select {
+					case <-ctx.Done():
+						return nil, fmt.Errorf("range parsing cancelled: %w", ctx.Err())
+					default:
+					}
+				}
 				items = append(items, string(i))
 			}
 		}
@@ -1265,6 +1371,14 @@ func (e *ExecutionEngine) GetMetrics() *metrics.Metrics {
 func (e *ExecutionEngine) executeTaskListWithRetry(ctx context.Context, tasks []types.Task, hosts []types.Host,
 	variables map[string]interface{}, playResult *types.PlayResult) error {
 	for i, task := range tasks {
+		// Check for context cancellation (graceful shutdown)
+		select {
+		case <-ctx.Done():
+			e.logger.Debug("Task list with retry execution cancelled: %v", ctx.Err())
+			return fmt.Errorf("task execution cancelled: %w", ctx.Err())
+		default:
+		}
+
 		e.logger.Debug("Executing task %d/%d: %s (tags: %v)", i+1, len(tasks), task.Name, task.Tags)
 
 		// Check if task should be skipped based on tags

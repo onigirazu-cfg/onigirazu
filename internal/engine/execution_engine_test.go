@@ -1195,7 +1195,8 @@ func TestGetLoopItems(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			items, err := engine.getLoopItems(tt.loop, nil)
+			ctx := context.Background()
+			items, err := engine.getLoopItems(ctx, tt.loop, nil)
 
 			if tt.expectedError {
 				assert.Error(t, err)
@@ -1296,7 +1297,8 @@ func TestParseRange(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			items, err := engine.parseRange(tt.rangeStr)
+			ctx := context.Background()
+			items, err := engine.parseRange(ctx, tt.rangeStr)
 
 			if tt.expectedError {
 				assert.Error(t, err, "expected error for range '%s'", tt.rangeStr)

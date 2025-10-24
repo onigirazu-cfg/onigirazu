@@ -1,0 +1,160 @@
+[DEBUG] Registering signal handlers for SIGINT and SIGTERM
+[DEBUG] Starting signal handler goroutine
+[DEBUG] Signal handler initialized
+[DEBUG] Signal handler goroutine started
+🍙 Starting Onigirazu Configuration Management Tool
+2025-10-24 12:51:12 [[32mINFO[0m] Starting Onigirazu configuration management tool
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 INITIALIZATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✓ State backend: .onigirazu-state
+✓ Max concurrency: 10
+✓ SSH strict mode: disabled
+
+2025-10-24 12:51:12 [[32mINFO[0m] Using state backend: file
+2025-10-24 12:51:12 [[32mINFO[0m] Loading inventory from: 127.0.0.1
+2025-10-24 12:51:12 [[32mINFO[0m] Parsed inline inventory: 1 hosts
+2025-10-24 12:51:12 [[32mINFO[0m] Successfully parsed inventory: 127.0.0.1 (1 groups, 1 hosts)
+2025-10-24 12:51:12 [[32mINFO[0m] Successfully loaded inventory: 1 groups, 1 hosts
+✓ Inventory: 127.0.0.1 (1 groups, 1 hosts)
+
+2025-10-24 12:51:12 [[32mINFO[0m] Parsing playbook: ../simple_long_test.yml
+2025-10-24 12:51:12 [[32mINFO[0m] Successfully parsed playbook: ../simple_long_test.yml (1 plays)
+2025-10-24 12:51:12 [[32mINFO[0m] Playbook parsed successfully: simple_long_test.yml (1 plays)
+✓ Playbook: ../simple_long_test.yml (1 plays)
+
+2025-10-24 12:51:12 [[32mINFO[0m] Audit: Started execution recording: ee439e0c-1dfb-4e08-8681-8126e42ed9a8
+2025-10-24 12:51:12 [[32mINFO[0m] Audit recording started: execution_id=ee439e0c-1dfb-4e08-8681-8126e42ed9a8
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🚀 EXECUTION START
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+2025-10-24 12:51:12 [[32mINFO[0m] Starting playbook execution
+2025-10-24 12:51:12 [[32mINFO[0m] Starting playbook execution: simple_long_test.yml
+2025-10-24 12:51:12 [[32mINFO[0m] === Starting play 1/1: 'Minimal Loop Test' === {play=Minimal Loop Test, play_index=1, total_plays=1, type=play_start}
+2025-10-24 12:51:12 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 1)' {host=Check disk usage (item 1), task=localhost, type=task_start}
+2025-10-24 12:51:14 [[32mINFO[0m] Task 'Check disk usage (item 1)' on host 'localhost': SUCCESS (changed) {success=true, changed=true, host=localhost, task=Check disk usage (item 1), type=task_end}
+2025-10-24 12:51:14 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 2)' {type=task_start, host=Check disk usage (item 2), task=localhost}
+[DEBUG] Signal received: interrupt
+[DEBUG] handleFirstInterrupt called
+
+╔══════════════════════════════════════════════════════════╗
+║         Interrupt Signal Received (Ctrl+C)              ║
+╚══════════════════════════════════════════════════════════╝
+
+Currently running tasks will be interrupted.
+
+Save state/audit data before exiting? [Y/n]: 2025-10-24 12:51:16 [[32mINFO[0m] Task 'Check disk usage (item 2)' on host 'localhost': SUCCESS (changed) {task=Check disk usage (item 2), type=task_end, success=true, changed=true, host=localhost}
+2025-10-24 12:51:16 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 3)' {host=Check disk usage (item 3), task=localhost, type=task_start}
+2025-10-24 12:51:18 [[32mINFO[0m] Task 'Check disk usage (item 3)' on host 'localhost': SUCCESS (changed) {success=true, changed=true, host=localhost, task=Check disk usage (item 3), type=task_end}
+2025-10-24 12:51:18 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 4)' {host=Check disk usage (item 4), task=localhost, type=task_start}
+2025-10-24 12:51:20 [[32mINFO[0m] Task 'Check disk usage (item 4)' on host 'localhost': SUCCESS (changed) {success=true, changed=true, host=localhost, task=Check disk usage (item 4), type=task_end}
+2025-10-24 12:51:20 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 5)' {host=Check disk usage (item 5), task=localhost, type=task_start}
+2025-10-24 12:51:22 [[32mINFO[0m] Task 'Check disk usage (item 5)' on host 'localhost': SUCCESS (changed) {type=task_end, success=true, changed=true, host=localhost, task=Check disk usage (item 5)}
+2025-10-24 12:51:22 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 6)' {host=Check disk usage (item 6), task=localhost, type=task_start}
+2025-10-24 12:51:24 [[32mINFO[0m] Task 'Check disk usage (item 6)' on host 'localhost': SUCCESS (changed) {changed=true, host=localhost, task=Check disk usage (item 6), type=task_end, success=true}
+2025-10-24 12:51:24 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 7)' {type=task_start, host=Check disk usage (item 7), task=localhost}
+2025-10-24 12:51:26 [[32mINFO[0m] Task 'Check disk usage (item 7)' on host 'localhost': SUCCESS (changed) {changed=true, host=localhost, task=Check disk usage (item 7), type=task_end, success=true}
+2025-10-24 12:51:26 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 8)' {host=Check disk usage (item 8), task=localhost, type=task_start}
+2025-10-24 12:51:28 [[32mINFO[0m] Task 'Check disk usage (item 8)' on host 'localhost': SUCCESS (changed) {success=true, changed=true, host=localhost, task=Check disk usage (item 8), type=task_end}
+2025-10-24 12:51:28 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 9)' {type=task_start, host=Check disk usage (item 9), task=localhost}
+2025-10-24 12:51:30 [[32mINFO[0m] Task 'Check disk usage (item 9)' on host 'localhost': SUCCESS (changed) {success=true, changed=true, host=localhost, task=Check disk usage (item 9), type=task_end}
+2025-10-24 12:51:30 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 10)' {host=Check disk usage (item 10), task=localhost, type=task_start}
+2025-10-24 12:51:32 [[32mINFO[0m] Task 'Check disk usage (item 10)' on host 'localhost': SUCCESS (changed) {type=task_end, success=true, changed=true, host=localhost, task=Check disk usage (item 10)}
+2025-10-24 12:51:32 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 11)' {host=Check disk usage (item 11), task=localhost, type=task_start}
+2025-10-24 12:51:34 [[32mINFO[0m] Task 'Check disk usage (item 11)' on host 'localhost': SUCCESS (changed) {type=task_end, success=true, changed=true, host=localhost, task=Check disk usage (item 11)}
+2025-10-24 12:51:34 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 12)' {host=Check disk usage (item 12), task=localhost, type=task_start}
+2025-10-24 12:51:36 [[32mINFO[0m] Task 'Check disk usage (item 12)' on host 'localhost': SUCCESS (changed) {changed=true, host=localhost, task=Check disk usage (item 12), type=task_end, success=true}
+2025-10-24 12:51:36 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 13)' {host=Check disk usage (item 13), task=localhost, type=task_start}
+2025-10-24 12:51:38 [[32mINFO[0m] Task 'Check disk usage (item 13)' on host 'localhost': SUCCESS (changed) {host=localhost, task=Check disk usage (item 13), type=task_end, success=true, changed=true}
+2025-10-24 12:51:38 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 14)' {task=localhost, type=task_start, host=Check disk usage (item 14)}
+2025-10-24 12:51:40 [[32mINFO[0m] Task 'Check disk usage (item 14)' on host 'localhost': SUCCESS (changed) {host=localhost, task=Check disk usage (item 14), type=task_end, success=true, changed=true}
+2025-10-24 12:51:40 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 15)' {task=localhost, type=task_start, host=Check disk usage (item 15)}
+2025-10-24 12:51:42 [[32mINFO[0m] Task 'Check disk usage (item 15)' on host 'localhost': SUCCESS (changed) {success=true, changed=true, host=localhost, task=Check disk usage (item 15), type=task_end}
+2025-10-24 12:51:42 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 16)' {host=Check disk usage (item 16), task=localhost, type=task_start}
+2025-10-24 12:51:44 [[32mINFO[0m] Task 'Check disk usage (item 16)' on host 'localhost': SUCCESS (changed) {type=task_end, success=true, changed=true, host=localhost, task=Check disk usage (item 16)}
+2025-10-24 12:51:44 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 17)' {host=Check disk usage (item 17), task=localhost, type=task_start}
+2025-10-24 12:51:46 [[32mINFO[0m] Task 'Check disk usage (item 17)' on host 'localhost': SUCCESS (changed) {success=true, changed=true, host=localhost, task=Check disk usage (item 17), type=task_end}
+2025-10-24 12:51:46 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 18)' {task=localhost, type=task_start, host=Check disk usage (item 18)}
+2025-10-24 12:51:48 [[32mINFO[0m] Task 'Check disk usage (item 18)' on host 'localhost': SUCCESS (changed) {success=true, changed=true, host=localhost, task=Check disk usage (item 18), type=task_end}
+2025-10-24 12:51:48 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 19)' {type=task_start, host=Check disk usage (item 19), task=localhost}
+2025-10-24 12:51:50 [[32mINFO[0m] Task 'Check disk usage (item 19)' on host 'localhost': SUCCESS (changed) {success=true, changed=true, host=localhost, task=Check disk usage (item 19), type=task_end}
+2025-10-24 12:51:50 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 20)' {type=task_start, host=Check disk usage (item 20), task=localhost}
+2025-10-24 12:51:52 [[32mINFO[0m] Task 'Check disk usage (item 20)' on host 'localhost': SUCCESS (changed) {host=localhost, task=Check disk usage (item 20), type=task_end, success=true, changed=true}
+2025-10-24 12:51:52 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 21)' {host=Check disk usage (item 21), task=localhost, type=task_start}
+2025-10-24 12:51:54 [[32mINFO[0m] Task 'Check disk usage (item 21)' on host 'localhost': SUCCESS (changed) {task=Check disk usage (item 21), type=task_end, success=true, changed=true, host=localhost}
+2025-10-24 12:51:54 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 22)' {task=localhost, type=task_start, host=Check disk usage (item 22)}
+2025-10-24 12:51:56 [[32mINFO[0m] Task 'Check disk usage (item 22)' on host 'localhost': SUCCESS (changed) {host=localhost, task=Check disk usage (item 22), type=task_end, success=true, changed=true}
+2025-10-24 12:51:56 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 23)' {host=Check disk usage (item 23), task=localhost, type=task_start}
+2025-10-24 12:51:59 [[32mINFO[0m] Task 'Check disk usage (item 23)' on host 'localhost': SUCCESS (changed) {host=localhost, task=Check disk usage (item 23), type=task_end, success=true, changed=true}
+2025-10-24 12:51:59 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 24)' {host=Check disk usage (item 24), task=localhost, type=task_start}
+2025-10-24 12:52:01 [[32mINFO[0m] Task 'Check disk usage (item 24)' on host 'localhost': SUCCESS (changed) {changed=true, host=localhost, task=Check disk usage (item 24), type=task_end, success=true}
+2025-10-24 12:52:01 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 25)' {host=Check disk usage (item 25), task=localhost, type=task_start}
+2025-10-24 12:52:03 [[32mINFO[0m] Task 'Check disk usage (item 25)' on host 'localhost': SUCCESS (changed) {changed=true, host=localhost, task=Check disk usage (item 25), type=task_end, success=true}
+2025-10-24 12:52:03 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 26)' {host=Check disk usage (item 26), task=localhost, type=task_start}
+2025-10-24 12:52:05 [[32mINFO[0m] Task 'Check disk usage (item 26)' on host 'localhost': SUCCESS (changed) {success=true, changed=true, host=localhost, task=Check disk usage (item 26), type=task_end}
+2025-10-24 12:52:05 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 27)' {host=Check disk usage (item 27), task=localhost, type=task_start}
+2025-10-24 12:52:07 [[32mINFO[0m] Task 'Check disk usage (item 27)' on host 'localhost': SUCCESS (changed) {changed=true, host=localhost, task=Check disk usage (item 27), type=task_end, success=true}
+2025-10-24 12:52:07 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 28)' {type=task_start, host=Check disk usage (item 28), task=localhost}
+2025-10-24 12:52:09 [[32mINFO[0m] Task 'Check disk usage (item 28)' on host 'localhost': SUCCESS (changed) {task=Check disk usage (item 28), type=task_end, success=true, changed=true, host=localhost}
+2025-10-24 12:52:09 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 29)' {task=localhost, type=task_start, host=Check disk usage (item 29)}
+2025-10-24 12:52:11 [[32mINFO[0m] Task 'Check disk usage (item 29)' on host 'localhost': SUCCESS (changed) {task=Check disk usage (item 29), type=task_end, success=true, changed=true, host=localhost}
+2025-10-24 12:52:11 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 30)' {type=task_start, host=Check disk usage (item 30), task=localhost}
+2025-10-24 12:52:13 [[32mINFO[0m] Task 'Check disk usage (item 30)' on host 'localhost': SUCCESS (changed) {host=localhost, task=Check disk usage (item 30), type=task_end, success=true, changed=true}
+2025-10-24 12:52:13 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 31)' {host=Check disk usage (item 31), task=localhost, type=task_start}
+2025-10-24 12:52:15 [[32mINFO[0m] Task 'Check disk usage (item 31)' on host 'localhost': SUCCESS (changed) {task=Check disk usage (item 31), type=task_end, success=true, changed=true, host=localhost}
+2025-10-24 12:52:15 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 32)' {task=localhost, type=task_start, host=Check disk usage (item 32)}
+2025-10-24 12:52:17 [[32mINFO[0m] Task 'Check disk usage (item 32)' on host 'localhost': SUCCESS (changed) {changed=true, host=localhost, task=Check disk usage (item 32), type=task_end, success=true}
+2025-10-24 12:52:17 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 33)' {host=Check disk usage (item 33), task=localhost, type=task_start}
+2025-10-24 12:52:19 [[32mINFO[0m] Task 'Check disk usage (item 33)' on host 'localhost': SUCCESS (changed) {host=localhost, task=Check disk usage (item 33), type=task_end, success=true, changed=true}
+2025-10-24 12:52:19 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 34)' {host=Check disk usage (item 34), task=localhost, type=task_start}
+2025-10-24 12:52:21 [[32mINFO[0m] Task 'Check disk usage (item 34)' on host 'localhost': SUCCESS (changed) {host=localhost, task=Check disk usage (item 34), type=task_end, success=true, changed=true}
+2025-10-24 12:52:21 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 35)' {type=task_start, host=Check disk usage (item 35), task=localhost}
+2025-10-24 12:52:23 [[32mINFO[0m] Task 'Check disk usage (item 35)' on host 'localhost': SUCCESS (changed) {host=localhost, task=Check disk usage (item 35), type=task_end, success=true, changed=true}
+2025-10-24 12:52:23 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 36)' {task=localhost, type=task_start, host=Check disk usage (item 36)}
+2025-10-24 12:52:25 [[32mINFO[0m] Task 'Check disk usage (item 36)' on host 'localhost': SUCCESS (changed) {success=true, changed=true, host=localhost, task=Check disk usage (item 36), type=task_end}
+2025-10-24 12:52:25 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 37)' {host=Check disk usage (item 37), task=localhost, type=task_start}
+2025-10-24 12:52:27 [[32mINFO[0m] Task 'Check disk usage (item 37)' on host 'localhost': SUCCESS (changed) {type=task_end, success=true, changed=true, host=localhost, task=Check disk usage (item 37)}
+2025-10-24 12:52:27 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 38)' {host=Check disk usage (item 38), task=localhost, type=task_start}
+2025-10-24 12:52:29 [[32mINFO[0m] Task 'Check disk usage (item 38)' on host 'localhost': SUCCESS (changed) {success=true, changed=true, host=localhost, task=Check disk usage (item 38), type=task_end}
+2025-10-24 12:52:29 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 39)' {host=Check disk usage (item 39), task=localhost, type=task_start}
+2025-10-24 12:52:31 [[32mINFO[0m] Task 'Check disk usage (item 39)' on host 'localhost': SUCCESS (changed) {type=task_end, success=true, changed=true, host=localhost, task=Check disk usage (item 39)}
+2025-10-24 12:52:31 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 40)' {host=Check disk usage (item 40), task=localhost, type=task_start}
+2025-10-24 12:52:33 [[32mINFO[0m] Task 'Check disk usage (item 40)' on host 'localhost': SUCCESS (changed) {type=task_end, success=true, changed=true, host=localhost, task=Check disk usage (item 40)}
+2025-10-24 12:52:33 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 41)' {host=Check disk usage (item 41), task=localhost, type=task_start}
+2025-10-24 12:52:35 [[32mINFO[0m] Task 'Check disk usage (item 41)' on host 'localhost': SUCCESS (changed) {task=Check disk usage (item 41), type=task_end, success=true, changed=true, host=localhost}
+2025-10-24 12:52:35 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 42)' {host=Check disk usage (item 42), task=localhost, type=task_start}
+2025-10-24 12:52:37 [[32mINFO[0m] Task 'Check disk usage (item 42)' on host 'localhost': SUCCESS (changed) {host=localhost, task=Check disk usage (item 42), type=task_end, success=true, changed=true}
+2025-10-24 12:52:37 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 43)' {task=localhost, type=task_start, host=Check disk usage (item 43)}
+2025-10-24 12:52:39 [[32mINFO[0m] Task 'Check disk usage (item 43)' on host 'localhost': SUCCESS (changed) {task=Check disk usage (item 43), type=task_end, success=true, changed=true, host=localhost}
+2025-10-24 12:52:39 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 44)' {host=Check disk usage (item 44), task=localhost, type=task_start}
+2025-10-24 12:52:41 [[32mINFO[0m] Task 'Check disk usage (item 44)' on host 'localhost': SUCCESS (changed) {task=Check disk usage (item 44), type=task_end, success=true, changed=true, host=localhost}
+2025-10-24 12:52:41 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 45)' {host=Check disk usage (item 45), task=localhost, type=task_start}
+2025-10-24 12:52:43 [[32mINFO[0m] Task 'Check disk usage (item 45)' on host 'localhost': SUCCESS (changed) {type=task_end, success=true, changed=true, host=localhost, task=Check disk usage (item 45)}
+2025-10-24 12:52:43 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 46)' {host=Check disk usage (item 46), task=localhost, type=task_start}
+2025-10-24 12:52:45 [[32mINFO[0m] Task 'Check disk usage (item 46)' on host 'localhost': SUCCESS (changed) {success=true, changed=true, host=localhost, task=Check disk usage (item 46), type=task_end}
+2025-10-24 12:52:45 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 47)' {type=task_start, host=Check disk usage (item 47), task=localhost}
+2025-10-24 12:52:47 [[32mINFO[0m] Task 'Check disk usage (item 47)' on host 'localhost': SUCCESS (changed) {success=true, changed=true, host=localhost, task=Check disk usage (item 47), type=task_end}
+2025-10-24 12:52:47 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 48)' {host=Check disk usage (item 48), task=localhost, type=task_start}
+2025-10-24 12:52:49 [[32mINFO[0m] Task 'Check disk usage (item 48)' on host 'localhost': SUCCESS (changed) {success=true, changed=true, host=localhost, task=Check disk usage (item 48), type=task_end}
+2025-10-24 12:52:49 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 49)' {host=Check disk usage (item 49), task=localhost, type=task_start}
+2025-10-24 12:52:51 [[32mINFO[0m] Task 'Check disk usage (item 49)' on host 'localhost': SUCCESS (changed) {host=localhost, task=Check disk usage (item 49), type=task_end, success=true, changed=true}
+2025-10-24 12:52:51 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 50)' {task=localhost, type=task_start, host=Check disk usage (item 50)}
+2025-10-24 12:52:53 [[32mINFO[0m] Task 'Check disk usage (item 50)' on host 'localhost': SUCCESS (changed) {task=Check disk usage (item 50), type=task_end, success=true, changed=true, host=localhost}
+2025-10-24 12:52:53 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 51)' {host=Check disk usage (item 51), task=localhost, type=task_start}
+2025-10-24 12:52:55 [[32mINFO[0m] Task 'Check disk usage (item 51)' on host 'localhost': SUCCESS (changed) {host=localhost, task=Check disk usage (item 51), type=task_end, success=true, changed=true}
+2025-10-24 12:52:55 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 52)' {host=Check disk usage (item 52), task=localhost, type=task_start}
+2025-10-24 12:52:57 [[32mINFO[0m] Task 'Check disk usage (item 52)' on host 'localhost': SUCCESS (changed) {changed=true, host=localhost, task=Check disk usage (item 52), type=task_end, success=true}
+2025-10-24 12:52:57 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 53)' {type=task_start, host=Check disk usage (item 53), task=localhost}
+2025-10-24 12:52:59 [[32mINFO[0m] Task 'Check disk usage (item 53)' on host 'localhost': SUCCESS (changed) {task=Check disk usage (item 53), type=task_end, success=true, changed=true, host=localhost}
+2025-10-24 12:52:59 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 54)' {host=Check disk usage (item 54), task=localhost, type=task_start}
+2025-10-24 12:53:01 [[32mINFO[0m] Task 'Check disk usage (item 54)' on host 'localhost': SUCCESS (changed) {host=localhost, task=Check disk usage (item 54), type=task_end, success=true, changed=true}
+2025-10-24 12:53:01 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 55)' {host=Check disk usage (item 55), task=localhost, type=task_start}
+2025-10-24 12:53:03 [[32mINFO[0m] Task 'Check disk usage (item 55)' on host 'localhost': SUCCESS (changed) {changed=true, host=localhost, task=Check disk usage (item 55), type=task_end, success=true}
+2025-10-24 12:53:03 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 56)' {task=localhost, type=task_start, host=Check disk usage (item 56)}
+2025-10-24 12:53:05 [[32mINFO[0m] Task 'Check disk usage (item 56)' on host 'localhost': SUCCESS (changed) {type=task_end, success=true, changed=true, host=localhost, task=Check disk usage (item 56)}
+2025-10-24 12:53:05 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 57)' {host=Check disk usage (item 57), task=localhost, type=task_start}
+2025-10-24 12:53:07 [[32mINFO[0m] Task 'Check disk usage (item 57)' on host 'localhost': SUCCESS (changed) {host=localhost, task=Check disk usage (item 57), type=task_end, success=true, changed=true}
+2025-10-24 12:53:07 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 58)' {host=Check disk usage (item 58), task=localhost, type=task_start}
+2025-10-24 12:53:09 [[32mINFO[0m] Task 'Check disk usage (item 58)' on host 'localhost': SUCCESS (changed) {success=true, changed=true, host=localhost, task=Check disk usage (item 58), type=task_end}
+2025-10-24 12:53:09 [[32mINFO[0m] Starting task 'localhost' on host 'Check disk usage (item 59)' {host=Check disk usage (item 59), task=localhost, type=task_start}

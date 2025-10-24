@@ -22,6 +22,7 @@ type SignalHandler struct {
 	onConfirmCancel  func(saveState bool) error
 	onForceCancel    func() error
 	gracefulShutdown bool
+	cleanupFuncs     []func() error
 }
 
 // NewSignalHandler creates a new signal handler with specified timeout
@@ -36,8 +37,11 @@ func NewSignalHandler(ctx context.Context, shutdownTimeout time.Duration) *Signa
 	}
 
 	// Start signal listener
+	fmt.Fprintf(os.Stderr, "[DEBUG] Registering signal handlers for SIGINT and SIGTERM\n")
 	signal.Notify(sh.sigChan, syscall.SIGINT, syscall.SIGTERM)
+	fmt.Fprintf(os.Stderr, "[DEBUG] Starting signal handler goroutine\n")
 	go sh.handleSignals()
+	fmt.Fprintf(os.Stderr, "[DEBUG] Signal handler initialized\n")
 
 	return sh
 }
@@ -51,9 +55,27 @@ func (sh *SignalHandler) SetCancelCallbacks(
 	sh.onForceCancel = onForce
 }
 
+// RegisterCleanup registers a cleanup function to be called during shutdown
+func (sh *SignalHandler) RegisterCleanup(cleanupFunc func() error) {
+	if cleanupFunc != nil {
+		sh.cleanupFuncs = append(sh.cleanupFuncs, cleanupFunc)
+	}
+}
+
+// executeCleanups executes all registered cleanup functions
+func (sh *SignalHandler) executeCleanups() {
+	for _, cleanupFunc := range sh.cleanupFuncs {
+		if err := cleanupFunc(); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: cleanup error: %v\n", err)
+		}
+	}
+}
+
 // handleSignals processes incoming signals
 func (sh *SignalHandler) handleSignals() {
+	fmt.Fprintf(os.Stderr, "[DEBUG] Signal handler goroutine started\n")
 	for sig := range sh.sigChan {
+		fmt.Fprintf(os.Stderr, "[DEBUG] Signal received: %v\n", sig)
 		count := sh.interruptCount.Add(1)
 
 		switch count {
@@ -69,6 +91,7 @@ func (sh *SignalHandler) handleSignals() {
 
 // handleFirstInterrupt prompts user for confirmation
 func (sh *SignalHandler) handleFirstInterrupt(sig os.Signal) {
+	fmt.Fprintf(os.Stderr, "[DEBUG] handleFirstInterrupt called\n")
 	fmt.Println()
 	fmt.Println("╔══════════════════════════════════════════════════════════╗")
 	fmt.Println("║         Interrupt Signal Received (Ctrl+C)              ║")
@@ -87,6 +110,9 @@ func (sh *SignalHandler) handleFirstInterrupt(sig os.Signal) {
 
 	sh.gracefulShutdown = true
 	sh.cancel()
+
+	// Execute cleanup functions
+	sh.executeCleanups()
 
 	// Call the confirmation callback
 	if sh.onConfirmCancel != nil {
@@ -108,6 +134,9 @@ func (sh *SignalHandler) handleForceInterrupt(sig os.Signal) {
 	fmt.Println()
 	fmt.Println("⚠️  Terminating immediately - tasks may be interrupted!")
 	fmt.Println()
+
+	// Execute cleanup functions
+	sh.executeCleanups()
 
 	// Call the force cancel callback
 	if sh.onForceCancel != nil {

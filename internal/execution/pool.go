@@ -39,14 +39,19 @@ type PoolExecutionResult struct {
 
 // NewPool creates a new execution pool
 func NewPool(maxWorkers int, logger interfaces.Logger) *Pool {
-	ctx, cancel := context.WithCancel(context.Background())
+	return NewPoolWithContext(context.Background(), maxWorkers, logger)
+}
+
+// NewPoolWithContext creates a new execution pool with an external context
+func NewPoolWithContext(ctx context.Context, maxWorkers int, logger interfaces.Logger) *Pool {
+	newCtx, cancel := context.WithCancel(ctx)
 
 	pool := &Pool{
 		maxWorkers: maxWorkers,
 		semaphore:  make(chan struct{}, maxWorkers),
 		logger:     logger,
 		results:    make(chan TaskExecution, maxWorkers*2), // Buffer for better performance
-		ctx:        ctx,
+		ctx:        newCtx,
 		cancel:     cancel,
 	}
 

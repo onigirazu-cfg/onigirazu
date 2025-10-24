@@ -168,6 +168,11 @@ Examples:
 			// Use the signal handler's context for execution
 			ctx = signalHandler.Context()
 
+			// Register SSH pool cleanup (will be executed on graceful shutdown)
+			signalHandler.RegisterCleanup(func() error {
+				return sshpkg.GetGlobalPool().CloseAll()
+			})
+
 			// Determine playbook directory for discovery
 			playbookDir := filepath.Dir(playbookPath)
 
@@ -373,7 +378,8 @@ Examples:
 				log.Warn("Failed to load existing state: %v", err)
 			}
 
-			executionPool := execution.NewPool(cfg.MaxConcurrency, log)
+			// Create execution pool with signal handler's context for graceful shutdown support
+			executionPool := execution.NewPoolWithContext(ctx, cfg.MaxConcurrency, log)
 			progressTracker := progress.NewTracker()
 			moduleRegistry := modules.NewRegistry()
 
@@ -620,6 +626,11 @@ Examples:
 
 			result, err := executionEngine.ExecutePlaybook(ctx, playbook)
 			if err != nil {
+				// Check if error is due to context cancellation (graceful shutdown)
+				if err == context.Canceled || strings.Contains(err.Error(), "context canceled") {
+					fmt.Fprintf(os.Stderr, "\n⚠️  Playbook execution interrupted by user\n")
+					os.Exit(130) // Standard exit code for SIGINT
+				}
 				return fmt.Errorf("playbook execution failed: %w", err)
 			}
 

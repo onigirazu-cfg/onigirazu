@@ -8,7 +8,9 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/onigirazu-cfg/onigirazu/internal/execution"
 	"github.com/onigirazu-cfg/onigirazu/internal/parser"
+	sshpkg "github.com/onigirazu-cfg/onigirazu/internal/ssh"
 	"github.com/onigirazu-cfg/onigirazu/internal/state"
 )
 
@@ -73,10 +75,21 @@ func runPlan(cmd *cobra.Command, args []string) error {
 	// Create parser
 	p := parser.New()
 
-	// Parse playbook
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	// Create context with graceful shutdown support
+	baseCtx := context.Background()
+	signalHandler := execution.NewSignalHandler(baseCtx, 10*time.Second)
+	defer signalHandler.Close()
+
+	// Register SSH pool cleanup
+	signalHandler.RegisterCleanup(func() error {
+		return sshpkg.GetGlobalPool().CloseAll()
+	})
+
+	// Create context with timeout and signal handling
+	ctx, cancel := context.WithTimeout(signalHandler.Context(), 30*time.Second)
 	defer cancel()
 
+	// Parse playbook
 	playbook, err := p.ParsePlaybook(ctx, playbookPath)
 	if err != nil {
 		return fmt.Errorf("failed to parse playbook: %w", err)
