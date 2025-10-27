@@ -68,7 +68,7 @@
 <body>
     <a href="index.html" class="back-link">← Back to Documentation</a>
     <h1>Onigirazu</h1>
-<p><strong>Current Release:</strong> v1.52.0 — <a href="https://github.com/onigirazu-cfg/onigirazu/releases/tag/v1.52.0">Comprehensive Documentation Release</a></p>
+<p><strong>Current Release:</strong> v1.54.0 — <a href="https://github.com/onigirazu-cfg/onigirazu/releases/tag/v1.54.0">Interactive Mode Production Release</a></p>
 <p>Onigirazu is a modern, high-performance configuration management tool written in Go, inspired by Ansible. It provides a simple yet powerful way to automate infrastructure configuration, application deployment, and system administration tasks.</p>
 <h2>✨ Key Highlights</h2>
 <ul>
@@ -80,7 +80,8 @@
 <li><strong>📊 State Management</strong>: Track changes and system state with rollback support</li>
 <li><strong>🎯 5 Ad-hoc Input Formats</strong>: Including unique natural language support</li>
 <li><strong>📚 22+ Built-in Modules</strong>: Comprehensive automation capabilities</li>
-<li><strong>📖 Complete Documentation</strong>: 2,500+ lines of guides for configuration, security, and testing (v1.52.0+)</li>
+<li><strong>📖 Complete Documentation</strong>: 2,500+ lines of guides for configuration, security, and testing</li>
+<li><strong>🖥️ Interactive Mode (v1.54.0+)</strong>: Real-time TUI dashboard with live logs, mode switching, and graceful control</li>
 </ul>
 <h2>Features</h2>
 <h3>Core Features</h3>
@@ -101,6 +102,7 @@
 <li><strong>Drift Detection</strong>: Detect and automatically fix configuration drift</li>
 <li><strong>Enhanced Logging</strong>: Structured logging with multiple output formats</li>
 <li><strong>Progress Tracking</strong>: Real-time execution progress with visual indicators</li>
+<li><strong>Interactive Mode</strong>: Beautiful TUI dashboard with live log streaming, multi-mode display switching, and graceful shutdown</li>
 <li><strong>Caching System</strong>: Intelligent caching for improved performance (facts, templates, packages)</li>
 <li><strong>Retry Logic</strong>: Configurable retry mechanisms with exponential backoff</li>
 <li><strong>Conditional Execution</strong>: Skip tasks based on conditions</li>
@@ -113,8 +115,8 @@
 <li><strong>Variable Interpolation</strong>: Dynamic variable substitution</li>
 <li><strong>Error Handling</strong>: Comprehensive error handling and reporting</li>
 <li><strong>Audit &amp; Analytics</strong>: Track execution history, performance metrics, and audit data with <code>audit</code> command</li>
-<li><strong>Complete Configuration Reference</strong>: 35+ configuration options fully documented (v1.52.0+)</li>
-<li><strong>Security Policy Guide</strong>: 13+ security options fully documented (v1.52.0+)</li>
+<li><strong>Complete Configuration Reference</strong>: 35+ configuration options fully documented</li>
+<li><strong>Security Policy Guide</strong>: 13+ security options fully documented</li>
 </ul>
 <h2>Installation</h2>
 <h3>📦 Pre-built Binaries (Recommended)</h3>
@@ -216,6 +218,108 @@ plays:
 <li><strong><a href="docs/examples/README.md">Playbook Format Guide</a></strong> - Real playbook examples and patterns</li>
 <li><strong><a href="docs/api/pkg/types.md">Playbook Types Documentation</a></strong> - Technical type definitions</li>
 </ul>
+<h2>🖥️ Interactive Mode (v1.54.0+)</h2>
+<p>Interactive Mode provides a beautiful, responsive terminal UI dashboard for real-time execution monitoring. Perfect for long-running playbooks, debugging, and interactive control.</p>
+<h3>Enable Interactive Mode</h3>
+<p>Simply add the <code>--interactive</code> flag to any playbook execution:</p>
+<pre class="codehilite"><code class="language-bash">onigirazu apply playbook.yaml -i inventory.yaml --interactive
+</code></pre>
+
+<h3>Features</h3>
+<ul>
+<li><strong>📊 Live Log Dashboard</strong>: Real-time log streaming with automatic scrolling</li>
+<li><strong>🔄 Multi-Mode Display</strong>: Switch between NORMAL, VERBOSE, and DEBUG modes</li>
+<li><strong>📈 Execution Statistics</strong>: Track progress with task counts and timing</li>
+<li><strong>⌨️ Keyboard Control</strong>: Responsive interactive controls</li>
+<li><strong>🎯 Graceful Shutdown</strong>: Stop execution cleanly with proper cleanup</li>
+</ul>
+<h3>Keyboard Controls</h3>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>V</strong></td>
+<td>Toggle VERBOSE mode (show more details)</td>
+</tr>
+<tr>
+<td><strong>D</strong></td>
+<td>Toggle DEBUG mode (show debug information)</td>
+</tr>
+<tr>
+<td><strong>N</strong></td>
+<td>Switch to NORMAL mode (less verbose)</td>
+</tr>
+<tr>
+<td><strong>S</strong></td>
+<td>Show execution statistics</td>
+</tr>
+<tr>
+<td><strong>H</strong></td>
+<td>Display help overlay</td>
+</tr>
+<tr>
+<td><strong>↑/↓</strong></td>
+<td>Scroll logs up/down</td>
+</tr>
+<tr>
+<td><strong>Page Up/Down</strong></td>
+<td>Page scroll logs</td>
+</tr>
+<tr>
+<td><strong>G</strong></td>
+<td>Graceful stop (clean shutdown)</td>
+</tr>
+<tr>
+<td><strong>Q</strong></td>
+<td>Quit TUI (without stopping execution)</td>
+</tr>
+<tr>
+<td><strong>Ctrl+C</strong></td>
+<td>Force quit (emergency exit)</td>
+</tr>
+</tbody>
+</table>
+<h3>Example Workflow</h3>
+<pre class="codehilite"><code class="language-bash"># 1. Start your playbook with interactive mode
+onigirazu apply deployment.yaml -i &quot;ubuntu@server1&quot; --interactive
+
+# 2. Watch the live dashboard
+# 3. Press V to see verbose logs if you want more detail
+# 4. Press S to check progress statistics
+# 5. Press G to gracefully stop if needed
+# 6. Press Q to exit TUI when done
+</code></pre>
+
+<h3>Display Modes</h3>
+<table>
+<thead>
+<tr>
+<th>Mode</th>
+<th>What You See</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>NORMAL</strong></td>
+<td>Standard task output and errors only</td>
+</tr>
+<tr>
+<td><strong>VERBOSE</strong></td>
+<td>Detailed output with variable values and timestamps</td>
+</tr>
+<tr>
+<td><strong>DEBUG</strong></td>
+<td>Complete debug information for troubleshooting</td>
+</tr>
+</tbody>
+</table>
+<p>All modes show real-time updates as tasks execute. The dashboard automatically updates at 30 FPS for smooth performance.</p>
+<p>📖 <strong>For detailed interactive mode guide, see <a href="docs/INTERACTIVE_MODE.md">docs/INTERACTIVE_MODE.md</a></strong></p>
 <h2>Playbook Format</h2>
 <p>Onigirazu uses a clean YAML format for playbooks. Here's the structure:</p>
 <pre class="codehilite"><code class="language-yaml"># Optional global variables

@@ -5,14 +5,19 @@ This document provides comprehensive documentation for all built-in modules in O
 ## 📋 Table of Contents
 
 - [Module Overview](#module-overview)
-- [System Modules](#system-modules)
+- [System Modules](#-system-modules)
 - [File System Modules](#-file-system-modules)
-- [Configuration Modules](#configuration-modules)
-- [Service Modules](#service-modules)
+- [Configuration Modules](#-configuration-modules)
+- [Service Modules](#-service-modules)
 - [Package Modules](#package-modules)
 - [Network Modules](#network-modules)
-- [Security Modules](#security-modules)
-- [Utility Modules](#utility-modules)
+- [System Connectivity](#-system-connectivity)
+- [Version Control](#-version-control)
+- [Scheduled Jobs](#-scheduled-jobs)
+- [Security & Firewall](#-security--firewall)
+- [Container Management](#-container-management)
+- [Database Management](#-database-management)
+- [Utility Modules](#-utility-modules)
 
 ## 🔧 Module Overview
 
@@ -1016,6 +1021,479 @@ Manage SSH authorized keys.
     exclusive: true
 ```
 
+## 🖥️ System Connectivity
+
+### ping
+
+Tests connectivity to target hosts.
+
+#### Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `data` | string | `pong` | Custom response message |
+
+#### Example
+
+```yaml
+- name: "Test connectivity to all hosts"
+  ping:
+
+- name: "Test with custom data"
+  ping:
+    data: "custom_response"
+```
+
+#### Return Values
+
+```json
+{
+  "ping": "pong",
+  "connection": "ssh",
+  "host": "webserver01",
+  "address": "192.168.1.100",
+  "user": "ubuntu",
+  "port": 22
+}
+```
+
+### stat
+
+Retrieve file or directory status information.
+
+#### Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `path` | string | - | File or directory path (required) |
+
+#### Example
+
+```yaml
+- name: "Get file status"
+  stat:
+    path: "/etc/nginx/nginx.conf"
+  register: "nginx_config"
+
+- name: "Check if directory exists and show permissions"
+  stat:
+    path: "/opt/myapp"
+  register: "app_dir"
+```
+
+#### Return Values
+
+```json
+{
+  "stat": {
+    "exists": true,
+    "type": "file",
+    "size": "4096",
+    "mode": "0644",
+    "mtime": "1696086600"
+  },
+  "exists": true
+}
+```
+
+## 🔄 Version Control
+
+### git
+
+Manages Git repositories on target hosts.
+
+#### Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `repo` | string | - | Git repository URL (required) |
+| `dest` | string | - | Destination path (required) |
+| `version` | string | `HEAD` | Branch, tag, or commit to checkout |
+| `force` | boolean | `false` | Force overwrite if dest exists |
+| `update` | boolean | `true` | Update existing repository |
+
+#### Example
+
+```yaml
+- name: "Clone application repository"
+  git:
+    repo: "https://github.com/myorg/myapp.git"
+    dest: "/opt/myapp"
+    version: "main"
+
+- name: "Checkout specific tag"
+  git:
+    repo: "git@github.com:myorg/myapp.git"
+    dest: "/opt/myapp"
+    version: "v1.2.3"
+    update: true
+```
+
+## ⏰ Scheduled Jobs
+
+### cron
+
+Manage cron jobs and system crontabs.
+
+#### Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `operation` | string | `job` | `job`, `file`, `system`, or `list` |
+| `name` | string | - | Job name/comment |
+| `job` | string | - | Job command to execute |
+| `minute` | string | `*` | Minute (0-59) |
+| `hour` | string | `*` | Hour (0-23) |
+| `day` | string | `*` | Day of month (1-31) |
+| `month` | string | `*` | Month (1-12) |
+| `weekday` | string | `*` | Day of week (0-6) |
+| `user` | string | `root` | Cron user |
+| `state` | string | `present` | `present` or `absent` |
+| `special_time` | string | - | Special time string (@reboot, @hourly, etc.) |
+
+#### Examples
+
+```yaml
+- name: "Create daily backup job"
+  cron:
+    operation: "job"
+    name: "Daily database backup"
+    job: "/usr/local/bin/backup-db.sh"
+    minute: "0"
+    hour: "2"
+    day: "*"
+    state: "present"
+    user: "backupuser"
+
+- name: "Schedule task to run at reboot"
+  cron:
+    operation: "job"
+    name: "Start application"
+    job: "/opt/myapp/start.sh"
+    special_time: "@reboot"
+    user: "appuser"
+
+- name: "List all cron jobs"
+  cron:
+    operation: "list"
+  register: "cron_jobs"
+```
+
+## 🔥 Security & Firewall
+
+### firewall
+
+Manage firewall rules and services.
+
+#### Supported Firewalls
+
+- UFW (Ubuntu/Debian)
+- firewalld (RHEL/CentOS)
+- iptables (Generic Linux)
+
+#### Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `operation` | string | `rule` | `enable`, `disable`, `rule`, `service`, `source`, `list`, `reload` |
+| `state` | string | `present` | `present` or `absent` |
+| `port` | string | - | Port number or port range |
+| `protocol` | string | `tcp` | `tcp`, `udp`, or both |
+| `service` | string | - | Service name (http, ssh, etc.) |
+| `source` | string | - | Source IP or network |
+| `rule` | string | - | Custom firewall rule |
+
+#### Examples
+
+```yaml
+- name: "Enable firewall"
+  firewall:
+    operation: "enable"
+
+- name: "Allow SSH port"
+  firewall:
+    operation: "rule"
+    port: "22"
+    protocol: "tcp"
+    state: "present"
+
+- name: "Allow HTTP/HTTPS services"
+  firewall:
+    operation: "service"
+    service: "http"
+    state: "present"
+
+- name: "Allow traffic from specific IP"
+  firewall:
+    operation: "source"
+    source: "192.168.1.0/24"
+    state: "present"
+
+- name: "List all firewall rules"
+  firewall:
+    operation: "list"
+  register: "fw_rules"
+```
+
+## 🐳 Container Management
+
+### docker_container
+
+Manage Docker containers.
+
+#### Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `name` | string | - | Container name (required) |
+| `image` | string | - | Docker image name |
+| `state` | string | `started` | `present`, `started`, `stopped`, `absent` |
+| `ports` | list | - | Port mappings (e.g., ["8080:80"]) |
+| `volumes` | list | - | Volume mounts |
+| `env` | dict | - | Environment variables |
+| `restart_policy` | string | - | Restart policy |
+
+#### Examples
+
+```yaml
+- name: "Create and run web container"
+  docker_container:
+    name: "myapp"
+    image: "nginx:latest"
+    state: "started"
+    ports:
+      - "8080:80"
+    volumes:
+      - "/var/www/html:/usr/share/nginx/html"
+    env:
+      ENVIRONMENT: "production"
+
+- name: "Stop container"
+  docker_container:
+    name: "myapp"
+    state: "stopped"
+```
+
+### docker_image
+
+Manage Docker images.
+
+#### Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `name` | string | - | Image name (required) |
+| `tag` | string | `latest` | Image tag |
+| `state` | string | `present` | `present` or `absent` |
+| `force` | boolean | `false` | Force pull/removal |
+
+#### Examples
+
+```yaml
+- name: "Pull latest nginx image"
+  docker_image:
+    name: "nginx"
+    tag: "latest"
+    state: "present"
+
+- name: "Remove old image"
+  docker_image:
+    name: "myapp"
+    tag: "v1.0.0"
+    state: "absent"
+```
+
+### docker_compose
+
+Manage Docker Compose applications.
+
+#### Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `project_name` | string | - | Project name |
+| `compose_file` | string | `docker-compose.yml` | Path to compose file |
+| `state` | string | `present` | `present`, `started`, `stopped`, `absent` |
+
+#### Examples
+
+```yaml
+- name: "Start docker-compose services"
+  docker_compose:
+    project_name: "mystack"
+    compose_file: "/opt/mystack/docker-compose.yml"
+    state: "started"
+
+- name: "Stop services"
+  docker_compose:
+    project_name: "mystack"
+    state: "stopped"
+```
+
+### podman
+
+Manage Podman containers (Docker-compatible).
+
+#### Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `name` | string | - | Container name (required) |
+| `image` | string | - | Container image |
+| `state` | string | `started` | `started`, `stopped`, `absent` |
+| `ports` | list | - | Port mappings |
+| `volumes` | list | - | Volume mounts |
+
+#### Examples
+
+```yaml
+- name: "Run podman container"
+  podman:
+    name: "myapp"
+    image: "myapp:latest"
+    state: "started"
+    ports:
+      - "8080:8080"
+```
+
+## 🗄️ Database Management
+
+### mysql_db
+
+Manage MySQL databases.
+
+#### Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `name` | string | - | Database name (required) |
+| `state` | string | `present` | `present` or `absent` |
+| `collation` | string | `utf8mb4_general_ci` | Database collation |
+| `encoding` | string | `utf8mb4` | Database encoding |
+
+#### Examples
+
+```yaml
+- name: "Create application database"
+  mysql_db:
+    name: "myapp_db"
+    state: "present"
+    encoding: "utf8mb4"
+    collation: "utf8mb4_unicode_ci"
+
+- name: "Remove database"
+  mysql_db:
+    name: "temp_db"
+    state: "absent"
+```
+
+### mysql_user
+
+Manage MySQL users and permissions.
+
+#### Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `name` | string | - | Username (required) |
+| `host` | string | `%` | Host pattern |
+| `password` | string | - | User password |
+| `state` | string | `present` | `present` or `absent` |
+| `priv` | string | - | Privileges (e.g., "mydb.*:ALL") |
+
+#### Examples
+
+```yaml
+- name: "Create database user"
+  mysql_user:
+    name: "appuser"
+    host: "192.168.%"
+    password: "securepassword"
+    priv: "myapp_db.*:ALL"
+    state: "present"
+
+- name: "Remove user"
+  mysql_user:
+    name: "tempuser"
+    state: "absent"
+```
+
+### postgresql_db
+
+Manage PostgreSQL databases.
+
+#### Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `name` | string | - | Database name (required) |
+| `state` | string | `present` | `present` or `absent` |
+| `owner` | string | - | Database owner role |
+| `encoding` | string | `UTF8` | Database encoding |
+
+#### Examples
+
+```yaml
+- name: "Create PostgreSQL database"
+  postgresql_db:
+    name: "myapp_db"
+    owner: "appuser"
+    encoding: "UTF8"
+    state: "present"
+```
+
+### postgresql_user
+
+Manage PostgreSQL users and roles.
+
+#### Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `name` | string | - | Username (required) |
+| `password` | string | - | User password |
+| `state` | string | `present` | `present` or `absent` |
+| `priv` | string | - | Privileges |
+
+#### Examples
+
+```yaml
+- name: "Create PostgreSQL user"
+  postgresql_user:
+    name: "appuser"
+    password: "securepassword"
+    priv: "myapp_db:ALL"
+    state: "present"
+```
+
+### mongodb
+
+Manage MongoDB databases and users.
+
+#### Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `name` | string | - | Database or user name (required) |
+| `operation` | string | `database` | `database` or `user` |
+| `state` | string | `present` | `present` or `absent` |
+
+#### Examples
+
+```yaml
+- name: "Create MongoDB database"
+  mongodb:
+    name: "myapp_db"
+    operation: "database"
+    state: "present"
+
+- name: "Create MongoDB user"
+  mongodb:
+    name: "appuser"
+    operation: "user"
+    state: "present"
+```
+
 ## 🛠️ Utility Modules
 
 ### debug
@@ -1140,5 +1618,23 @@ Fail execution with custom message.
     msg: "Database connection failed"
   when: "database_check.rc != 0"
 ```
+
+## 📚 Complete Module List
+
+All available modules in Onigirazu (34 total):
+
+**System & Connectivity**: command, shell, script, ping, facts, debug, set_fact, wait_for, pause, fail
+**File Management**: file, copy, fetch, find, template, lineinfile, blockinfile, stat
+**Package Management**: package, apt, yum
+**Service Management**: service, systemd, cron
+**Security & Firewall**: firewall, authorized_key
+**Version Control**: git
+**Configuration**: config
+**Containers**: docker_container, docker_image, docker_compose, podman
+**Databases**: mysql_db, mysql_user, postgresql_db, postgresql_user, mongodb
+**Network**: get_url, uri
+**User Management**: user, group
+
+---
 
 This comprehensive module documentation provides detailed information about all built-in modules, their parameters, usage examples, and return values. Each module is designed to be idempotent and provide consistent behavior across different platforms.
