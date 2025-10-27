@@ -108,7 +108,7 @@ jobs:
           -o dist/${BINARY_NAME}-${GOOS}-${GOARCH} ./cmd/onigirazu
 
     - name: Upload build artifacts
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: binaries-${{ matrix.goos }}-${{ matrix.goarch }}
         path: dist/
@@ -149,7 +149,7 @@ jobs:
         cache: true
 
     - name: Download build artifacts
-      uses: actions/download-artifact@v5
+      uses: actions/download-artifact@v6
       with:
         name: binaries-linux-amd64
         path: dist/
