@@ -34,7 +34,7 @@ func (tm *TmuxManager) IsTmuxAvailable() bool {
 	return tm.isTmuxAvailable
 }
 
-// Start initializes a tmux session with dual panes
+// Start initializes a tmux session with dual panes (does NOT attach)
 func (tm *TmuxManager) Start() (string, error) {
 	if !tm.isTmuxAvailable {
 		return "", fmt.Errorf("tmux is not installed. Install it with: brew install tmux (macOS) or apt-get install tmux (Linux)")
@@ -60,14 +60,21 @@ func (tm *TmuxManager) Start() (string, error) {
 	// Add help text to right pane
 	tm.updateControlPane()
 
-	// Attach to session
-	cmd = exec.Command("tmux", "attach-session", "-t", tm.sessionName)
+	// Return without attaching - caller will send command and then attach
+	return tm.sessionName, nil
+}
+
+// Attach connects to the tmux session for user interaction (blocking)
+func (tm *TmuxManager) Attach() error {
+	if !tm.isTmuxAvailable {
+		return fmt.Errorf("tmux not available")
+	}
+
+	cmd := exec.Command("tmux", "attach-session", "-t", tm.sessionName)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	cmd.Run() // Let user interact
-
-	return tm.sessionName, nil
+	return cmd.Run()
 }
 
 // updateControlPane updates the control panel with instructions

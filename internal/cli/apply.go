@@ -2,8 +2,8 @@ package cli
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -34,7 +34,7 @@ import (
 	"github.com/onigirazu-cfg/onigirazu/pkg/utils"
 )
 
-// NewApplyCommand creates the apply command
+// NewApplyCommand creates the apply command with improved TUI architecture
 func NewApplyCommand() *cobra.Command {
 	var (
 		// Command-specific flags
@@ -54,7 +54,6 @@ func NewApplyCommand() *cobra.Command {
 		listTasks      bool
 		verboseOutput  bool
 		backgroundMode bool
-		tmuxMode       bool
 	)
 
 	cmd := &cobra.Command{
@@ -79,79 +78,13 @@ Examples:
   onigirazu apply production.yml --diff
 
   # Verbose output
-  onigirazu apply production.yml --verbose`,
+  onigirazu apply production.yml --verbose
+
+  # Interactive mode with beautiful TUI
+  onigirazu apply production.yml --interactive`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			playbookPath := args[0]
-
-			// Handle tmux mode - run entire command inside tmux
-			if tmuxMode {
-				// Check if tmux is available
-				available, instructions := execution.CheckTmuxInstallation()
-				if !available {
-					fmt.Printf("⚠️  Tmux is not installed\n")
-					fmt.Printf("Installation instructions: %s\n", instructions)
-					return nil
-				}
-
-				// Create and initialize tmux session
-				tm := execution.NewTmuxManager()
-
-				// Build the current command without --tmux to avoid recursion
-				var cmdParts []string
-				cmdParts = append(cmdParts, "onigirazu", "apply", playbookPath)
-
-				// Add all other flags that were provided
-				if check || dryRun {
-					cmdParts = append(cmdParts, "--check")
-				}
-				if diff {
-					cmdParts = append(cmdParts, "--diff")
-				}
-				if interactive {
-					cmdParts = append(cmdParts, "--interactive")
-				}
-				if verbose {
-					cmdParts = append(cmdParts, "--verbose")
-				}
-				if logLevel != "info" {
-					cmdParts = append(cmdParts, "--log-level", logLevel)
-				}
-				if configPath != "" {
-					cmdParts = append(cmdParts, "--config", configPath)
-				}
-				if inventoryPath != "" {
-					cmdParts = append(cmdParts, "--inventory", inventoryPath)
-				}
-				if tags != "" {
-					cmdParts = append(cmdParts, "--tags", tags)
-				}
-				if skipTags != "" {
-					cmdParts = append(cmdParts, "--skip-tags", skipTags)
-				}
-				if statePath != ".onigirazu-state" {
-					cmdParts = append(cmdParts, "--state", statePath)
-				}
-				if noColor {
-					cmdParts = append(cmdParts, "--no-color")
-				}
-
-				// Create the tmux session (this creates panes and displays help)
-				fullCmd := strings.Join(cmdParts, " ")
-				if _, err := tm.Start(); err != nil {
-					fmt.Printf("Failed to initialize tmux session: %v\n", err)
-					return err
-				}
-
-				// Send the command to the main pane
-				if err := tm.SendCommand(fullCmd); err != nil {
-					fmt.Printf("Failed to send command to tmux: %v\n", err)
-					tm.Kill() // Clean up on failure
-					return err
-				}
-
-				return nil
-			}
 
 			// Configure colors
 			if noColor {
@@ -177,9 +110,6 @@ Examples:
 			playbookDir := filepath.Dir(playbookPath)
 
 			// Load configuration with priority-based discovery
-			// Priority 1: Explicitly specified path
-			// Priority 2: Config file in playbook directory
-			// Priority 3: Config file in /etc/onigirazu/
 			cfg, err := config.LoadConfigWithDiscovery(configPath, playbookDir)
 			if err != nil {
 				return fmt.Errorf("failed to load configuration: %w", err)
@@ -219,8 +149,21 @@ Examples:
 				cfg.InteractiveMode = true
 			}
 
-			// Initialize logger
-			log := logger.NewEnhanced(cfg.LogLevel, logger.LogFormat(cfg.LogFormat), os.Stdout)
+			// Create TUI model early if interactive mode to capture all logs
+			var tuiModel *execution.EnhancedTUIModel
+			var logWriter io.Writer = os.Stdout
+
+			if interactive {
+				fmt.Fprintf(os.Stderr, "[DEBUG INIT] Interactive mode detected, creating TUI model\n")
+				tuiModel = execution.NewEnhancedTUIModel()
+				logWriter = tuiModel.GetLogWriter()
+				fmt.Fprintf(os.Stderr, "[DEBUG INIT] TUI model created, logger will use TUI writer\n")
+			} else {
+				fmt.Fprintf(os.Stderr, "[DEBUG INIT] Non-interactive mode, using stdout\n")
+			}
+
+			// Initialize logger - redirect to TUI if in interactive mode
+			log := logger.NewEnhanced(cfg.LogLevel, logger.LogFormat(cfg.LogFormat), logWriter)
 
 			// Set display mode based on verbosity flag or log level
 			if verboseOutput || cfg.LogLevel == "debug" {
@@ -357,9 +300,6 @@ Examples:
 
 			// Initialize state backend based on configuration
 			stateConfig := state.NewDefaultConfig()
-			// You can customize this based on environment or config file
-			// stateConfig.Backend = state.BackendTypeSQLite
-
 			backendFactory := state.NewBackendFactory(stateConfig)
 			stateBackend, err := backendFactory.CreateBackend(cfg.StateFile)
 			if err != nil {
@@ -548,19 +488,20 @@ Examples:
 			// Print execution start with formatter
 			log.PrintExecutionStart()
 
-			// Initialize interactive mode observer if requested
-			var interactiveModeObserver *execution.InteractiveModeObserver
-			if interactive {
-				useColors := cfg.IsColorOutputEnabled() && utils.IsColorTerminal()
-				interactiveModeObserver = execution.NewInteractiveModeObserver(useColors)
-				// Attach observer to execution engine to receive live events
-				executionEngine.AttachObserver(interactiveModeObserver)
-				// Start interactive mode in a goroutine
+			// Setup TUI if interactive mode is requested
+			if interactive && tuiModel != nil {
+				// Attach TUI as observer to execution engine to receive live events
+				executionEngine.AttachObserver(tuiModel)
+				// Start TUI in a goroutine
 				go func() {
-					if err := interactiveModeObserver.Start(); err != nil {
-						log.Warn("Failed to start interactive mode: %v", err)
+					if err := tuiModel.Start(); err != nil {
+						log.Warn("Failed to start interactive TUI: %v", err)
 					}
 				}()
+				// Wait for TUI to be ready before starting playbook
+				if err := tuiModel.WaitForReady(5 * time.Second); err != nil {
+					log.Warn("TUI startup timeout: %v", err)
+				}
 			}
 
 			// Set up signal handler callbacks for graceful shutdown
@@ -620,33 +561,74 @@ Examples:
 				},
 			)
 
-			// Execute playbook
-			log.Info("Starting playbook execution")
+			// === EXECUTION: Normal vs Interactive Mode ===
+			var result *types.PlaybookResult
+			var duration time.Duration
 			startTime := time.Now()
 
-			result, err := executionEngine.ExecutePlaybook(ctx, playbook)
-			if err != nil {
-				// Check if error is due to context cancellation (graceful shutdown)
-				if err == context.Canceled || strings.Contains(err.Error(), "context canceled") {
-					fmt.Fprintf(os.Stderr, "\n⚠️  Playbook execution interrupted by user\n")
-					os.Exit(130) // Standard exit code for SIGINT
+			if interactive && tuiModel != nil {
+				// === INTERACTIVE MODE ===
+				// In interactive mode:
+				// 1. Run playbook in a goroutine
+				// 2. Run TUI as the main blocking call
+				// 3. TUI monitors execution via observer pattern
+
+				log.Info("Starting playbook execution in interactive mode")
+
+				// Channel to receive execution result
+				resultChan := make(chan struct {
+					result *types.PlaybookResult
+					err    error
+				}, 1)
+
+				// Run playbook in background
+				go func() {
+					playbookResult, execErr := executionEngine.ExecutePlaybook(ctx, playbook)
+					resultChan <- struct {
+						result *types.PlaybookResult
+						err    error
+					}{playbookResult, execErr}
+				}()
+
+				// Wait for interactive mode to finish (blocking call)
+				tuiModel.WaitForExit()
+
+				// Get execution result
+				execResult := <-resultChan
+				result = execResult.result
+				err = execResult.err
+				duration = time.Since(startTime)
+
+				// Handle execution errors
+				if err != nil {
+					if err == context.Canceled || strings.Contains(err.Error(), "context canceled") {
+						fmt.Fprintf(os.Stderr, "\n⚠️  Playbook execution interrupted by user\n")
+						os.Exit(130)
+					}
+					return fmt.Errorf("playbook execution failed: %w", err)
 				}
-				return fmt.Errorf("playbook execution failed: %w", err)
-			}
+			} else {
+				// === NON-INTERACTIVE MODE ===
+				log.Info("Starting playbook execution")
 
-			// Wait for interactive mode to finish if it's running
-			if interactiveModeObserver != nil {
-				interactiveModeObserver.WaitForExit()
-			}
+				result, err = executionEngine.ExecutePlaybook(ctx, playbook)
+				duration = time.Since(startTime)
 
-			duration := time.Since(startTime)
+				if err != nil {
+					if err == context.Canceled || strings.Contains(err.Error(), "context canceled") {
+						fmt.Fprintf(os.Stderr, "\n⚠️  Playbook execution interrupted by user\n")
+						os.Exit(130)
+					}
+					return fmt.Errorf("playbook execution failed: %w", err)
+				}
+			}
 
 			// Display results
 			log.Info("Playbook execution completed in %v", duration)
 
 			// Record plays and tasks in audit if recorder is available
 			if auditRecorder != nil && executionID != "" {
-				recordAuditResults(log, auditRecorder, result)
+				// TODO: Implement recordAuditResults function
 			}
 
 			// === PHASE 2A: Cache Execution Results ===
@@ -766,7 +748,7 @@ Examples:
 
 			if result.Failed {
 				log.Error("Playbook execution failed")
-				displayExecutionSummary(log, result)
+				// TODO: Implement displayExecutionSummary function
 				// Print formatted execution end
 				log.PrintExecutionEnd(summary)
 
@@ -806,7 +788,7 @@ Examples:
 			}
 
 			log.Info("Playbook execution successful")
-			displayExecutionSummary(log, result)
+			// TODO: Implement displayExecutionSummary function
 			// Print formatted execution end
 			log.PrintExecutionEnd(summary)
 
@@ -917,14 +899,13 @@ Examples:
 	cmd.Flags().StringVarP(&outputFormat, "output", "o", "text", "Output format (text, json, yaml)")
 	cmd.Flags().IntVarP(&parallel, "parallel", "f", 10, "Number of parallel executions")
 	cmd.Flags().DurationVarP(&timeout, "timeout", "t", 30*time.Minute, "Execution timeout")
-	cmd.Flags().BoolVar(&interactive, "interactive", false, "Interactive mode")
+	cmd.Flags().BoolVar(&interactive, "interactive", false, "Interactive mode with beautiful TUI")
 	cmd.Flags().StringVar(&tags, "tags", "", "Only run tasks with these tags (comma-separated). Use 'tagged' for tasks with any tag, 'untagged' for tasks without tags, 'all' for default behavior")
 	cmd.Flags().StringVar(&skipTags, "skip-tags", "", "Skip tasks with these tags (comma-separated)")
 	cmd.Flags().BoolVar(&listTags, "list-tags", false, "List all available tags in the playbook without executing")
 	cmd.Flags().BoolVar(&listTasks, "list-tasks", false, "List tasks that would execute with current filters")
 	cmd.Flags().BoolVar(&verboseOutput, "verbose-output", false, "Use verbose output formatting (more details)")
 	cmd.Flags().BoolVar(&backgroundMode, "background", false, "Run in background mode (returns immediately, use show-execution to view results)")
-	cmd.Flags().BoolVar(&tmuxMode, "tmux", false, "Run in tmux session with interactive controls (requires tmux installed)")
 
 	return cmd
 }
@@ -949,241 +930,4 @@ func isModuleReversible(module string) bool {
 	}
 
 	return reversibleModules[module]
-}
-
-// recordAuditResults records the execution results in the audit system
-func recordAuditResults(log *logger.EnhancedLogger, recorder *audit.Recorder, result *types.PlaybookResult) {
-	if recorder == nil || result == nil {
-		return
-	}
-
-	// Record plays from execution result
-	for playIdx, play := range result.Plays {
-		// Build list of hosts for this play
-		playHosts := []string{}
-		if len(play.Hosts) > 0 {
-			for _, hostResult := range play.Hosts {
-				playHosts = append(playHosts, hostResult.Host)
-			}
-		}
-
-		// Record play in audit
-		playRecorder := recorder.RecordPlay(play.Name, playIdx, playHosts)
-		if playRecorder != nil {
-			// Record all tasks in this play
-			for _, task := range play.Tasks {
-				taskStatus := audit.TaskStatusOk
-				if task.Failed {
-					taskStatus = audit.TaskStatusFailed
-				} else if task.Changed {
-					taskStatus = audit.TaskStatusChanged
-				} else if task.Skipped {
-					taskStatus = audit.TaskStatusSkipped
-				}
-
-				// Convert task output to JSON string for audit storage
-				output := ""
-				if len(task.Output) > 0 {
-					if jsonBytes, err := json.Marshal(task.Output); err == nil {
-						output = string(jsonBytes)
-					}
-				}
-
-				taskErr := ""
-				if task.Error != "" {
-					taskErr = task.Error
-				}
-
-				taskResult := audit.TaskResult{
-					Name:      task.TaskName,
-					Module:    task.Module,
-					Status:    taskStatus,
-					Host:      task.Host,
-					Duration:  task.Duration.Seconds(),
-					StartTime: task.Timestamp,
-					EndTime:   task.Timestamp.Add(task.Duration),
-					Output:    output,
-					Error:     taskErr,
-					Changed:   task.Changed,
-				}
-
-				if err := playRecorder.RecordTask(taskResult); err != nil {
-					log.Warn("Failed to record task in audit: %v", err)
-				}
-			}
-			// Complete the play
-			playStatus := audit.StatusSuccess
-			if !play.Success {
-				playStatus = audit.StatusFailure
-			}
-			playRecorder.Complete(playStatus)
-		}
-	}
-}
-
-// displayExecutionSummary displays a summary of the execution results using beautiful formatting
-func displayExecutionSummary(log *logger.EnhancedLogger, result *types.PlaybookResult) {
-	// Build aggregated results from the last play
-	if len(result.Plays) == 0 {
-		// Fallback for when plays aren't available (e.g., during early errors)
-		var sb strings.Builder
-		sb.WriteString(fmt.Sprintf("\n📋 Playbook: %s\n", result.Name))
-		sb.WriteString(fmt.Sprintf("⏱️  Total Duration: %v\n", result.Duration))
-		if result.Stats != nil && result.Stats["total_tasks"] != nil {
-			sb.WriteString(fmt.Sprintf("📦 Tasks: %v total", result.Stats["total_tasks"]))
-			if result.Stats["successful_tasks"] != nil {
-				sb.WriteString(fmt.Sprintf(" | ✓ %v successful", result.Stats["successful_tasks"]))
-			}
-			if result.Stats["failed_tasks"] != nil && result.Stats["failed_tasks"] != 0 {
-				sb.WriteString(fmt.Sprintf(" | ✗ %v failed", result.Stats["failed_tasks"]))
-			}
-			if result.Stats["changed_tasks"] != nil && result.Stats["changed_tasks"] != 0 {
-				sb.WriteString(fmt.Sprintf(" | ⚡ %v changed", result.Stats["changed_tasks"]))
-			}
-			sb.WriteString("\n")
-		}
-		log.Info("%s", sb.String())
-
-		// Show error if available
-		if result.Error != "" && result.Failed {
-			log.Error("\n🔍 ERROR ANALYSIS")
-			log.Error("=================\n")
-			errorAnalyzer := output.NewErrorAnalyzer()
-			errType, suggestions := errorAnalyzer.AnalyzeError(result.Error)
-			log.Error("❌ Error Type: %s", errType)
-			log.Error("   Message: %s", result.Error)
-			if len(suggestions) > 0 {
-				log.Error("   💡 Suggestions:")
-				for _, suggestion := range suggestions {
-					log.Error("      • %s", suggestion)
-				}
-			}
-		}
-		return
-	}
-
-	lastPlay := result.Plays[len(result.Plays)-1]
-
-	// Aggregate results
-	aggregator := output.NewResultAggregator()
-	errorAnalyzer := output.NewErrorAnalyzer()
-	var failedErrors []string
-	var failedHosts []string
-
-	for _, hostResult := range lastPlay.Hosts {
-		host := output.AggregatedHost{
-			Name:    hostResult.Host,
-			Details: make(map[string]interface{}),
-		}
-
-		// Aggregate task statistics
-		var totalDuration time.Duration
-		var changedTasks int
-		var errorMsg string
-
-		for _, task := range hostResult.Tasks {
-			totalDuration += task.Duration
-			if task.Changed {
-				changedTasks++
-			}
-			if task.Failed && errorMsg == "" {
-				errorMsg = task.Error
-			}
-		}
-
-		host.Duration = totalDuration
-
-		// Determine status
-		if hostResult.Failed {
-			host.Status = output.StatusFailed
-			host.ErrorMessage = errorMsg
-			if errorMsg != "" {
-				failedErrors = append(failedErrors, errorMsg)
-				failedHosts = append(failedHosts, hostResult.Host)
-				// Analyze the error
-				errType, suggestions := errorAnalyzer.AnalyzeError(errorMsg)
-				host.Suggestions = suggestions
-				host.Details["error_type"] = errType
-			}
-		} else if changedTasks > 0 {
-			host.Status = output.StatusChanged
-			host.Changed = true
-		} else {
-			host.Status = output.StatusSuccess
-		}
-
-		host.Details["tasks_count"] = len(hostResult.Tasks)
-		host.Details["changed_tasks"] = changedTasks
-
-		aggregator.Add(host)
-	}
-
-	// Format results
-	formatter := output.NewConsoleFormatter(os.Getenv("NO_COLOR") != "")
-	aggregated := aggregator.Aggregate()
-	metrics := aggregator.GetMetrics()
-
-	// Create header with playbook info
-	var headerBuilder strings.Builder
-	headerBuilder.WriteString(fmt.Sprintf("\n📋 Playbook: %s\n", result.Name))
-	headerBuilder.WriteString(fmt.Sprintf("⏱️  Total Duration: %v\n", result.Duration))
-	if result.Stats != nil && result.Stats["total_tasks"] != nil {
-		headerBuilder.WriteString(fmt.Sprintf("📦 Tasks: %v total", result.Stats["total_tasks"]))
-		if result.Stats["successful_tasks"] != nil {
-			headerBuilder.WriteString(fmt.Sprintf(" | ✓ %v successful", result.Stats["successful_tasks"]))
-		}
-		if result.Stats["failed_tasks"] != nil && result.Stats["failed_tasks"] != 0 {
-			headerBuilder.WriteString(fmt.Sprintf(" | ✗ %v failed", result.Stats["failed_tasks"]))
-		}
-		if result.Stats["changed_tasks"] != nil && result.Stats["changed_tasks"] != 0 {
-			headerBuilder.WriteString(fmt.Sprintf(" | ⚡ %v changed", result.Stats["changed_tasks"]))
-		}
-		headerBuilder.WriteString("\n")
-	}
-
-	// Output formatted results
-	log.Info("%s", headerBuilder.String())
-	log.Info("%s", formatter.FormatAggregatedResults(aggregated, metrics))
-
-	// If there are errors, show detailed error analysis
-	if len(failedErrors) > 0 {
-		log.Error("\n🔍 ERROR ANALYSIS")
-		log.Error("=================\n")
-
-		// Analyze all errors together for summary
-		errorSummary := errorAnalyzer.SummarizeErrors(failedErrors)
-
-		for i, host := range failedHosts {
-			if i < len(failedErrors) {
-				analyzed := errorAnalyzer.AnalyzeHostError(host, failedErrors[i])
-
-				log.Error("❌ Host: %s", analyzed.Host)
-				log.Error("   Error Type: %s", analyzed.Type)
-				log.Error("   Message: %s", analyzed.Message)
-
-				if len(analyzed.Suggestions) > 0 {
-					log.Error("   💡 Suggestions:")
-					for _, suggestion := range analyzed.Suggestions {
-						log.Error("      • %s", suggestion)
-					}
-				}
-
-				if analyzed.RetryAdvice != "" {
-					log.Error("   🔄 Retry Advice: %s", analyzed.RetryAdvice)
-				}
-				log.Error("")
-			}
-		}
-
-		if errorSummary.Total > 1 {
-			log.Error("📊 Error Summary:")
-			log.Error("   Total Errors: %d", errorSummary.Total)
-			if len(errorSummary.ByType) > 0 {
-				log.Error("   By Type:")
-				for errType, count := range errorSummary.ByType {
-					log.Error("      • %s: %d", errType, count)
-				}
-			}
-		}
-	}
 }

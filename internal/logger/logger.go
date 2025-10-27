@@ -20,6 +20,14 @@ func New(verbose bool) *Logger {
 	}
 }
 
+// NewWithWriter creates a logger that writes to a custom writer (e.g., for TUI integration)
+func NewWithWriter(verbose bool, writer io.Writer) *Logger {
+	return &Logger{
+		verbose: verbose,
+		logger:  log.New(writer, "", 0),
+	}
+}
+
 func (l *Logger) Info(format string, args ...interface{}) {
 	message := fmt.Sprintf(format, args...)
 	l.logger.Printf("[INFO] %s", message)

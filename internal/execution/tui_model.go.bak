@@ -1,0 +1,884 @@
+package execution
+
+import (
+	"fmt"
+	"os"
+	"strings"
+	"sync"
+	"time"
+
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/mattn/go-runewidth"
+	"github.com/onigirazu-cfg/onigirazu/pkg/types"
+	"golang.org/x/term"
+)
+
+// TUIModel is the main bubbletea model for interactive execution
+type TUIModel struct {
+	// Log buffer and scrolling
+	logs           []string
+	scrollOffset   int
+	viewportHeight int
+	viewportWidth  int
+
+	// Execution state
+	mode       DisplayMode
+	paused     bool
+	shouldExit bool
+	showHelp   bool
+	showStats  bool
+	useColors  bool
+
+	// Execution tracking
+	playbookName     string
+	playCount        int
+	currentPlayIndex int
+	currentTaskName  string
+	currentHost      string
+	startTime        time.Time
+	endTime          time.Time
+	status           string // "running", "completed", "failed"
+
+	// Statistics
+	taskStats map[string]*TaskStats
+	hostStats map[string]*HostStats
+	playStats map[string]*PlayStats
+
+	// Synchronization
+	eventChan chan ExecutionEvent
+	mutex     sync.RWMutex
+	stopChan  chan struct{}
+
+	// Callbacks
+	stopCallback func() error
+}
+
+// PlayStats tracks per-play statistics
+type PlayStats struct {
+	Name        string
+	Index       int
+	Total       int
+	Success     bool
+	Duration    time.Duration
+	TaskCount   int
+	FailedCount int
+}
+
+// NewTUIModel creates a new TUI model
+func NewTUIModel(useColors bool) *TUIModel {
+	return &TUIModel{
+		logs:         make([]string, 0, 1000),
+		scrollOffset: 0,
+		mode:         DisplayNormal,
+		useColors:    useColors,
+		taskStats:    make(map[string]*TaskStats),
+		hostStats:    make(map[string]*HostStats),
+		playStats:    make(map[string]*PlayStats),
+		eventChan:    make(chan ExecutionEvent, 100),
+		stopChan:     make(chan struct{}),
+		status:       "running",
+		startTime:    time.Now(),
+	}
+}
+
+// Init initializes the model
+func (m *TUIModel) Init() tea.Cmd {
+	// Only listen for events - no ticker needed since events drive updates
+	return m.listenForEvents()
+}
+
+// Update handles messages
+func (m *TUIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.viewportWidth = msg.Width
+		m.viewportHeight = msg.Height - 4 // Reserve space for status and control bar
+		return m, nil
+
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "ctrl+c", "q":
+			m.shouldExit = true
+			return m, tea.Quit
+
+		case "v":
+			m.mutex.Lock()
+			if m.mode == DisplayVerbose {
+				m.mode = DisplayNormal
+				m.addLog("[Mode changed to: NORMAL]")
+			} else {
+				m.mode = DisplayVerbose
+				m.addLog("[Mode changed to: VERBOSE]")
+			}
+			m.mutex.Unlock()
+
+		case "d":
+			m.mutex.Lock()
+			if m.mode == DisplayDebug {
+				m.mode = DisplayNormal
+				m.addLog("[Mode changed to: NORMAL]")
+			} else {
+				m.mode = DisplayDebug
+				m.addLog("[Mode changed to: DEBUG]")
+			}
+			m.mutex.Unlock()
+
+		case "n":
+			m.mutex.Lock()
+			if m.mode != DisplayNormal {
+				m.mode = DisplayNormal
+				m.addLog("[Mode changed to: NORMAL]")
+			}
+			m.mutex.Unlock()
+
+		case "p":
+			m.mutex.Lock()
+			m.paused = !m.paused
+			status := "PAUSED"
+			if !m.paused {
+				status = "RESUMED"
+			}
+			m.addLog(fmt.Sprintf("[Execution %s]", status))
+			m.mutex.Unlock()
+
+		case "s":
+			m.mutex.Lock()
+			m.showStats = !m.showStats
+			m.mutex.Unlock()
+
+		case "h":
+			m.mutex.Lock()
+			m.showHelp = !m.showHelp
+			m.mutex.Unlock()
+
+		case "g":
+			m.addLog("[Gracefully stopping execution...]")
+			if m.stopCallback != nil {
+				go func() {
+					if err := m.stopCallback(); err != nil {
+						m.addLog(fmt.Sprintf("[Error stopping: %v]", err))
+					}
+				}()
+			}
+
+		case "up":
+			if m.scrollOffset > 0 {
+				m.scrollOffset--
+			}
+
+		case "down":
+			maxScroll := len(m.logs) - m.viewportHeight
+			if maxScroll > 0 && m.scrollOffset < maxScroll {
+				m.scrollOffset++
+			}
+
+		case "pageup":
+			m.scrollOffset -= m.viewportHeight
+			if m.scrollOffset < 0 {
+				m.scrollOffset = 0
+			}
+
+		case "pagedown":
+			m.scrollOffset += m.viewportHeight
+			maxScroll := len(m.logs) - m.viewportHeight
+			if maxScroll > 0 && m.scrollOffset > maxScroll {
+				m.scrollOffset = maxScroll
+			}
+		}
+
+	case ExecutionEvent:
+		m.processEvent(msg)
+		// Re-queue the event listener to receive the next event
+		return m, m.listenForEvents()
+	}
+
+	return m, nil
+}
+
+// View renders the TUI
+func (m *TUIModel) View() string {
+	// Check overlay flags with lock to prevent race conditions
+	m.mutex.RLock()
+	showHelp := m.showHelp
+	showStats := m.showStats
+	m.mutex.RUnlock()
+
+	if showHelp {
+		return m.renderModalOverlay(m.renderHelpOverlay())
+	}
+
+	if showStats {
+		return m.renderModalOverlay(m.renderStatsOverlay())
+	}
+
+	return m.renderNormal()
+}
+
+// renderModalOverlay wraps an overlay box and centers it on the screen
+func (m *TUIModel) renderModalOverlay(overlayContent string) string {
+	// Split overlay into lines
+	overlayLines := strings.Split(strings.TrimSuffix(overlayContent, "\n"), "\n")
+
+	// Calculate padding for centering
+	boxHeight := len(overlayLines)
+	topPadding := (m.viewportHeight - boxHeight) / 2
+	if topPadding < 0 {
+		topPadding = 0
+	}
+
+	var result []string
+
+	// Render status bar (with lock to prevent race conditions)
+	m.mutex.RLock()
+	statusBar := m.renderStatusBar()
+	m.mutex.RUnlock()
+	result = append(result, statusBar)
+
+	// Add top padding with dimmed background
+	dimStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("237"))
+	for i := 0; i < topPadding; i++ {
+		result = append(result, dimStyle.Render(strings.Repeat(" ", m.viewportWidth)))
+	}
+
+	// Add overlay box (centered horizontally)
+	for _, line := range overlayLines {
+		lineWidth := visibleWidth(line)
+		if lineWidth < m.viewportWidth {
+			// Center the line horizontally
+			leftPadding := (m.viewportWidth - lineWidth) / 2
+			paddedLine := strings.Repeat(" ", leftPadding) + line
+			result = append(result, paddedLine)
+		} else {
+			result = append(result, line)
+		}
+	}
+
+	// Add bottom padding with dimmed background
+	bottomPadding := m.viewportHeight - topPadding - boxHeight
+	for i := 0; i < bottomPadding; i++ {
+		result = append(result, dimStyle.Render(strings.Repeat(" ", m.viewportWidth)))
+	}
+
+	// Render control bar
+	result = append(result, m.renderControlBar())
+
+	return strings.Join(result, "\n")
+}
+
+// renderNormal renders the normal view with fixed layout (like htop)
+// ┌─ Status Bar (1 line, always visible at top) ───────────┐
+// ├─ Log Viewport (bounded, lines truncated) ──────────────┤
+// └─ Control Bar (1 line, always visible at bottom) ───────┘
+// This ensures logs NEVER overflow and all UI stays in place.
+func (m *TUIModel) renderNormal() string {
+	m.mutex.RLock()
+	defer m.mutex.RUnlock()
+
+	// Build the three sections with fixed layout
+	statusBar := m.renderStatusBar()
+	logArea := m.renderLogAreaFixed() // ← Use bounded fixed version
+	controlBar := m.renderControlBar()
+
+	return fmt.Sprintf("%s\n%s\n%s", statusBar, logArea, controlBar)
+}
+
+// renderStatusBar renders the top status bar
+func (m *TUIModel) renderStatusBar() string {
+	statusStyle := lipgloss.NewStyle().
+		Background(lipgloss.Color("239")).
+		Foreground(lipgloss.Color("255")).
+		Padding(0, 1).
+		Width(m.viewportWidth)
+
+	mode := "NORMAL"
+	switch m.mode {
+	case DisplayVerbose:
+		mode = "VERBOSE"
+	case DisplayDebug:
+		mode = "DEBUG"
+	}
+
+	pausedStr := ""
+	if m.paused {
+		pausedStr = " [PAUSED]"
+	}
+
+	duration := time.Since(m.startTime).Round(time.Second)
+
+	statusText := fmt.Sprintf(
+		"🍙 %s | Play: %d/%d | Task: %s | Mode: %s | %v%s | Press H for help",
+		m.playbookName,
+		m.currentPlayIndex,
+		m.playCount,
+		truncate(m.currentTaskName, 30),
+		mode,
+		duration,
+		pausedStr,
+	)
+
+	// Truncate if too long using visual width (handles emoji correctly)
+	if m.viewportWidth > 20 {
+		statusText = runewidth.Truncate(statusText, m.viewportWidth-2, "")
+	} else if m.viewportWidth <= 20 {
+		// For very small terminals, show minimal info
+		statusText = fmt.Sprintf("🍙 %s [%s] %v", truncate(m.playbookName, 10), mode, duration)
+	}
+
+	return statusStyle.Render(statusText)
+}
+
+// renderLogArea renders the scrollable log area (DEPRECATED - use renderLogAreaFixed)
+func (m *TUIModel) renderLogArea() string {
+	startIdx := m.scrollOffset
+	endIdx := startIdx + m.viewportHeight
+
+	if endIdx > len(m.logs) {
+		endIdx = len(m.logs)
+	}
+
+	var visibleLogs []string
+	if startIdx < len(m.logs) {
+		visibleLogs = m.logs[startIdx:endIdx]
+	}
+
+	// Pad to fill viewport
+	for len(visibleLogs) < m.viewportHeight {
+		visibleLogs = append(visibleLogs, "")
+	}
+
+	logStyle := lipgloss.NewStyle().
+		Height(m.viewportHeight).
+		Padding(0, 1)
+
+	logText := strings.Join(visibleLogs, "\n")
+	return logStyle.Render(logText)
+}
+
+// renderLogAreaFixed renders bounded log area (htop-style: lines truncated, viewport constrained)
+// KEY: Each line is truncated to viewport width, ensuring logs NEVER overflow horizontally
+// and status/control bars NEVER get pushed off-screen
+func (m *TUIModel) renderLogAreaFixed() string {
+	startIdx := m.scrollOffset
+	endIdx := startIdx + m.viewportHeight
+
+	if endIdx > len(m.logs) {
+		endIdx = len(m.logs)
+	}
+
+	var visibleLogs []string
+	if startIdx < len(m.logs) {
+		visibleLogs = m.logs[startIdx:endIdx]
+	}
+
+	// Truncate each line to viewport width and ensure exactly viewportHeight lines
+	maxWidth := m.viewportWidth - 2 // -2 for padding (1px each side)
+	if maxWidth < 10 {
+		maxWidth = 10 // minimum width for tiny terminals
+	}
+
+	var boundedLogs []string
+	for i := 0; i < m.viewportHeight; i++ {
+		if i < len(visibleLogs) {
+			line := visibleLogs[i]
+
+			// Truncate using go-runewidth (optimized, handles emoji correctly)
+			line = runewidth.Truncate(line, maxWidth, "")
+
+			boundedLogs = append(boundedLogs, line)
+		} else {
+			// Fill remaining lines with empty space
+			boundedLogs = append(boundedLogs, "")
+		}
+	}
+
+	// Apply padding and styling
+	logStyle := lipgloss.NewStyle().
+		Padding(0, 1)
+
+	logText := strings.Join(boundedLogs, "\n")
+	return logStyle.Render(logText)
+}
+
+// renderControlBar renders the bottom control bar
+func (m *TUIModel) renderControlBar() string {
+	controlStyle := lipgloss.NewStyle().
+		Background(lipgloss.Color("236")).
+		Foreground(lipgloss.Color("244")).
+		Padding(0, 1).
+		Width(m.viewportWidth)
+
+	var controlText string
+	if m.viewportWidth > 80 {
+		// Full text for wide terminals
+		controlText = "V:Verbose  D:Debug  N:Normal  P:Pause  S:Stats  G:Stop  H:Help  Q:Quit  | ↑↓/PgUp/PgDn: Scroll"
+	} else if m.viewportWidth > 60 {
+		// Medium text for normal terminals
+		controlText = "V:Verbose  D:Debug  N:Normal  S:Stats  G:Stop  H:Help  Q:Quit | Scroll: ↑↓/PgUp/PgDn"
+	} else if m.viewportWidth > 40 {
+		// Short text for small terminals
+		controlText = "V:Verbose  D:Debug  N:Normal  S:Stats  H:Help  Q:Quit"
+	} else {
+		// Minimal text for very small terminals
+		controlText = "V:Verb  D:Dbg  N:Norm  S:Stats  Q:Quit"
+	}
+
+	return controlStyle.Render(controlText)
+}
+
+// renderHelpOverlay renders the help overlay with dynamic width
+func (m *TUIModel) renderHelpOverlay() string {
+	// Use 80% of viewport width for the box, minimum 60 chars
+	boxWidth := (m.viewportWidth * 4) / 5
+	if boxWidth < 60 {
+		boxWidth = 60
+	}
+	if boxWidth > m.viewportWidth-2 {
+		boxWidth = m.viewportWidth - 2
+	}
+	innerWidth := boxWidth - 2 // Account for vertical borders
+
+	var sb strings.Builder
+	sb.WriteString(buildBoxLine("═", boxWidth) + "\n")
+	sb.WriteString("║" + padRight("Interactive Execution Controls", innerWidth) + "║\n")
+	sb.WriteString(buildBoxMiddle("═", boxWidth) + "\n")
+	sb.WriteString("║" + padRight("", innerWidth) + "║\n")
+
+	// Display Modes
+	sb.WriteString("║" + padRight("Display Modes:", innerWidth) + "║\n")
+	sb.WriteString("║" + padRight("  V - Toggle VERBOSE mode (detailed output)", innerWidth) + "║\n")
+	sb.WriteString("║" + padRight("  D - Toggle DEBUG mode (very detailed)", innerWidth) + "║\n")
+	sb.WriteString("║" + padRight("  N - Return to NORMAL mode (errors only)", innerWidth) + "║\n")
+	sb.WriteString("║" + padRight("", innerWidth) + "║\n")
+
+	// Execution Control
+	sb.WriteString("║" + padRight("Execution Control:", innerWidth) + "║\n")
+	sb.WriteString("║" + padRight("  P - Pause/Resume execution", innerWidth) + "║\n")
+	sb.WriteString("║" + padRight("  G - Gracefully stop execution", innerWidth) + "║\n")
+	sb.WriteString("║" + padRight("  Q or Ctrl+C - Quit UI (execution continues)", innerWidth) + "║\n")
+	sb.WriteString("║" + padRight("", innerWidth) + "║\n")
+
+	// Scrolling
+	sb.WriteString("║" + padRight("Scrolling:", innerWidth) + "║\n")
+	sb.WriteString("║" + padRight("  ↑/↓ - Scroll up/down one line", innerWidth) + "║\n")
+	sb.WriteString("║" + padRight("  PgUp/PgDn - Scroll by page", innerWidth) + "║\n")
+	sb.WriteString("║" + padRight("", innerWidth) + "║\n")
+
+	// Display
+	sb.WriteString("║" + padRight("Display:", innerWidth) + "║\n")
+	sb.WriteString("║" + padRight("  S - Toggle statistics display", innerWidth) + "║\n")
+	sb.WriteString("║" + padRight("  H - Toggle this help screen", innerWidth) + "║\n")
+	sb.WriteString("║" + padRight("", innerWidth) + "║\n")
+
+	sb.WriteString("║" + padRight("Press any key to close this help", innerWidth) + "║\n")
+	sb.WriteString("║" + padRight("", innerWidth) + "║\n")
+	sb.WriteString(buildBoxBottom("═", boxWidth) + "\n")
+
+	return sb.String()
+}
+
+// renderStatsOverlay renders the statistics overlay with dynamic width
+func (m *TUIModel) renderStatsOverlay() string {
+	m.mutex.RLock()
+	defer m.mutex.RUnlock()
+
+	// Use 80% of viewport width for the box, minimum 60 chars
+	boxWidth := (m.viewportWidth * 4) / 5
+	if boxWidth < 60 {
+		boxWidth = 60
+	}
+	if boxWidth > m.viewportWidth-2 {
+		boxWidth = m.viewportWidth - 2
+	}
+	innerWidth := boxWidth - 2 // Account for vertical borders
+
+	var sb strings.Builder
+	sb.WriteString(buildBoxLine("═", boxWidth) + "\n")
+	sb.WriteString("║" + padRight("Execution Statistics", innerWidth) + "║\n")
+	sb.WriteString(buildBoxMiddle("═", boxWidth) + "\n")
+
+	// Host statistics
+	sb.WriteString("║" + padRight("Hosts:", innerWidth) + "║\n")
+	for _, stats := range m.hostStats {
+		line := fmt.Sprintf("  %s: %d tasks", stats.Name, stats.TaskCount)
+		sb.WriteString("║" + padRight(line, innerWidth) + "║\n")
+	}
+
+	sb.WriteString("║" + padRight("", innerWidth) + "║\n")
+
+	// Task statistics
+	sb.WriteString("║" + padRight("Tasks:", innerWidth) + "║\n")
+	maxTaskNameWidth := innerWidth - 30 // Reserve space for stats
+	if maxTaskNameWidth < 10 {
+		maxTaskNameWidth = 10
+	}
+
+	for _, stats := range m.taskStats {
+		total := stats.Success + stats.Failed + stats.Changed + stats.Skipped
+		taskName := truncate(stats.Name, maxTaskNameWidth)
+		line := fmt.Sprintf("  %s: %d (✓%d ✗%d ⟳%d ⊝%d)",
+			taskName, total, stats.Success, stats.Failed, stats.Changed, stats.Skipped)
+		sb.WriteString("║" + padRight(line, innerWidth) + "║\n")
+	}
+
+	sb.WriteString("║" + padRight("", innerWidth) + "║\n")
+	sb.WriteString("║" + padRight("Press S to close statistics", innerWidth) + "║\n")
+	sb.WriteString("║" + padRight("", innerWidth) + "║\n")
+	sb.WriteString(buildBoxBottom("═", boxWidth) + "\n")
+
+	return sb.String()
+}
+
+// processEvent processes an execution event
+func (m *TUIModel) processEvent(event ExecutionEvent) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	timeStr := event.Timestamp.Format("15:04:05")
+
+	// Determine whether to display based on mode
+	shouldDisplay := false
+	switch m.mode {
+	case DisplayNormal:
+		// Only show errors, play start, and execution end
+		if event.Type == "error" || event.Type == "execution_end" || event.Type == "play_start" {
+			shouldDisplay = true
+		}
+	case DisplayVerbose:
+		// Show most events except detailed task starts
+		if event.Type != "task_start" || m.mode == DisplayDebug {
+			shouldDisplay = true
+		}
+	case DisplayDebug:
+		// Show everything
+		shouldDisplay = true
+	}
+
+	if !shouldDisplay {
+		return
+	}
+
+	// Format and add log
+	var logLine string
+	switch event.Type {
+	case "execution_start":
+		logLine = fmt.Sprintf("[%s] ▶ Starting: %s", timeStr, event.Message)
+	case "play_start":
+		logLine = fmt.Sprintf("[%s] ▶ Play [%d/%d]: %s", timeStr, m.currentPlayIndex, m.playCount, event.PlayName)
+	case "play_end":
+		logLine = fmt.Sprintf("[%s] ✓ Play completed: %s (%v)", timeStr, event.PlayName, event.Message)
+	case "task_start":
+		logLine = fmt.Sprintf("[%s] ⟳ Task: %s on %s", timeStr, event.TaskName, event.HostName)
+	case "task_end":
+		logLine = fmt.Sprintf("[%s] ✓ Task: %s on %s", timeStr, event.TaskName, event.HostName)
+	case "error":
+		logLine = fmt.Sprintf("[%s] ✗ ERROR: %s", timeStr, event.Message)
+	case "execution_end":
+		logLine = fmt.Sprintf("[%s] ▶ Execution ended: %s", timeStr, event.Message)
+	default:
+		logLine = fmt.Sprintf("[%s] %s", timeStr, event.Message)
+	}
+
+	m.addLog(logLine)
+
+	// Update execution state based on event type
+	switch event.Type {
+	case "execution_start":
+		m.status = "running"
+
+	case "play_start":
+		m.currentPlayIndex = event.PlayIndex
+		m.currentTaskName = ""
+
+	case "task_start":
+		m.currentTaskName = event.TaskName
+		m.currentHost = event.HostName
+
+	case "task_end":
+		// Update task stats (handled by observer)
+
+	case "execution_end":
+		m.status = "completed"
+		m.endTime = time.Now()
+	}
+}
+
+// addLog safely adds a log line
+func (m *TUIModel) addLog(line string) {
+	m.logs = append(m.logs, line)
+	// Auto-scroll to bottom when new logs arrive
+	maxScroll := len(m.logs) - m.viewportHeight
+	if maxScroll > 0 {
+		m.scrollOffset = maxScroll
+	}
+}
+
+// SetStopCallback sets the callback for graceful stop
+func (m *TUIModel) SetStopCallback(fn func() error) {
+	m.stopCallback = fn
+}
+
+// listenForEvents listens for execution events
+func (m *TUIModel) listenForEvents() tea.Cmd {
+	return func() tea.Msg {
+		for event := range m.eventChan {
+			return event
+		}
+		return nil
+	}
+}
+
+// AddEvent adds an execution event
+func (m *TUIModel) AddEvent(event ExecutionEvent) {
+	select {
+	case m.eventChan <- event:
+	default:
+		// Channel full, drop oldest or skip
+	}
+}
+
+// Stop stops the TUI
+func (m *TUIModel) Stop() {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	m.shouldExit = true
+	close(m.stopChan)
+}
+
+// Start starts the TUI
+func (m *TUIModel) Start() error {
+	// Check if stdin is a TTY
+	if !term.IsTerminal(int(os.Stdin.Fd())) {
+		return fmt.Errorf("failed to enable interactive mode: stdin is not a terminal (use --interactive only in interactive shells)")
+	}
+
+	p := tea.NewProgram(m)
+	if _, err := p.Run(); err != nil {
+		return fmt.Errorf("TUI error: %w", err)
+	}
+
+	return nil
+}
+
+// Implement ExecutionObserver interface
+
+// OnExecutionStart is called when execution begins
+func (m *TUIModel) OnExecutionStart(playbookName string, playCount int) {
+	m.mutex.Lock()
+	m.playbookName = playbookName
+	m.playCount = playCount
+	m.startTime = time.Now()
+	m.mutex.Unlock()
+
+	m.AddEvent(ExecutionEvent{
+		Type:      "execution_start",
+		Message:   fmt.Sprintf("Starting execution of %s (%d plays)", playbookName, playCount),
+		Timestamp: time.Now(),
+	})
+}
+
+// OnPlayStart is called when a play starts
+func (m *TUIModel) OnPlayStart(playName string, playIndex int, totalPlays int) {
+	m.mutex.Lock()
+	m.currentPlayIndex = playIndex
+	stats, exists := m.playStats[playName]
+	if !exists {
+		stats = &PlayStats{
+			Name:  playName,
+			Index: playIndex,
+			Total: totalPlays,
+		}
+		m.playStats[playName] = stats
+	}
+	m.mutex.Unlock()
+
+	m.AddEvent(ExecutionEvent{
+		Type:      "play_start",
+		PlayName:  playName,
+		PlayIndex: playIndex,
+		Message:   fmt.Sprintf("Starting play: %s", playName),
+		Timestamp: time.Now(),
+	})
+}
+
+// OnPlayEnd is called when a play ends
+func (m *TUIModel) OnPlayEnd(playName string, playIndex int, success bool, duration time.Duration) {
+	m.mutex.Lock()
+	stats, exists := m.playStats[playName]
+	if exists {
+		stats.Success = success
+		stats.Duration = duration
+	}
+	m.mutex.Unlock()
+
+	status := "✓"
+	if !success {
+		status = "✗"
+	}
+
+	m.AddEvent(ExecutionEvent{
+		Type:      "play_end",
+		PlayName:  playName,
+		Message:   fmt.Sprintf("%s Play %s completed in %v", status, playName, duration.Round(time.Millisecond)),
+		Timestamp: time.Now(),
+	})
+}
+
+// OnTaskStart is called when a task starts
+func (m *TUIModel) OnTaskStart(taskName string, hostName string) {
+	m.AddEvent(ExecutionEvent{
+		Type:      "task_start",
+		TaskName:  taskName,
+		HostName:  hostName,
+		Message:   fmt.Sprintf("Running task '%s' on %s", taskName, hostName),
+		Timestamp: time.Now(),
+	})
+}
+
+// OnTaskEnd is called when a task ends
+func (m *TUIModel) OnTaskEnd(taskResult *types.TaskResult) {
+	if taskResult == nil {
+		return
+	}
+
+	m.mutex.Lock()
+	// Update task stats
+	stats, exists := m.taskStats[taskResult.TaskName]
+	if !exists {
+		stats = &TaskStats{Name: taskResult.TaskName}
+		m.taskStats[taskResult.TaskName] = stats
+	}
+
+	if taskResult.Failed {
+		stats.Failed++
+	} else if taskResult.Changed {
+		stats.Changed++
+	} else if taskResult.Skipped {
+		stats.Skipped++
+	} else {
+		stats.Success++
+	}
+
+	// Update host stats
+	hostStats, exists := m.hostStats[taskResult.Host]
+	if !exists {
+		hostStats = &HostStats{Name: taskResult.Host}
+		m.hostStats[taskResult.Host] = hostStats
+	}
+	hostStats.TaskCount++
+
+	m.mutex.Unlock()
+
+	status := "✓"
+	if taskResult.Failed {
+		status = "✗"
+	} else if taskResult.Changed {
+		status = "⟳"
+	}
+
+	m.AddEvent(ExecutionEvent{
+		Type:      "task_end",
+		TaskName:  taskResult.TaskName,
+		HostName:  taskResult.Host,
+		Message:   fmt.Sprintf("%s Task '%s' on %s", status, taskResult.TaskName, taskResult.Host),
+		Timestamp: time.Now(),
+	})
+}
+
+// OnExecutionEnd is called when execution completes
+func (m *TUIModel) OnExecutionEnd(result *types.PlaybookResult, duration time.Duration) {
+	status := "✓ success"
+	if result.Failed {
+		status = "✗ failed"
+	}
+
+	m.mutex.Lock()
+	m.status = "completed"
+	if result.Failed {
+		m.status = "failed"
+	}
+	m.endTime = time.Now()
+	m.mutex.Unlock()
+
+	m.AddEvent(ExecutionEvent{
+		Type:      "execution_end",
+		Message:   fmt.Sprintf("Execution completed: %s (%v)", status, duration.Round(time.Millisecond)),
+		Timestamp: time.Now(),
+	})
+}
+
+// OnError is called when an error occurs
+func (m *TUIModel) OnError(taskName string, hostName string, error string) {
+	m.AddEvent(ExecutionEvent{
+		Type:      "error",
+		TaskName:  taskName,
+		HostName:  hostName,
+		Message:   fmt.Sprintf("Error in %s on %s: %s", taskName, hostName, error),
+		Timestamp: time.Now(),
+	})
+}
+
+// WaitForExit blocks until the TUI signals exit
+func (m *TUIModel) WaitForExit() {
+	<-m.stopChan
+}
+
+// Helper function to truncate strings
+func truncate(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen-3] + "..."
+}
+
+// visibleWidth returns the visual display width of a string, accounting for
+// multi-byte characters, emoji, and zero-width characters
+func visibleWidth(s string) int {
+	return runewidth.StringWidth(s)
+}
+
+// padRight pads a string to a specific visual width with spaces on the right
+func padRight(s string, width int) string {
+	visible := visibleWidth(s)
+	if visible >= width {
+		return s
+	}
+	padding := width - visible
+	return s + strings.Repeat(" ", padding)
+}
+
+// padLeft pads a string to a specific visual width with spaces on the left
+func padLeft(s string, width int) string {
+	visible := visibleWidth(s)
+	if visible >= width {
+		return s
+	}
+	padding := width - visible
+	return strings.Repeat(" ", padding) + s
+}
+
+// buildBoxLine creates a horizontal box line with proper width
+// boxChar should be '═' for double line or '─' for single line
+func buildBoxLine(boxChar string, width int) string {
+	if width <= 2 {
+		return strings.Repeat(boxChar, width)
+	}
+	return "╔" + strings.Repeat(boxChar, width-2) + "╗"
+}
+
+// buildBoxBottom creates a bottom box line with proper width
+func buildBoxBottom(boxChar string, width int) string {
+	if width <= 2 {
+		return strings.Repeat(boxChar, width)
+	}
+	return "╚" + strings.Repeat(boxChar, width-2) + "╝"
+}
+
+// buildBoxMiddle creates a middle separator line with proper width
+func buildBoxMiddle(boxChar string, width int) string {
+	if width <= 2 {
+		return strings.Repeat(boxChar, width)
+	}
+	return "╠" + strings.Repeat(boxChar, width-2) + "╣"
+}

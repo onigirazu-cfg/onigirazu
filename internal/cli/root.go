@@ -69,6 +69,7 @@ across your infrastructure with a focus on simplicity and reliability.`,
 	_ = rootCmd.PersistentFlags().MarkHidden("dry-run")
 
 	// Add subcommands
+	// Use apply command with proper TUI architecture
 	rootCmd.AddCommand(NewApplyCommand())
 	rootCmd.AddCommand(NewVersionCommand())
 	rootCmd.AddCommand(newValidateCmd())
