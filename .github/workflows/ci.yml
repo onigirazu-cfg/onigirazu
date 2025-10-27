@@ -149,7 +149,7 @@ jobs:
         cache: true
 
     - name: Download build artifacts
-      uses: actions/download-artifact@v5
+      uses: actions/download-artifact@v6
       with:
         name: binaries-linux-amd64
         path: dist/
