@@ -149,20 +149,10 @@ Examples:
 				cfg.InteractiveMode = true
 			}
 
-			// Create TUI model early if interactive mode to capture all logs
-			var tuiModel *execution.EnhancedTUIModel
-			var logWriter io.Writer = os.Stdout
+			// Initialize logger
+			logWriter := io.Writer(os.Stdout)
 
-			if interactive {
-				fmt.Fprintf(os.Stderr, "[DEBUG INIT] Interactive mode detected, creating TUI model\n")
-				tuiModel = execution.NewEnhancedTUIModel()
-				logWriter = tuiModel.GetLogWriter()
-				fmt.Fprintf(os.Stderr, "[DEBUG INIT] TUI model created, logger will use TUI writer\n")
-			} else {
-				fmt.Fprintf(os.Stderr, "[DEBUG INIT] Non-interactive mode, using stdout\n")
-			}
-
-			// Initialize logger - redirect to TUI if in interactive mode
+			// Initialize logger
 			log := logger.NewEnhanced(cfg.LogLevel, logger.LogFormat(cfg.LogFormat), logWriter)
 
 			// Set display mode based on verbosity flag or log level
@@ -488,20 +478,9 @@ Examples:
 			// Print execution start with formatter
 			log.PrintExecutionStart()
 
-			// Setup TUI if interactive mode is requested
-			if interactive && tuiModel != nil {
-				// Attach TUI as observer to execution engine to receive live events
-				executionEngine.AttachObserver(tuiModel)
-				// Start TUI in a goroutine
-				go func() {
-					if err := tuiModel.Start(); err != nil {
-						log.Warn("Failed to start interactive TUI: %v", err)
-					}
-				}()
-				// Wait for TUI to be ready before starting playbook
-				if err := tuiModel.WaitForReady(5 * time.Second); err != nil {
-					log.Warn("TUI startup timeout: %v", err)
-				}
+			// Setup interactive mode if requested
+			if interactive {
+				log.Info("Interactive mode enabled")
 			}
 
 			// Set up signal handler callbacks for graceful shutdown
@@ -566,13 +545,8 @@ Examples:
 			var duration time.Duration
 			startTime := time.Now()
 
-			if interactive && tuiModel != nil {
+			if interactive {
 				// === INTERACTIVE MODE ===
-				// In interactive mode:
-				// 1. Run playbook in a goroutine
-				// 2. Run TUI as the main blocking call
-				// 3. TUI monitors execution via observer pattern
-
 				log.Info("Starting playbook execution in interactive mode")
 
 				// Channel to receive execution result
@@ -582,16 +556,11 @@ Examples:
 				}, 1)
 
 				// Run playbook in background
-				go func() {
-					playbookResult, execErr := executionEngine.ExecutePlaybook(ctx, playbook)
-					resultChan <- struct {
-						result *types.PlaybookResult
-						err    error
-					}{playbookResult, execErr}
-				}()
-
-				// Wait for interactive mode to finish (blocking call)
-				tuiModel.WaitForExit()
+				playbookResult, execErr := executionEngine.ExecutePlaybook(ctx, playbook)
+				resultChan <- struct {
+					result *types.PlaybookResult
+					err    error
+				}{playbookResult, execErr}
 
 				// Get execution result
 				execResult := <-resultChan

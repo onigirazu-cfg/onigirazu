@@ -42,6 +42,17 @@ func NewRegistry() *Registry {
 	registry.RegisterModule(NewFirewallModule())
 	registry.RegisterModule(NewConfigModule())
 
+	// New modules for completeness
+	registry.RegisterModule(NewFailModule())
+	registry.RegisterModule(NewPauseModule())
+	registry.RegisterModule(NewScriptModule())
+	registry.RegisterModule(NewWaitForModule())
+	registry.RegisterModule(NewAuthorizedKeyModule())
+	registry.RegisterModule(NewBlockinfileModule())
+	registry.RegisterModule(NewAptModule())
+	registry.RegisterModule(NewYumModule())
+	registry.RegisterModule(NewURIModule())
+
 	// Docker/Container modules
 	registry.RegisterModule(NewDockerContainerModule())
 	registry.RegisterModule(NewDockerImageModule())
