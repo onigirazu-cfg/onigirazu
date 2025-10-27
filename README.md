@@ -1,6 +1,6 @@
 # Onigirazu
 
-**Current Release:** v1.52.0 — [Comprehensive Documentation Release](https://github.com/onigirazu-cfg/onigirazu/releases/tag/v1.52.0)
+**Current Release:** v1.54.0 — [Interactive Mode Production Release](https://github.com/onigirazu-cfg/onigirazu/releases/tag/v1.54.0)
 
 Onigirazu is a modern, high-performance configuration management tool written in Go, inspired by Ansible. It provides a simple yet powerful way to automate infrastructure configuration, application deployment, and system administration tasks.
 
@@ -14,7 +14,8 @@ Onigirazu is a modern, high-performance configuration management tool written in
 - **📊 State Management**: Track changes and system state with rollback support
 - **🎯 5 Ad-hoc Input Formats**: Including unique natural language support
 - **📚 22+ Built-in Modules**: Comprehensive automation capabilities
-- **📖 Complete Documentation**: 2,500+ lines of guides for configuration, security, and testing (v1.52.0+)
+- **📖 Complete Documentation**: 2,500+ lines of guides for configuration, security, and testing
+- **🖥️ Interactive Mode (v1.54.0+)**: Real-time TUI dashboard with live logs, mode switching, and graceful control
 
 ## Features
 
@@ -36,6 +37,7 @@ Onigirazu is a modern, high-performance configuration management tool written in
 - **Drift Detection**: Detect and automatically fix configuration drift
 - **Enhanced Logging**: Structured logging with multiple output formats
 - **Progress Tracking**: Real-time execution progress with visual indicators
+- **Interactive Mode**: Beautiful TUI dashboard with live log streaming, multi-mode display switching, and graceful shutdown
 - **Caching System**: Intelligent caching for improved performance (facts, templates, packages)
 - **Retry Logic**: Configurable retry mechanisms with exponential backoff
 - **Conditional Execution**: Skip tasks based on conditions
@@ -48,8 +50,8 @@ Onigirazu is a modern, high-performance configuration management tool written in
 - **Variable Interpolation**: Dynamic variable substitution
 - **Error Handling**: Comprehensive error handling and reporting
 - **Audit & Analytics**: Track execution history, performance metrics, and audit data with `audit` command
-- **Complete Configuration Reference**: 35+ configuration options fully documented (v1.52.0+)
-- **Security Policy Guide**: 13+ security options fully documented (v1.52.0+)
+- **Complete Configuration Reference**: 35+ configuration options fully documented
+- **Security Policy Guide**: 13+ security options fully documented
 
 ## Installation
 
@@ -173,6 +175,66 @@ onigirazu apply playbook.yaml -i inventory.yaml
 
 - **[Playbook Format Guide](docs/examples/README.md)** - Real playbook examples and patterns
 - **[Playbook Types Documentation](docs/api/pkg/types.md)** - Technical type definitions
+
+## 🖥️ Interactive Mode (v1.54.0+)
+
+Interactive Mode provides a beautiful, responsive terminal UI dashboard for real-time execution monitoring. Perfect for long-running playbooks, debugging, and interactive control.
+
+### Enable Interactive Mode
+
+Simply add the `--interactive` flag to any playbook execution:
+
+```bash
+onigirazu apply playbook.yaml -i inventory.yaml --interactive
+```
+
+### Features
+
+- **📊 Live Log Dashboard**: Real-time log streaming with automatic scrolling
+- **🔄 Multi-Mode Display**: Switch between NORMAL, VERBOSE, and DEBUG modes
+- **📈 Execution Statistics**: Track progress with task counts and timing
+- **⌨️ Keyboard Control**: Responsive interactive controls
+- **🎯 Graceful Shutdown**: Stop execution cleanly with proper cleanup
+
+### Keyboard Controls
+
+| Key | Action |
+|-----|--------|
+| **V** | Toggle VERBOSE mode (show more details) |
+| **D** | Toggle DEBUG mode (show debug information) |
+| **N** | Switch to NORMAL mode (less verbose) |
+| **S** | Show execution statistics |
+| **H** | Display help overlay |
+| **↑/↓** | Scroll logs up/down |
+| **Page Up/Down** | Page scroll logs |
+| **G** | Graceful stop (clean shutdown) |
+| **Q** | Quit TUI (without stopping execution) |
+| **Ctrl+C** | Force quit (emergency exit) |
+
+### Example Workflow
+
+```bash
+# 1. Start your playbook with interactive mode
+onigirazu apply deployment.yaml -i "ubuntu@server1" --interactive
+
+# 2. Watch the live dashboard
+# 3. Press V to see verbose logs if you want more detail
+# 4. Press S to check progress statistics
+# 5. Press G to gracefully stop if needed
+# 6. Press Q to exit TUI when done
+```
+
+### Display Modes
+
+| Mode | What You See |
+|------|--------------|
+| **NORMAL** | Standard task output and errors only |
+| **VERBOSE** | Detailed output with variable values and timestamps |
+| **DEBUG** | Complete debug information for troubleshooting |
+
+All modes show real-time updates as tasks execute. The dashboard automatically updates at 30 FPS for smooth performance.
+
+📖 **For detailed interactive mode guide, see [docs/INTERACTIVE_MODE.md](docs/INTERACTIVE_MODE.md)**
 
 ## Playbook Format
 
