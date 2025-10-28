@@ -9,6 +9,7 @@ This document provides comprehensive documentation for all built-in modules in O
 - [File System Modules](#-file-system-modules)
 - [Configuration Modules](#-configuration-modules)
 - [Service Modules](#-service-modules)
+- [System Control Modules](#-system-control-modules)
 - [Package Modules](#package-modules)
 - [Network Modules](#network-modules)
 - [System Connectivity](#-system-connectivity)
@@ -747,6 +748,235 @@ Advanced systemd service management.
     name: "unwanted.service"
     masked: true
 ```
+
+## 🎛️ System Control Modules
+
+### sysctl
+
+Manage kernel parameters via sysctl. Configure kernel tuning for performance and system behavior.
+
+#### Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `name` | string | - | Sysctl key (required) |
+| `value` | string | - | Sysctl value (required) |
+| `state` | string | `present` | Parameter state (`present` or `absent`) |
+| `sysctl_file` | string | `/etc/sysctl.d/99-onigirazu.conf` | Configuration file for persistence |
+| `persist` | boolean | `true` | Persist parameter to sysctl file |
+| `reload` | boolean | `true` | Reload sysctl settings after change |
+
+#### Example
+
+```yaml
+- name: "Enable IP forwarding"
+  sysctl:
+    name: "net.ipv4.ip_forward"
+    value: "1"
+    state: "present"
+    persist: true
+
+- name: "Configure TCP parameters"
+  sysctl:
+    name: "net.ipv4.tcp_max_syn_backlog"
+    value: "2048"
+    sysctl_file: "/etc/sysctl.d/network.conf"
+
+- name: "Remove custom kernel parameter"
+  sysctl:
+    name: "kernel.custom_param"
+    state: "absent"
+```
+
+#### Return Values
+
+```json
+{
+  "sysctl_key": "net.ipv4.ip_forward",
+  "current_value": "0",
+  "desired_value": "1",
+  "changed": true,
+  "msg": "Kernel parameter net.ipv4.ip_forward set to 1",
+  "persisted_to_file": "/etc/sysctl.d/99-onigirazu.conf"
+}
+```
+
+#### Common Use Cases
+
+```yaml
+# Enable IP forwarding for router
+- sysctl:
+    name: "net.ipv4.ip_forward"
+    value: "1"
+
+# Increase max connections for web server
+- sysctl:
+    name: "net.core.somaxconn"
+    value: "4096"
+
+# Tune TCP parameters
+- sysctl:
+    name: "net.ipv4.tcp_max_syn_backlog"
+    value: "2048"
+
+# Configure memory management
+- sysctl:
+    name: "vm.swappiness"
+    value: "10"
+```
+
+### reboot
+
+Reboot the system with optional pre-reboot checks and delays.
+
+#### Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `pre_reboot_delay` | integer | `0` | Delay in seconds before reboot |
+| `msg` | string | "System will reboot in a few seconds" | Reboot message |
+| `test_boot` | boolean | `false` | Test boot without rebooting |
+| `reboot_command` | string | - | Custom reboot command |
+
+#### Example
+
+```yaml
+- name: "Reboot system immediately"
+  reboot:
+
+- name: "Reboot with delay and notification"
+  reboot:
+    pre_reboot_delay: 60
+    msg: "System maintenance - rebooting in 1 minute"
+
+- name: "Test boot check"
+  reboot:
+    test_boot: true
+
+- name: "Custom reboot procedure"
+  reboot:
+    reboot_command: "shutdown -r now"
+    pre_reboot_delay: 30
+```
+
+#### Return Values
+
+```json
+{
+  "host": "server01",
+  "reboot_initiated": true,
+  "msg": "System reboot scheduled to start in 1 minute",
+  "changed": true
+}
+```
+
+#### Important Notes
+
+- Reboot is scheduled with `shutdown -r +1` (1 minute delay) to allow playbook to complete
+- Pre-reboot notifications are sent via `wall` command if delay is set
+- The module execution returns before actual reboot occurs
+- Use in playbooks with proper error handling
+
+### mount
+
+Control active and persistent filesystem mounts. Manage mount points in /etc/fstab and current mount status.
+
+#### Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `path` | string | - | Mount point path (required) |
+| `src` | string | - | Device/source for state=present |
+| `state` | string | `present` | Mount state |
+| `fstype` | string | `defaults` | Filesystem type |
+| `opts` | string | `defaults` | Mount options |
+| `backup` | boolean | `true` | Backup /etc/fstab before changes |
+
+#### States
+
+- `present`: Add to fstab and mount
+- `absent`: Remove from fstab and unmount
+- `mounted`: Ensure filesystem is mounted
+- `unmounted`: Ensure filesystem is unmounted
+
+#### Example
+
+```yaml
+- name: "Mount NFS share"
+  mount:
+    path: "/mnt/nfs"
+    src: "192.168.1.100:/export/data"
+    state: "present"
+    fstype: "nfs"
+    opts: "defaults,nfsvers=4.0,hard,intr"
+
+- name: "Mount USB drive"
+  mount:
+    path: "/mnt/usb"
+    src: "/dev/sdb1"
+    state: "present"
+    fstype: "ext4"
+    opts: "noatime,defaults"
+
+- name: "Unmount temporary mount"
+  mount:
+    path: "/mnt/tmp"
+    state: "absent"
+
+- name: "Ensure data partition is mounted"
+  mount:
+    path: "/data"
+    state: "mounted"
+```
+
+#### Return Values
+
+```json
+{
+  "path": "/mnt/nfs",
+  "src": "192.168.1.100:/export/data",
+  "fstype": "nfs",
+  "opts": "defaults,nfsvers=4.0",
+  "changed": true,
+  "msg": "Mount point /mnt/nfs configured and mounted",
+  "mounted": true,
+  "added_to_fstab": true
+}
+```
+
+#### Common Use Cases
+
+```yaml
+# Production NFS mount with HA options
+- mount:
+    path: "/data"
+    src: "nfs-server:/export/prod"
+    fstype: "nfs"
+    opts: "defaults,hard,intr,bg,nfsvers=4"
+    state: "present"
+
+# Data drive with optimizations
+- mount:
+    path: "/var/lib/mysql"
+    src: "/dev/sdb1"
+    fstype: "ext4"
+    opts: "noatime,nodiratime,defaults"
+    state: "present"
+
+# Loop device or ISO mount
+- mount:
+    path: "/mnt/iso"
+    src: "/path/to/image.iso"
+    fstype: "iso9660"
+    opts: "ro,loop"
+    state: "present"
+```
+
+#### Troubleshooting
+
+- **Mount fails after adding to fstab**: Check filesystem type and options are correct
+- **Permission denied**: Ensure running with appropriate privileges (sudo/become)
+- **Device not found**: Verify source path/device exists and is accessible
 
 ## 📦 Package Modules
 
