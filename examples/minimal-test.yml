@@ -3,5 +3,6 @@ plays:
   - name: "Minimal Test"
     hosts: all
     tasks:
-      - name: "Test command"
-        command: "echo 'Hello World'"
+      - name: "Display greeting message"
+        debug:
+          msg: "Hello World"

@@ -7,14 +7,9 @@ plays:
     hosts: cs_server
     tasks:
       # System information
-      - name: "Get system information"
-        command:
-          cmd: "uname -a"
-        register: system_info
-
       - name: "Display system info"
-        shell:
-          cmd: "echo 'System: {{ system_info.stdout }}'"
+        debug:
+          msg: "System: {{ ansible_facts.system }} {{ ansible_facts.distribution }} {{ ansible_facts.distribution_version }}"
       # Install essential packages
       - name: "Install essential tools"
         package:
@@ -46,13 +41,13 @@ plays:
             echo "Uptime: $(uptime)"
       # Test the script
       - name: "Run welcome script"
-        shell:
-          cmd: "/home/usx/scripts/welcome.sh"
+        script:
+          path: "/home/usx/scripts/welcome.sh"
         register: welcome_output
 
       - name: "Display welcome output"
-        shell:
-          cmd: "echo '{{ welcome_output.stdout }}'"
+        debug:
+          msg: "{{ welcome_output.stdout }}"
       # Create a simple config file
       - name: "Create server config"
         file:
@@ -67,10 +62,10 @@ plays:
           mode: "0644"
       # Check disk space
       - name: "Check disk space"
-        shell:
-          cmd: "df -h /"
+        stat:
+          path: "/"
         register: disk_space
 
       - name: "Display disk space"
-        shell:
-          cmd: "echo 'Disk space: {{ disk_space.stdout }}'"
+        debug:
+          msg: "Root filesystem available: {{ disk_space.stat.size | filesizeformat }}"

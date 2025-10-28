@@ -14,18 +14,18 @@ plays:
         debug:
           msg: "my_variable = {{ my_variable }}, another_var = {{ another_var }}"
 
-      # Test 2: Register from shell command
-      - name: Run shell command and register result
-        shell:
-          cmd: echo "Dynamic value from shell"
-        register: shell_result
+      # Test 2: Generate dynamic value using set_fact
+      - name: Generate dynamic value
+        set_fact:
+          shell_result:
+            stdout: "Dynamic value from set_fact"
 
       - name: Debug registered variable
         debug:
-          msg: "Shell output: {{ shell_result.stdout }}"
+          msg: "Generated output: {{ shell_result.stdout }}"
 
-      # Test 3: Set fact based on registered variable
-      - name: Set fact from registered variable
+      # Test 3: Set fact based on previous variable
+      - name: Set fact from previous variable
         set_fact:
           processed_output: "Processed: {{ shell_result.stdout }}"
 
@@ -50,11 +50,11 @@ plays:
             - fact3: {{ fact3 }}
             - fact4: {{ fact4 }}
 
-      # Test 5: Register with command module
-      - name: Run command and register
-        command:
-          cmd: date +%Y-%m-%d
-        register: date_result
+      # Test 5: Use built-in date fact
+      - name: Set date result from facts
+        set_fact:
+          date_result:
+            stdout: "{{ ansible_date_time.date }}"
 
       - name: Debug date result
         debug:

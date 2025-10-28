@@ -108,16 +108,16 @@ tasks:
           regexp: 'Initial deployment'
           replace: 'Updated production deployment'
 
-      - name: "Display updated file content"
-        command: "cat {{ test_file }}"
+      - name: "Read updated file content"
+        slurp:
+          src: "{{ test_file }}"
         register: updated_content
-        changed_when: false
 
       - name: "Show changes made"
         debug:
           msg: |
             ✓ File content updated:
-            {{ updated_content.stdout }}
+            {{ updated_content.content | b64decode }}
 
   # ===== Task Group 4: File Statistics =====
 

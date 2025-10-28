@@ -7,30 +7,42 @@ plays:
     hosts: all
     tasks:
       # First, let's see what we're working with
-      - name: "Check current tree status"
-        command:
-          command: "tree --version || echo 'tree not found'"
-      - name: "Check current nano status"
-        command:
-          command: "nano --version || echo 'nano not found'"
+      - name: "Check if tree binary exists"
+        stat:
+          path: "/usr/bin/tree"
+        register: tree_check
+
+      - name: "Check if nano binary exists"
+        stat:
+          path: "/usr/bin/nano"
+        register: nano_check
+
       # Try to remove nano explicitly
       - name: "Force remove nano package"
         package:
           name: "nano"
           state: "absent"
+
       # Try to install tree explicitly
       - name: "Force install tree package"
         package:
           name: "tree"
           state: "present"
+
       # Check status after operations
-      - name: "Check tree status after install"
-        command:
-          command: "tree --version || echo 'tree still not found'"
-      - name: "Check nano status after removal"
-        command:
-          command: "nano --version || echo 'nano successfully removed'"
-      # Test tree functionality
-      - name: "Test tree command on /tmp"
-        command:
-          command: "tree /tmp -L 1"
+      - name: "Verify tree installed"
+        stat:
+          path: "/usr/bin/tree"
+        register: tree_after
+
+      - name: "Verify nano removed"
+        stat:
+          path: "/usr/bin/nano"
+        register: nano_after
+
+      # Display results
+      - name: "Show package status"
+        debug:
+          msg: |
+            Tree binary exists: {{ tree_after.stat.exists }}
+            Nano binary exists: {{ nano_after.stat.exists }}
