@@ -1,0 +1,147 @@
+# Onigirazu Production Configuration (v1.55.1)
+#
+# Hardened configuration for production deployments.
+# Emphasizes security, reliability, and observability.
+
+# ============================================================================
+# EXECUTION SETTINGS
+# ============================================================================
+
+# Production: moderate concurrency, careful execution
+max_concurrency: 5
+
+# Production: generous timeout for critical operations
+default_timeout: 2m
+
+# Production: retry failed tasks
+retry_attempts: 5
+retry_delay: 10s
+
+# ============================================================================
+# LOGGING
+# ============================================================================
+
+# JSON format for production log aggregation (ELK, Splunk, DataDog, etc.)
+log_level: info
+log_format: json
+
+# ============================================================================
+# SECURITY - HARDENED
+# ============================================================================
+
+# Restrict shell commands in production
+allow_shell_commands: false
+
+# Extensive blocklist for production safety
+blocked_commands:
+  - "rm -rf"
+  - "format"
+  - "mkfs"
+  - "dd if="
+  - ":(){ :|:& };:"
+  - "shutdown"
+  - "reboot"
+  - "halt"
+  - "poweroff"
+  - ".* | sh$"               # Pipe to shell
+  - ".* && rm"               # Chaining with rm
+  - "curl .*|.*sh"           # Download and execute
+  - "wget .*|.*sh"           # Download and execute
+  - "apt-get remove"         # Package removal (prevent accidents)
+  - "yum remove"
+  - "dnf remove"
+
+# ============================================================================
+# PERFORMANCE
+# ============================================================================
+
+# Production: enable caching for consistent performance
+enable_caching: true
+cache_ttl: 5m
+
+# Production: verify file integrity
+enable_checksum: true
+
+# Production: no experimental features
+enable_parallel: false
+
+# ============================================================================
+# EXECUTION MODES
+# ============================================================================
+
+# Production: never dry_run, never check_mode
+dry_run: false
+check_mode: false
+verbose: false
+
+# Production: show differences for audit trail
+show_diff: true
+
+# ============================================================================
+# UI SETTINGS
+# ============================================================================
+
+# Production: JSON output for parsing and logging
+output_format: json
+
+# Production: no interactive mode
+interactive_mode: false
+
+# Suppress colors if output goes to log file
+color_output: true
+progress_bar: false
+
+# ============================================================================
+# SSH/CONNECTION SETTINGS - HARDENED
+# ============================================================================
+
+# Production: strict SSH host key verification (security critical)
+ssh_strict_host_key: true
+
+# Production: standard known_hosts location
+ssh_known_hosts_file: ~/.ssh/known_hosts
+
+# Production: NEVER ignore host key verification
+default_insecure_ignore_host_key: false
+
+# Production: reasonable connection timeout
+ssh_timeout: 60s
+ssh_keepalive: 60s
+ssh_max_sessions: 5
+
+# Production: reuse connections for efficiency
+connection_reuse: true
+
+# ============================================================================
+# MONITORING & METRICS
+# ============================================================================
+
+# Production: enable metrics for observability
+enable_metrics: true
+metrics_port: 9090
+metrics_path: /metrics
+
+# Production: enable profiling for troubleshooting
+enable_profiling: false
+
+# ============================================================================
+# VAULT INTEGRATION
+# ============================================================================
+
+# Production: use Vault for secrets (not inline tokens)
+vault_enabled: true
+
+# Configure your Vault server
+vault_address: "https://vault.example.com:8200"
+
+# Use environment variable instead: export ONIGIRAZU_VAULT_TOKEN=...
+# Never put tokens in config files!
+vault_token: ""
+
+# ============================================================================
+# SYNTAX
+# ============================================================================
+
+# Production: enforce consistent syntax
+preferred_module_syntax: nested
+enforce_module_syntax: true

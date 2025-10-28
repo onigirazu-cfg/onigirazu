@@ -1,0 +1,19 @@
+# Onigirazu Minimal Configuration (v1.55.1)
+#
+# Stripped-down configuration with only essential settings.
+# Perfect for quick setups or embedded systems.
+#
+# All other settings use built-in defaults.
+
+# Parallel execution
+max_concurrency: 10
+
+# Task timeout
+default_timeout: 30s
+
+# Logging
+log_level: info
+
+# Retry policy
+retry_attempts: 3
+retry_delay: 5s

@@ -79,6 +79,11 @@ archives:
       - LICENSE*
       - docs/**/*
       - examples/**/*
+      # Configuration files (included in all archives for all platforms)
+      - src: ./examples/onigirazu.default.yml
+      - src: ./examples/onigirazu.minimal.yml
+      - src: ./examples/onigirazu.production.yml
+      - src: ./examples/onigirazu.docker.yml
 
 checksum:
   name_template: 'checksums.txt'
@@ -306,6 +311,24 @@ nfpms:
         dst: /usr/share/doc/onigirazu/docs
         file_info:
           mode: 0644
+      # Configuration files - examples for users
+      - src: ./examples/onigirazu.default.yml
+        dst: /usr/share/onigirazu/onigirazu.default.yml
+        file_info:
+          mode: 0644
+      - src: ./examples/onigirazu.minimal.yml
+        dst: /usr/share/onigirazu/examples/onigirazu.minimal.yml
+        file_info:
+          mode: 0644
+      - src: ./examples/onigirazu.production.yml
+        dst: /usr/share/onigirazu/examples/onigirazu.production.yml
+        file_info:
+          mode: 0644
+      - src: ./examples/onigirazu.docker.yml
+        dst: /usr/share/onigirazu/examples/onigirazu.docker.yml
+        file_info:
+          mode: 0644
+      # Legacy example files (for backward compatibility)
       - src: ./docs/examples/config.example.yml
         dst: /usr/share/onigirazu/config.example.yml
         file_info:
@@ -318,6 +341,7 @@ nfpms:
         dst: /usr/share/onigirazu/playbook.example.yml
         file_info:
           mode: 0644
+      # Directories
       - dst: /var/log/onigirazu
         type: dir
         file_info:

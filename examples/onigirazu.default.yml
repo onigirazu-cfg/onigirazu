@@ -1,0 +1,233 @@
+# Onigirazu Default Configuration File (v1.55.1)
+#
+# This is the default configuration with all available options explained.
+# Use this as a starting point for custom configurations.
+#
+# See https://github.com/onigirazu-cfg/onigirazu/docs/CONFIGURATION_REFERENCE.md
+# for comprehensive documentation.
+
+# ============================================================================
+# EXECUTION SETTINGS
+# ============================================================================
+
+# Maximum number of parallel task executions across hosts
+# - 1: Serial execution (slowest, most stable)
+# - 10: Default (good balance for most workloads)
+# - CPU_CORES: CPU-intensive operations
+# - 2*CPU_CORES: I/O-intensive operations
+max_concurrency: 10
+
+# Default timeout for task execution (if not specified per-task)
+# Format: 30s, 5m, 1h
+# Recommended: 30s for network ops, 5m for package installation
+default_timeout: 30s
+
+# Number of times to retry failed tasks (per host)
+# Set to 0 to disable retries
+retry_attempts: 3
+
+# Delay between retry attempts
+# Format: 0s (immediate), 5s (default), 10s (slower networks)
+retry_delay: 5s
+
+# ============================================================================
+# LOGGING CONFIGURATION
+# ============================================================================
+
+# Logging verbosity level
+# - error:   Only errors (minimal output)
+# - warn:    Warnings and errors
+# - info:    General information (default - recommended for production)
+# - debug:   Detailed diagnostic information
+# - trace:   All internal operations (very verbose)
+log_level: info
+
+# Log output format
+# - text: Human-readable format (default)
+# - json: Structured JSON (for log aggregation systems like ELK, Splunk)
+log_format: text
+
+# ============================================================================
+# SECURITY SETTINGS
+# ============================================================================
+
+# Allow execution of command: and shell: modules
+# Set to false to prevent arbitrary command execution
+allow_shell_commands: true
+
+# Command patterns to block globally (in addition to security policies)
+# Patterns are matched as substrings; use regex patterns for complex rules
+blocked_commands:
+  - "rm -rf"              # Recursive delete
+  - "format"              # Disk formatting
+  - "mkfs"                # Filesystem creation
+  - "dd if="              # Direct disk writing
+  - ":(){ :|:& };:"       # Fork bomb
+  - "shutdown"            # System shutdown
+  - "reboot"              # System reboot
+  - "halt"                # System halt
+  - "poweroff"            # Power off system
+
+# ============================================================================
+# PERFORMANCE TUNING
+# ============================================================================
+
+# Enable caching of task results to speed up repeated runs
+enable_caching: true
+
+# How long to keep cached results in memory
+# Format: 30s, 5m, 1h
+cache_ttl: 5m
+
+# Enable checksum verification for file operations
+# Ensures file integrity but adds slight overhead
+enable_checksum: true
+
+# Enable parallel execution of independent tasks
+# Warning: Experimental feature, may not work with all modules
+enable_parallel: false
+
+# Strategy for parallel execution
+# - linear:  Wait for all hosts to finish each task (synchronized)
+# - free:    Hosts proceed independently (faster but less predictable)
+parallel_strategy: linear
+
+# ============================================================================
+# EXECUTION MODES
+# ============================================================================
+
+# Simulate execution without making any actual changes
+# Shows what would be done without doing it
+dry_run: false
+
+# Only check syntax without executing playbooks
+# Useful for pre-flight validation
+check_mode: false
+
+# Enable verbose output (equivalent to log_level: debug)
+# Overrides log_level setting if true
+verbose: false
+
+# Show differences when files are modified
+# Displays before/after for text file changes
+show_diff: true
+
+# ============================================================================
+# USER INTERFACE SETTINGS
+# ============================================================================
+
+# Use colored output in terminal (ANSI colors)
+# Disable for CI/CD systems that don't support colors
+color_output: true
+
+# Show progress bar during execution
+# Helps visualize long-running tasks
+progress_bar: true
+
+# Interactive mode with prompts (for ad-hoc commands)
+# Prompts for confirmation before dangerous operations
+interactive_mode: false
+
+# Output format for results
+# - text: Human-readable format (default)
+# - json: Structured JSON output
+# - yaml: YAML format
+output_format: text
+
+# ============================================================================
+# SSH/CONNECTION SETTINGS
+# ============================================================================
+
+# SSH connection timeout per host
+# If SSH connection takes longer, it fails and retries
+ssh_timeout: 30s
+
+# SSH keepalive interval (prevents timeout on stable connections)
+# Sends periodic messages to keep connection alive
+ssh_keepalive: 60s
+
+# Maximum concurrent SSH sessions per host
+# Limits simultaneous connections to prevent overwhelming remote systems
+ssh_max_sessions: 10
+
+# Reuse SSH connections across tasks
+# Speeds up execution by reusing already established connections
+connection_reuse: true
+
+# Enable strict SSH host key verification
+# Warning: Set to false only for development; production should use true
+# When false, allows connecting to hosts with unknown keys (security risk)
+ssh_strict_host_key: false
+
+# Path to SSH known_hosts file
+# Empty string uses system default (~/.ssh/known_hosts)
+ssh_known_hosts_file: ""
+
+# Ignore SSH host key verification completely
+# INSECURE - Never use in production!
+# Only for development environments with test hosts
+default_insecure_ignore_host_key: false
+
+# ============================================================================
+# MONITORING & METRICS
+# ============================================================================
+
+# Enable metrics collection (Prometheus format)
+# Exposes execution statistics for monitoring systems
+enable_metrics: false
+
+# Port for metrics HTTP server
+# Metrics available at http://localhost:9090/metrics
+metrics_port: 9090
+
+# HTTP path for metrics endpoint
+metrics_path: /metrics
+
+# Enable CPU and memory profiling
+# Helps identify performance bottlenecks
+# Generates pprof output for analysis
+enable_profiling: false
+
+# ============================================================================
+# VAULT INTEGRATION (Secrets Management)
+# ============================================================================
+
+# Enable HashiCorp Vault for secrets management
+vault_enabled: false
+
+# Vault server address
+# Example: https://vault.example.com:8200
+vault_address: ""
+
+# Vault authentication token
+# Note: Better to use ONIGIRAZU_VAULT_TOKEN environment variable
+# to avoid exposing secrets in config files
+vault_token: ""
+
+# ============================================================================
+# SYNTAX PREFERENCES
+# ============================================================================
+
+# Preferred module syntax style
+# - nested: module:\n  arg1: value1\n  arg2: value2 (recommended)
+# - flat:   module: arg1=value1 arg2=value2
+preferred_module_syntax: nested
+
+# Enforce the preferred syntax
+# If true, rejects playbooks using the other syntax style
+enforce_module_syntax: false
+
+# ============================================================================
+# ENVIRONMENT VARIABLE OVERRIDES
+# ============================================================================
+#
+# All configuration options can be overridden via environment variables:
+#
+#   ONIGIRAZU_MAX_CONCURRENCY=20
+#   ONIGIRAZU_TIMEOUT=2m
+#   ONIGIRAZU_LOG_LEVEL=debug
+#   ONIGIRAZU_DRY_RUN=true
+#   ONIGIRAZU_VAULT_TOKEN=secret_token
+#
+# Environment variables take precedence over config file settings.
+# Config file settings take precedence over built-in defaults.
