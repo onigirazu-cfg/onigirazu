@@ -46,7 +46,7 @@
     - name: "Deploy SSH private key"
       copy:
         content: "{{ bitwarden('ssh-keys', 'private_key') }}"
-        dest: "/home/{{ ansible_user }}/.ssh/id_rsa"
+        dest: "/home/{{ onigirazu_user_id }}/.ssh/id_rsa"
         mode: "0600"
 
     # Example 4: Use custom field from Bitwarden

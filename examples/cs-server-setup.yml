@@ -9,7 +9,7 @@ plays:
       # System information
       - name: "Display system info"
         debug:
-          msg: "System: {{ ansible_facts.system }} {{ ansible_facts.distribution }} {{ ansible_facts.distribution_version }}"
+          msg: "System: {{ onigirazu_os_family }} {{ onigirazu_distribution }} {{ onigirazu_distribution_version }}"
       # Install essential packages
       - name: "Install essential tools"
         package:

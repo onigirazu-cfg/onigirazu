@@ -18,8 +18,8 @@ connection: local
 gather_facts: yes
 
 vars:
-  test_file: "{{ ansible_env.HOME }}/test-config.txt"
-  backup_file: "{{ ansible_env.HOME }}/test-config.txt.backup"
+  test_file: "{{ onigirazu_env.HOME }}/test-config.txt"
+  backup_file: "{{ onigirazu_env.HOME }}/test-config.txt.backup"
   docker_image: "alpine:latest"
   test_message: "Initial server configuration at localhost"
 
