@@ -1,5 +1,13 @@
 # Docker Hub Setup Guide
 
+⚠️ **LEGACY DOCUMENTATION** - Docker Hub is no longer the primary Docker image registry.
+
+**Recommended**: See [DOCKER_GHCR_SETUP.md](./DOCKER_GHCR_SETUP.md) for the current GitHub Container Registry (GHCR) setup, which is integrated with the GitHub release workflow.
+
+This guide is kept for reference and may be deprecated in future versions.
+
+---
+
 This guide explains how to set up Docker Hub publishing for Onigirazu releases.
 
 ## Prerequisites
