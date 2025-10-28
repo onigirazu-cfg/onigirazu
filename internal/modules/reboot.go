@@ -84,7 +84,7 @@ func (m *RebootModule) performReboot(exec *executor.CommandExecutor, host types.
 			return m.failResult(result, fmt.Sprintf("test boot check failed: %v", err))
 		}
 		result.Output["test_boot_output"] = output
-		result.Output["msg"] = "System passed boot test - reboot cancelled (test_boot=true)"
+		result.Output["msg"] = "System passed boot test - reboot canceled (test_boot=true)"
 		result.Duration = time.Since(result.Timestamp)
 		return result, nil
 	}
