@@ -54,7 +54,7 @@ plays:
       - name: Set date result from facts
         set_fact:
           date_result:
-            stdout: "{{ ansible_date_time.date }}"
+            stdout: "{{ onigirazu_date_time.date }}"
 
       - name: Debug date result
         debug:
