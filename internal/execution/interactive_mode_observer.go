@@ -73,30 +73,6 @@ func NewInteractiveModeObserver(useColors bool) *InteractiveModeObserver {
 	}
 }
 
-// Screen management escape sequences
-const (
-	clearScreen   = "\033[2J" // Clear entire screen
-	cursorHome    = "\033[H"  // Move cursor to home (0,0)
-	cursorSave    = "\033[s"  // Save cursor position
-	cursorRestore = "\033[u"  // Restore cursor position
-	clearLine     = "\033[K"  // Clear from cursor to end of line
-)
-
-// clearAndHome clears the screen and moves cursor to home position
-func (im *InteractiveModeObserver) clearAndHome() {
-	fmt.Print(clearScreen + cursorHome)
-}
-
-// saveCursor saves the current cursor position
-func (im *InteractiveModeObserver) saveCursor() {
-	fmt.Print(cursorSave)
-}
-
-// restoreCursor restores the saved cursor position
-func (im *InteractiveModeObserver) restoreCursor() {
-	fmt.Print(cursorRestore)
-}
-
 // Start begins interactive mode with keyboard input handling
 func (im *InteractiveModeObserver) Start() error {
 	// Check if stdin is a TTY

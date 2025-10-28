@@ -108,14 +108,14 @@ func (m *URIModule) Execute(ctx context.Context, host types.Host, args map[strin
 
 	// Expected status codes
 	statusCodes := []int{200}
-	if statusVal, exists := args["status_code"]; exists {
+	if statusVal, ok := args["status_code"]; ok {
 		switch v := statusVal.(type) {
 		case float64:
 			statusCodes = []int{int(v)}
 		case []interface{}:
 			statusCodes = []int{}
 			for _, code := range v {
-				if codeInt, ok := code.(float64); ok {
+				if codeInt, codeOk := code.(float64); codeOk {
 					statusCodes = append(statusCodes, int(codeInt))
 				}
 			}
@@ -124,9 +124,7 @@ func (m *URIModule) Execute(ctx context.Context, host types.Host, args map[strin
 
 	// Note: validateCerts is parsed but Go's net/http handles SSL verification by default
 	// This parameter is kept for Ansible compatibility
-	if _, exists := args["validate_certs"]; exists {
-		// Parameter is accepted for compatibility, SSL validation is handled by Go's standard library
-	}
+	// Parameter is accepted for compatibility, SSL validation is handled by Go's standard library
 
 	timeout := 30
 	if timeoutVal, exists := args["timeout"]; exists {

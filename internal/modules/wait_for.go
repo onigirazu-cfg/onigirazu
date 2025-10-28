@@ -106,7 +106,7 @@ func (m *WaitForModule) Execute(ctx context.Context, host types.Host, args map[s
 		select {
 		case <-ctx.Done():
 			result.Success = false
-			result.Error = "context cancelled"
+			result.Error = "context canceled"
 			result.Duration = time.Since(startTime)
 			return result, nil
 		default:
