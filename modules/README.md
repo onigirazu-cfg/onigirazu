@@ -121,15 +121,16 @@ Execute commands on target hosts.
 #### Example
 
 ```yaml
-- name: "Check disk usage"
-  command:
-    cmd: "df -h"
-  register: "disk_usage"
+- name: "Get file stats for size checking"
+  stat:
+    path: "/var/log"
+  register: "log_dir_stats"
 
 - name: "Create backup directory"
-  command:
-    cmd: "mkdir -p /backup/{{ onigirazu_date_time.date }}"
-    creates: "/backup/{{ onigirazu_date_time.date }}"
+  file:
+    path: "/backup/{{ onigirazu_date_time.date }}"
+    state: "directory"
+    mode: "0755"
 ```
 
 #### Return Values
@@ -162,16 +163,20 @@ Execute shell commands with full shell features.
 #### Example
 
 ```yaml
-- name: "Process log files"
-  shell:
-    cmd: |
-      for log in /var/log/*.log; do
-        if [ -f "$log" ]; then
-          echo "Processing $log"
-          gzip "$log"
-        fi
-      done
-    chdir: "/var/log"
+# Find log files and compress them using archive module
+- name: "Find log files to compress"
+  find:
+    paths: "/var/log"
+    patterns: "*.log"
+    file_type: "file"
+  register: "log_files"
+
+- name: "Archive and compress log files"
+  archive:
+    path: "{{ log_files.files | map(attribute='path') | list }}"
+    dest: "/var/log/archive-{{ onigirazu_date_time.date }}.tar.gz"
+    format: "tar.gz"
+  when: "log_files.files | length > 0"
 ```
 
 ### script
