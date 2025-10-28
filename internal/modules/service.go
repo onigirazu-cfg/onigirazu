@@ -3,6 +3,7 @@ package modules
 import (
 	"context"
 	"fmt"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -61,6 +62,105 @@ func (m *ServiceModuleFixed) GetDescription() string {
 	return "Manage system services"
 }
 
+// PreCheckState checks if service is already in the desired state
+func (m *ServiceModuleFixed) PreCheckState(ctx context.Context, host types.Host, args map[string]interface{}) (*PreCheckResult, error) {
+	// Get service name
+	name, ok := args["name"].(string)
+	if !ok || name == "" {
+		return &PreCheckResult{
+			ShouldExecute: true,
+			Reason:        "No service name specified",
+		}, nil
+	}
+
+	state := getStringArg(args, "state", "started")
+	enabledVal := args["enabled"]
+	hasEnabledArg := enabledVal != nil
+
+	// For "restarted" and "reloaded" states, always execute as these are always changes
+	if state == "restarted" || state == "reloaded" {
+		return &PreCheckResult{
+			IsStateCorrect: false,
+			ShouldExecute:  true,
+			Reason:         fmt.Sprintf("Service %s action requires execution", state),
+			CurrentState: map[string]interface{}{
+				"action": state,
+			},
+		}, nil
+	}
+
+	var isRunning, isEnabled bool
+
+	// Use test service manager if available (for testing)
+	if m.testServiceManager != nil {
+		var err error
+		isRunning, err = m.testServiceManager.IsRunning(name)
+		if err != nil {
+			// Service doesn't exist or error - treat as not running
+			isRunning = false
+		}
+		isEnabled, err = m.testServiceManager.IsEnabled(name)
+		if err != nil {
+			// Service doesn't exist or error - treat as not enabled
+			isEnabled = false
+		}
+	} else {
+		// Check if service is running (fast: ~50ms via systemctl)
+		isRunningCmd := exec.CommandContext(ctx, "systemctl", "is-active", name)
+		isRunning = isRunningCmd.Run() == nil
+
+		// Check if service is enabled (fast: ~50ms via systemctl)
+		isEnabledCmd := exec.CommandContext(ctx, "systemctl", "is-enabled", name)
+		isEnabled = isEnabledCmd.Run() == nil
+	}
+
+	currentState := map[string]interface{}{
+		"running": isRunning,
+		"enabled": isEnabled,
+	}
+
+	// Check if desired state matches current state
+	allCorrect := true
+
+	// Check running state
+	switch state {
+	case "started":
+		if !isRunning {
+			allCorrect = false
+		}
+	case "stopped":
+		if isRunning {
+			allCorrect = false
+		}
+	}
+
+	// Check enabled state if specified
+	if hasEnabledArg {
+		desiredEnabled := getBoolArg(args, "enabled", false)
+		if desiredEnabled != isEnabled {
+			allCorrect = false
+		}
+	}
+
+	if allCorrect {
+		// State is already correct - skip execution
+		return &PreCheckResult{
+			IsStateCorrect: true,
+			ShouldExecute:  false,
+			Reason:         fmt.Sprintf("Service already in state: %s", state),
+			CurrentState:   currentState,
+		}, nil
+	}
+
+	// State needs to change - execute the operation
+	return &PreCheckResult{
+		IsStateCorrect: false,
+		ShouldExecute:  true,
+		Reason:         fmt.Sprintf("Service needs to be set to state: %s", state),
+		CurrentState:   currentState,
+	}, nil
+}
+
 // Execute manages system services
 func (m *ServiceModuleFixed) Execute(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
 	startTime := time.Now()
@@ -72,6 +172,20 @@ func (m *ServiceModuleFixed) Execute(ctx context.Context, host types.Host, args 
 		Changed:   false,
 		Output:    make(map[string]interface{}),
 		Timestamp: startTime,
+	}
+
+	// Pre-check: if state is already correct, skip execution
+	preCheck, err := m.PreCheckState(ctx, host, args)
+	if err == nil && preCheck.IsStateCorrect {
+		result.Success = true
+		result.Changed = false
+		result.Output = map[string]interface{}{
+			"message":       preCheck.Reason,
+			"pre_checked":   true,
+			"service_state": preCheck.CurrentState,
+		}
+		result.Duration = time.Since(startTime)
+		return result, nil
 	}
 
 	// Use CreateExecutor to get fresh executor for this host

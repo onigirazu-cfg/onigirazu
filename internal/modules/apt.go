@@ -26,6 +26,79 @@ func (m *AptModule) GetDescription() string {
 	return "Manage packages on Debian/Ubuntu systems using apt"
 }
 
+// PreCheckState checks if packages are already in the desired state
+// This enables idempotency by avoiding unnecessary apt-get calls
+func (m *AptModule) PreCheckState(ctx context.Context, host types.Host, args map[string]interface{}) (*PreCheckResult, error) {
+	// Get package names
+	var pkgNames []string
+	if nameVal, exists := args["name"]; exists {
+		switch v := nameVal.(type) {
+		case string:
+			if v != "" {
+				pkgNames = []string{v}
+			}
+		case []interface{}:
+			for _, pkg := range v {
+				if pkgStr, ok := pkg.(string); ok {
+					pkgNames = append(pkgNames, pkgStr)
+				}
+			}
+		}
+	}
+
+	state := "present"
+	if stateVal, exists := args["state"]; exists {
+		if stateStr, ok := stateVal.(string); ok {
+			state = stateStr
+		}
+	}
+
+	// If no packages specified, execute anyway
+	if len(pkgNames) == 0 {
+		return &PreCheckResult{
+			ShouldExecute: true,
+			Reason:        "No packages specified",
+		}, nil
+	}
+
+	// Check current package installation status using dpkg (fast: ~100ms)
+	// This is much faster than apt-get (~5000ms)
+	currentState := make(map[string]interface{})
+	allCorrect := true
+
+	for _, pkgName := range pkgNames {
+		cmd := exec.CommandContext(ctx, "dpkg", "-l", pkgName)
+		isInstalled := cmd.Run() == nil
+
+		currentState[pkgName] = isInstalled
+
+		// Check if desired state matches current state
+		if state == "present" && !isInstalled {
+			allCorrect = false
+		} else if state == "absent" && isInstalled {
+			allCorrect = false
+		}
+	}
+
+	if allCorrect {
+		// State is already correct - skip execution
+		return &PreCheckResult{
+			IsStateCorrect: true,
+			ShouldExecute:  false,
+			Reason:         fmt.Sprintf("Packages already in state: %s", state),
+			CurrentState:   currentState,
+		}, nil
+	}
+
+	// State needs to change - execute the operation
+	return &PreCheckResult{
+		IsStateCorrect: false,
+		ShouldExecute:  true,
+		Reason:         fmt.Sprintf("Packages need to be set to state: %s", state),
+		CurrentState:   currentState,
+	}, nil
+}
+
 func (m *AptModule) Execute(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
 	startTime := time.Now()
 
@@ -85,6 +158,28 @@ func (m *AptModule) Execute(ctx context.Context, host types.Host, args map[strin
 		}
 	}
 
+	// ✅ IDEMPOTENCY CHECK: Pre-check if packages are already in desired state
+	if len(pkgNames) > 0 && (state == "present" || state == "absent" || state == "latest") {
+		preCheck, err := m.PreCheckState(ctx, host, args)
+		if err != nil {
+			result.Success = false
+			result.Error = fmt.Sprintf("pre-check failed: %v", err)
+			result.Duration = time.Since(startTime)
+			return result, nil
+		}
+
+		// If state is already correct, skip execution
+		if preCheck.IsStateCorrect {
+			result.Success = true
+			result.Changed = false // ✅ IMPORTANT: No changes needed!
+			result.Output["state"] = state
+			result.Output["packages"] = pkgNames
+			result.Output["msg"] = preCheck.Reason
+			result.Duration = time.Since(startTime)
+			return result, nil
+		}
+	}
+
 	// Update cache if requested
 	if updateCache {
 		if err := m.updateAptCache(ctx); err != nil {
@@ -105,7 +200,7 @@ func (m *AptModule) Execute(ctx context.Context, host types.Host, args map[strin
 				result.Duration = time.Since(startTime)
 				return result, nil
 			}
-			result.Changed = true
+			result.Changed = true // ✅ CORRECT: We actually made changes
 		} else if state == "absent" {
 			if err := m.removePackages(ctx, pkgNames); err != nil {
 				result.Success = false
@@ -113,7 +208,7 @@ func (m *AptModule) Execute(ctx context.Context, host types.Host, args map[strin
 				result.Duration = time.Since(startTime)
 				return result, nil
 			}
-			result.Changed = true
+			result.Changed = true // ✅ CORRECT: We actually made changes
 		}
 	}
 

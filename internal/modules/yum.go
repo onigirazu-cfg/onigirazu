@@ -26,6 +26,77 @@ func (m *YumModule) GetDescription() string {
 	return "Manage packages on RedHat/CentOS/Fedora systems using yum"
 }
 
+// PreCheckState checks if packages are already in the desired state
+func (m *YumModule) PreCheckState(ctx context.Context, host types.Host, args map[string]interface{}) (*PreCheckResult, error) {
+	// Get package names
+	var pkgNames []string
+	if nameVal, exists := args["name"]; exists {
+		switch v := nameVal.(type) {
+		case string:
+			if v != "" {
+				pkgNames = []string{v}
+			}
+		case []interface{}:
+			for _, pkg := range v {
+				if pkgStr, ok := pkg.(string); ok {
+					pkgNames = append(pkgNames, pkgStr)
+				}
+			}
+		}
+	}
+
+	state := "present"
+	if stateVal, exists := args["state"]; exists {
+		if stateStr, ok := stateVal.(string); ok {
+			state = stateStr
+		}
+	}
+
+	// If no packages specified, execute anyway
+	if len(pkgNames) == 0 {
+		return &PreCheckResult{
+			ShouldExecute: true,
+			Reason:        "No packages specified",
+		}, nil
+	}
+
+	// Check current package installation status using rpm (fast: ~50ms)
+	currentState := make(map[string]interface{})
+	allCorrect := true
+
+	for _, pkgName := range pkgNames {
+		cmd := exec.CommandContext(ctx, "rpm", "-q", pkgName)
+		isInstalled := cmd.Run() == nil
+
+		currentState[pkgName] = isInstalled
+
+		// Check if desired state matches current state
+		if state == "present" && !isInstalled {
+			allCorrect = false
+		} else if state == "absent" && isInstalled {
+			allCorrect = false
+		}
+	}
+
+	if allCorrect {
+		// State is already correct - skip execution
+		return &PreCheckResult{
+			IsStateCorrect: true,
+			ShouldExecute:  false,
+			Reason:         fmt.Sprintf("Packages already in state: %s", state),
+			CurrentState:   currentState,
+		}, nil
+	}
+
+	// State needs to change - execute the operation
+	return &PreCheckResult{
+		IsStateCorrect: false,
+		ShouldExecute:  true,
+		Reason:         fmt.Sprintf("Packages need to be set to state: %s", state),
+		CurrentState:   currentState,
+	}, nil
+}
+
 func (m *YumModule) Execute(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
 	startTime := time.Now()
 
@@ -37,6 +108,17 @@ func (m *YumModule) Execute(ctx context.Context, host types.Host, args map[strin
 		Success:   true,
 		Changed:   false,
 		Output:    make(map[string]interface{}),
+	}
+
+	// Pre-check: if state is already correct, skip execution
+	preCheck, err := m.PreCheckState(ctx, host, args)
+	if err == nil && preCheck.IsStateCorrect {
+		result.Output["state"] = args["state"]
+		result.Output["packages"] = args["name"]
+		result.Output["msg"] = preCheck.Reason
+		result.Output["pre_checked"] = true
+		result.Duration = time.Since(startTime)
+		return result, nil
 	}
 
 	// Get parameters

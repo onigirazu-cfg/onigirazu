@@ -3,6 +3,7 @@ package modules
 import (
 	"context"
 	"fmt"
+	"os/exec"
 	"time"
 
 	"github.com/onigirazu-cfg/onigirazu/internal/executor"
@@ -29,6 +30,59 @@ func (m *UserModuleFixed) GetDescription() string {
 	return "Manages system users"
 }
 
+// PreCheckState checks if user is already in the desired state
+func (m *UserModuleFixed) PreCheckState(ctx context.Context, host types.Host, args map[string]interface{}) (*PreCheckResult, error) {
+	// Get username
+	username, ok := args["name"].(string)
+	if !ok || username == "" {
+		return &PreCheckResult{
+			ShouldExecute: true,
+			Reason:        "No username specified",
+		}, nil
+	}
+
+	state := "present"
+	if stateVal, exists := args["state"]; exists {
+		if stateStr, ok := stateVal.(string); ok {
+			state = stateStr
+		}
+	}
+
+	// Check current user existence using getent (fast: ~30ms)
+	cmd := exec.CommandContext(ctx, "getent", "passwd", username)
+	userExists := cmd.Run() == nil
+
+	currentState := map[string]interface{}{
+		"exists": userExists,
+	}
+
+	// Check if desired state matches current state
+	allCorrect := false
+	if state == "present" && userExists {
+		allCorrect = true
+	} else if state == "absent" && !userExists {
+		allCorrect = true
+	}
+
+	if allCorrect {
+		// State is already correct - skip execution
+		return &PreCheckResult{
+			IsStateCorrect: true,
+			ShouldExecute:  false,
+			Reason:         fmt.Sprintf("User already in state: %s", state),
+			CurrentState:   currentState,
+		}, nil
+	}
+
+	// State needs to change - execute the operation
+	return &PreCheckResult{
+		IsStateCorrect: false,
+		ShouldExecute:  true,
+		Reason:         fmt.Sprintf("User needs to be set to state: %s", state),
+		CurrentState:   currentState,
+	}, nil
+}
+
 func (m *UserModuleFixed) Execute(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
 	startTime := time.Now()
 
@@ -37,6 +91,20 @@ func (m *UserModuleFixed) Execute(ctx context.Context, host types.Host, args map
 		Host:      host.Name,
 		Module:    m.name,
 		Timestamp: startTime,
+	}
+
+	// Pre-check: if state is already correct, skip execution
+	preCheck, err := m.PreCheckState(ctx, host, args)
+	if err == nil && preCheck.IsStateCorrect {
+		result.Success = true
+		result.Changed = false
+		result.Output = map[string]interface{}{
+			"message":     preCheck.Reason,
+			"pre_checked": true,
+			"user_state":  preCheck.CurrentState,
+		}
+		result.Duration = time.Since(startTime)
+		return result, nil
 	}
 
 	// Create a fresh executor for this execution

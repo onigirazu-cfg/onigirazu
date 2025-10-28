@@ -3,6 +3,7 @@ package modules
 import (
 	"context"
 	"fmt"
+	"os/exec"
 	"time"
 
 	"github.com/onigirazu-cfg/onigirazu/internal/executor"
@@ -29,6 +30,59 @@ func (m *GroupModuleFixed) GetDescription() string {
 	return "Manages system groups"
 }
 
+// PreCheckState checks if group is already in the desired state
+func (m *GroupModuleFixed) PreCheckState(ctx context.Context, host types.Host, args map[string]interface{}) (*PreCheckResult, error) {
+	// Get groupname
+	groupname, ok := args["name"].(string)
+	if !ok || groupname == "" {
+		return &PreCheckResult{
+			ShouldExecute: true,
+			Reason:        "No groupname specified",
+		}, nil
+	}
+
+	state := "present"
+	if stateVal, exists := args["state"]; exists {
+		if stateStr, ok := stateVal.(string); ok {
+			state = stateStr
+		}
+	}
+
+	// Check current group existence using getent (fast: ~30ms)
+	cmd := exec.CommandContext(ctx, "getent", "group", groupname)
+	groupExists := cmd.Run() == nil
+
+	currentState := map[string]interface{}{
+		"exists": groupExists,
+	}
+
+	// Check if desired state matches current state
+	allCorrect := false
+	if state == "present" && groupExists {
+		allCorrect = true
+	} else if state == "absent" && !groupExists {
+		allCorrect = true
+	}
+
+	if allCorrect {
+		// State is already correct - skip execution
+		return &PreCheckResult{
+			IsStateCorrect: true,
+			ShouldExecute:  false,
+			Reason:         fmt.Sprintf("Group already in state: %s", state),
+			CurrentState:   currentState,
+		}, nil
+	}
+
+	// State needs to change - execute the operation
+	return &PreCheckResult{
+		IsStateCorrect: false,
+		ShouldExecute:  true,
+		Reason:         fmt.Sprintf("Group needs to be set to state: %s", state),
+		CurrentState:   currentState,
+	}, nil
+}
+
 func (m *GroupModuleFixed) Execute(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
 	startTime := time.Now()
 
@@ -37,6 +91,20 @@ func (m *GroupModuleFixed) Execute(ctx context.Context, host types.Host, args ma
 		Host:      host.Name,
 		Module:    m.name,
 		Timestamp: startTime,
+	}
+
+	// Pre-check: if state is already correct, skip execution
+	preCheck, err := m.PreCheckState(ctx, host, args)
+	if err == nil && preCheck.IsStateCorrect {
+		result.Success = true
+		result.Changed = false
+		result.Output = map[string]interface{}{
+			"message":     preCheck.Reason,
+			"pre_checked": true,
+			"group_state": preCheck.CurrentState,
+		}
+		result.Duration = time.Since(startTime)
+		return result, nil
 	}
 
 	// Initialize executor for this execution

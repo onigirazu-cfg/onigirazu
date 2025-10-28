@@ -181,3 +181,130 @@ func (m *BaseExecutorModule) WithExecutorResult(host types.Host, fn func(*execut
 func (m *BaseExecutorModule) CreateExecutor(host types.Host) (*executor.CommandExecutor, error) {
 	return executor.NewCommandExecutor(host)
 }
+
+// --- Idempotency Support (Phase 1 Enhancement) ---
+
+// PreCheckResult represents the result of a pre-check state comparison
+type PreCheckResult struct {
+	// IsStateCorrect indicates whether the current system state matches the desired state
+	IsStateCorrect bool
+
+	// Reason describes why the state is or isn't correct
+	Reason string
+
+	// CurrentState holds the current system state (for diagnostics)
+	CurrentState map[string]interface{}
+
+	// Differences holds a map of fields that don't match desired state (for diagnostics)
+	// Key: field name, Value: "current_value vs desired_value"
+	Differences map[string]string
+
+	// ShouldExecute indicates whether the module should proceed with execution
+	// Usually: !IsStateCorrect, but some modules (like command) always execute
+	ShouldExecute bool
+
+	// PreCheckDuration is how long the pre-check took
+	Duration time.Duration
+}
+
+// PreCheckState performs a pre-execution check to determine if the module should execute
+// This is the foundation of idempotency - check state before making changes
+//
+// For idempotent modules, implement this method to:
+// 1. Get current system state
+// 2. Compare with desired state from args
+// 3. Return whether execution is needed
+//
+// For non-idempotent modules (command, shell, script), always return ShouldExecute=true
+//
+// Default implementation: assumes module should always execute (non-idempotent behavior)
+// Override in specific module implementations
+func (m *BaseModule) PreCheckState(ctx context.Context, host types.Host, args map[string]interface{}) (*PreCheckResult, error) {
+	return &PreCheckResult{
+		IsStateCorrect: false,
+		Reason:         "PreCheckState not implemented for this module",
+		CurrentState:   make(map[string]interface{}),
+		Differences:    make(map[string]string),
+		ShouldExecute:  true, // Default: always execute
+		Duration:       0,
+	}, nil
+}
+
+// ApplyIdempotencyCheck wraps module execution with automatic pre-check
+// If pre-check indicates state is already correct, skips execution and returns appropriate result
+//
+// Usage in Execute methods:
+//
+//	preCheck, err := m.ApplyIdempotencyCheck(ctx, host, args)
+//	if err != nil {
+//	    return result, err
+//	}
+//	if !preCheck.ShouldExecute {
+//	    // State is already correct, no changes needed
+//	    result.Changed = false
+//	    result.Output = preCheck.CurrentState
+//	    return result, nil
+//	}
+//	// ... continue with actual execution
+func (m *BaseModule) ApplyIdempotencyCheck(ctx context.Context, host types.Host, args map[string]interface{}) (*PreCheckResult, error) {
+	startTime := time.Now()
+	preCheck, err := m.PreCheckState(ctx, host, args)
+	preCheck.Duration = time.Since(startTime)
+
+	if err != nil {
+		// Pre-check failed - should we proceed or abort?
+		// Default: proceed (non-idempotent fallback)
+		return &PreCheckResult{
+			ShouldExecute: true,
+			Reason:        fmt.Sprintf("PreCheck error: %v", err),
+		}, nil
+	}
+
+	return preCheck, nil
+}
+
+// CompareStateFields is a utility method to compare two state objects
+// Returns: (equal bool, differences map)
+// Useful for implementing PreCheckState in specific modules
+func CompareStateFields(desired map[string]interface{}, current map[string]interface{}, criticalFields []string) (bool, map[string]string) {
+	differences := make(map[string]string)
+
+	// Check all critical fields
+	for _, field := range criticalFields {
+		desiredVal, desiredOk := desired[field]
+		currentVal, currentOk := current[field]
+
+		if !desiredOk || !currentOk {
+			if desiredOk != currentOk {
+				differences[field] = fmt.Sprintf("%v vs %v", currentVal, desiredVal)
+			}
+			continue
+		}
+
+		// Compare values
+		if fmt.Sprintf("%v", desiredVal) != fmt.Sprintf("%v", currentVal) {
+			differences[field] = fmt.Sprintf("%v vs %v", currentVal, desiredVal)
+		}
+	}
+
+	return len(differences) == 0, differences
+}
+
+// BuildStateOutput is a utility method to format state for output
+// Helps modules return consistent state information in results
+func BuildStateOutput(state map[string]interface{}, changed bool, changeDetails string) map[string]interface{} {
+	output := make(map[string]interface{})
+
+	// Copy state fields to output
+	for k, v := range state {
+		output[k] = v
+	}
+
+	// Add metadata
+	output["changed"] = changed
+	if changeDetails != "" {
+		output["change_details"] = changeDetails
+	}
+
+	return output
+}

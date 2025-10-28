@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sync"
 	"sync/atomic"
@@ -411,6 +412,101 @@ func NewUnifiedPackageModule() *UnifiedPackageModule {
 	}
 }
 
+// PreCheckState checks if packages are already in the desired state
+func (m *UnifiedPackageModule) PreCheckState(ctx context.Context, host types.Host, args map[string]interface{}) (*PreCheckResult, error) {
+	// Get package specifications
+	packageSpecs, err := m.parsePackageSpecs(args)
+	if err != nil {
+		// If can't parse, must execute
+		return &PreCheckResult{
+			ShouldExecute: true,
+			Reason:        "Unable to parse package specifications",
+		}, nil
+	}
+
+	if len(packageSpecs) == 0 {
+		// No packages specified, nothing to check
+		return &PreCheckResult{
+			ShouldExecute: true,
+			Reason:        "No packages specified",
+		}, nil
+	}
+
+	state := getStringArg(args, "state", "present")
+	dryRun := getBoolArg(args, "dry_run", false)
+
+	// Skip pre-check for dry-run (it has special behavior)
+	if dryRun {
+		return &PreCheckResult{
+			ShouldExecute: true,
+			Reason:        "Dry-run requested",
+		}, nil
+	}
+
+	// For now, do a simple check - if state is "present", check if packages exist
+	// This is a fast pre-check (30-100ms per package)
+	allCorrect := true
+	currentState := make(map[string]interface{})
+
+	for _, pkg := range packageSpecs {
+		installed := m.isPackageInstalled(ctx, pkg.Name)
+		currentState[pkg.Name] = installed
+
+		if state == "present" && !installed {
+			allCorrect = false
+		} else if state == "absent" && installed {
+			allCorrect = false
+		}
+	}
+
+	if allCorrect {
+		// All packages are in correct state - skip execution
+		return &PreCheckResult{
+			IsStateCorrect: true,
+			ShouldExecute:  false,
+			Reason:         fmt.Sprintf("Packages already in state: %s", state),
+			CurrentState:   currentState,
+		}, nil
+	}
+
+	// Packages need changes - execute the operation
+	return &PreCheckResult{
+		IsStateCorrect: false,
+		ShouldExecute:  true,
+		Reason:         fmt.Sprintf("Packages need to be set to state: %s", state),
+		CurrentState:   currentState,
+	}, nil
+}
+
+// isPackageInstalled checks if a package is installed (fast check ~30-50ms)
+func (m *UnifiedPackageModule) isPackageInstalled(ctx context.Context, pkgName string) bool {
+	// Try dpkg first (Debian/Ubuntu)
+	cmd := exec.CommandContext(ctx, "dpkg", "-l", pkgName)
+	if cmd.Run() == nil {
+		return true
+	}
+
+	// Try rpm (RedHat/CentOS/Fedora)
+	cmd = exec.CommandContext(ctx, "rpm", "-q", pkgName)
+	if cmd.Run() == nil {
+		return true
+	}
+
+	// Try pacman (Arch Linux)
+	cmd = exec.CommandContext(ctx, "pacman", "-Q", pkgName)
+	if cmd.Run() == nil {
+		return true
+	}
+
+	// Try zypper (SUSE/openSUSE)
+	cmd = exec.CommandContext(ctx, "zypper", "se", "-i", pkgName)
+	if cmd.Run() == nil {
+		return true
+	}
+
+	return false
+}
+
 // Execute manages system packages with all features
 func (m *UnifiedPackageModule) Execute(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
 	startTime := time.Now()
@@ -437,6 +533,20 @@ func (m *UnifiedPackageModule) Execute(ctx context.Context, host types.Host, arg
 		Changed:   false,
 		Output:    make(map[string]interface{}),
 		Timestamp: startTime,
+	}
+
+	// Pre-check: if state is already correct, skip execution
+	preCheck, err := m.PreCheckState(ctx, host, args)
+	if err == nil && preCheck.IsStateCorrect {
+		result.Success = true
+		result.Changed = false
+		result.Output = map[string]interface{}{
+			"message":       preCheck.Reason,
+			"pre_checked":   true,
+			"package_state": preCheck.CurrentState,
+		}
+		result.Duration = time.Since(startTime)
+		return result, nil
 	}
 
 	// Create executor for this host
