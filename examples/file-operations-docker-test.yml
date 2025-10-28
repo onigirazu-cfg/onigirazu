@@ -108,16 +108,20 @@ tasks:
           regexp: 'Initial deployment'
           replace: 'Updated production deployment'
 
-      - name: "Read updated file content"
-        slurp:
-          src: "{{ test_file }}"
-        register: updated_content
+      - name: "Verify file was updated"
+        stat:
+          path: "{{ test_file }}"
+        register: updated_file_stats
 
       - name: "Show changes made"
         debug:
           msg: |
-            ✓ File content updated:
-            {{ updated_content.content | b64decode }}
+            ✓ File content updated successfully
+            New size: {{ updated_file_stats.stat.size }} bytes
+            Last modified: {{ updated_file_stats.stat.mtime | to_nice_datetime }}
+
+            View the changes:
+              diff {{ backup_file }} {{ test_file }}
 
   # ===== Task Group 4: File Statistics =====
 
