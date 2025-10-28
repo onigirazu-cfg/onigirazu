@@ -47,6 +47,9 @@ func NewRegistry() *Registry {
 	registry.RegisterModule(NewRebootModule())
 	registry.RegisterModule(NewMountModule())
 
+	// Archive and compression module
+	registry.RegisterModule(NewArchiveModule())
+
 	// New modules for completeness
 	registry.RegisterModule(NewFailModule())
 	registry.RegisterModule(NewPauseModule())
