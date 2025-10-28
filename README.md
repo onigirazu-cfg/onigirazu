@@ -13,7 +13,7 @@ Onigirazu is a modern, high-performance configuration management tool written in
 - **🔄 Idempotent**: Safe to run multiple times
 - **📊 State Management**: Track changes and system state with rollback support
 - **🎯 5 Ad-hoc Input Formats**: Including unique natural language support
-- **📚 22+ Built-in Modules**: Comprehensive automation capabilities
+- **📚 40 Built-in Modules**: Complete automation capabilities (v1.55.0+)
 - **📖 Complete Documentation**: 2,500+ lines of guides for configuration, security, and testing
 - **🖥️ Interactive Mode (v1.54.0+)**: Real-time TUI dashboard with live logs, mode switching, and graceful control
 
@@ -42,7 +42,7 @@ Onigirazu is a modern, high-performance configuration management tool written in
 - **Retry Logic**: Configurable retry mechanisms with exponential backoff
 - **Conditional Execution**: Skip tasks based on conditions
 - **Loop Support**: Iterate over lists and ranges
-- **Module System**: Extensible architecture with 22+ built-in modules
+- **Module System**: Extensible architecture with 40 built-in modules
 - **Plugin System**: Extensible plugin architecture (modules, callbacks, filters, inventory)
 - **Secrets Management**: Bitwarden integration for secure credential management
 - **Security Policies**: File operation restrictions and access control on control machine

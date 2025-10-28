@@ -797,11 +797,9 @@ Debian/Ubuntu package management.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `name` | string/list | - | Package name(s) |
-| `state` | string | `present` | Package state |
-| `update_cache` | boolean | `false` | Update apt cache |
-| `cache_valid_time` | integer | `0` | Cache validity |
-| `upgrade` | string | `no` | Upgrade packages |
+| `name` | string/list | - | Package name(s) (optional if only updating cache) |
+| `state` | string | `present` | Package state (`present`, `latest`, or `absent`) |
+| `update_cache` | boolean | `false` | Update apt cache before operation |
 | `autoremove` | boolean | `false` | Remove unused packages |
 | `autoclean` | boolean | `false` | Clean package cache |
 
@@ -828,12 +826,12 @@ RedHat/CentOS package management.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `name` | string/list | - | Package name(s) |
-| `state` | string | `present` | Package state |
-| `enablerepo` | string | - | Enable repository |
-| `disablerepo` | string | - | Disable repository |
-| `exclude` | string | - | Exclude packages |
-| `update_cache` | boolean | `false` | Update cache |
+| `name` | string/list | - | Package name(s) (optional if only updating cache) |
+| `state` | string | `present` | Package state (`present`, `latest`, or `absent`) |
+| `enablerepo` | string | - | Enable specific repository |
+| `disablerepo` | string | - | Disable specific repository |
+| `security` | boolean | `false` | Install only security updates |
+| `update_cache` | boolean | `false` | Update yum cache |
 
 #### Example
 
@@ -861,13 +859,14 @@ Interact with HTTP/HTTPS services.
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `url` | string | - | Request URL (required) |
-| `method` | string | `GET` | HTTP method |
-| `body` | string | - | Request body |
-| `body_format` | string | `raw` | Body format |
-| `headers` | dict | - | HTTP headers |
-| `timeout` | integer | `30` | Request timeout |
-| `validate_certs` | boolean | `true` | Validate SSL certificates |
-| `status_code` | list | `[200]` | Expected status codes |
+| `method` | string | `GET` | HTTP method (GET, POST, PUT, DELETE, PATCH, HEAD) |
+| `body` | string/dict | - | Request body (string or dict for JSON) |
+| `body_format` | string | `raw` | Body format (`raw` or `json`) |
+| `headers` | dict | - | Custom HTTP headers |
+| `user` | string | - | Username for basic authentication |
+| `password` | string | - | Password for basic authentication |
+| `timeout` | integer | `30` | Request timeout in seconds |
+| `status_code` | list | - | Acceptable HTTP status codes |
 
 #### Example
 
@@ -1550,14 +1549,13 @@ Wait for conditions to be met.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `port` | integer | - | Port to wait for |
-| `host` | string | `127.0.0.1` | Host to check |
-| `path` | string | - | File path to wait for |
-| `search_regex` | string | - | Regex pattern in file |
-| `state` | string | `started` | Condition state |
-| `timeout` | integer | `300` | Wait timeout |
-| `delay` | integer | `0` | Initial delay |
-| `sleep` | integer | `1` | Check interval |
+| `port` | integer | - | Port number to wait for (check if listening) |
+| `host` | string | `localhost` | Hostname/IP address to check |
+| `path` | string | - | File path to wait for (check if exists) |
+| `search_regex` | string | - | Regex pattern to search in file content |
+| `state` | string | `started` | Condition state (`started` = expect condition met, `stopped` = expect condition failed) |
+| `timeout` | integer | `300` | Maximum wait time in seconds |
+| `delay` | integer | `0` | Initial delay before checking in seconds |
 
 #### Example
 
@@ -1583,10 +1581,9 @@ Pause execution for user input or time.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `seconds` | integer | - | Pause duration |
+| `seconds` | integer | - | Pause duration in seconds |
 | `minutes` | integer | - | Pause duration in minutes |
-| `prompt` | string | - | User prompt message |
-| `echo` | boolean | `true` | Echo user input |
+| `prompt` | string | - | User prompt message (waits for user input if provided) |
 
 #### Example
 
@@ -1621,7 +1618,7 @@ Fail execution with custom message.
 
 ## 📚 Complete Module List
 
-All available modules in Onigirazu (34 total):
+All available modules in Onigirazu (40 total - v1.55.0+):
 
 **System & Connectivity**: command, shell, script, ping, facts, debug, set_fact, wait_for, pause, fail
 **File Management**: file, copy, fetch, find, template, lineinfile, blockinfile, stat
@@ -1634,6 +1631,20 @@ All available modules in Onigirazu (34 total):
 **Databases**: mysql_db, mysql_user, postgresql_db, postgresql_user, mongodb
 **Network**: get_url, uri
 **User Management**: user, group
+
+### New in v1.55.0
+
+The following 9 modules were added to complete the module coverage:
+
+- **fail**: Fail execution with custom message (Control Flow)
+- **pause**: Pause execution for user input or time duration (Control Flow)
+- **wait_for**: Wait for conditions like ports, files, or regex patterns (System Utility)
+- **script**: Execute local scripts on remote hosts (Execution)
+- **authorized_key**: Manage SSH public keys (Security)
+- **blockinfile**: Insert/update/remove multi-line text blocks (File Management)
+- **apt**: Debian/Ubuntu package management (Package Management)
+- **yum**: RedHat/CentOS package management (Package Management)
+- **uri**: HTTP/HTTPS API requests with full method support (Network)
 
 ---
 
