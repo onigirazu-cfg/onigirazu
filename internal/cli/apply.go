@@ -149,10 +149,16 @@ Examples:
 				cfg.InteractiveMode = true
 			}
 
-			// Initialize logger
-			logWriter := io.Writer(os.Stdout)
+			// Create TUI model early if interactive mode to capture all logs
+			var tuiModel *execution.EnhancedTUIModel
+			var logWriter io.Writer = os.Stdout
 
-			// Initialize logger
+			if interactive {
+				tuiModel = execution.NewEnhancedTUIModel()
+				logWriter = tuiModel.GetLogWriter()
+			}
+
+			// Initialize logger - redirect to TUI if in interactive mode
 			log := logger.NewEnhanced(cfg.LogLevel, logger.LogFormat(cfg.LogFormat), logWriter)
 
 			// Set display mode based on verbosity flag or log level
@@ -478,9 +484,20 @@ Examples:
 			// Print execution start with formatter
 			log.PrintExecutionStart()
 
-			// Setup interactive mode if requested
-			if interactive {
-				log.Info("Interactive mode enabled")
+			// Setup TUI if interactive mode is requested
+			if interactive && tuiModel != nil {
+				// Attach TUI as observer to execution engine to receive live events
+				executionEngine.AttachObserver(tuiModel)
+				// Start TUI in a goroutine
+				go func() {
+					if err := tuiModel.Start(); err != nil {
+						log.Warn("Failed to start interactive TUI: %v", err)
+					}
+				}()
+				// Wait for TUI to be ready before starting playbook
+				if err := tuiModel.WaitForReady(5 * time.Second); err != nil {
+					log.Warn("TUI startup timeout: %v", err)
+				}
 			}
 
 			// Set up signal handler callbacks for graceful shutdown
@@ -540,56 +557,24 @@ Examples:
 				},
 			)
 
-			// === EXECUTION: Normal vs Interactive Mode ===
-			var result *types.PlaybookResult
-			var duration time.Duration
+			// === EXECUTION ===
+			log.Info("Starting playbook execution")
 			startTime := time.Now()
 
-			if interactive {
-				// === INTERACTIVE MODE ===
-				log.Info("Starting playbook execution in interactive mode")
+			result, err := executionEngine.ExecutePlaybook(ctx, playbook)
+			duration := time.Since(startTime)
 
-				// Channel to receive execution result
-				resultChan := make(chan struct {
-					result *types.PlaybookResult
-					err    error
-				}, 1)
+			// Wait for TUI to finish if it's running (user presses Q to exit)
+			if interactive && tuiModel != nil {
+				tuiModel.WaitForExit()
+			}
 
-				// Run playbook in background
-				playbookResult, execErr := executionEngine.ExecutePlaybook(ctx, playbook)
-				resultChan <- struct {
-					result *types.PlaybookResult
-					err    error
-				}{playbookResult, execErr}
-
-				// Get execution result
-				execResult := <-resultChan
-				result = execResult.result
-				err = execResult.err
-				duration = time.Since(startTime)
-
-				// Handle execution errors
-				if err != nil {
-					if err == context.Canceled || strings.Contains(err.Error(), "context canceled") {
-						fmt.Fprintf(os.Stderr, "\n⚠️  Playbook execution interrupted by user\n")
-						os.Exit(130)
-					}
-					return fmt.Errorf("playbook execution failed: %w", err)
+			if err != nil {
+				if err == context.Canceled || strings.Contains(err.Error(), "context canceled") {
+					fmt.Fprintf(os.Stderr, "\n⚠️  Playbook execution interrupted by user\n")
+					os.Exit(130)
 				}
-			} else {
-				// === NON-INTERACTIVE MODE ===
-				log.Info("Starting playbook execution")
-
-				result, err = executionEngine.ExecutePlaybook(ctx, playbook)
-				duration = time.Since(startTime)
-
-				if err != nil {
-					if err == context.Canceled || strings.Contains(err.Error(), "context canceled") {
-						fmt.Fprintf(os.Stderr, "\n⚠️  Playbook execution interrupted by user\n")
-						os.Exit(130)
-					}
-					return fmt.Errorf("playbook execution failed: %w", err)
-				}
+				return fmt.Errorf("playbook execution failed: %w", err)
 			}
 
 			// Display results
