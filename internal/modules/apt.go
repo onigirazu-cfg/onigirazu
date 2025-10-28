@@ -236,7 +236,7 @@ func (m *AptModule) Execute(ctx context.Context, host types.Host, args map[strin
 
 	result.Output["state"] = state
 	result.Output["packages"] = pkgNames
-	result.Output["msg"] = fmt.Sprintf("Package operation completed")
+	result.Output["msg"] = "Package operation completed"
 
 	result.Duration = time.Since(startTime)
 	return result, nil

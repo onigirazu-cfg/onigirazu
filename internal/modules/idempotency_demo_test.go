@@ -97,7 +97,7 @@ func (m *SimpleCounterModule) PreCheckState(ctx context.Context, host types.Host
 	if !isStateCorrect {
 		if !exists {
 			reason = fmt.Sprintf("counter '%s' does not exist", counterName)
-			differences["counter_exists"] = fmt.Sprintf("current=false, desired=true")
+			differences["counter_exists"] = "current=false, desired=true"
 		} else {
 			reason = fmt.Sprintf("counter value mismatch: current=%d, desired=%d", currentValue, expectedValue)
 			differences["value"] = fmt.Sprintf("current=%d, desired=%d", currentValue, expectedValue)
