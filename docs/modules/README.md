@@ -2,6 +2,8 @@
 
 This document provides comprehensive documentation for all built-in modules in Onigirazu.
 
+> 📑 **Looking for a specific module?** Check the [Alphabetical Index](INDEX.md) for a quick reference of all 45 modules!
+
 ## 📋 Table of Contents
 
 - [Module Overview](#module-overview)
