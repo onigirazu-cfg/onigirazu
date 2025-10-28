@@ -978,6 +978,145 @@ Control active and persistent filesystem mounts. Manage mount points in /etc/fst
 - **Permission denied**: Ensure running with appropriate privileges (sudo/become)
 - **Device not found**: Verify source path/device exists and is accessible
 
+### archive
+
+Create and manage compressed archives. Supports multiple formats including tar, gzip, bzip2, xz, and zip with glob pattern matching and selective exclusions.
+
+**Available since v1.57.0** ✨ - Native archive creation module with glob patterns and exclusions
+
+#### Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `path` | string/list | - | Source file(s) or pattern(s) (required) |
+| `dest` | string | - | Destination archive file (required) |
+| `format` | string | `tar.gz` | Archive format: `tar`, `tar.gz`, `tar.bz2`, `tar.xz`, `zip` |
+| `exclude` | list | `[]` | Exclude patterns (glob format) |
+| `remove` | boolean | `false` | Remove source files after successful archiving |
+
+#### Supported Formats
+
+| Format | Description | File Extension | Use Case |
+|--------|-------------|-----------------|----------|
+| `tar` | Uncompressed tar archive | `.tar` | Large files, local transfers |
+| `tar.gz` | Gzip compressed tar | `.tar.gz` | Default, good compression ratio |
+| `tar.bz2` | Bzip2 compressed tar | `.tar.bz2` | Better compression, slower |
+| `tar.xz` | XZ compressed tar | `.tar.xz` | Best compression, very slow |
+| `zip` | ZIP archive | `.zip` | Cross-platform, Windows compatible |
+
+#### Example
+
+```yaml
+- name: "Create simple tar.gz archive"
+  archive:
+    path: "/var/log/app"
+    dest: "/backups/app-logs-{{ onigirazu_date_time.date }}.tar.gz"
+    format: "tar.gz"
+
+- name: "Archive multiple specific files"
+  archive:
+    path:
+      - "/etc/nginx/nginx.conf"
+      - "/etc/nginx/conf.d/"
+    dest: "/backups/nginx-config.tar.gz"
+
+- name: "Archive with exclusions"
+  archive:
+    path: "/opt/application"
+    dest: "/backups/app-full.tar.gz"
+    format: "tar.gz"
+    exclude:
+      - "*.tmp"
+      - "cache/*"
+      - "logs/*"
+
+- name: "Archive and remove source files"
+  archive:
+    path: "/tmp/working_files"
+    dest: "/archive/project-v1.2.0.zip"
+    format: "zip"
+    remove: true
+
+- name: "Archive with glob patterns"
+  archive:
+    path:
+      - "/var/log/*.log"
+      - "/var/log/app/*"
+    dest: "/backups/logs-archive.tar.bz2"
+    format: "tar.bz2"
+    exclude:
+      - "debug.log"
+```
+
+#### Return Values
+
+```json
+{
+  "archived": true,
+  "archive_path": "/backups/app-logs-2025-10-28.tar.gz",
+  "format": "tar.gz",
+  "file_count": 42,
+  "size_bytes": 5242880,
+  "size_human": "5.0 MB",
+  "files_archived": [
+    "/var/log/app/access.log",
+    "/var/log/app/error.log",
+    "/var/log/app/debug.log"
+  ],
+  "changed": true,
+  "msg": "Successfully created archive with 42 files"
+}
+```
+
+#### Common Use Cases
+
+```yaml
+# Database backup
+- archive:
+    path: "/var/backups/database"
+    dest: "/secure/backup-{{ onigirazu_date_time.iso8601_basic }}.tar.xz"
+    format: "tar.xz"
+
+# Log rotation archive
+- archive:
+    path: "/var/log"
+    dest: "/archive/logs-{{ onigirazu_date_time.year }}-{{ onigirazu_date_time.month }}.tar.gz"
+    exclude:
+      - "current/*"
+      - "*.sock"
+    remove: false
+
+# Application deployment archive
+- archive:
+    path:
+      - "/opt/app/src"
+      - "/opt/app/config"
+      - "/opt/app/README.md"
+    dest: "/releases/app-{{ app_version }}.zip"
+    format: "zip"
+    exclude:
+      - "*.pyc"
+      - "__pycache__"
+      - ".git"
+      - "node_modules"
+
+# Cross-platform compatible backup
+- archive:
+    path: "/home/user/documents"
+    dest: "/backup/docs-{{ onigirazu_date_time.date }}.zip"
+    format: "zip"
+    remove: false
+```
+
+#### Important Notes
+
+- **Glob Patterns**: The `path` parameter supports glob patterns (e.g., `*.log`, `app_*/`)
+- **Source Files**: Must exist and be readable by the executing user
+- **Destination**: Parent directory must exist and be writable
+- **Remove Safety**: Files are only removed after successful archive creation
+- **Exclusions**: Exclude patterns use glob matching (e.g., `*.tmp`, `dir/*`)
+- **Format Selection**: Choose `tar.xz` for maximum compression, `zip` for Windows compatibility
+
 ## 📦 Package Modules
 
 ### package

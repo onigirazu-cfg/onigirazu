@@ -1,6 +1,6 @@
 # Onigirazu
 
-**Current Release:** v1.54.0 — [Interactive Mode Production Release](https://github.com/onigirazu-cfg/onigirazu/releases/tag/v1.54.0)
+**Current Release:** v1.57.0 — [System Control & Archive Module Release](https://github.com/onigirazu-cfg/onigirazu/releases/tag/v1.57.0)
 
 Onigirazu is a modern, high-performance configuration management tool written in Go, inspired by Ansible. It provides a simple yet powerful way to automate infrastructure configuration, application deployment, and system administration tasks.
 
@@ -13,7 +13,7 @@ Onigirazu is a modern, high-performance configuration management tool written in
 - **🔄 Idempotent**: Safe to run multiple times
 - **📊 State Management**: Track changes and system state with rollback support
 - **🎯 5 Ad-hoc Input Formats**: Including unique natural language support
-- **📚 40 Built-in Modules**: Complete automation capabilities (v1.55.0+)
+- **📚 44 Built-in Modules**: Complete automation capabilities with system control, archive, and more (v1.57.0+)
 - **📖 Complete Documentation**: 2,500+ lines of guides for configuration, security, and testing
 - **🖥️ Interactive Mode (v1.54.0+)**: Real-time TUI dashboard with live logs, mode switching, and graceful control
 
@@ -42,7 +42,7 @@ Onigirazu is a modern, high-performance configuration management tool written in
 - **Retry Logic**: Configurable retry mechanisms with exponential backoff
 - **Conditional Execution**: Skip tasks based on conditions
 - **Loop Support**: Iterate over lists and ranges
-- **Module System**: Extensible architecture with 40 built-in modules
+- **Module System**: Extensible architecture with 44 built-in modules (sysctl, reboot, mount, archive, and 40 others)
 - **Plugin System**: Extensible plugin architecture (modules, callbacks, filters, inventory)
 - **Secrets Management**: Bitwarden integration for secure credential management
 - **Security Policies**: File operation restrictions and access control on control machine
