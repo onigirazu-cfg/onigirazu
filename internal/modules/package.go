@@ -500,11 +500,7 @@ func (m *UnifiedPackageModule) isPackageInstalled(ctx context.Context, pkgName s
 
 	// Try zypper (SUSE/openSUSE)
 	cmd = exec.CommandContext(ctx, "zypper", "se", "-i", pkgName)
-	if cmd.Run() == nil {
-		return true
-	}
-
-	return false
+	return cmd.Run() == nil
 }
 
 // Execute manages system packages with all features
