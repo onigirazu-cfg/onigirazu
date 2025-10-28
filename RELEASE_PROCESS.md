@@ -4,15 +4,17 @@
 
 The Onigirazu project uses a **quality-gated release process** to ensure that all releases meet high standards for security, code quality, and functionality.
 
+This process was implemented in **Phase 2** and automatically validates all releases before they go public.
+
 ## How It Works
 
 ### 1. Quality Gate (Automatic)
 
-When you push a version tag (e.g., `v1.28.1`), the **Release Gate** workflow automatically runs:
+When you push a version tag (e.g., `v1.56.0`), the **Release Gate** workflow automatically runs:
 
 ```bash
-git tag v1.28.1
-git push origin v1.28.1
+git tag -a v1.56.0 -m "Release v1.56.0"
+git push origin v1.56.0
 ```
 
 The Release Gate performs the following checks:
@@ -50,11 +52,32 @@ Please fix the failing checks before releasing.
 4. Delete and recreate the tag:
 
    ```bash
-   git tag -d v1.28.1
-   git push origin :refs/tags/v1.28.1
-   git tag v1.28.1
-   git push origin v1.28.1
+   git tag -d v1.56.0
+   git push origin :refs/tags/v1.56.0
+   git tag -a v1.56.0 -m "Release v1.56.0"
+   git push origin v1.56.0
    ```
+
+### Monitoring the Release
+
+After pushing a tag, monitor the pipelines:
+
+```bash
+# Check Release Gate status
+gh run list --workflow=release-gate.yml --limit=1
+
+# Watch in real-time
+gh run watch <RUN_ID>
+
+# Get detailed release info
+gh release view --json tagName,name,publishedAt
+```
+
+Expected timeline:
+
+- **Release Gate**: 5-7 minutes (quality checks)
+- **Release Workflow**: 8-12 minutes (build & publish)
+- **Total**: 15-20 minutes until GitHub Release is created
 
 ## Manual Release (Emergency)
 
@@ -62,7 +85,7 @@ In case you need to bypass quality checks (not recommended), you can trigger a m
 
 1. Go to **Actions** → **Release** workflow
 2. Click **Run workflow**
-3. Enter the tag name (e.g., `v1.28.1`)
+3. Enter the tag name (e.g., `v1.56.0`)
 4. Optionally check **Skip quality checks** (⚠️ use with caution)
 5. Click **Run workflow**
 
@@ -83,8 +106,8 @@ Before creating a release:
 We follow [Semantic Versioning](https://semver.org/):
 
 - **Major** (v2.0.0): Breaking changes
-- **Minor** (v1.28.0): New features, backward compatible
-- **Patch** (v1.28.1): Bug fixes, backward compatible
+- **Minor** (v1.56.0): New features, backward compatible (e.g., Phase 2 configuration management)
+- **Patch** (v1.56.1): Bug fixes, backward compatible
 
 Pre-release versions:
 
@@ -125,8 +148,8 @@ Check which specific check failed:
 Delete the tag locally and remotely:
 
 ```bash
-git tag -d v1.28.1
-git push origin :refs/tags/v1.28.1
+git tag -d v1.56.0
+git push origin :refs/tags/v1.56.0
 ```
 
 ### Release workflow not triggered
