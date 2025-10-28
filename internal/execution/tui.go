@@ -19,6 +19,28 @@ import (
 // ============================================================================
 // GLANCE-STYLE TUI - Complete Widget-Based Dashboard
 // ============================================================================
+//
+// This is the single, authoritative implementation of interactive mode using Bubble Tea
+// for a beautiful terminal user interface with real-time log visualization, statistics
+// panels, and keyboard controls.
+//
+// Previous implementations have been removed in favor of this comprehensive implementation:
+// - InteractiveMode (interactive_mode.go) - simple keyboard-based handler
+// - InteractiveModeObserver (interactive_mode_observer.go) - event-based observer pattern
+// - TmuxManager (tmux_manager.go) - legacy tmux session management
+//
+// All interactive mode functionality is now exclusively handled by EnhancedTUIModel.
+
+// ExecutionEvent represents an execution event for the TUI
+type ExecutionEvent struct {
+	Type      string // "execution_start", "play_start", "task_end", "execution_end", "error"
+	PlayName  string
+	PlayIndex int
+	TaskName  string
+	HostName  string
+	Message   string
+	Timestamp time.Time
+}
 
 // EnhancedTUIModel - the main Bubble Tea model for glance-style dashboard
 type EnhancedTUIModel struct {
