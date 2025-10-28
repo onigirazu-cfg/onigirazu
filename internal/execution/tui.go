@@ -73,6 +73,7 @@ type EnhancedTUIModel struct {
 	taskStats map[string]*DetailedTaskStats
 	hostStats map[string]*DetailedHostStats
 	playStats map[string]*DetailedPlayStats
+	metrics   *ExecutionMetrics
 
 	// Control state
 	paused      bool
@@ -100,14 +101,19 @@ type EnhancedTUIModel struct {
 
 // DetailedTaskStats extends basic TaskStats with more info
 type DetailedTaskStats struct {
-	Name        string
-	Success     int
-	Failed      int
-	Changed     int
-	Skipped     int
-	LastUpdate  time.Time
-	Duration    time.Duration
-	AvgDuration time.Duration
+	Name            string
+	Success         int
+	Failed          int
+	Changed         int
+	Skipped         int
+	LastUpdate      time.Time
+	Duration        time.Duration
+	AvgDuration     time.Duration
+	TotalDuration   time.Duration   // Sum of all executions
+	MinDuration     time.Duration   // Fastest execution
+	MaxDuration     time.Duration   // Slowest execution
+	ExecutionCount  int             // Number of times executed
+	IndividualTimes []time.Duration // Track each execution time for speed calculation
 }
 
 // DetailedHostStats extends basic HostStats with more info
@@ -120,6 +126,7 @@ type DetailedHostStats struct {
 	SkippedCount  int
 	LastTaskTime  time.Time
 	TotalDuration time.Duration
+	AvgTaskTime   time.Duration
 }
 
 // DetailedPlayStats extends basic PlayStats
@@ -131,6 +138,18 @@ type DetailedPlayStats struct {
 	Failed    int
 	Duration  time.Duration
 	StartTime time.Time
+}
+
+// ExecutionMetrics tracks overall execution speed metrics
+type ExecutionMetrics struct {
+	TotalTasksExecuted int
+	TotalDuration      time.Duration
+	AvgTaskSpeed       float64 // tasks per second
+	MaxTaskSpeed       float64 // peak speed
+	MinTaskSpeed       float64 // lowest speed
+	FastestTask        *DetailedTaskStats
+	SlowestTask        *DetailedTaskStats
+	LastUpdated        time.Time
 }
 
 // LogEntry represents a single log line
@@ -155,6 +174,7 @@ func NewEnhancedTUIModel() *EnhancedTUIModel {
 		taskStats:       make(map[string]*DetailedTaskStats),
 		hostStats:       make(map[string]*DetailedHostStats),
 		playStats:       make(map[string]*DetailedPlayStats),
+		metrics:         &ExecutionMetrics{},
 		eventChan:       make(chan ExecutionEvent, 100),
 		stopChan:        make(chan struct{}),
 		tickerChan:      make(chan time.Time),
@@ -562,6 +582,16 @@ func (m *EnhancedTUIModel) renderStatsPanel(width int, height int) string {
 	hostCountStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("45"))
 	lines = append(lines, hostCountStyle.Render(fmt.Sprintf("Hosts: %d", len(m.hostStats))))
 
+	// Speed metrics (if there's space)
+	if len(lines) < contentHeight-5 {
+		lines = append(lines, "")
+		speedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("226"))
+		avgSpeed, tasksPerSec := m.getSpeedMetrics()
+		lines = append(lines, "Speed:")
+		lines = append(lines, "  "+speedStyle.Render(avgSpeed))
+		lines = append(lines, "  "+speedStyle.Render(tasksPerSec))
+	}
+
 	// Current execution info (if there's space)
 	if len(lines) < contentHeight-4 && m.currentTaskName != "" {
 		lines = append(lines, "")
@@ -574,17 +604,6 @@ func (m *EnhancedTUIModel) renderStatsPanel(width int, height int) string {
 			hostStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("111"))
 			hostName := truncateString(m.currentHost, contentWidth-2)
 			lines = append(lines, "  "+hostStyle.Render(hostName))
-		}
-	}
-
-	// Performance metrics (if there's space)
-	if len(lines) < contentHeight-1 && m.elapsedTime > 0 && totalTasks > 0 {
-		minutesElapsed := m.elapsedTime.Minutes()
-		if minutesElapsed > 0 {
-			tasksPerMin := float64(totalTasks) / minutesElapsed
-			lines = append(lines, "")
-			perfStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
-			lines = append(lines, perfStyle.Render(fmt.Sprintf("%.1f tasks/min", tasksPerMin)))
 		}
 	}
 
@@ -708,36 +727,70 @@ func (m *EnhancedTUIModel) renderStatsModal() string {
 
 	var lines []string
 	lines = append(lines, "")
-	lines = append(lines, "  DETAILED STATISTICS")
-	lines = append(lines, "  ──────────────────")
+	lines = append(lines, "  DETAILED STATISTICS & SPEED METRICS")
+	lines = append(lines, "  ──────────────────────────────────")
 	lines = append(lines, "")
 
-	// Task statistics (limit to 8 entries)
+	// Speed metrics header
+	avgSpeed, tasksPerSec := m.getSpeedMetrics()
+	lines = append(lines, "  EXECUTION SPEED:")
+	lines = append(lines, fmt.Sprintf("    Avg: %s | Throughput: %s", avgSpeed, tasksPerSec))
+	lines = append(lines, "")
+
+	// Fastest and slowest tasks
+	fastest, slowest := m.getFastestSlowestTasks()
+	if fastest != nil || slowest != nil {
+		lines = append(lines, "  PERFORMANCE EXTREMES:")
+		if fastest != nil {
+			fastName := truncateString(fastest.Name, 35)
+			lines = append(lines, fmt.Sprintf("    ⚡ Fastest: %s (%dms)", fastName, fastest.MinDuration.Milliseconds()))
+		}
+		if slowest != nil {
+			slowName := truncateString(slowest.Name, 35)
+			lines = append(lines, fmt.Sprintf("    🐢 Slowest: %s (%dms)", slowName, slowest.MaxDuration.Milliseconds()))
+		}
+		lines = append(lines, "")
+	}
+
+	// Task statistics sorted by duration (limit to 6 entries)
 	if len(m.taskStats) > 0 {
-		lines = append(lines, "  TASKS:")
-		taskCount := 0
+		lines = append(lines, "  TASKS BY DURATION:")
+
+		// Sort tasks by average duration (slowest first)
+		type taskDuration struct {
+			name  string
+			stats *DetailedTaskStats
+		}
+		var tasksByDur []taskDuration
 		for name, stats := range m.taskStats {
-			if taskCount >= 8 {
+			tasksByDur = append(tasksByDur, taskDuration{name, stats})
+		}
+		sort.Slice(tasksByDur, func(i, j int) bool {
+			return tasksByDur[i].stats.AvgDuration > tasksByDur[j].stats.AvgDuration
+		})
+
+		taskCount := 0
+		for _, td := range tasksByDur {
+			if taskCount >= 6 {
 				break
 			}
-			taskLine := fmt.Sprintf("    %s", truncateString(name, 45))
-			taskLine += fmt.Sprintf(" S:%d F:%d C:%d", stats.Success, stats.Failed, stats.Changed)
+			taskName := truncateString(td.name, 38)
+			taskLine := fmt.Sprintf("    %s (%dms)", taskName, td.stats.AvgDuration.Milliseconds())
 			lines = append(lines, taskLine)
 			taskCount++
 		}
 		lines = append(lines, "")
 	}
 
-	// Host statistics (limit to 5 entries)
+	// Host statistics with timing (limit to 4 entries)
 	if len(m.hostStats) > 0 {
-		lines = append(lines, "  HOSTS:")
+		lines = append(lines, "  HOSTS (avg task time):")
 		hostCount := 0
 		for hostname, stats := range m.hostStats {
-			if hostCount >= 5 {
+			if hostCount >= 4 {
 				break
 			}
-			hostLine := fmt.Sprintf("    %s", truncateString(hostname, 40))
-			hostLine += fmt.Sprintf(" T:%d S:%d F:%d", stats.TaskCount, stats.SuccessCount, stats.FailedCount)
+			hostLine := fmt.Sprintf("    %s: %dms", truncateString(hostname, 32), stats.AvgTaskTime.Milliseconds())
 			lines = append(lines, hostLine)
 			hostCount++
 		}
@@ -886,6 +939,85 @@ func (m *EnhancedTUIModel) getVisibleLogs(count int) []LogEntry {
 // ============================================================================
 // PROGRESS & STATUS RENDERING ENHANCEMENTS
 // ============================================================================
+
+// updateMetrics recalculates overall execution metrics
+func (m *EnhancedTUIModel) updateMetrics() {
+	if m.metrics == nil {
+		m.metrics = &ExecutionMetrics{}
+	}
+
+	totalTasks := 0
+	totalDuration := time.Duration(0)
+	var fastest, slowest *DetailedTaskStats
+
+	for _, stats := range m.taskStats {
+		totalTasks += stats.ExecutionCount
+		totalDuration += stats.TotalDuration
+
+		// Find fastest task
+		if fastest == nil || stats.MinDuration < fastest.MinDuration {
+			fastest = stats
+		}
+
+		// Find slowest task
+		if slowest == nil || stats.MaxDuration > slowest.MaxDuration {
+			slowest = stats
+		}
+	}
+
+	m.metrics.TotalTasksExecuted = totalTasks
+	m.metrics.TotalDuration = totalDuration
+	m.metrics.FastestTask = fastest
+	m.metrics.SlowestTask = slowest
+
+	// Calculate speed metrics
+	if totalDuration > 0 && totalTasks > 0 {
+		seconds := totalDuration.Seconds()
+		m.metrics.AvgTaskSpeed = float64(totalTasks) / seconds
+	}
+
+	m.metrics.LastUpdated = time.Now()
+}
+
+// getSpeedMetrics returns formatted speed information
+func (m *EnhancedTUIModel) getSpeedMetrics() (avgSpeed, tasksPerSec string) {
+	m.mutex.RLock()
+	defer m.mutex.RUnlock()
+
+	if m.metrics == nil || m.elapsedTime == 0 {
+		return "- tasks/min", "- tasks/sec"
+	}
+
+	successTasks, failedTasks, skippedTasks, changedTasks := m.getTaskProgress()
+	totalCompleted := successTasks + failedTasks + skippedTasks + changedTasks
+
+	if totalCompleted == 0 || m.elapsedTime == 0 {
+		return "- tasks/min", "- tasks/sec"
+	}
+
+	tasksPerMinute := float64(totalCompleted) / m.elapsedTime.Minutes()
+	tasksPerSecond := float64(totalCompleted) / m.elapsedTime.Seconds()
+
+	return fmt.Sprintf("%.1f t/min", tasksPerMinute), fmt.Sprintf("%.2f t/sec", tasksPerSecond)
+}
+
+// getFastestSlowestTasks returns the fastest and slowest executing tasks
+func (m *EnhancedTUIModel) getFastestSlowestTasks() (fastest, slowest *DetailedTaskStats) {
+	if len(m.taskStats) == 0 {
+		return nil, nil
+	}
+
+	for _, stats := range m.taskStats {
+		if fastest == nil || stats.MinDuration < fastest.MinDuration {
+			fastest = stats
+		}
+		if slowest == nil || stats.MaxDuration > slowest.MaxDuration {
+			slowest = stats
+		}
+	}
+
+	return fastest, slowest
+}
 
 // renderProgressBar renders a visual progress bar with percentage
 func renderProgressBar(current, total, width int) string {
@@ -1662,6 +1794,12 @@ func (m *EnhancedTUIModel) OnTaskEnd(taskResult *types.TaskResult) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
+	// Track duration
+	duration := taskResult.Duration
+	if duration < 0 {
+		duration = 0
+	}
+
 	if stats, exists := m.taskStats[taskResult.TaskName]; exists {
 		if taskResult.Failed {
 			stats.Failed++
@@ -1672,9 +1810,32 @@ func (m *EnhancedTUIModel) OnTaskEnd(taskResult *types.TaskResult) {
 		} else {
 			stats.Success++
 		}
+
+		// Track execution times
+		stats.ExecutionCount++
+		stats.TotalDuration += duration
+		stats.AvgDuration = stats.TotalDuration / time.Duration(stats.ExecutionCount)
+		stats.IndividualTimes = append(stats.IndividualTimes, duration)
+
+		// Update min/max
+		if stats.MinDuration == 0 || duration < stats.MinDuration {
+			stats.MinDuration = duration
+		}
+		if duration > stats.MaxDuration {
+			stats.MaxDuration = duration
+		}
+
 		stats.LastUpdate = time.Now()
 	} else {
-		newStats := &DetailedTaskStats{Name: taskResult.TaskName}
+		newStats := &DetailedTaskStats{
+			Name:            taskResult.TaskName,
+			ExecutionCount:  1,
+			TotalDuration:   duration,
+			AvgDuration:     duration,
+			MinDuration:     duration,
+			MaxDuration:     duration,
+			IndividualTimes: []time.Duration{duration},
+		}
 		if taskResult.Failed {
 			newStats.Failed = 1
 		} else if taskResult.Changed {
@@ -1688,9 +1849,11 @@ func (m *EnhancedTUIModel) OnTaskEnd(taskResult *types.TaskResult) {
 		m.taskStats[taskResult.TaskName] = newStats
 	}
 
-	// Update host stats
+	// Update host stats with timing
 	if hostStats, exists := m.hostStats[taskResult.Host]; exists {
 		hostStats.TaskCount++
+		hostStats.TotalDuration += duration
+		hostStats.AvgTaskTime = hostStats.TotalDuration / time.Duration(hostStats.TaskCount)
 		if taskResult.Failed {
 			hostStats.FailedCount++
 		} else {
@@ -1699,8 +1862,10 @@ func (m *EnhancedTUIModel) OnTaskEnd(taskResult *types.TaskResult) {
 		hostStats.LastTaskTime = time.Now()
 	} else {
 		newHostStats := &DetailedHostStats{
-			Name:      taskResult.Host,
-			TaskCount: 1,
+			Name:          taskResult.Host,
+			TaskCount:     1,
+			TotalDuration: duration,
+			AvgTaskTime:   duration,
 		}
 		if taskResult.Failed {
 			newHostStats.FailedCount = 1
@@ -1710,6 +1875,9 @@ func (m *EnhancedTUIModel) OnTaskEnd(taskResult *types.TaskResult) {
 		newHostStats.LastTaskTime = time.Now()
 		m.hostStats[taskResult.Host] = newHostStats
 	}
+
+	// Update overall metrics
+	m.updateMetrics()
 }
 
 // OnExecutionEnd is called when execution ends
