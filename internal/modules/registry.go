@@ -42,6 +42,11 @@ func NewRegistry() *Registry {
 	registry.RegisterModule(NewFirewallModule())
 	registry.RegisterModule(NewConfigModule())
 
+	// System Control modules (critical)
+	registry.RegisterModule(NewSysctlModule())
+	registry.RegisterModule(NewRebootModule())
+	registry.RegisterModule(NewMountModule())
+
 	// New modules for completeness
 	registry.RegisterModule(NewFailModule())
 	registry.RegisterModule(NewPauseModule())
