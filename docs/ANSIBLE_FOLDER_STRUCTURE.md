@@ -1,10 +1,10 @@
-# Ansible-Style Folder Structure Support (v1.61.0)
+# Folder Structure Support (v1.61.0)
 
-Onigirazu now supports organizing playbooks with Ansible-style folder structures, enabling cleaner separation of concerns and better code organization.
+Onigirazu now supports organizing playbooks with hierarchical folder structures, enabling cleaner separation of concerns and better code organization. The structure follows conventions similar to Ansible's role organization patterns.
 
 ## Overview
 
-With the Ansible Folder Structure feature, you can organize your playbooks similar to Ansible best practices:
+With the Folder Structure feature, you can organize your playbooks in a clean, hierarchical manner:
 
 ```
 my_project/
@@ -27,7 +27,7 @@ my_project/
 
 ### 1. Automatic Directory Detection
 
-- Detects standard Ansible directories automatically
+- Detects standard project directories automatically
 - Walks up directory tree to find project root
 - Caches detection results for performance
 
@@ -196,7 +196,7 @@ Cache is automatically invalidated after TTL expiration.
 
 ### ProjectStructureDetector
 
-Detects Ansible-style folder structures automatically.
+Detects hierarchical folder structures automatically (following conventions similar to Ansible role patterns).
 
 ### VariableLoader
 

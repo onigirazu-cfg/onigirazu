@@ -28,7 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Ansible-Style Folder Structure Support**: Complete implementation of Ansible-style folder organization
+- **Folder Structure Support**: Complete implementation of hierarchical folder organization (similar to Ansible conventions)
   - `ProjectStructureDetector`: Automatic detection of standard Ansible directories (defaults, vars, templates, files, handlers, tasks)
   - `VariableLoader`: Smart loading and merging of variables with proper precedence chain
   - `FileResolver`: Intelligent file path resolution from `files/` directory with fallback options
