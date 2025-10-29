@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -50,10 +51,13 @@ type Config struct {
 	OutputFormat    string `yaml:"output_format" json:"output_format"` // "text", "json", "yaml"
 
 	// Monitoring
-	EnableMetrics   bool   `yaml:"enable_metrics" json:"enable_metrics"`
-	MetricsPort     int    `yaml:"metrics_port" json:"metrics_port"`
-	MetricsPath     string `yaml:"metrics_path" json:"metrics_path"`
-	EnableProfiling bool   `yaml:"enable_profiling" json:"enable_profiling"`
+	EnableMetrics        bool     `yaml:"enable_metrics" json:"enable_metrics"`
+	MetricsPort          int      `yaml:"metrics_port" json:"metrics_port"`
+	MetricsPath          string   `yaml:"metrics_path" json:"metrics_path"`
+	MetricsListenAddress string   `yaml:"metrics_listen_address" json:"metrics_listen_address"` // Default: "127.0.0.1"
+	MetricsAuthToken     string   `yaml:"metrics_auth_token" json:"metrics_auth_token"`         // Optional Bearer token
+	MetricsIPWhitelist   []string `yaml:"metrics_ip_whitelist" json:"metrics_ip_whitelist"`     // Optional IP whitelist
+	EnableProfiling      bool     `yaml:"enable_profiling" json:"enable_profiling"`
 
 	// SSH/Connection
 	SSHTimeout                   time.Duration `yaml:"ssh_timeout" json:"ssh_timeout"`
@@ -108,6 +112,9 @@ func DefaultConfig() *Config {
 		EnableMetrics:                getEnvBool("ONIGIRAZU_ENABLE_METRICS", false),
 		MetricsPort:                  getEnvInt("ONIGIRAZU_METRICS_PORT", 9090),
 		MetricsPath:                  getEnvString("ONIGIRAZU_METRICS_PATH", "/metrics"),
+		MetricsListenAddress:         getEnvString("ONIGIRAZU_METRICS_LISTEN_ADDRESS", "127.0.0.1"),
+		MetricsAuthToken:             getEnvString("ONIGIRAZU_METRICS_AUTH_TOKEN", ""),
+		MetricsIPWhitelist:           getEnvStringSlice("ONIGIRAZU_METRICS_IP_WHITELIST", []string{}),
 		EnableProfiling:              getEnvBool("ONIGIRAZU_ENABLE_PROFILING", false),
 		SSHTimeout:                   getEnvDuration("ONIGIRAZU_SSH_TIMEOUT", 30*time.Second),
 		SSHKeepAlive:                 getEnvDuration("ONIGIRAZU_SSH_KEEPALIVE", 60*time.Second),
@@ -154,6 +161,21 @@ func getEnvDuration(key string, defaultValue time.Duration) time.Duration {
 	if value := os.Getenv(key); value != "" {
 		if duration, err := time.ParseDuration(value); err == nil {
 			return duration
+		}
+	}
+	return defaultValue
+}
+
+func getEnvStringSlice(key string, defaultValue []string) []string {
+	if value := os.Getenv(key); value != "" {
+		var result []string
+		for _, item := range strings.Split(value, ",") {
+			if trimmed := strings.TrimSpace(item); trimmed != "" {
+				result = append(result, trimmed)
+			}
+		}
+		if len(result) > 0 {
+			return result
 		}
 	}
 	return defaultValue
@@ -361,6 +383,18 @@ func (c *Config) GetMetricsPort() int {
 
 func (c *Config) GetMetricsPath() string {
 	return c.MetricsPath
+}
+
+func (c *Config) GetMetricsListenAddress() string {
+	return c.MetricsListenAddress
+}
+
+func (c *Config) GetMetricsAuthToken() string {
+	return c.MetricsAuthToken
+}
+
+func (c *Config) GetMetricsIPWhitelist() []string {
+	return c.MetricsIPWhitelist
 }
 
 func (c *Config) IsProfilingEnabled() bool {

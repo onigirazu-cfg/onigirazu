@@ -18,6 +18,7 @@ import (
 	"github.com/onigirazu-cfg/onigirazu/internal/execution"
 	"github.com/onigirazu-cfg/onigirazu/internal/inventory"
 	"github.com/onigirazu-cfg/onigirazu/internal/logger"
+	"github.com/onigirazu-cfg/onigirazu/internal/metrics"
 	"github.com/onigirazu-cfg/onigirazu/internal/modules"
 	"github.com/onigirazu-cfg/onigirazu/internal/output"
 	"github.com/onigirazu-cfg/onigirazu/internal/parser"
@@ -590,6 +591,44 @@ Examples:
 					return nil
 				},
 			)
+
+			// === METRICS SERVER SETUP ===
+			var metricsInstance *metrics.Metrics
+			if cfg.IsMetricsEnabled() {
+				log.Info("Metrics collection enabled")
+				metricsInstance = metrics.NewMetricsWithPrometheus()
+
+				// Build metrics server address
+				metricsAddr := fmt.Sprintf("%s:%d", cfg.GetMetricsListenAddress(), cfg.GetMetricsPort())
+
+				// Start metrics server in a goroutine
+				go func() {
+					log.Info("Starting metrics HTTP server on %s%s", metricsAddr, cfg.GetMetricsPath())
+					if err := metricsInstance.StartMetricsServer(
+						metricsAddr,
+						cfg.GetMetricsAuthToken(),
+						cfg.GetMetricsIPWhitelist(),
+					); err != nil {
+						log.Warn("Metrics server error: %v", err)
+					}
+				}()
+
+				// Register cleanup for graceful shutdown
+				signalHandler.RegisterCleanup(func() error {
+					log.Info("Shutting down metrics server")
+					// Note: metrics server shutdown would need to be implemented separately
+					// The current implementation uses ListenAndServe which blocks
+					return nil
+				})
+
+				log.Info("Metrics server configured - endpoints available at http://%s%s", metricsAddr, cfg.GetMetricsPath())
+				if cfg.GetMetricsAuthToken() != "" {
+					log.Info("  - Bearer token authentication enabled")
+				}
+				if len(cfg.GetMetricsIPWhitelist()) > 0 {
+					log.Info("  - IP whitelist enabled (%d IPs)", len(cfg.GetMetricsIPWhitelist()))
+				}
+			}
 
 			// === EXECUTION ===
 			log.Info("Starting playbook execution")

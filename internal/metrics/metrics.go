@@ -653,23 +653,58 @@ func (m *Metrics) GetPrometheusHandler() http.Handler {
 	return promhttp.HandlerFor(m.promRegistry, promhttp.HandlerOpts{})
 }
 
-// StartMetricsServer starts HTTP server for metrics endpoint
-func (m *Metrics) StartMetricsServer(addr string) error {
+// StartMetricsServer starts HTTP server for metrics endpoint with security options
+// addr: full address in format "HOST:PORT" (e.g., "127.0.0.1:9090")
+// authToken: optional Bearer token for authentication (empty = no auth)
+// ipWhitelist: optional list of allowed IPs (empty = allow all)
+func (m *Metrics) StartMetricsServer(addr, authToken string, ipWhitelist []string) error {
 	if m.promRegistry == nil {
 		return fmt.Errorf("prometheus metrics not enabled")
 	}
 
 	mux := http.NewServeMux()
-	mux.Handle("/metrics", m.GetPrometheusHandler())
-	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("OK"))
-	})
-	mux.HandleFunc("/summary", func(w http.ResponseWriter, r *http.Request) {
-		summary := m.GetSummary()
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(summary)
-	})
+
+	// Create middleware chain for security
+	metricsHandler := m.GetPrometheusHandler()
+	if metricsHandler == nil {
+		return fmt.Errorf("failed to get prometheus handler")
+	}
+
+	// Wrap handlers with security middleware
+	securedMetrics := m.securityMiddleware(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			metricsHandler.ServeHTTP(w, r)
+		}),
+		authToken,
+		ipWhitelist,
+	)
+
+	securedHealth := m.securityMiddleware(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "text/plain")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("OK"))
+		}),
+		authToken,
+		ipWhitelist,
+	)
+
+	securedSummary := m.securityMiddleware(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			summary := m.GetSummary()
+			w.Header().Set("Content-Type", "application/json")
+			if err := json.NewEncoder(w).Encode(summary); err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				fmt.Fprintf(w, `{"error": "failed to encode summary: %v"}`, err)
+			}
+		}),
+		authToken,
+		ipWhitelist,
+	)
+
+	mux.Handle("/metrics", securedMetrics)
+	mux.Handle("/health", securedHealth)
+	mux.Handle("/summary", securedSummary)
 
 	// Create HTTP server with timeouts for security
 	server := &http.Server{
@@ -681,6 +716,86 @@ func (m *Metrics) StartMetricsServer(addr string) error {
 	}
 
 	return server.ListenAndServe()
+}
+
+// securityMiddleware creates a middleware that checks auth token and IP whitelist
+func (m *Metrics) securityMiddleware(next http.Handler, authToken string, ipWhitelist []string) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Check IP whitelist if configured
+		if len(ipWhitelist) > 0 {
+			clientIP := getClientIP(r)
+			if !isIPAllowed(clientIP, ipWhitelist) {
+				http.Error(w, "Forbidden: IP not in whitelist", http.StatusForbidden)
+				return
+			}
+		}
+
+		// Check auth token if configured
+		if authToken != "" {
+			authHeader := r.Header.Get("Authorization")
+			if !isValidBearer(authHeader, authToken) {
+				w.Header().Set("WWW-Authenticate", `Bearer realm="Metrics"`)
+				http.Error(w, "Unauthorized: invalid or missing authentication token", http.StatusUnauthorized)
+				return
+			}
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+// getClientIP extracts the client IP address from the request
+func getClientIP(r *http.Request) string {
+	// Check X-Forwarded-For header first (for proxied requests)
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		// Take the first IP in the list
+		ips := strings.Split(xff, ",")
+		if len(ips) > 0 {
+			return strings.TrimSpace(ips[0])
+		}
+	}
+
+	// Check X-Real-IP header
+	if xri := r.Header.Get("X-Real-IP"); xri != "" {
+		return xri
+	}
+
+	// Fall back to remote address
+	if r.RemoteAddr != "" {
+		// Remove port if present
+		if idx := strings.LastIndex(r.RemoteAddr, ":"); idx >= 0 {
+			return r.RemoteAddr[:idx]
+		}
+		return r.RemoteAddr
+	}
+
+	return ""
+}
+
+// isIPAllowed checks if the given IP is in the whitelist
+func isIPAllowed(ip string, whitelist []string) bool {
+	for _, allowed := range whitelist {
+		if ip == allowed {
+			return true
+		}
+	}
+	return false
+}
+
+// isValidBearer validates the Bearer token from Authorization header
+func isValidBearer(authHeader, expectedToken string) bool {
+	if authHeader == "" {
+		return false
+	}
+
+	// Expected format: "Bearer <token>"
+	const bearerPrefix = "Bearer "
+	if !strings.HasPrefix(authHeader, bearerPrefix) {
+		return false
+	}
+
+	token := strings.TrimPrefix(authHeader, bearerPrefix)
+	return token == expectedToken
 }
 
 // RecordTaskResult records the result of a task execution
