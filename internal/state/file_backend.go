@@ -2,7 +2,6 @@ package state
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,9 +12,10 @@ import (
 
 // FileBackend implements StateBackend interface for file-based storage
 type FileBackend struct {
-	config    *FileConfig
-	stateFile string
-	backupDir string
+	config     *FileConfig
+	stateFile  string
+	backupDir  string
+	compressor *CompressionManager
 }
 
 // NewFileBackend creates a new file-based state backend
@@ -53,9 +53,10 @@ func NewFileBackend(config *FileConfig, stateFile string) (*FileBackend, error) 
 	}
 
 	return &FileBackend{
-		config:    config,
-		stateFile: stateFile,
-		backupDir: backupDir,
+		config:     config,
+		stateFile:  stateFile,
+		backupDir:  backupDir,
+		compressor: NewCompressionManager(DefaultCompressionConfig()),
 	}, nil
 }
 
@@ -79,14 +80,10 @@ func (fb *FileBackend) LoadState(ctx context.Context) (*types.State, error) {
 		return nil, fmt.Errorf("error reading state file: %w", err)
 	}
 
-	// Check if data is compressed
-	if fb.config.Compression {
-		// TODO: Add decompression logic if needed
-	}
-
-	var state types.State
-	if err := json.Unmarshal(data, &state); err != nil {
-		return nil, fmt.Errorf("error parsing state: %w", err)
+	// Decompress if needed (auto-detects compression)
+	state, err := fb.compressor.DecompressState(data)
+	if err != nil {
+		return nil, fmt.Errorf("error decompressing/parsing state: %w", err)
 	}
 
 	// Initialize maps if nil
@@ -97,7 +94,7 @@ func (fb *FileBackend) LoadState(ctx context.Context) (*types.State, error) {
 		state.Checksums = make(map[string]string)
 	}
 
-	return &state, nil
+	return state, nil
 }
 
 // SaveState saves state to file with automatic backup rotation
@@ -118,15 +115,10 @@ func (fb *FileBackend) SaveState(ctx context.Context, state *types.State) error 
 		}
 	}
 
-	// Marshal state to JSON
-	data, err := json.MarshalIndent(state, "", "  ")
+	// Compress state (handles compression if enabled)
+	data, err := fb.compressor.CompressState(state)
 	if err != nil {
-		return fmt.Errorf("error serializing state: %w", err)
-	}
-
-	// Compress if enabled
-	if fb.config.Compression {
-		// TODO: Add compression logic if needed
+		return fmt.Errorf("error compressing state: %w", err)
 	}
 
 	// Write to temporary file first, then rename (atomic)

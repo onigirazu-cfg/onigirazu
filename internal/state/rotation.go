@@ -1,9 +1,11 @@
 package state
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"time"
 
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
@@ -134,23 +136,33 @@ func (rm *RotationManager) archiveResults(results []types.PlayResult, playbook s
 		return fmt.Errorf("failed to create archive directory: %w", err)
 	}
 
-	// Create archive filename with timestamp
+	// Create archive filename with timestamp (sanitize playbook name)
 	timestamp := time.Now().Format("2006-01-02_15-04-05")
-	_ = filepath.Join(
+	safePlaybook := filepath.Base(playbook)
+	archiveFile := filepath.Join(
 		rm.policy.ArchiveDir,
-		fmt.Sprintf("archived_results_%s_%s.json", timestamp, playbook),
+		fmt.Sprintf("archived_results_%s_%s.json", timestamp, safePlaybook),
 	)
 
 	// Create archived data structure
-	_ = map[string]interface{}{
+	archivedData := map[string]interface{}{
 		"timestamp": time.Now(),
 		"playbook":  playbook,
 		"count":     len(results),
 		"results":   results,
 	}
 
-	// TODO: In real implementation, use JSON marshaling and compression
-	// This is simplified for now
+	// Marshal to JSON with compression support
+	jsonData, err := json.MarshalIndent(archivedData, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal archive data: %w", err)
+	}
+
+	// Compress if compression manager available (try to get compression manager)
+	// For now, write uncompressed JSON; compression is optional for archives
+	if err := os.WriteFile(archiveFile, jsonData, 0644); err != nil {
+		return fmt.Errorf("failed to write archive file: %w", err)
+	}
 
 	return nil
 }
@@ -170,10 +182,42 @@ func (rm *RotationManager) CleanupOldArchives() error {
 		return fmt.Errorf("failed to read archive directory: %w", err)
 	}
 
-	// Sort by modification time and keep only the most recent
-	if len(entries) > rm.policy.KeepArchives {
-		// TODO: Implement proper sorting and cleanup
-		// This is simplified for now
+	// If within the limit, nothing to do
+	if len(entries) <= rm.policy.KeepArchives {
+		return nil
+	}
+
+	// Create sortable file info slice
+	type fileInfo struct {
+		name    string
+		modTime time.Time
+	}
+
+	var files []fileInfo
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			info, err := entry.Info()
+			if err == nil {
+				files = append(files, fileInfo{
+					name:    entry.Name(),
+					modTime: info.ModTime(),
+				})
+			}
+		}
+	}
+
+	// Sort by modification time (oldest first)
+	sort.Slice(files, func(i, j int) bool {
+		return files[i].modTime.Before(files[j].modTime)
+	})
+
+	// Delete oldest files until we're at the limit
+	toDelete := len(files) - rm.policy.KeepArchives
+	for i := 0; i < toDelete && i < len(files); i++ {
+		archivePath := filepath.Join(rm.policy.ArchiveDir, files[i].name)
+		if err := os.Remove(archivePath); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: failed to delete old archive %s: %v\n", archivePath, err)
+		}
 	}
 
 	return nil

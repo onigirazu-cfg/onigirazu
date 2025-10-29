@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -655,7 +656,7 @@ Examples:
 
 			// Record plays and tasks in audit if recorder is available
 			if auditRecorder != nil && executionID != "" {
-				// TODO: Implement recordAuditResults function
+				recordAuditResults(auditRecorder, result, log)
 			}
 
 			// === PHASE 2A: Cache Execution Results ===
@@ -957,4 +958,88 @@ func isModuleReversible(module string) bool {
 	}
 
 	return reversibleModules[module]
+}
+
+// recordAuditResults records playbook execution results in the audit log
+func recordAuditResults(recorder *audit.Recorder, result *types.PlaybookResult, log interface{}) {
+	if recorder == nil || result == nil {
+		return
+	}
+
+	// Get a logger for error messages
+	logger, ok := log.(interface {
+		Warn(format string, args ...interface{})
+	})
+	if !ok {
+		return
+	}
+
+	// Record each play
+	for playIndex, play := range result.Plays {
+		// Get unique hosts for this play
+		hosts := make([]string, 0)
+		hostMap := make(map[string]bool)
+
+		for _, task := range play.Tasks {
+			if _, seen := hostMap[task.Host]; !seen && task.Host != "" {
+				hosts = append(hosts, task.Host)
+				hostMap[task.Host] = true
+			}
+		}
+
+		// Record play execution
+		playRecorder := recorder.RecordPlay(play.Name, playIndex, hosts)
+		if playRecorder == nil {
+			logger.Warn("Failed to create play recorder for play %d: %s", playIndex, play.PlayName)
+			continue
+		}
+
+		// Record each task in the play
+		for _, task := range play.Tasks {
+			// Convert task status
+			var taskStatus audit.TaskStatus
+			if task.Failed {
+				taskStatus = audit.TaskStatusFailed
+			} else if task.Skipped {
+				taskStatus = audit.TaskStatusSkipped
+			} else if task.Changed {
+				taskStatus = audit.TaskStatusChanged
+			} else {
+				taskStatus = audit.TaskStatusOk
+			}
+
+			// Create audit task result
+			auditTaskResult := audit.TaskResult{
+				Name:       task.TaskName,
+				Module:     task.Module,
+				Status:     taskStatus,
+				Host:       task.Host,
+				Duration:   task.Duration.Seconds(),
+				StartTime:  task.Timestamp,
+				EndTime:    task.Timestamp.Add(task.Duration),
+				Changed:    task.Changed,
+				ReturnCode: 0,
+				Error:      task.Error,
+			}
+
+			// Add output as JSON string if available
+			if task.Output != nil {
+				if jsonBytes, err := json.Marshal(task.Output); err == nil {
+					auditTaskResult.Output = string(jsonBytes)
+				}
+			}
+
+			// Record the task result
+			if err := recorder.RecordTaskResult(auditTaskResult); err != nil {
+				logger.Warn("Failed to record task result for %s on %s: %v", task.TaskName, task.Host, err)
+			}
+		}
+
+		// Mark play as complete
+		playStatus := audit.StatusSuccess
+		if !play.Success {
+			playStatus = audit.StatusFailure
+		}
+		playRecorder.Complete(playStatus)
+	}
 }

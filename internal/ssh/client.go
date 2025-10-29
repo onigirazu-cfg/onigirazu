@@ -171,6 +171,58 @@ func (c *Client) Close() error {
 	return nil
 }
 
+// HealthCheck sends a ping to verify the connection is alive
+// Returns true if connection is healthy, false otherwise
+func (c *Client) HealthCheck(timeout time.Duration) bool {
+	if c.client == nil {
+		return false
+	}
+
+	// Create a channel for the result
+	result := make(chan bool, 1)
+
+	// Send the health check in a goroutine with timeout
+	go func() {
+		// Try to send a keepalive message by executing a simple command
+		// Using 'true' command which always succeeds and has minimal overhead
+		session, err := c.client.NewSession()
+		if err != nil {
+			result <- false
+			return
+		}
+		defer session.Close()
+
+		// Execute a lightweight command with minimal output
+		err = session.Run("true")
+		result <- err == nil
+	}()
+
+	// Wait for result or timeout
+	select {
+	case ok := <-result:
+		return ok
+	case <-time.After(timeout):
+		c.logger.Warn("Health check timeout for host %s", c.host.Address)
+		return false
+	}
+}
+
+// IsAlive checks if the client connection is still active
+// This is a quick check using SSH channel open
+func (c *Client) IsAlive() bool {
+	if c.client == nil {
+		return false
+	}
+
+	// Try to open a channel which will fail immediately if connection is dead
+	session, err := c.client.NewSession()
+	if err != nil {
+		return false
+	}
+	session.Close()
+	return true
+}
+
 // IsLocal checks if the host is localhost
 func IsLocal(host types.Host) bool {
 	if host.Address == "localhost" || host.Address == "127.0.0.1" || host.Address == "::1" {
