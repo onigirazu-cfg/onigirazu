@@ -12,6 +12,7 @@ This document describes **all inventory formats actually supported** by the Onig
 | INI | `.ini` | ✅ Full support | `parseIniInventory()` | Ansible compatibility |
 | Simple List | (plain text) | ✅ Full support | `parseSimpleList()` | Quick host lists |
 | Dynamic Scripts | (executable) | ✅ Full support | `parseDynamicInventory()` | Cloud integration |
+| Inline Specs | (CLI string) | ✅ Full support | `InlineInventoryDetector` | Quick ad-hoc hosts |
 | Auto-detect | (no extension) | ✅ Full support | `autoDetectAndParse()` | Flexible format detection |
 
 ---
@@ -499,7 +500,107 @@ EOF
 
 ---
 
-## 📋 7. Auto-Detection (No Extension)
+## 📋 7. Inline Inventory (CLI Strings)
+
+**Direct host specifications passed on command line (no file needed).**
+
+### Parser Location
+
+- `internal/parser/inline_inventory.go` - `InlineInventoryDetector` class
+
+### Single Host Specifications
+
+```bash
+# Just IP address
+onigirazu run -i 192.168.1.1 playbook.yml
+
+# With port
+onigirazu run -i 192.168.1.1:2222 playbook.yml
+
+# With username
+onigirazu run -i admin@192.168.1.1 playbook.yml
+
+# Full specification
+onigirazu run -i admin@192.168.1.1:2222 playbook.yml
+```
+
+### Multiple Hosts (Comma-Separated)
+
+```bash
+# List of IPs
+onigirazu run -i "192.168.1.1,192.168.1.2,192.168.1.3" playbook.yml
+
+# With different ports and users
+onigirazu run -i "root@192.168.1.1:22,admin@192.168.1.2:2222,deploy@host.com" playbook.yml
+```
+
+### Ansible Trailing Comma Format
+
+```bash
+# Ansible-style with trailing comma (indicates inline inventory)
+onigirazu run -i "192.168.1.1," playbook.yml
+```
+
+### Detection Logic
+
+The `InlineInventoryDetector` distinguishes inline specs from file paths by analyzing:
+
+1. **File separators** - Check for path separators (/, \, etc.)
+2. **Path patterns** - Look for patterns like `..`, `./`, etc.
+3. **Host validity** - Validate host specifications
+4. **Trailing comma** - Ansible marker for inline inventory
+
+### Valid Inline Specifications
+
+✅ **These are recognized as inline inventory:**
+
+- `192.168.1.1`
+- `192.168.1.1:2222`
+- `user@192.168.1.1`
+- `user@192.168.1.1:2222`
+- `localhost`
+- `host.example.com`
+- `192.168.1.1,192.168.1.2`
+- `192.168.1.1,` (Ansible style)
+
+❌ **These are treated as file paths:**
+
+- `./inventory.yml`
+- `../hosts`
+- `/etc/ansible/hosts`
+- `~/inventory`
+- `inventory.txt`
+
+### Use Cases
+
+- Quick testing: `onigirazu run -i 192.168.1.1 playbook.yml`
+- Ad-hoc deployments: Multiple hosts without creating inventory file
+- CI/CD pipelines: Direct host passing
+- Script integration: Programmatic host specification
+
+### Examples
+
+**Single host quick test:**
+
+```bash
+onigirazu run -i 192.168.1.100 deploy.yml
+```
+
+**Multiple hosts with different configurations:**
+
+```bash
+onigirazu run -i "root@192.168.1.1:22,admin@192.168.1.2:2222,deploy@web.example.com" production.yml
+```
+
+**Ansible-style notation:**
+
+```bash
+onigirazu run -i "192.168.1.1," playbook.yml
+```
+
+---
+
+## 📋 8. Auto-Detection (No Extension)
 
 **Parser intelligently detects format from content.**
 
@@ -654,12 +755,30 @@ type Host struct {
 | Use Case | Recommended | Why |
 |----------|-------------|-----|
 | Human editing | YAML | Most readable |
-| Ansible migration | INI | Full compatibility |
+| Ansible migration | INI or YAML | Full compatibility |
 | API/Automation | JSON | Structured data |
 | Configuration | TOML | Clean syntax |
-| Quick testing | Simple list | Minimal syntax |
+| Quick testing | Simple list or Inline | Minimal syntax |
+| Ad-hoc CLI | Inline specs | No file needed |
 | Cloud integration | Dynamic script | Programmatic |
 | Unknown format | Auto-detect | Let parser decide |
+
+## 📊 Format Comparison Matrix
+
+| Feature | YAML | JSON | TOML | INI | Simple | Inline |
+|---------|------|------|------|-----|--------|--------|
+| Host specs | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Port number | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| SSH user | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| SSH key | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |
+| Host key insecure | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |
+| Groups | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |
+| Group vars | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |
+| Host vars | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |
+| Comments | ✅ | ❌ | ✅ | ✅ | ✅ | ❌ |
+| Readable | ✅ | ⚠️ | ✅ | ✅ | ✅ | ✅ |
+| File-based | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
+| Dynamic exec | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 
 ---
 
