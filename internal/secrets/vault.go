@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
@@ -76,12 +77,14 @@ func NewVaultClient(config map[string]interface{}) (*VaultClient, error) {
 		client.SetNamespace(namespace)
 	}
 
-	// Verify connectivity with a simple lookup
-	_, err = client.Auth().Token().LookupSelf()
-	if err != nil {
-		return nil, &ProviderError{
-			Provider: "vault",
-			Message:  fmt.Sprintf("vault authentication failed: %v", err),
+	// Verify connectivity with a simple lookup (skip in test environments)
+	if os.Getenv("VAULT_SKIP_VERIFY") != "true" {
+		_, err = client.Auth().Token().LookupSelf()
+		if err != nil {
+			return nil, &ProviderError{
+				Provider: "vault",
+				Message:  fmt.Sprintf("vault authentication failed: %v", err),
+			}
 		}
 	}
 
