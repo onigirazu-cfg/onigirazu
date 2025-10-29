@@ -333,9 +333,9 @@ tasks:
 
 For complete documentation, see:
 
-- [Variables and Configuration Reference](VARIABLES_AND_CONFIGURATION.md)
-- [Quick Start Guide](quick-start.md)
-- [Inventory Formats](inventory-formats.md)
+- [Configuration Reference](CONFIGURATION_REFERENCE.md)
+- [Quick Start Configuration](QUICK_START_CONFIGURATION.md)
+- [Inventory Formats](INVENTORY_FORMATS.md)
 
 ---
 
@@ -343,11 +343,11 @@ For complete documentation, see:
 
 | Topic | Link |
 |-------|------|
-| All Variables | [VARIABLES_AND_CONFIGURATION.md](VARIABLES_AND_CONFIGURATION.md) |
-| Configuration | [VARIABLES_AND_CONFIGURATION.md#configuration-parameters](VARIABLES_AND_CONFIGURATION.md#configuration-parameters) |
-| Date/Time | [VARIABLES_AND_CONFIGURATION.md#date-and-time-variables](VARIABLES_AND_CONFIGURATION.md#date-and-time-variables) |
-| Inventory | [inventory-formats.md](inventory-formats.md) |
+| Configuration | [CONFIGURATION_REFERENCE.md](CONFIGURATION_REFERENCE.md) |
+| Quick Start | [QUICK_START_CONFIGURATION.md](QUICK_START_CONFIGURATION.md) |
+| All Formats | [INVENTORY_FORMATS.md](INVENTORY_FORMATS.md) |
 | Modules | [modules/README.md](modules/README.md) |
+| Playbook Examples | [examples/README.md](examples/README.md) |
 
 ---
 

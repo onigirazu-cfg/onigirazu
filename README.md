@@ -9,30 +9,21 @@ Welcome to the Onigirazu documentation directory! This contains comprehensive do
 
 ### User Documentation
 
-- **[Quick Start Guide](quick-start.md)** - Get started with Onigirazu in minutes
+- **[Quick Start Guide](QUICK_START_CONFIGURATION.md)** - Get started with Onigirazu in minutes
 - **[Playbook Format & Examples](examples/README.md)** - Playbook structure, syntax, and real-world examples
-- **[Playbook Types Reference](api/pkg/types.md)** - Technical type definitions for playbooks and tasks
+- **[Playbook Types Reference](examples/README.md)** - Technical type definitions for playbooks and tasks
 - **[Variables Cheat Sheet](VARIABLES_CHEATSHEET.md)** - Quick reference for common variables ⚡
-- **[Variables and Configuration](VARIABLES_AND_CONFIGURATION.md)** - Complete reference for all configuration parameters and variables
-- **[Inventory Formats](inventory-formats.md)** - Supported inventory file formats (YAML, TOML, JSON, INI, text)
-- **[Inline Inventory Guide](../INLINE_INVENTORY_GUIDE.md)** - Using inline host specifications without inventory files
+- **[Configuration Reference](CONFIGURATION_REFERENCE.md)** - Complete reference for all configuration parameters and variables
+- **[Inventory Formats](INVENTORY_FORMATS.md)** - Supported inventory file formats (YAML, TOML, JSON, INI, text)
+- **[Inventory Formats Guide](INVENTORY_FORMATS.md)** - Using inventory specifications and file formats
 - **[Modules Reference](modules/README.md)** - Built-in modules documentation
 - **[Ad-hoc Commands Guide](ADHOC_GUIDE.md)** - Execute commands without playbooks (5 input formats)
 
 ### New in v1.52.0: Complete Configuration & Security Documentation
 
-- **[Configuration Reference](CONFIGURATION_REFERENCE.md)** ⭐ NEW - Complete guide to all 35+ configuration options
 - **[Security Policy Guide](SECURITY_POLICY_GUIDE.md)** ⭐ NEW - Complete guide to all 13+ security options
-- **[Quick Start Configuration](QUICK_START_CONFIGURATION.md)** ⭐ NEW - 5-minute setup guide (fixes common errors)
 - **[Configuration & Security Index](INDEX_CONFIGURATION_SECURITY.md)** ⭐ NEW - Navigation guide by role and problem type
-
-### API Documentation
-
-- **[api/](api/)** - Auto-generated API documentation
-  - **[index.html](api/index.html)** - Beautiful HTML documentation (open in browser)
-  - **[README.md](api/README.md)** - API documentation overview
-  - **[pkg/](api/pkg/)** - Public package documentation
-  - **[internal/](api/internal/)** - Internal package documentation
+- **[Troubleshooting Configuration](TROUBLESHOOTING_CONFIG.md)** - Solutions for common configuration issues
 
 ### Design Documentation
 
@@ -42,82 +33,29 @@ Welcome to the Onigirazu documentation directory! This contains comprehensive do
 
 ## 🚀 Quick Start
 
-### View API Documentation
-
-1. **HTML Documentation** (Recommended):
-
-   ```bash
-   make docs-open
-   # or manually: open docs/api/index.html
-   ```
-
-2. **Interactive Documentation Server**:
-
-   ```bash
-   make docs-serve
-   # Opens http://localhost:8080
-   ```
-
-3. **Command Line**:
-
-   ```bash
-   go doc github.com/onigirazu-cfg/onigirazu/pkg/types
-   ```
-
-### Generate Documentation
-
-To regenerate the API documentation:
-
-```bash
-make docs-generate
-```
-
-This will:
-
-- Generate markdown documentation for all packages
-- Create a beautiful HTML documentation page
-- Update the API index
+1. **Start here**: [Quick Start Configuration](QUICK_START_CONFIGURATION.md) - 5-minute setup guide
+2. **Set up inventory**: [Inventory Formats](INVENTORY_FORMATS.md) - All supported formats
+3. **Learn variables**: [Variables Cheat Sheet](VARIABLES_CHEATSHEET.md) - Common variables reference
+4. **Write playbooks**: [Playbook Format & Examples](examples/README.md) - Syntax and examples
+5. **Run ad-hoc commands**: [Ad-hoc Commands Guide](ADHOC_GUIDE.md) - Command-line execution
 
 ## 📖 Available Documentation
 
-### Core Types (`pkg/types`)
+### Core Concepts
 
-- **[Playbook](api/pkg/types.md#playbook)** - YAML playbook structure, see [Playbook Format Guide](examples/README.md)
-- **[Task](api/pkg/types.md#task)** - Individual task definition
-- **[Host](api/pkg/types.md#host)** - Target host configuration
-- **TaskResult** - Execution results
-- **ExecutionContext** - Runtime context
+- **[Playbook Format](examples/README.md)** - YAML playbook structure and syntax
+- **[Task Definition](examples/README.md)** - Individual task structure and options
+- **[Inventory & Hosts](INVENTORY_FORMATS.md)** - Target host configuration
+- **[Variables & Templates](VARIABLES_CHEATSHEET.md)** - Variable interpolation and templating
+- **[Modules](modules/README.md)** - Built-in modules and module development
+- **[Handlers & Callbacks](HANDLERS_GUIDE.md)** - Event handling and workflow orchestration
 
-### Configuration (`internal/config`)
+### Advanced Topics
 
-- Configuration loading and validation
-- Environment variable handling
-- Default settings
-
-### Core Engine (`internal/core`)
-
-- Main execution engine
-- Task orchestration
-- Error handling
-
-### Modules (`internal/modules`)
-
-- Built-in modules (command, file, template, etc.)
-- Module interface and implementation
-- Custom module development
-
-### Parser (`internal/parser`)
-
-- YAML parsing and validation
-- [Playbook structure parsing](examples/README.md) with validation
-- [Inline inventory parsing](../INLINE_INVENTORY_GUIDE.md) for direct host specifications
-- Variable interpolation and template processing
-
-### Workflow (`internal/workflow`)
-
-- Workflow orchestration
-- Event handling
-- Progress tracking
+- **[Loops & Iteration](LOOPS_GUIDE.md)** - Loop constructs and iteration patterns
+- **[Filters & Plugins](FILTERS_GUIDE.md)** - Available filters and plugin system
+- **[Interactive Mode](INTERACTIVE_MODE.md)** - Interactive playbook execution
+- **[Tag Filtering](TAG_FILTERING.md)** - Running specific tasks by tags
 
 ## 🛠 Documentation Commands
 
@@ -156,7 +94,7 @@ When adding new features or modifying existing code:
 If you have questions about the documentation or need help:
 
 1. Check the [main README](../README.md)
-2. Browse the [API documentation](api/)
+2. See [Troubleshooting Configuration](TROUBLESHOOTING_CONFIG.md) for common issues
 3. Open an issue on GitHub
 4. Join our community discussions
 

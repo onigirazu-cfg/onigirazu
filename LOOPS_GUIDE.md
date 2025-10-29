@@ -1112,7 +1112,7 @@ Parses range string into items array.
 
 ## Related Documentation
 
-- [Task Execution](PLAYBOOK_QUICK_REFERENCE.md)
-- [Variables and Templates](VARIABLES_AND_CONFIGURATION.md)
-- [Playbook Syntax](PLAYBOOK_FORMATS.md)
+- [Playbook Format & Examples](examples/README.md)
+- [Variables and Templates](VARIABLES_CHEATSHEET.md)
+- [Configuration Reference](CONFIGURATION_REFERENCE.md)
 - [Handlers Guide](HANDLERS_GUIDE.md)
