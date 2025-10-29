@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.61.1] - 2024-11-01
+
+### Fixed
+
+- Fixed deprecated Go APIs in folderstructure package:
+  - Replaced deprecated `filepath.HasPrefix` with `strings.HasPrefix`
+  - Replaced deprecated `ioutil.ReadDir` with `os.ReadDir`
+  - Replaced deprecated `ioutil.ReadFile` with `os.ReadFile`
+  - All changes maintain full backward compatibility
+  - No functional changes - code quality improvements only
+
+### Security
+
+- Improved code maintainability by using modern Go APIs
+
+### Changed
+
+- Internal implementation only - no user-facing changes
+
 ## [1.61.0] - 2024-11-01
 
 ### Added
