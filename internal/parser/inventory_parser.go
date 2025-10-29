@@ -322,12 +322,6 @@ type ansibleYamlInventory struct {
 	All map[string]interface{} `yaml:"all"`
 }
 
-type ansibleGroup struct {
-	Hosts    map[string]interface{} `yaml:"hosts"`
-	Children map[string]interface{} `yaml:"children"`
-	Vars     map[string]interface{} `yaml:"vars"`
-}
-
 // parseAnsibleYamlInventory parses Ansible-format YAML inventory
 func (p *InventoryParser) parseAnsibleYamlInventory(data []byte) (*types.Inventory, error) {
 	var ansibleInv ansibleYamlInventory
