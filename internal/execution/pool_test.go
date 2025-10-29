@@ -3,6 +3,7 @@ package execution
 import (
 	"context"
 	"errors"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -706,8 +707,14 @@ func TestPool_DelegateToInvalidHost(t *testing.T) {
 	results, err := pool.ExecuteParallel([]*types.Task{task}, hosts, map[string]interface{}{}, registry)
 	assert.NoError(t, err)
 	assert.Equal(t, 2, len(results), "Should have results for all hosts")
+
+	// Sort the executed hosts to avoid race condition in order
+	sortedExecutedHosts := make([]string, len(executedHosts))
+	copy(sortedExecutedHosts, executedHosts)
+	sort.Strings(sortedExecutedHosts)
+
 	// Should execute on original hosts since delegated host was not found
-	assert.Equal(t, []string{"host1", "host2"}, executedHosts, "Should execute on original hosts when delegate target not found")
+	assert.Equal(t, []string{"host1", "host2"}, sortedExecutedHosts, "Should execute on original hosts when delegate target not found")
 }
 
 // TestFindHostByName tests the findHostByName helper function
