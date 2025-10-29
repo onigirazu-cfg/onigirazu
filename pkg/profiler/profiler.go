@@ -13,7 +13,6 @@ import (
 // ProfileManager handles CPU and memory profiling for Onigirazu execution
 type ProfileManager struct {
 	cpuFile      *os.File
-	memFile      *os.File
 	traceFile    *os.File
 	outputDir    string
 	enabled      bool
@@ -161,7 +160,7 @@ func (pm *ProfileManager) GenerateReport() (string, error) {
 	}
 
 	duration := time.Since(pm.startTime)
-	report := fmt.Sprintf("=== PROFILING REPORT ===\n")
+	report := "=== PROFILING REPORT ===\n"
 	report += fmt.Sprintf("Duration: %v\n", duration)
 	report += fmt.Sprintf("Output Directory: %s\n", pm.outputDir)
 	report += fmt.Sprintf("Generated: %s\n\n", time.Now().Format(time.RFC3339))

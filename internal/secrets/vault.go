@@ -17,7 +17,6 @@ type VaultClient struct {
 	token     string
 	client    *api.Client
 	cache     *secretCache
-	mu        sync.RWMutex
 	namespace string
 }
 
