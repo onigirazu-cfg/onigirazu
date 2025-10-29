@@ -2,7 +2,7 @@ package folderstructure
 
 import (
 	"fmt"
-	"io/ioutil"
+	"os"
 	"path/filepath"
 	"sync"
 	"time"
@@ -75,7 +75,7 @@ func (hm *HandlerManager) LoadHandlers(projectPath string) ([]*Handler, error) {
 
 // loadHandlersFromDir loads all handlers from a directory
 func (hm *HandlerManager) loadHandlersFromDir(dirPath string) ([]*Handler, error) {
-	entries, err := ioutil.ReadDir(dirPath)
+	entries, err := os.ReadDir(dirPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read directory: %w", err)
 	}
@@ -114,7 +114,7 @@ func (hm *HandlerManager) loadHandlersFromDir(dirPath string) ([]*Handler, error
 
 // loadHandlersFromFile loads handlers from a single YAML file
 func (hm *HandlerManager) loadHandlersFromFile(filePath string) ([]*Handler, error) {
-	data, err := ioutil.ReadFile(filePath)
+	data, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read file: %w", err)
 	}

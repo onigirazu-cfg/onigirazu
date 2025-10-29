@@ -2,7 +2,7 @@ package folderstructure
 
 import (
 	"fmt"
-	"io/ioutil"
+	"os"
 	"path/filepath"
 	"sync"
 	"time"
@@ -79,7 +79,7 @@ func (vl *VariableLoader) LoadVariables(projectPath string) (*VariableSet, error
 
 // loadVariablesFromDir loads all YAML files from a directory
 func (vl *VariableLoader) loadVariablesFromDir(dirPath string, varSet *VariableSet, source string, priority int) error {
-	entries, err := ioutil.ReadDir(dirPath)
+	entries, err := os.ReadDir(dirPath)
 	if err != nil {
 		return fmt.Errorf("failed to read directory: %w", err)
 	}
@@ -124,7 +124,7 @@ func (vl *VariableLoader) loadVariablesFromDir(dirPath string, varSet *VariableS
 
 // loadVariablesFromFile loads variables from a single YAML file
 func (vl *VariableLoader) loadVariablesFromFile(filePath string, varSet *VariableSet, source, fileName string, priority int) error {
-	data, err := ioutil.ReadFile(filePath)
+	data, err := os.ReadFile(filePath)
 	if err != nil {
 		return fmt.Errorf("failed to read file: %w", err)
 	}

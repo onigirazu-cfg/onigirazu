@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -166,7 +167,7 @@ func (fr *FileResolver) ValidateFilePath(basePath string, filePath string) error
 	}
 
 	// Check for ../ in the relative path
-	if filepath.IsAbs(rel) || rel == ".." || filepath.HasPrefix(rel, ".."+string(filepath.Separator)) {
+	if filepath.IsAbs(rel) || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return fmt.Errorf("path traversal detected: %s", filePath)
 	}
 
