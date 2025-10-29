@@ -32,6 +32,7 @@ import (
 	"github.com/onigirazu-cfg/onigirazu/internal/tagfilter"
 	"github.com/onigirazu-cfg/onigirazu/internal/taskpreview"
 	"github.com/onigirazu-cfg/onigirazu/internal/template"
+	"github.com/onigirazu-cfg/onigirazu/pkg/profiler"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 	"github.com/onigirazu-cfg/onigirazu/pkg/utils"
 )
@@ -57,6 +58,12 @@ func NewApplyCommand() *cobra.Command {
 		verboseOutput  bool
 		backgroundMode bool
 		lenient        bool
+		// Profiling flags
+		profileEnabled bool
+		profileDir     string
+		profileCPU     bool
+		profileMem     bool
+		profileTrace   bool
 	)
 
 	cmd := &cobra.Command{
@@ -635,6 +642,38 @@ Examples:
 			log.Info("Starting playbook execution")
 			startTime := time.Now()
 
+			// Initialize profiler if enabled
+			var profileMgr *profiler.ProfileManager
+			if profileEnabled {
+				cfg := profiler.Config{
+					Enabled:   true,
+					OutputDir: profileDir,
+					CPU:       profileCPU && !profileTrace, // Trace disables CPU profiling
+					Memory:    profileMem,
+					Trace:     profileTrace,
+				}
+				var err error
+				profileMgr, err = profiler.NewProfileManager(cfg)
+				if err != nil {
+					log.Warn("Failed to initialize profiler: %v", err)
+				} else {
+					if err := profileMgr.StartProfiling(); err != nil {
+						log.Warn("Failed to start profiling: %v", err)
+					} else {
+						log.Info("Profiling enabled - output: %s", profileDir)
+					}
+					// Ensure profiling stops even if execution fails
+					defer func() {
+						if err := profileMgr.StopProfiling(); err != nil {
+							log.Warn("Failed to stop profiling: %v", err)
+						}
+						if report, err := profileMgr.GenerateReport(); err == nil && report != "" {
+							log.Info("Profiling report:\n%s", report)
+						}
+					}()
+				}
+			}
+
 			result, err := executionEngine.ExecutePlaybook(ctx, playbook)
 			duration := time.Since(startTime)
 
@@ -997,6 +1036,13 @@ Examples:
 
 	// Inventory flags
 	cmd.Flags().BoolVar(&lenient, "lenient", false, "Lenient mode: skip inventory validation errors and process what is valid")
+
+	// Profiling flags
+	cmd.Flags().BoolVar(&profileEnabled, "profile", false, "Enable profiling (CPU, memory, trace)")
+	cmd.Flags().StringVar(&profileDir, "profile-dir", ".onigirazu/profiles", "Output directory for profile files")
+	cmd.Flags().BoolVar(&profileCPU, "profile-cpu", true, "Profile CPU usage (enabled by default with --profile)")
+	cmd.Flags().BoolVar(&profileMem, "profile-mem", true, "Profile memory usage (enabled by default with --profile)")
+	cmd.Flags().BoolVar(&profileTrace, "profile-trace", false, "Generate execution trace (disables CPU profiling)")
 
 	return cmd
 }
