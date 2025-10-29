@@ -284,7 +284,24 @@ func (t *Tracker) UpdateTask(hostName, taskName string, success bool) {
 
 // UpdateProgress updates progress (interface method)
 func (t *Tracker) UpdateProgress(completed, total int) {
-	t.Update(completed, "")
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+
+	if total > 0 {
+		t.total = total
+	}
+	t.completed = completed
+
+	// Rate limit updates
+	now := time.Now()
+	if now.Sub(t.lastUpdate) < t.updateRate {
+		return
+	}
+	t.lastUpdate = now
+
+	if t.showBar {
+		t.render()
+	}
 }
 
 // GetStats returns progress statistics (interface method)

@@ -9,7 +9,7 @@ import (
 // ExecutionObserver receives events during execution
 type ExecutionObserver interface {
 	// OnExecutionStart is called when execution begins
-	OnExecutionStart(playbookName string, playCount int)
+	OnExecutionStart(playbookName string, playCount int, taskCount int)
 
 	// OnPlayStart is called when a play starts
 	OnPlayStart(playName string, playIndex int, totalPlays int)
@@ -50,9 +50,9 @@ func (m *MultiObserver) Attach(observer ExecutionObserver) {
 }
 
 // OnExecutionStart broadcasts to all observers
-func (m *MultiObserver) OnExecutionStart(playbookName string, playCount int) {
+func (m *MultiObserver) OnExecutionStart(playbookName string, playCount int, taskCount int) {
 	for _, obs := range m.observers {
-		obs.OnExecutionStart(playbookName, playCount)
+		obs.OnExecutionStart(playbookName, playCount, taskCount)
 	}
 }
 

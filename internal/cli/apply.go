@@ -591,25 +591,11 @@ Examples:
 				cacheDir := filepath.Join(homeDir, ".onigirazu", "cache", "executions")
 				cacheMgr, err := execution.NewCacheManagerWithPath(cacheDir)
 				if err == nil {
-					// Count successes and failures from results
-					totalSuccess := 0
-					totalFailed := 0
-					totalChanged := 0
-					totalSkipped := 0
-
-					for _, play := range result.Plays {
-						for _, task := range play.Tasks {
-							if task.Failed {
-								totalFailed++
-							} else if task.Changed {
-								totalChanged++
-							} else if task.Skipped {
-								totalSkipped++
-							} else {
-								totalSuccess++
-							}
-						}
-					}
+					// Use pre-calculated task counts from PlaybookResult
+					totalSuccess := result.SuccessTasks
+					totalFailed := result.FailedTasks
+					totalChanged := result.ChangedTasks
+					totalSkipped := result.SkippedTasks
 
 					// Build execution result for caching
 					execResult := &execution.ExecutionResult{
@@ -678,27 +664,38 @@ Examples:
 			}
 
 			// Prepare execution summary
+			// Use progress tracker stats if available (more accurate), otherwise use result fields
 			summary := logger.ExecutionSummary{
 				TotalDuration: duration,
 				PlayCount:     len(result.Plays),
 				Stats:         result.Stats,
 			}
 
-			// Calculate task counts from plays
-			for _, play := range result.Plays {
-				for _, task := range play.Tasks {
-					summary.TaskCount++
-					if task.Failed {
-						summary.FailedCount++
-					} else if task.Changed {
-						summary.ChangedCount++
-					} else if task.Skipped {
-						summary.SkippedCount++
-					} else {
-						summary.SuccessCount++
-					}
+			// Get task counts from progress tracker if available
+			trackerStats := progressTracker.GetStats()
+			if trackerStats != nil {
+				if total, ok := trackerStats["total"].(int); ok {
+					summary.TaskCount = total
 				}
+				if completed, ok := trackerStats["completed"].(int); ok {
+					summary.SuccessCount = completed
+				}
+				if failed, ok := trackerStats["failed"].(int); ok {
+					summary.FailedCount = failed
+				}
+				if skipped, ok := trackerStats["skipped"].(int); ok {
+					summary.SkippedCount = skipped
+				}
+			} else {
+				// Fallback to result fields
+				summary.TaskCount = result.TotalTasks
+				summary.SuccessCount = result.SuccessTasks
+				summary.FailedCount = result.FailedTasks
+				summary.SkippedCount = result.SkippedTasks
 			}
+
+			// Calculate changed count from result
+			summary.ChangedCount = result.ChangedTasks
 
 			if result.Failed {
 				log.Error("Playbook execution failed")

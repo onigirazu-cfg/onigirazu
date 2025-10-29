@@ -20,7 +20,7 @@ import (
 
 // ExecutionObserverI is the interface for execution observers (import cycle avoidance)
 type ExecutionObserverI interface {
-	OnExecutionStart(playbookName string, playCount int)
+	OnExecutionStart(playbookName string, playCount int, taskCount int)
 	OnPlayStart(playName string, playIndex int, totalPlays int)
 	OnPlayEnd(playName string, playIndex int, success bool, duration time.Duration)
 	OnTaskStart(taskName string, hostName string)
@@ -137,10 +137,19 @@ func (e *ExecutionEngine) AttachObserver(observer ExecutionObserverI) {
 }
 
 // notifyExecutionStart notifies observers of execution start
-func (e *ExecutionEngine) notifyExecutionStart(playbookName string, playCount int) {
+func (e *ExecutionEngine) notifyExecutionStart(playbookName string, playCount int, taskCount int) {
 	for _, obs := range e.observers {
-		obs.OnExecutionStart(playbookName, playCount)
+		obs.OnExecutionStart(playbookName, playCount, taskCount)
 	}
+}
+
+// countPlaybookTasks counts the total number of tasks in a playbook
+func (e *ExecutionEngine) countPlaybookTasks(playbook *types.Playbook) int {
+	totalTasks := 0
+	for _, play := range playbook.Plays {
+		totalTasks += len(play.Tasks)
+	}
+	return totalTasks
 }
 
 // notifyPlayStart notifies observers of play start
@@ -207,8 +216,14 @@ func (e *ExecutionEngine) ExecutePlaybook(ctx context.Context, playbook *types.P
 		Plays:     make([]types.PlayResult, 0, len(playbook.Plays)),
 	}
 
+	// Count total tasks for progress tracking
+	totalTaskCount := e.countPlaybookTasks(playbook)
+
+	// Initialize progress tracker with total task count
+	e.progressTracker.UpdateProgress(0, totalTaskCount)
+
 	// Notify observers of execution start
-	e.notifyExecutionStart(playbook.Name, len(playbook.Plays))
+	e.notifyExecutionStart(playbook.Name, len(playbook.Plays), totalTaskCount)
 
 	// Execute each play
 	contextCancelled := false
@@ -277,6 +292,38 @@ func (e *ExecutionEngine) ExecutePlaybook(ctx context.Context, playbook *types.P
 	result.EndTime = time.Now()
 	result.Duration = result.EndTime.Sub(result.StartTime)
 	result.Stats = e.getExecutionStats()
+
+	// Calculate aggregate task statistics
+	totalTasks := 0
+	successCount := 0
+	failedCount := 0
+	changedCount := 0
+	skippedCount := 0
+
+	for _, play := range result.Plays {
+		// Tasks are stored in Hosts[].Tasks, not in play.Tasks
+		for _, host := range play.Hosts {
+			for _, task := range host.Tasks {
+				totalTasks++
+				if task.Failed {
+					failedCount++
+				} else if task.Skipped {
+					skippedCount++
+				} else {
+					successCount++
+					if task.Changed {
+						changedCount++
+					}
+				}
+			}
+		}
+	}
+
+	result.TotalTasks = totalTasks
+	result.SuccessTasks = successCount
+	result.FailedTasks = failedCount
+	result.ChangedTasks = changedCount
+	result.SkippedTasks = skippedCount
 
 	// Record playbook execution metrics
 	e.metricsManager.AddExecutionTime(time.Since(playbookStartTime))

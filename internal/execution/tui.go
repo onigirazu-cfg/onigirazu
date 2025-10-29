@@ -40,6 +40,13 @@ type ExecutionEvent struct {
 	HostName  string
 	Message   string
 	Timestamp time.Time
+	// Task status fields (for task_end events)
+	TaskFailed   bool
+	TaskChanged  bool
+	TaskSkipped  bool
+	TaskDuration time.Duration
+	// Progress tracking
+	TotalTaskCount int // Total tasks in the playbook
 }
 
 // EnhancedTUIModel - the main Bubble Tea model for glance-style dashboard
@@ -62,6 +69,7 @@ type EnhancedTUIModel struct {
 	// Execution state
 	playbookName     string
 	playCount        int
+	totalTaskCount   int // Total tasks in the playbook (for progress calculation)
 	currentPlayIndex int
 	currentTaskName  string
 	currentHost      string
@@ -212,12 +220,6 @@ func (m *EnhancedTUIModel) Start() error {
 	// Create and run the Bubble Tea program with alt screen
 	m.program = tea.NewProgram(m, tea.WithAltScreen())
 
-	// Start event processor goroutine
-	go m.eventProcessor()
-
-	// Start ticker for updates
-	go m.tickerLoop()
-
 	// Run the TUI (blocking)
 	if _, err := m.program.Run(); err != nil {
 		return fmt.Errorf("TUI error: %w", err)
@@ -335,24 +337,28 @@ func (m *EnhancedTUIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		return m, nil
+		return m, tea.Batch(m.listenForEvents(), m.listenForTicks())
 
 	case tea.KeyMsg:
-		return m.handleKeypress(msg)
+		_, cmd := m.handleKeypress(msg)
+		if cmd != nil {
+			return m, tea.Batch(m.listenForEvents(), m.listenForTicks(), cmd)
+		}
+		return m, tea.Batch(m.listenForEvents(), m.listenForTicks())
 
 	case ExecutionEvent:
 		m.processEvent(msg)
-		return m, m.listenForEvents()
+		return m, tea.Batch(m.listenForEvents(), m.listenForTicks())
 
 	case tickMsg:
 		m.updateElapsedTime()
-		return m, m.listenForTicks()
+		return m, tea.Batch(m.listenForEvents(), m.listenForTicks())
 
 	case tea.QuitMsg:
 		return m, tea.Quit
 	}
 
-	return m, nil
+	return m, tea.Batch(m.listenForEvents(), m.listenForTicks())
 }
 
 // View renders the complete UI (Bubble Tea interface)
@@ -562,7 +568,13 @@ func (m *EnhancedTUIModel) renderStatsPanel(width int, height int) string {
 
 	// Task stats summary with indicators and progress
 	successTasks, failedTasks, skippedTasks, changedTasks := m.getTaskProgress()
-	totalTasks := successTasks + failedTasks + skippedTasks + changedTasks
+	completedTasks := successTasks + failedTasks + skippedTasks + changedTasks
+
+	// Use actual total task count if available, otherwise use completed tasks count
+	totalTasks := m.totalTaskCount
+	if totalTasks == 0 {
+		totalTasks = completedTasks
+	}
 
 	lines = append(lines, "")
 	lines = append(lines, "Tasks:")
@@ -980,10 +992,8 @@ func (m *EnhancedTUIModel) updateMetrics() {
 }
 
 // getSpeedMetrics returns formatted speed information
+// NOTE: Must be called while holding m.mutex (either Lock or RLock)
 func (m *EnhancedTUIModel) getSpeedMetrics() (avgSpeed, tasksPerSec string) {
-	m.mutex.RLock()
-	defer m.mutex.RUnlock()
-
 	if m.metrics == nil || m.elapsedTime == 0 {
 		return "- tasks/min", "- tasks/sec"
 	}
@@ -1021,7 +1031,8 @@ func (m *EnhancedTUIModel) getFastestSlowestTasks() (fastest, slowest *DetailedT
 
 // renderProgressBar renders a visual progress bar with percentage
 func renderProgressBar(current, total, width int) string {
-	if width < 10 || total <= 0 {
+	// Ensure width is valid
+	if width < 10 || total <= 0 || current < 0 {
 		return ""
 	}
 
@@ -1036,9 +1047,19 @@ func renderProgressBar(current, total, width int) string {
 		barWidth = 5
 	}
 
+	// Ensure barWidth is never negative
+	if barWidth <= 0 {
+		return ""
+	}
+
 	filled := (barWidth * current) / total
 	if current > 0 && filled == 0 {
 		filled = 1 // Show at least 1 if current > 0
+	}
+
+	// Ensure filled never exceeds barWidth
+	if filled > barWidth {
+		filled = barWidth
 	}
 
 	// Determine color based on percentage
@@ -1054,7 +1075,12 @@ func renderProgressBar(current, total, width int) string {
 		barStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("196")) // Red
 	}
 
-	bar := strings.Repeat("█", filled) + strings.Repeat("░", barWidth-filled)
+	empty := barWidth - filled
+	if empty < 0 {
+		empty = 0
+	}
+
+	bar := strings.Repeat("█", filled) + strings.Repeat("░", empty)
 	return fmt.Sprintf("[%s] %3d%%", barStyle.Render(bar), percentage)
 }
 
@@ -1548,6 +1574,7 @@ func (m *EnhancedTUIModel) processEvent(event ExecutionEvent) {
 	case "execution_start":
 		m.playbookName = event.PlayName
 		m.playCount = event.PlayIndex
+		m.totalTaskCount = event.TotalTaskCount
 		m.status = "running"
 		m.startTime = time.Now()
 		level = "INFO"
@@ -1567,14 +1594,59 @@ func (m *EnhancedTUIModel) processEvent(event ExecutionEvent) {
 
 	case "task_end":
 		level = "TASK_END"
-		// Update stats
+		// Update stats with proper status counters
+		duration := event.TaskDuration
+		if duration < 0 {
+			duration = 0
+		}
+
 		if stats, exists := m.taskStats[event.TaskName]; exists {
+			// Increment appropriate status counter
+			if event.TaskFailed {
+				stats.Failed++
+			} else if event.TaskChanged {
+				stats.Changed++
+			} else if event.TaskSkipped {
+				stats.Skipped++
+			} else {
+				stats.Success++
+			}
+			// Update execution metrics
+			stats.ExecutionCount++
+			stats.TotalDuration += duration
+			stats.AvgDuration = stats.TotalDuration / time.Duration(stats.ExecutionCount)
+			stats.IndividualTimes = append(stats.IndividualTimes, duration)
+			// Update min/max
+			if stats.MinDuration == 0 || duration < stats.MinDuration {
+				stats.MinDuration = duration
+			}
+			if duration > stats.MaxDuration {
+				stats.MaxDuration = duration
+			}
 			stats.LastUpdate = time.Now()
 		} else {
-			m.taskStats[event.TaskName] = &DetailedTaskStats{
-				Name:       event.TaskName,
-				LastUpdate: time.Now(),
+			// Create new stats entry with status set
+			newStats := &DetailedTaskStats{
+				Name:            event.TaskName,
+				ExecutionCount:  1,
+				TotalDuration:   duration,
+				AvgDuration:     duration,
+				MinDuration:     duration,
+				MaxDuration:     duration,
+				IndividualTimes: []time.Duration{duration},
+				LastUpdate:      time.Now(),
 			}
+			// Set initial status count
+			if event.TaskFailed {
+				newStats.Failed = 1
+			} else if event.TaskChanged {
+				newStats.Changed = 1
+			} else if event.TaskSkipped {
+				newStats.Skipped = 1
+			} else {
+				newStats.Success = 1
+			}
+			m.taskStats[event.TaskName] = newStats
 		}
 
 	case "error":
@@ -1593,20 +1665,6 @@ func (m *EnhancedTUIModel) processEvent(event ExecutionEvent) {
 		Level:     level,
 		Message:   msg,
 	})
-}
-
-// eventProcessor processes events from the execution
-func (m *EnhancedTUIModel) eventProcessor() {
-	for {
-		select {
-		case event := <-m.eventChan:
-			if m.program != nil {
-				m.program.Send(event)
-			}
-		case <-m.stopChan:
-			return
-		}
-	}
 }
 
 // ============================================================================
@@ -1630,23 +1688,6 @@ func (m *EnhancedTUIModel) listenForEvents() tea.Cmd {
 			return event
 		case <-m.ctx.Done():
 			return nil
-		}
-	}
-}
-
-// tickerLoop sends periodic tick messages
-func (m *EnhancedTUIModel) tickerLoop() {
-	ticker := time.NewTicker(500 * time.Millisecond)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ticker.C:
-			if m.program != nil {
-				m.program.Send(tickMsg(time.Now()))
-			}
-		case <-m.stopChan:
-			return
 		}
 	}
 }
@@ -1722,13 +1763,14 @@ func truncateString(s string, maxWidth int) string {
 // ============================================================================
 
 // OnExecutionStart is called when execution begins
-func (m *EnhancedTUIModel) OnExecutionStart(playbookName string, playCount int) {
+func (m *EnhancedTUIModel) OnExecutionStart(playbookName string, playCount int, taskCount int) {
 	m.eventChan <- ExecutionEvent{
-		Type:      "execution_start",
-		PlayName:  playbookName,
-		PlayIndex: playCount,
-		Message:   fmt.Sprintf("Starting playbook: %s (%d plays)", playbookName, playCount),
-		Timestamp: time.Now(),
+		Type:           "execution_start",
+		PlayName:       playbookName,
+		PlayIndex:      playCount,
+		TotalTaskCount: taskCount,
+		Message:        fmt.Sprintf("Starting playbook: %s (%d plays, %d tasks)", playbookName, playCount, taskCount),
+		Timestamp:      time.Now(),
 	}
 }
 
@@ -1783,14 +1825,18 @@ func (m *EnhancedTUIModel) OnTaskEnd(taskResult *types.TaskResult) {
 	}
 
 	m.eventChan <- ExecutionEvent{
-		Type:      "task_end",
-		TaskName:  taskResult.TaskName,
-		HostName:  taskResult.Host,
-		Message:   fmt.Sprintf("%s %s", status, taskResult.TaskName),
-		Timestamp: time.Now(),
+		Type:         "task_end",
+		TaskName:     taskResult.TaskName,
+		HostName:     taskResult.Host,
+		Message:      fmt.Sprintf("%s %s", status, taskResult.TaskName),
+		Timestamp:    time.Now(),
+		TaskFailed:   taskResult.Failed,
+		TaskChanged:  taskResult.Changed,
+		TaskSkipped:  taskResult.Skipped,
+		TaskDuration: taskResult.Duration,
 	}
 
-	// Update stats
+	// Update host stats (task stats are updated through event processing)
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
@@ -1798,55 +1844,6 @@ func (m *EnhancedTUIModel) OnTaskEnd(taskResult *types.TaskResult) {
 	duration := taskResult.Duration
 	if duration < 0 {
 		duration = 0
-	}
-
-	if stats, exists := m.taskStats[taskResult.TaskName]; exists {
-		if taskResult.Failed {
-			stats.Failed++
-		} else if taskResult.Changed {
-			stats.Changed++
-		} else if taskResult.Skipped {
-			stats.Skipped++
-		} else {
-			stats.Success++
-		}
-
-		// Track execution times
-		stats.ExecutionCount++
-		stats.TotalDuration += duration
-		stats.AvgDuration = stats.TotalDuration / time.Duration(stats.ExecutionCount)
-		stats.IndividualTimes = append(stats.IndividualTimes, duration)
-
-		// Update min/max
-		if stats.MinDuration == 0 || duration < stats.MinDuration {
-			stats.MinDuration = duration
-		}
-		if duration > stats.MaxDuration {
-			stats.MaxDuration = duration
-		}
-
-		stats.LastUpdate = time.Now()
-	} else {
-		newStats := &DetailedTaskStats{
-			Name:            taskResult.TaskName,
-			ExecutionCount:  1,
-			TotalDuration:   duration,
-			AvgDuration:     duration,
-			MinDuration:     duration,
-			MaxDuration:     duration,
-			IndividualTimes: []time.Duration{duration},
-		}
-		if taskResult.Failed {
-			newStats.Failed = 1
-		} else if taskResult.Changed {
-			newStats.Changed = 1
-		} else if taskResult.Skipped {
-			newStats.Skipped = 1
-		} else {
-			newStats.Success = 1
-		}
-		newStats.LastUpdate = time.Now()
-		m.taskStats[taskResult.TaskName] = newStats
 	}
 
 	// Update host stats with timing
