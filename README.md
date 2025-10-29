@@ -871,23 +871,16 @@ These comprehensive guides cover all configuration options and security policies
 
 ### User Documentation
 
-- **[Quick Start Guide](docs/quick-start.md)** - Get started in 5 minutes
+- **[Quick Start Guide](docs/QUICK_START_CONFIGURATION.md)** - Get started in 5 minutes
 - **[Installation Guide](INSTALLATION.md)** - Detailed installation instructions
 - **[Playbook Format & Examples](docs/examples/README.md)** - Real playbook examples and patterns
-- **[Playbook Types Reference](docs/api/pkg/types.md)** - Technical type definitions
-- **[Inventory Formats](docs/inventory-formats.md)** - Supported inventory formats
-- **[Variables Reference](docs/VARIABLES_AND_CONFIGURATION.md)** - Complete variables guide
+- **[Inventory Formats](docs/INVENTORY_FORMATS.md)** - Supported inventory formats
+- **[Variables Reference](docs/VARIABLES_CHEATSHEET.md)** - Complete variables guide
 - **[Modules Reference](docs/modules/README.md)** - All built-in modules
 - **[Ad-hoc Commands Guide](docs/ADHOC_GUIDE.md)** - Ad-hoc command documentation
-- **[Inline Inventory Guide](docs/INLINE_INVENTORY_GUIDE.md)** - Using inline host specifications
 - **[Loop Guide](docs/LOOPS_GUIDE.md)** - Loop syntax and examples
 - **[Handlers Guide](docs/HANDLERS_GUIDE.md)** - Task notifications and handlers
 - **[Audit & Analytics Guide](../onigirazu_docs/features/AUDIT_AND_ANALYTICS_SYSTEM.md)** - Track execution history and analyze performance
-
-### API Documentation
-
-- **[HTML Documentation](docs/api/index.html)** - Beautiful, interactive API documentation
-- **[API Overview](docs/api/README.md)** - Documentation structure
 
 ### Developer Documentation
 
