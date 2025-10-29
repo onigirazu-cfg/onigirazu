@@ -7,12 +7,14 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/onigirazu-cfg/onigirazu/internal/validator"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
 type Parser struct {
-	variables       map[string]interface{}
-	inventoryParser *InventoryParser
+	variables             map[string]interface{}
+	inventoryParser       *InventoryParser
+	moduleSyntaxValidator *validator.ModuleSyntaxValidator
 }
 
 func New() *Parser {
@@ -24,6 +26,11 @@ func New() *Parser {
 // SetInventoryParser sets the inventory parser (for dependency injection)
 func (p *Parser) SetInventoryParser(invParser *InventoryParser) {
 	p.inventoryParser = invParser
+}
+
+// SetModuleSyntaxValidator sets the module syntax validator (for dependency injection)
+func (p *Parser) SetModuleSyntaxValidator(validator *validator.ModuleSyntaxValidator) {
+	p.moduleSyntaxValidator = validator
 }
 
 // ParsePlaybook parses playbook from YAML file
@@ -41,6 +48,13 @@ func (p *Parser) ParsePlaybook(ctx context.Context, filePath string) (*types.Pla
 	// Validate playbook
 	if err := p.ValidatePlaybook(&playbook); err != nil {
 		return nil, fmt.Errorf("error validating playbook: %w", err)
+	}
+
+	// Validate module syntax if validator is available
+	if p.moduleSyntaxValidator != nil {
+		if err := p.moduleSyntaxValidator.ValidatePlaybookModules(&playbook); err != nil {
+			return nil, fmt.Errorf("module syntax validation failed: %w", err)
+		}
 	}
 
 	return &playbook, nil

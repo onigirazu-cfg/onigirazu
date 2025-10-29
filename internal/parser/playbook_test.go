@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/onigirazu-cfg/onigirazu/internal/validator"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
@@ -420,4 +421,64 @@ plays:
 	assert.Equal(t, "databases", playbook.Plays[1].Hosts)
 	assert.Len(t, playbook.Plays[1].Tasks, 1)
 	assert.Equal(t, "Install postgresql", playbook.Plays[1].Tasks[0].Name)
+}
+
+func TestParsePlaybook_WithModuleSyntaxValidator_Valid(t *testing.T) {
+	tmpDir := t.TempDir()
+	playbookPath := filepath.Join(tmpDir, "playbook.yml")
+
+	playbookContent := `name: Test Playbook
+plays:
+  - name: Test Play
+    hosts: all
+    tasks:
+      - name: Test Task
+        module: ping
+`
+
+	err := os.WriteFile(playbookPath, []byte(playbookContent), 0644)
+	require.NoError(t, err)
+
+	parser := New()
+	ctx := context.Background()
+
+	// Set up module syntax validator with valid modules
+	moduleSyntaxValidator := validator.NewModuleSyntaxValidator([]string{"ping", "debug", "file"})
+	parser.SetModuleSyntaxValidator(moduleSyntaxValidator)
+
+	playbook, err := parser.ParsePlaybook(ctx, playbookPath)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, playbook)
+}
+
+func TestParsePlaybook_WithModuleSyntaxValidator_Invalid(t *testing.T) {
+	tmpDir := t.TempDir()
+	playbookPath := filepath.Join(tmpDir, "playbook.yml")
+
+	playbookContent := `name: Test Playbook
+plays:
+  - name: Test Play
+    hosts: all
+    tasks:
+      - name: Test Task
+        module: invalid_module
+`
+
+	err := os.WriteFile(playbookPath, []byte(playbookContent), 0644)
+	require.NoError(t, err)
+
+	parser := New()
+	ctx := context.Background()
+
+	// Set up module syntax validator with limited modules
+	moduleSyntaxValidator := validator.NewModuleSyntaxValidator([]string{"ping", "debug", "file"})
+	parser.SetModuleSyntaxValidator(moduleSyntaxValidator)
+
+	playbook, err := parser.ParsePlaybook(ctx, playbookPath)
+
+	assert.Error(t, err)
+	assert.Nil(t, playbook)
+	assert.Contains(t, err.Error(), "module syntax validation failed")
+	assert.Contains(t, err.Error(), "unknown module")
 }
