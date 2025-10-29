@@ -32,6 +32,7 @@ import (
 	"github.com/onigirazu-cfg/onigirazu/internal/tagfilter"
 	"github.com/onigirazu-cfg/onigirazu/internal/taskpreview"
 	"github.com/onigirazu-cfg/onigirazu/internal/template"
+	"github.com/onigirazu-cfg/onigirazu/internal/validator"
 	"github.com/onigirazu-cfg/onigirazu/pkg/profiler"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 	"github.com/onigirazu-cfg/onigirazu/pkg/utils"
@@ -336,6 +337,10 @@ Examples:
 			if lenient {
 				enhancedParser.SetLenient(true)
 			}
+
+			// Set up module syntax validator with available modules
+			moduleSyntaxValidator := validator.NewModuleSyntaxValidator(moduleRegistry.ListModules())
+			enhancedParser.SetModuleSyntaxValidator(moduleSyntaxValidator)
 
 			inventoryManager := inventory.NewManager(enhancedParser, log, cacheManager)
 

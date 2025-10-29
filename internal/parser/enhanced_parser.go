@@ -10,17 +10,19 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/onigirazu-cfg/onigirazu/internal/interfaces"
+	"github.com/onigirazu-cfg/onigirazu/internal/validator"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
 // EnhancedParser provides advanced playbook parsing capabilities
 type EnhancedParser struct {
-	templateEngine  interfaces.TemplateEngine
-	logger          interfaces.Logger
-	variables       map[string]interface{}
-	inventoryParser *InventoryParser
-	roleLoader      *RoleLoader // NEW: For loading roles
-	lenient         bool        // NEW: Lenient mode for inventory parsing
+	templateEngine        interfaces.TemplateEngine
+	logger                interfaces.Logger
+	variables             map[string]interface{}
+	inventoryParser       *InventoryParser
+	roleLoader            *RoleLoader                      // NEW: For loading roles
+	lenient               bool                             // NEW: Lenient mode for inventory parsing
+	moduleSyntaxValidator *validator.ModuleSyntaxValidator // NEW: Module syntax validation
 }
 
 // NewEnhancedParser creates a new enhanced parser
@@ -44,6 +46,11 @@ func (p *EnhancedParser) SetLenient(lenient bool) {
 	if lenient {
 		p.logger.Info("Lenient mode enabled: inventory validation is relaxed")
 	}
+}
+
+// SetModuleSyntaxValidator sets the module syntax validator
+func (p *EnhancedParser) SetModuleSyntaxValidator(validator *validator.ModuleSyntaxValidator) {
+	p.moduleSyntaxValidator = validator
 }
 
 // ParsePlaybook parses a playbook file with template rendering
@@ -73,6 +80,13 @@ func (p *EnhancedParser) ParsePlaybook(ctx context.Context, filePath string) (*t
 	// Validate and process playbook
 	if err := p.validatePlaybook(&playbook); err != nil {
 		return nil, fmt.Errorf("playbook validation failed for %s: %w", filePath, err)
+	}
+
+	// Validate module syntax if validator is available
+	if p.moduleSyntaxValidator != nil {
+		if err := p.moduleSyntaxValidator.ValidatePlaybookModules(&playbook); err != nil {
+			return nil, fmt.Errorf("module syntax validation failed: %w", err)
+		}
 	}
 
 	// Process includes and imports
