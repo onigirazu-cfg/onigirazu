@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 	"time"
 
@@ -79,6 +80,17 @@ type TaskResult struct {
 	Details  map[string]interface{} // For verbose/debug modes
 }
 
+// HostResultSummary holds per-host execution summary
+type HostResultSummary struct {
+	Hostname     string
+	TasksOK      int
+	TasksChanged int
+	TasksFailed  int
+	TasksSkipped int
+	Duration     time.Duration
+	Status       string // OK, CHANGED, FAILED
+}
+
 // ExecutionSummary holds execution summary data
 type ExecutionSummary struct {
 	TotalDuration time.Duration
@@ -89,6 +101,7 @@ type ExecutionSummary struct {
 	ChangedCount  int
 	SkippedCount  int
 	Stats         map[string]interface{}
+	HostResults   map[string]HostResultSummary // Per-host breakdown
 }
 
 // NormalFormatter - Clean, user-friendly output
@@ -228,7 +241,38 @@ func (f *NormalFormatter) FormatExecutionEnd(summary ExecutionSummary) string {
 	if summary.SkippedCount > 0 {
 		sb.WriteString(fmt.Sprintf(" | ⊘ %d skipped", summary.SkippedCount))
 	}
-	sb.WriteString("\n\n")
+	sb.WriteString("\n")
+
+	// Per-host breakdown
+	if len(summary.HostResults) > 0 {
+		sb.WriteString("\nPer-Host Results:\n")
+
+		// Sort hosts for consistent output
+		hosts := make([]string, 0, len(summary.HostResults))
+		for hostname := range summary.HostResults {
+			hosts = append(hosts, hostname)
+		}
+		sort.Strings(hosts)
+
+		for _, hostname := range hosts {
+			hostResult := summary.HostResults[hostname]
+			status := "✅"
+			if hostResult.Status == "FAILED" {
+				status = "❌"
+			} else if hostResult.Status == "CHANGED" {
+				status = "🔄"
+			}
+
+			sb.WriteString(fmt.Sprintf("  %s %-25s OK:%d CHANGED:%d FAILED:%d SKIPPED:%d\n",
+				status, hostname,
+				hostResult.TasksOK,
+				hostResult.TasksChanged,
+				hostResult.TasksFailed,
+				hostResult.TasksSkipped,
+			))
+		}
+		sb.WriteString("\n")
+	}
 
 	return sb.String()
 }
@@ -419,7 +463,45 @@ func (f *VerboseFormatter) FormatExecutionEnd(summary ExecutionSummary) string {
 	sb.WriteString(fmt.Sprintf("  ├─ ✓ OK: %d\n", summary.SuccessCount))
 	sb.WriteString(fmt.Sprintf("  ├─ ⚡ Changed: %d\n", summary.ChangedCount))
 	sb.WriteString(fmt.Sprintf("  ├─ ✗ Failed: %d\n", summary.FailedCount))
-	sb.WriteString(fmt.Sprintf("  └─ ⊘ Skipped: %d\n\n", summary.SkippedCount))
+	sb.WriteString(fmt.Sprintf("  └─ ⊘ Skipped: %d\n", summary.SkippedCount))
+
+	// Per-host breakdown
+	if len(summary.HostResults) > 0 {
+		sb.WriteString("\nPer-Host Details:\n")
+
+		// Sort hosts for consistent output
+		hosts := make([]string, 0, len(summary.HostResults))
+		for hostname := range summary.HostResults {
+			hosts = append(hosts, hostname)
+		}
+		sort.Strings(hosts)
+
+		for i, hostname := range hosts {
+			hostResult := summary.HostResults[hostname]
+			isLast := i == len(hosts)-1
+			prefix := "  ├─"
+			if isLast {
+				prefix = "  └─"
+			}
+
+			status := "✅"
+			if hostResult.Status == "FAILED" {
+				status = "❌"
+			} else if hostResult.Status == "CHANGED" {
+				status = "🔄"
+			}
+
+			sb.WriteString(fmt.Sprintf("%s %s %-20s OK:%d CHANGED:%d FAILED:%d SKIPPED:%d\n",
+				prefix, status, hostname,
+				hostResult.TasksOK,
+				hostResult.TasksChanged,
+				hostResult.TasksFailed,
+				hostResult.TasksSkipped,
+			))
+		}
+	}
+
+	sb.WriteString("\n")
 
 	return sb.String()
 }
@@ -569,6 +651,7 @@ func (f *DebugFormatter) FormatExecutionEnd(summary ExecutionSummary) string {
 		"changed_count":  summary.ChangedCount,
 		"skipped_count":  summary.SkippedCount,
 		"stats":          summary.Stats,
+		"host_results":   summary.HostResults,
 	}
 
 	jsonBytes, _ := json.MarshalIndent(data, "", "  ")

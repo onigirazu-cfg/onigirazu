@@ -743,6 +743,7 @@ Examples:
 				TotalDuration: duration,
 				PlayCount:     len(result.Plays),
 				Stats:         result.Stats,
+				HostResults:   make(map[string]logger.HostResultSummary),
 			}
 
 			// Get task counts from progress tracker if available
@@ -770,6 +771,68 @@ Examples:
 
 			// Calculate changed count from result
 			summary.ChangedCount = result.ChangedTasks
+
+			// Populate per-host breakdown from plays
+			if result.Plays != nil {
+				for _, play := range result.Plays {
+					if len(play.Hosts) > 0 {
+						for _, hostResult := range play.Hosts {
+							hostname := hostResult.Host
+							existing, found := summary.HostResults[hostname]
+
+							// Count task results for this host
+							tasksOK := 0
+							tasksChanged := 0
+							tasksFailed := 0
+							tasksSkipped := 0
+
+							for _, task := range hostResult.Tasks {
+								if task.Skipped {
+									tasksSkipped++
+								} else if task.Failed {
+									tasksFailed++
+								} else if task.Changed {
+									tasksChanged++
+								} else if task.Success {
+									tasksOK++
+								}
+							}
+
+							// Determine overall status
+							hostStatus := "OK"
+							if tasksFailed > 0 {
+								hostStatus = "FAILED"
+							} else if tasksChanged > 0 {
+								hostStatus = "CHANGED"
+							}
+
+							// Accumulate counts for hosts that appear in multiple plays
+							if found {
+								existing.TasksOK += tasksOK
+								existing.TasksChanged += tasksChanged
+								existing.TasksFailed += tasksFailed
+								existing.TasksSkipped += tasksSkipped
+								// Update status if this play shows failure
+								if hostStatus == "FAILED" {
+									existing.Status = "FAILED"
+								} else if hostStatus == "CHANGED" && existing.Status != "FAILED" {
+									existing.Status = "CHANGED"
+								}
+								summary.HostResults[hostname] = existing
+							} else {
+								summary.HostResults[hostname] = logger.HostResultSummary{
+									Hostname:     hostname,
+									TasksOK:      tasksOK,
+									TasksChanged: tasksChanged,
+									TasksFailed:  tasksFailed,
+									TasksSkipped: tasksSkipped,
+									Status:       hostStatus,
+								}
+							}
+						}
+					}
+				}
+			}
 
 			if result.Failed {
 				log.Error("Playbook execution failed")
