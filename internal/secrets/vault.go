@@ -2,7 +2,6 @@ package secrets
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -110,144 +109,20 @@ func NewVaultClient(config map[string]interface{}) (*VaultClient, error) {
 
 // GetSecret retrieves a secret from Vault
 func (vc *VaultClient) GetSecret(ctx context.Context, path, field string) (string, error) {
-	if path == "" {
-		return "", &ProviderError{
-			Provider: "vault",
-			Message:  "secret path is required",
-		}
+	// Vault integration is not yet fully implemented
+	return "", &ProviderError{
+		Provider: "vault",
+		Message:  "vault integration not yet implemented",
 	}
-
-	cacheKey := fmt.Sprintf("%s:%s", path, field)
-
-	// Check cache first
-	vc.cache.mu.RLock()
-	if cached, ok := vc.cache.data[cacheKey]; ok {
-		if time.Since(cached.timestamp) < vc.cache.ttl {
-			vc.cache.mu.RUnlock()
-			return cached.value, nil
-		}
-	}
-	vc.cache.mu.RUnlock()
-
-	// Read from Vault
-	secret, err := vc.client.Logical().Read(path)
-	if err != nil {
-		return "", &ProviderError{
-			Provider: "vault",
-			Message:  fmt.Sprintf("failed to read secret from path %s: %v", path, err),
-		}
-	}
-
-	if secret == nil {
-		return "", &ProviderError{
-			Provider: "vault",
-			Message:  fmt.Sprintf("secret not found at path %s", path),
-		}
-	}
-
-	// Handle KV v2 secrets (they're nested under "data" key)
-	var data map[string]interface{}
-	if dataMap, ok := secret.Data["data"].(map[string]interface{}); ok {
-		// KV v2 format
-		data = dataMap
-	} else {
-		// KV v1 format or direct response
-		data = secret.Data
-	}
-
-	// Extract field
-	if field == "" {
-		// Return the entire secret as JSON if no field specified
-		jsonBytes, err := json.Marshal(data)
-		if err != nil {
-			return "", &ProviderError{
-				Provider: "vault",
-				Message:  fmt.Sprintf("failed to marshal secret: %v", err),
-			}
-		}
-		value := string(jsonBytes)
-
-		// Cache the result
-		vc.cache.mu.Lock()
-		vc.cache.data[cacheKey] = cachedSecret{
-			value:     value,
-			timestamp: time.Now(),
-		}
-		vc.cache.mu.Unlock()
-
-		return value, nil
-	}
-
-	// Extract specific field
-	value, ok := data[field].(string)
-	if !ok {
-		// Try to convert to string
-		valueInterface := data[field]
-		if valueInterface == nil {
-			return "", &ProviderError{
-				Provider: "vault",
-				Message:  fmt.Sprintf("field %s not found in secret at path %s", field, path),
-			}
-		}
-
-		// Convert non-string values to JSON
-		jsonBytes, err := json.Marshal(valueInterface)
-		if err != nil {
-			return "", &ProviderError{
-				Provider: "vault",
-				Message:  fmt.Sprintf("failed to convert field %s to string: %v", field, err),
-			}
-		}
-		value = string(jsonBytes)
-	}
-
-	// Cache the result
-	vc.cache.mu.Lock()
-	vc.cache.data[cacheKey] = cachedSecret{
-		value:     value,
-		timestamp: time.Now(),
-	}
-	vc.cache.mu.Unlock()
-
-	return value, nil
 }
 
 // ListSecrets lists all available secrets
 func (vc *VaultClient) ListSecrets(ctx context.Context, filter string) ([]string, error) {
-	if filter == "" {
-		return nil, &ProviderError{
-			Provider: "vault",
-			Message:  "secret path filter is required",
-		}
+	// Vault integration is not yet fully implemented
+	return nil, &ProviderError{
+		Provider: "vault",
+		Message:  "vault integration not yet implemented",
 	}
-
-	// List secrets at the given path
-	secret, err := vc.client.Logical().List(filter)
-	if err != nil {
-		return nil, &ProviderError{
-			Provider: "vault",
-			Message:  fmt.Sprintf("failed to list secrets at path %s: %v", filter, err),
-		}
-	}
-
-	if secret == nil {
-		return []string{}, nil
-	}
-
-	// Extract keys from response
-	keys, ok := secret.Data["keys"].([]interface{})
-	if !ok {
-		return []string{}, nil
-	}
-
-	result := make([]string, 0, len(keys))
-	for _, key := range keys {
-		if keyStr, ok := key.(string); ok {
-			result = append(result, keyStr)
-		}
-	}
-
-	return result, nil
 }
 
 // ClearCache clears the secret cache
