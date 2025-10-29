@@ -239,7 +239,7 @@ func (p *ConnectionPool) isConnectionValid(wrapper *ConnectionWrapper) bool {
 
 	// Perform actual health check on the connection
 	// Use a 5-second timeout for health checks
-	if !wrapper.client.IsAlive() {
+	if wrapper.client != nil && !wrapper.client.IsAlive() {
 		p.logger.Debug("Connection health check failed for host %s", wrapper.host.Address)
 		return false
 	}

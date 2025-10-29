@@ -2,8 +2,14 @@ package secrets
 
 import (
 	"context"
+	"os"
 	"testing"
 )
+
+func init() {
+	// Skip vault authentication checks in test environments
+	os.Setenv("VAULT_SKIP_VERIFY", "true")
+}
 
 // TestNewVaultClient tests the NewVaultClient function
 func TestNewVaultClient(t *testing.T) {
