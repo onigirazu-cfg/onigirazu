@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/onigirazu-cfg/onigirazu/internal/validator"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
@@ -778,4 +779,139 @@ plays:
 	assert.Len(t, playbook.Plays, 2)
 	assert.Equal(t, "First Play", playbook.Plays[0].Name)
 	assert.Equal(t, "Second Play", playbook.Plays[1].Name)
+}
+
+func TestEnhancedParser_WithModuleSyntaxValidator_Valid(t *testing.T) {
+	tmpDir := t.TempDir()
+	playbookPath := filepath.Join(tmpDir, "playbook.yml")
+
+	playbookContent := `name: Valid Module Playbook
+plays:
+  - name: Test Play
+    hosts: localhost
+    tasks:
+      - name: Ping task
+        module: ping
+      - name: Debug task
+        module: debug
+`
+
+	err := os.WriteFile(playbookPath, []byte(playbookContent), 0644)
+	require.NoError(t, err)
+
+	logger := &mockLogger{}
+	templateEngine := &mockTemplateEngine{}
+	parser := NewEnhancedParser(templateEngine, logger)
+
+	// Set up module validator with valid modules
+	moduleSyntaxValidator := validator.NewModuleSyntaxValidator([]string{"ping", "debug", "file"})
+	parser.SetModuleSyntaxValidator(moduleSyntaxValidator)
+
+	ctx := context.Background()
+	playbook, err := parser.ParsePlaybook(ctx, playbookPath)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, playbook)
+	assert.Len(t, playbook.Plays, 1)
+	assert.Equal(t, "Test Play", playbook.Plays[0].Name)
+}
+
+func TestEnhancedParser_WithModuleSyntaxValidator_Invalid(t *testing.T) {
+	tmpDir := t.TempDir()
+	playbookPath := filepath.Join(tmpDir, "playbook.yml")
+
+	playbookContent := `name: Invalid Module Playbook
+plays:
+  - name: Test Play
+    hosts: localhost
+    tasks:
+      - name: Unknown module task
+        module: unknown_module
+`
+
+	err := os.WriteFile(playbookPath, []byte(playbookContent), 0644)
+	require.NoError(t, err)
+
+	logger := &mockLogger{}
+	templateEngine := &mockTemplateEngine{}
+	parser := NewEnhancedParser(templateEngine, logger)
+
+	// Set up module validator with limited valid modules
+	moduleSyntaxValidator := validator.NewModuleSyntaxValidator([]string{"ping", "debug", "file"})
+	parser.SetModuleSyntaxValidator(moduleSyntaxValidator)
+
+	ctx := context.Background()
+	playbook, err := parser.ParsePlaybook(ctx, playbookPath)
+
+	assert.Error(t, err)
+	assert.Nil(t, playbook)
+	assert.Contains(t, err.Error(), "module syntax validation failed")
+	assert.Contains(t, err.Error(), "unknown module")
+}
+
+func TestEnhancedParser_WithModuleSyntaxValidator_WithSuggestion(t *testing.T) {
+	tmpDir := t.TempDir()
+	playbookPath := filepath.Join(tmpDir, "playbook.yml")
+
+	// Misspelled module name: "pakage" instead of "package"
+	playbookContent := `name: Typo Module Playbook
+plays:
+  - name: Test Play
+    hosts: localhost
+    tasks:
+      - name: Package task with typo
+        module: pakage
+`
+
+	err := os.WriteFile(playbookPath, []byte(playbookContent), 0644)
+	require.NoError(t, err)
+
+	logger := &mockLogger{}
+	templateEngine := &mockTemplateEngine{}
+	parser := NewEnhancedParser(templateEngine, logger)
+
+	// Set up module validator with available modules including "package"
+	moduleSyntaxValidator := validator.NewModuleSyntaxValidator([]string{"ping", "debug", "file", "package"})
+	parser.SetModuleSyntaxValidator(moduleSyntaxValidator)
+
+	ctx := context.Background()
+	playbook, err := parser.ParsePlaybook(ctx, playbookPath)
+
+	assert.Error(t, err)
+	assert.Nil(t, playbook)
+	// Error should suggest the correct module name
+	assert.Contains(t, err.Error(), "Did you mean")
+	assert.Contains(t, err.Error(), "package")
+}
+
+func TestEnhancedParser_WithModuleSyntaxValidator_Optional(t *testing.T) {
+	tmpDir := t.TempDir()
+	playbookPath := filepath.Join(tmpDir, "playbook.yml")
+
+	// Invalid module name
+	playbookContent := `name: Playbook Without Validator
+plays:
+  - name: Test Play
+    hosts: localhost
+    tasks:
+      - name: Unknown module task
+        module: nonexistent_module
+`
+
+	err := os.WriteFile(playbookPath, []byte(playbookContent), 0644)
+	require.NoError(t, err)
+
+	logger := &mockLogger{}
+	templateEngine := &mockTemplateEngine{}
+	parser := NewEnhancedParser(templateEngine, logger)
+
+	// DO NOT set validator - validation should be skipped
+	ctx := context.Background()
+	playbook, err := parser.ParsePlaybook(ctx, playbookPath)
+
+	// Should succeed because validator is not set
+	assert.NoError(t, err)
+	assert.NotNil(t, playbook)
+	assert.Len(t, playbook.Plays, 1)
+	assert.Equal(t, "Test Play", playbook.Plays[0].Name)
 }
