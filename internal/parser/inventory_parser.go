@@ -264,8 +264,15 @@ func (p *InventoryParser) parseSimpleHostLine(line string, lineNum int) *types.H
 	return host
 }
 
-// parseYamlInventory parses YAML format inventory
+// parseYamlInventory parses YAML format inventory with auto-detection of Ansible format
 func (p *InventoryParser) parseYamlInventory(data []byte) (*types.Inventory, error) {
+	// First, try to detect if this is Ansible-style YAML
+	if isAnsibleYaml(data) {
+		p.logger.Debug("Detected Ansible-style YAML inventory format")
+		return p.parseAnsibleYamlInventory(data)
+	}
+
+	// Otherwise, parse as standard Onigirazu YAML
 	var inventory types.Inventory
 	if err := yaml.Unmarshal(data, &inventory); err != nil {
 		return nil, fmt.Errorf("error parsing YAML inventory: %w", err)
@@ -280,6 +287,222 @@ func (p *InventoryParser) parseYamlInventory(data []byte) (*types.Inventory, err
 	}
 
 	return &inventory, nil
+}
+
+// isAnsibleYaml detects if YAML content is in Ansible format
+func isAnsibleYaml(data []byte) bool {
+	var rawMap map[string]interface{}
+	if err := yaml.Unmarshal(data, &rawMap); err != nil {
+		return false
+	}
+
+	// Ansible format has top-level "all" key or uses "ansible_" prefix in host vars
+	if _, hasAll := rawMap["all"]; hasAll {
+		return true
+	}
+
+	// Check for ansible_* variable names in host definitions
+	if hosts, ok := rawMap["hosts"].(map[string]interface{}); ok {
+		for _, hostData := range hosts {
+			if hostMap, ok := hostData.(map[string]interface{}); ok {
+				for key := range hostMap {
+					if strings.HasPrefix(key, "ansible_") {
+						return true
+					}
+				}
+			}
+		}
+	}
+
+	return false
+}
+
+// AnsibleYAML structures for parsing Ansible-format inventory
+type ansibleYamlInventory struct {
+	All map[string]interface{} `yaml:"all"`
+}
+
+type ansibleGroup struct {
+	Hosts    map[string]interface{} `yaml:"hosts"`
+	Children map[string]interface{} `yaml:"children"`
+	Vars     map[string]interface{} `yaml:"vars"`
+}
+
+// parseAnsibleYamlInventory parses Ansible-format YAML inventory
+func (p *InventoryParser) parseAnsibleYamlInventory(data []byte) (*types.Inventory, error) {
+	var ansibleInv ansibleYamlInventory
+	if err := yaml.Unmarshal(data, &ansibleInv); err != nil {
+		return nil, fmt.Errorf("error parsing Ansible YAML inventory: %w", err)
+	}
+
+	inventory := &types.Inventory{
+		Groups: make(map[string]*types.Group),
+		Hosts:  make([]types.Host, 0),
+	}
+
+	// Parse the "all" group which contains all hosts and groups
+	if ansibleInv.All != nil {
+		allData := ansibleInv.All
+		// First pass: collect all hosts from the "all" section
+		parsedHosts := make(map[string]*types.Host)
+
+		if hostsData, ok := allData["hosts"].(map[string]interface{}); ok {
+			for hostName, hostData := range hostsData {
+				host := p.parseAnsibleHost(hostName, hostData)
+				if host != nil {
+					parsedHosts[hostName] = host
+					inventory.Hosts = append(inventory.Hosts, *host)
+				}
+			}
+		}
+
+		// Second pass: parse groups and their hosts
+		if groupsData, ok := allData["children"].(map[string]interface{}); ok {
+			for groupName, groupData := range groupsData {
+				group := p.parseAnsibleGroup(groupName, groupData, parsedHosts)
+				if group != nil {
+					inventory.Groups[groupName] = group
+				}
+			}
+		}
+
+		// Parse group-level vars if present
+		if vars, ok := allData["vars"].(map[string]interface{}); ok {
+			allGroup := &types.Group{
+				Name:     "all",
+				Hosts:    make(map[string]*types.Host),
+				Children: make([]string, 0),
+				Vars:     vars,
+			}
+			// Add all hosts to "all" group
+			for _, host := range parsedHosts {
+				allGroup.Hosts[host.Name] = host
+			}
+			inventory.Groups["all"] = allGroup
+		}
+	}
+
+	if len(inventory.Hosts) == 0 {
+		return nil, fmt.Errorf("no valid hosts found in Ansible inventory")
+	}
+
+	p.logger.Info("Parsed Ansible YAML inventory: %d groups, %d hosts", len(inventory.Groups), len(inventory.Hosts))
+	return inventory, nil
+}
+
+// parseAnsibleHost converts Ansible host definition to Onigirazu Host
+func (p *InventoryParser) parseAnsibleHost(hostName string, hostData interface{}) *types.Host {
+	host := &types.Host{
+		Name:    hostName,
+		Address: hostName,
+		Port:    22,
+		User:    "root",
+		Vars:    make(map[string]interface{}),
+	}
+
+	if hostData == nil {
+		return host
+	}
+
+	hostMap, ok := hostData.(map[string]interface{})
+	if !ok {
+		return host
+	}
+
+	// Map Ansible variables to Onigirazu fields
+	for key, value := range hostMap {
+		switch key {
+		case "ansible_host":
+			if v, ok := value.(string); ok {
+				host.Address = v
+			}
+		case "ansible_port":
+			switch v := value.(type) {
+			case int:
+				host.Port = v
+			case float64:
+				host.Port = int(v)
+			case string:
+				if _, err := fmt.Sscanf(v, "%d", &host.Port); err != nil {
+					p.logger.Warn("Invalid ansible_port value: %v", value)
+				}
+			}
+		case "ansible_user":
+			if v, ok := value.(string); ok {
+				host.User = v
+			}
+		case "ansible_ssh_private_key_file":
+			if v, ok := value.(string); ok {
+				host.KeyFile = v
+			}
+		case "ansible_password":
+			if v, ok := value.(string); ok {
+				host.Password = v
+			}
+		case "ansible_ssh_host_key_checking":
+			if v, ok := value.(bool); ok && !v {
+				host.InsecureIgnoreHostKey = true
+			}
+		default:
+			// Store other Ansible variables (including custom ones) in Vars
+			// Remove ansible_ prefix for cleaner variable names
+			varName := strings.TrimPrefix(key, "ansible_")
+			host.Vars[varName] = value
+		}
+	}
+
+	return host
+}
+
+// parseAnsibleGroup converts Ansible group definition to Onigirazu Group
+func (p *InventoryParser) parseAnsibleGroup(groupName string, groupData interface{}, allHosts map[string]*types.Host) *types.Group {
+	group := &types.Group{
+		Name:     groupName,
+		Hosts:    make(map[string]*types.Host),
+		Children: make([]string, 0),
+		Vars:     make(map[string]interface{}),
+	}
+
+	if groupData == nil {
+		return group
+	}
+
+	groupMap, ok := groupData.(map[string]interface{})
+	if !ok {
+		return group
+	}
+
+	// Parse hosts in this group
+	if hostsData, ok := groupMap["hosts"].(map[string]interface{}); ok {
+		for hostName := range hostsData {
+			if host, exists := allHosts[hostName]; exists {
+				group.Hosts[hostName] = host
+			}
+		}
+	}
+
+	// Parse child groups
+	if childrenData, ok := groupMap["children"].([]interface{}); ok {
+		for _, childName := range childrenData {
+			if name, ok := childName.(string); ok {
+				group.Children = append(group.Children, name)
+			}
+		}
+	} else if childrenData, ok := groupMap["children"].(map[string]interface{}); ok {
+		// Handle children as map (Ansible format can use both)
+		for childName := range childrenData {
+			group.Children = append(group.Children, childName)
+		}
+	}
+
+	// Parse group variables
+	if vars, ok := groupMap["vars"].(map[string]interface{}); ok {
+		for key, value := range vars {
+			group.Vars[key] = value
+		}
+	}
+
+	return group
 }
 
 // TOML structure for inventory

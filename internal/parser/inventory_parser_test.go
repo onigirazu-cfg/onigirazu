@@ -1072,3 +1072,272 @@ func TestInventoryParser_InsecureIgnoreHostKey_JSON(t *testing.T) {
 	assert.Len(t, inv.Hosts, 1)
 	assert.True(t, inv.Hosts[0].InsecureIgnoreHostKey, "InsecureIgnoreHostKey should be true")
 }
+
+// Tests for Ansible-format YAML inventory support
+
+func TestInventoryParser_AnsibleYAML_BasicHosts(t *testing.T) {
+	logger := &mockLogger{}
+	parser := NewInventoryParser(logger)
+
+	ansibleYaml := `
+all:
+  hosts:
+    web1:
+      ansible_host: 192.168.1.10
+      ansible_user: deploy
+      ansible_port: 22
+    web2:
+      ansible_host: 192.168.1.11
+      ansible_user: deploy
+`
+
+	inv, err := parser.parseYamlInventory([]byte(ansibleYaml))
+	assert.NoError(t, err)
+	assert.NotNil(t, inv)
+	assert.Len(t, inv.Hosts, 2)
+
+	// Check first host
+	assert.Equal(t, "web1", inv.Hosts[0].Name)
+	assert.Equal(t, "192.168.1.10", inv.Hosts[0].Address)
+	assert.Equal(t, "deploy", inv.Hosts[0].User)
+	assert.Equal(t, 22, inv.Hosts[0].Port)
+
+	// Check second host
+	assert.Equal(t, "web2", inv.Hosts[1].Name)
+	assert.Equal(t, "192.168.1.11", inv.Hosts[1].Address)
+	assert.Equal(t, "deploy", inv.Hosts[1].User)
+}
+
+func TestInventoryParser_AnsibleYAML_WithGroups(t *testing.T) {
+	logger := &mockLogger{}
+	parser := NewInventoryParser(logger)
+
+	ansibleYaml := `
+all:
+  hosts:
+    web1:
+      ansible_host: 192.168.1.10
+      ansible_user: deploy
+    web2:
+      ansible_host: 192.168.1.11
+      ansible_user: deploy
+    db1:
+      ansible_host: 192.168.1.20
+      ansible_user: postgres
+  children:
+    webservers:
+      hosts:
+        web1:
+        web2:
+      vars:
+        http_port: 80
+    databases:
+      hosts:
+        db1:
+      vars:
+        db_port: 5432
+`
+
+	inv, err := parser.parseYamlInventory([]byte(ansibleYaml))
+	assert.NoError(t, err)
+	assert.NotNil(t, inv)
+	assert.Len(t, inv.Hosts, 3)
+	assert.Len(t, inv.Groups, 2)
+
+	// Check webservers group
+	webserversGroup, ok := inv.Groups["webservers"]
+	assert.True(t, ok)
+	assert.Len(t, webserversGroup.Hosts, 2)
+	assert.Equal(t, 80, webserversGroup.Vars["http_port"])
+
+	// Check databases group
+	databasesGroup, ok := inv.Groups["databases"]
+	assert.True(t, ok)
+	assert.Len(t, databasesGroup.Hosts, 1)
+	assert.Equal(t, 5432, databasesGroup.Vars["db_port"])
+}
+
+func TestInventoryParser_AnsibleYAML_WithCustomVars(t *testing.T) {
+	logger := &mockLogger{}
+	parser := NewInventoryParser(logger)
+
+	ansibleYaml := `
+all:
+  hosts:
+    web1:
+      ansible_host: 192.168.1.10
+      ansible_user: deploy
+      app_version: 1.0.0
+      environment: production
+      custom_var: custom_value
+`
+
+	inv, err := parser.parseYamlInventory([]byte(ansibleYaml))
+	assert.NoError(t, err)
+	assert.Len(t, inv.Hosts, 1)
+
+	host := inv.Hosts[0]
+	assert.Equal(t, "192.168.1.10", host.Address)
+	assert.Equal(t, "deploy", host.User)
+	// Custom vars should be stored (ansible_ prefix removed from ansible_* vars)
+	assert.Equal(t, "1.0.0", host.Vars["app_version"])
+	assert.Equal(t, "production", host.Vars["environment"])
+	assert.Equal(t, "custom_value", host.Vars["custom_var"])
+}
+
+func TestInventoryParser_AnsibleYAML_WithSSHKey(t *testing.T) {
+	logger := &mockLogger{}
+	parser := NewInventoryParser(logger)
+
+	ansibleYaml := `
+all:
+  hosts:
+    secure_host:
+      ansible_host: 192.168.1.100
+      ansible_user: admin
+      ansible_ssh_private_key_file: ~/.ssh/id_rsa
+      ansible_ssh_host_key_checking: false
+`
+
+	inv, err := parser.parseYamlInventory([]byte(ansibleYaml))
+	assert.NoError(t, err)
+	assert.Len(t, inv.Hosts, 1)
+
+	host := inv.Hosts[0]
+	assert.Equal(t, "~/.ssh/id_rsa", host.KeyFile)
+	assert.True(t, host.InsecureIgnoreHostKey)
+}
+
+func TestInventoryParser_AnsibleYAML_WithPassword(t *testing.T) {
+	logger := &mockLogger{}
+	parser := NewInventoryParser(logger)
+
+	ansibleYaml := `
+all:
+  hosts:
+    pwd_host:
+      ansible_host: 192.168.1.100
+      ansible_user: admin
+      ansible_password: my_password
+      ansible_port: 2222
+`
+
+	inv, err := parser.parseYamlInventory([]byte(ansibleYaml))
+	assert.NoError(t, err)
+	assert.Len(t, inv.Hosts, 1)
+
+	host := inv.Hosts[0]
+	assert.Equal(t, "192.168.1.100", host.Address)
+	assert.Equal(t, "admin", host.User)
+	assert.Equal(t, "my_password", host.Password)
+	assert.Equal(t, 2222, host.Port)
+}
+
+func TestInventoryParser_AnsibleYAML_NestedGroups(t *testing.T) {
+	logger := &mockLogger{}
+	parser := NewInventoryParser(logger)
+
+	ansibleYaml := `
+all:
+  hosts:
+    web1:
+      ansible_host: 192.168.1.10
+    db1:
+      ansible_host: 192.168.1.20
+    cache1:
+      ansible_host: 192.168.1.30
+  children:
+    webservers:
+      hosts:
+        web1:
+      vars:
+        tier: frontend
+    databases:
+      hosts:
+        db1:
+      vars:
+        tier: backend
+    cache:
+      hosts:
+        cache1:
+      vars:
+        tier: backend
+    production:
+      children:
+        - webservers
+        - databases
+        - cache
+      vars:
+        env: production
+`
+
+	inv, err := parser.parseYamlInventory([]byte(ansibleYaml))
+	assert.NoError(t, err)
+	assert.Len(t, inv.Hosts, 3)
+	assert.Len(t, inv.Groups, 4)
+
+	// Check production group has children
+	prodGroup, ok := inv.Groups["production"]
+	assert.True(t, ok)
+	assert.Len(t, prodGroup.Children, 3)
+	assert.Equal(t, "production", prodGroup.Vars["env"])
+}
+
+func TestInventoryParser_AnsibleYAML_EmptyChildren(t *testing.T) {
+	logger := &mockLogger{}
+	parser := NewInventoryParser(logger)
+
+	ansibleYaml := `
+all:
+  hosts:
+    web1:
+      ansible_host: 192.168.1.10
+  children:
+    webservers:
+      hosts:
+        web1:
+`
+
+	inv, err := parser.parseYamlInventory([]byte(ansibleYaml))
+	assert.NoError(t, err)
+	assert.Len(t, inv.Hosts, 1)
+	assert.Len(t, inv.Groups, 1)
+
+	webGroup, ok := inv.Groups["webservers"]
+	assert.True(t, ok)
+	assert.Len(t, webGroup.Children, 0)
+}
+
+func TestInventoryParser_AnsibleYAML_IsDetected(t *testing.T) {
+	// Test that Ansible format is properly detected
+	ansibleYaml := []byte(`
+all:
+  hosts:
+    web1:
+      ansible_host: 192.168.1.10
+`)
+
+	assert.True(t, isAnsibleYaml(ansibleYaml))
+
+	// Test Onigirazu format is not detected as Ansible
+	onigiraazuYaml := []byte(`
+hosts:
+  - name: web1
+    address: 192.168.1.10
+groups:
+  webservers:
+    hosts:
+      web1:
+`)
+
+	assert.False(t, isAnsibleYaml(onigiraazuYaml))
+
+	// Test detection via ansible_ prefix
+	ansibleWithVar := []byte(`
+hosts:
+  web1:
+    ansible_host: 192.168.1.10
+`)
+
+	assert.True(t, isAnsibleYaml(ansibleWithVar))
+}

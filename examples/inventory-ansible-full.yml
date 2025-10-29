@@ -1,0 +1,80 @@
+# Full Ansible-format inventory example for Onigirazu
+# This demonstrates complete Ansible compatibility with:
+# - Standard Ansible connection parameters (ansible_host, ansible_user, etc.)
+# - Nested groups with children
+# - Group variables and host variables
+# - Custom variables alongside Ansible parameters
+
+all:
+  hosts:
+    web1:
+      ansible_host: 192.168.1.10
+      ansible_port: 22
+      ansible_user: deploy
+      ansible_ssh_private_key_file: ~/.ssh/web_key
+      app_version: 1.0.0
+      environment: production
+
+    web2:
+      ansible_host: 192.168.1.11
+      ansible_user: deploy
+      ansible_password: secret123
+      app_port: 8080
+
+    db1:
+      ansible_host: 192.168.1.20
+      ansible_user: postgres
+      ansible_ssh_private_key_file: ~/.ssh/db_key
+      ansible_port: 2222
+      db_version: 13
+
+    cache1:
+      ansible_host: cache.internal
+      ansible_user: redis
+      redis_port: 6379
+
+  children:
+    # Web servers group
+    webservers:
+      hosts:
+        web1:
+        web2:
+      vars:
+        http_port: 80
+        https_port: 443
+        max_connections: 1000
+
+    # Database servers group
+    databases:
+      hosts:
+        db1:
+      vars:
+        max_connections: 200
+        backup_enabled: true
+        backup_retention_days: 30
+
+    # Cache servers group
+    cache:
+      hosts:
+        cache1:
+      vars:
+        max_memory: 2gb
+        eviction_policy: allkeys-lru
+
+    # Production tier - includes all groups
+    production:
+      children:
+        - webservers
+        - databases
+        - cache
+      vars:
+        env: production
+        monitoring_enabled: true
+        log_level: info
+        datacenter: us-east-1
+
+  vars:
+    # Global variables for all hosts
+    company: acme
+    domain: example.com
+    ntp_server: ntp.example.com

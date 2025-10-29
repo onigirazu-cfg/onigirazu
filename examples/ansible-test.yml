@@ -1,0 +1,9 @@
+---
+name: Test Ansible Inventory Format
+plays:
+  - name: Test Ansible Format Inventory Parsing
+    hosts: webservers
+    tasks:
+      - name: Sample task
+        debug:
+          msg: "Testing Ansible inventory format support"
