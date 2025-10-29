@@ -176,6 +176,8 @@ type Task struct {
 	Become       bool                   `yaml:"become,omitempty"`
 	BecomeUser   string                 `yaml:"become_user,omitempty"`
 	BecomeMethod string                 `yaml:"become_method,omitempty"`
+	RunOnce      bool                   `yaml:"run_once,omitempty"`
+	DelegateTo   string                 `yaml:"delegate_to,omitempty"`
 }
 
 // UnmarshalYAML implements custom YAML unmarshaling for Task
@@ -211,6 +213,8 @@ func (t *Task) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		"become":        true,
 		"become_user":   true,
 		"become_method": true,
+		"run_once":      true,
+		"delegate_to":   true,
 	}
 
 	// Extract basic fields
@@ -247,6 +251,12 @@ func (t *Task) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	}
 	if becomeMethod, ok := taskMap["become_method"].(string); ok {
 		t.BecomeMethod = becomeMethod
+	}
+	if runOnce, ok := taskMap["run_once"].(bool); ok {
+		t.RunOnce = runOnce
+	}
+	if delegateTo, ok := taskMap["delegate_to"].(string); ok {
+		t.DelegateTo = delegateTo
 	}
 
 	// Handle tags

@@ -541,6 +541,198 @@ func TestPool_ConcurrentExecution(t *testing.T) {
 	assert.Greater(t, max, int32(1), "Should have concurrent execution")
 }
 
+// TestPool_RunOnce tests run_once functionality
+func TestPool_RunOnce(t *testing.T) {
+	logger := &mockLogger{}
+	pool := NewPool(4, logger)
+	defer pool.Close()
+
+	executedHosts := make([]string, 0)
+	var mu sync.Mutex
+
+	module := &mockModuleExecutor{
+		executeFunc: func(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
+			mu.Lock()
+			executedHosts = append(executedHosts, host.Name)
+			mu.Unlock()
+			return types.TaskResult{Success: true, Host: host.Name}, nil
+		},
+	}
+
+	registry := &mockModuleRegistry{
+		modules: map[string]*mockModuleExecutor{"mock": module},
+	}
+
+	// Task with run_once enabled
+	task := &types.Task{
+		Name:    "Run Once Task",
+		Module:  "mock",
+		RunOnce: true,
+	}
+
+	hosts := []types.Host{
+		{Name: "host1"},
+		{Name: "host2"},
+		{Name: "host3"},
+	}
+
+	results, err := pool.ExecuteParallel([]*types.Task{task}, hosts, map[string]interface{}{}, registry)
+	assert.NoError(t, err)
+	assert.Equal(t, 1, len(results), "Should execute on only 1 host")
+	assert.Equal(t, []string{"host1"}, executedHosts, "Should execute on first host only")
+}
+
+// TestPool_DelegateTo tests delegate_to functionality
+func TestPool_DelegateTo(t *testing.T) {
+	logger := &mockLogger{}
+	pool := NewPool(4, logger)
+	defer pool.Close()
+
+	executedHosts := make([]string, 0)
+	var mu sync.Mutex
+
+	module := &mockModuleExecutor{
+		executeFunc: func(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
+			mu.Lock()
+			executedHosts = append(executedHosts, host.Name)
+			mu.Unlock()
+			return types.TaskResult{Success: true, Host: host.Name}, nil
+		},
+	}
+
+	registry := &mockModuleRegistry{
+		modules: map[string]*mockModuleExecutor{"mock": module},
+	}
+
+	// Task delegated to localhost
+	task := &types.Task{
+		Name:       "Delegated Task",
+		Module:     "mock",
+		DelegateTo: "localhost",
+	}
+
+	hosts := []types.Host{
+		{Name: "host1"},
+		{Name: "host2"},
+		{Name: "localhost"},
+	}
+
+	results, err := pool.ExecuteParallel([]*types.Task{task}, hosts, map[string]interface{}{}, registry)
+	assert.NoError(t, err)
+	// With delegate_to, each original host still gets a result channel,
+	// but execution happens on the delegated host
+	assert.Equal(t, 3, len(results), "Should have results for all original hosts")
+	// All executions should be on localhost
+	assert.Equal(t, []string{"localhost", "localhost", "localhost"}, executedHosts, "All tasks should execute on localhost")
+}
+
+// TestPool_RunOnceAndDelegateTo tests both features together
+func TestPool_RunOnceAndDelegateTo(t *testing.T) {
+	logger := &mockLogger{}
+	pool := NewPool(4, logger)
+	defer pool.Close()
+
+	executedHosts := make([]string, 0)
+	var mu sync.Mutex
+
+	module := &mockModuleExecutor{
+		executeFunc: func(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
+			mu.Lock()
+			executedHosts = append(executedHosts, host.Name)
+			mu.Unlock()
+			return types.TaskResult{Success: true, Host: host.Name}, nil
+		},
+	}
+
+	registry := &mockModuleRegistry{
+		modules: map[string]*mockModuleExecutor{"mock": module},
+	}
+
+	// Task with both run_once and delegate_to
+	task := &types.Task{
+		Name:       "Combined Task",
+		Module:     "mock",
+		RunOnce:    true,
+		DelegateTo: "localhost",
+	}
+
+	hosts := []types.Host{
+		{Name: "host1"},
+		{Name: "host2"},
+		{Name: "host3"},
+		{Name: "localhost"},
+	}
+
+	results, err := pool.ExecuteParallel([]*types.Task{task}, hosts, map[string]interface{}{}, registry)
+	assert.NoError(t, err)
+	assert.Equal(t, 1, len(results), "Should execute on only 1 host (run_once)")
+	assert.Equal(t, []string{"localhost"}, executedHosts, "Should execute on delegated host")
+}
+
+// TestPool_DelegateToInvalidHost tests delegate_to with non-existent host
+func TestPool_DelegateToInvalidHost(t *testing.T) {
+	logger := &mockLogger{}
+	pool := NewPool(4, logger)
+	defer pool.Close()
+
+	executedHosts := make([]string, 0)
+	var mu sync.Mutex
+
+	module := &mockModuleExecutor{
+		executeFunc: func(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
+			mu.Lock()
+			executedHosts = append(executedHosts, host.Name)
+			mu.Unlock()
+			return types.TaskResult{Success: true, Host: host.Name}, nil
+		},
+	}
+
+	registry := &mockModuleRegistry{
+		modules: map[string]*mockModuleExecutor{"mock": module},
+	}
+
+	// Task delegated to non-existent host
+	task := &types.Task{
+		Name:       "Invalid Delegate Task",
+		Module:     "mock",
+		DelegateTo: "nonexistent",
+	}
+
+	hosts := []types.Host{
+		{Name: "host1"},
+		{Name: "host2"},
+	}
+
+	results, err := pool.ExecuteParallel([]*types.Task{task}, hosts, map[string]interface{}{}, registry)
+	assert.NoError(t, err)
+	assert.Equal(t, 2, len(results), "Should have results for all hosts")
+	// Should execute on original hosts since delegated host was not found
+	assert.Equal(t, []string{"host1", "host2"}, executedHosts, "Should execute on original hosts when delegate target not found")
+}
+
+// TestFindHostByName tests the findHostByName helper function
+func TestFindHostByName(t *testing.T) {
+	hosts := []types.Host{
+		{Name: "host1", Address: "192.168.1.1"},
+		{Name: "host2", Address: "192.168.1.2"},
+		{Name: "localhost", Address: "127.0.0.1"},
+	}
+
+	// Test finding by name
+	result := findHostByName(hosts, "host1")
+	assert.NotNil(t, result)
+	assert.Equal(t, "host1", result.Name)
+
+	// Test finding by address
+	result = findHostByName(hosts, "192.168.1.2")
+	assert.NotNil(t, result)
+	assert.Equal(t, "host2", result.Name)
+
+	// Test not found
+	result = findHostByName(hosts, "nonexistent")
+	assert.Nil(t, result)
+}
+
 // Benchmark tests
 func BenchmarkPool_Execute(b *testing.B) {
 	logger := &mockLogger{}

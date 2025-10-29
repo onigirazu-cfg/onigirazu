@@ -165,8 +165,30 @@ func (p *Pool) ExecuteParallel(tasks []*types.Task, hosts []types.Host, variable
 			return nil, fmt.Errorf("module '%s' not found: %w", task.Module, err)
 		}
 
-		for _, host := range hosts {
-			resultChan := p.Execute(task, host, variables, module)
+		// Determine which hosts to run this task on
+		tasksHosts := hosts
+
+		// Handle run_once: only run on the first host
+		if task.RunOnce && len(hosts) > 0 {
+			tasksHosts = hosts[:1]
+			p.logger.Debug("Task '%s' has run_once enabled, will execute only on first host '%s'", task.Name, hosts[0].Name)
+		}
+
+		for _, host := range tasksHosts {
+			// Handle delegate_to: execute on a different host
+			executionHost := host
+			if task.DelegateTo != "" {
+				// Find the delegated host
+				delegatedHost := findHostByName(hosts, task.DelegateTo)
+				if delegatedHost != nil {
+					executionHost = *delegatedHost
+					p.logger.Debug("Task '%s' delegated from host '%s' to '%s'", task.Name, host.Name, executionHost.Name)
+				} else {
+					p.logger.Debug("Task '%s' delegate_to host '%s' not found, using original host '%s'", task.Name, task.DelegateTo, host.Name)
+				}
+			}
+
+			resultChan := p.Execute(task, executionHost, variables, module)
 			resultChans = append(resultChans, resultChan)
 		}
 	}
@@ -191,6 +213,16 @@ func (p *Pool) ExecuteParallel(tasks []*types.Task, hosts []types.Host, variable
 	}
 
 	return results, nil
+}
+
+// findHostByName finds a host by name in the hosts slice
+func findHostByName(hosts []types.Host, name string) *types.Host {
+	for i := range hosts {
+		if hosts[i].Name == name || hosts[i].Address == name {
+			return &hosts[i]
+		}
+	}
+	return nil
 }
 
 // ExecuteWithRetry executes a task with retry logic
