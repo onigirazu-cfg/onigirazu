@@ -415,6 +415,7 @@ func createTestEngine() (*ExecutionEngine, *MockConfig, *MockLogger, *MockInvent
 	mockLogger.On("PlayStart", mock.Anything, mock.Anything, mock.Anything).Return()
 	mockLogger.On("PlayEnd", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
 	mockProgressTracker.On("UpdateTask", mock.Anything, mock.Anything, mock.Anything).Return()
+	mockProgressTracker.On("UpdateProgress", mock.Anything, mock.Anything).Return()
 	mockStateManager.On("LoadState", mock.Anything).Return(&types.State{}, nil)
 
 	engine := NewExecutionEngine(
