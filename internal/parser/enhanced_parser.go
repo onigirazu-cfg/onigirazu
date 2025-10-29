@@ -20,6 +20,7 @@ type EnhancedParser struct {
 	variables       map[string]interface{}
 	inventoryParser *InventoryParser
 	roleLoader      *RoleLoader // NEW: For loading roles
+	lenient         bool        // NEW: Lenient mode for inventory parsing
 }
 
 // NewEnhancedParser creates a new enhanced parser
@@ -28,12 +29,21 @@ func NewEnhancedParser(templateEngine interfaces.TemplateEngine, logger interfac
 		templateEngine: templateEngine,
 		logger:         logger,
 		variables:      make(map[string]interface{}),
+		lenient:        false, // Default to strict mode
 	}
 	// Create inventory parser
 	parser.inventoryParser = NewInventoryParser(logger)
 	// Create role loader (default roles path: playbooks/roles)
 	parser.roleLoader = NewRoleLoader(logger, "playbooks/roles")
 	return parser
+}
+
+// SetLenient sets lenient mode for inventory parsing
+func (p *EnhancedParser) SetLenient(lenient bool) {
+	p.lenient = lenient
+	if lenient {
+		p.logger.Info("Lenient mode enabled: inventory validation is relaxed")
+	}
 }
 
 // ParsePlaybook parses a playbook file with template rendering
@@ -91,9 +101,16 @@ func (p *EnhancedParser) ParseInventory(ctx context.Context, filePath string) (*
 		return nil, fmt.Errorf("failed to parse inventory %s: %w", filePath, err)
 	}
 
-	// Validate inventory
-	if err := p.validateInventory(inventory); err != nil {
-		return nil, fmt.Errorf("inventory validation failed for %s: %w", filePath, err)
+	// Validate inventory (unless in lenient mode)
+	if !p.lenient {
+		if err := p.validateInventory(inventory); err != nil {
+			return nil, fmt.Errorf("inventory validation failed for %s: %w", filePath, err)
+		}
+	} else {
+		// In lenient mode, just warn about issues instead of failing
+		if err := p.validateInventoryLenient(inventory); err != nil {
+			p.logger.Warn("Inventory validation issues (lenient mode): %v", err)
+		}
 	}
 
 	p.logger.Info("Successfully parsed inventory: %s (%d groups, %d hosts)",
@@ -227,7 +244,7 @@ func (p *EnhancedParser) validateCondition(condition, context string) error {
 	return nil
 }
 
-// validateInventory validates inventory structure
+// validateInventory validates inventory structure (strict mode)
 func (p *EnhancedParser) validateInventory(inventory *types.Inventory) error {
 	if len(inventory.Groups) == 0 {
 		return fmt.Errorf("inventory must contain at least one group")
@@ -238,6 +255,45 @@ func (p *EnhancedParser) validateInventory(inventory *types.Inventory) error {
 		if err := p.validateGroup(group, groupName); err != nil {
 			return fmt.Errorf("group '%s' validation failed: %w", groupName, err)
 		}
+	}
+
+	return nil
+}
+
+// validateInventoryLenient validates inventory structure in lenient mode
+// Issues are logged as warnings instead of errors
+func (p *EnhancedParser) validateInventoryLenient(inventory *types.Inventory) error {
+	var issues []string
+
+	if len(inventory.Groups) == 0 {
+		p.logger.Warn("Inventory contains no groups")
+		if len(inventory.Hosts) == 0 {
+			issues = append(issues, "inventory is empty (no hosts and no groups)")
+		}
+	}
+
+	// Check groups in lenient mode - just warn about empty ones
+	emptyGroups := []string{}
+	for groupName, group := range inventory.Groups {
+		if len(group.Hosts) == 0 && len(group.Children) == 0 {
+			emptyGroups = append(emptyGroups, groupName)
+		}
+
+		// Validate hosts don't crash on nil
+		for hostName, host := range group.Hosts {
+			if err := p.validateHost(host, hostName); err != nil {
+				p.logger.Warn("Host '%s' in group '%s': %v", hostName, groupName, err)
+			}
+		}
+	}
+
+	if len(emptyGroups) > 0 {
+		p.logger.Warn("Found %d empty groups (no hosts or children): %v", len(emptyGroups), emptyGroups)
+		issues = append(issues, fmt.Sprintf("empty groups: %v", emptyGroups))
+	}
+
+	if len(issues) > 0 {
+		return fmt.Errorf("inventory has issues in lenient mode: %s", strings.Join(issues, "; "))
 	}
 
 	return nil

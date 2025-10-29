@@ -16,11 +16,12 @@ import (
 )
 
 var (
-	inventoryFile  string
-	inventoryHost  string
-	inventoryGroup string
-	inventoryList  bool
-	inventoryGraph bool
+	inventoryFile    string
+	inventoryHost    string
+	inventoryGroup   string
+	inventoryList    bool
+	inventoryGraph   bool
+	inventoryLenient bool
 )
 
 var inventoryCmd = &cobra.Command{
@@ -36,6 +37,7 @@ func init() {
 	inventoryCmd.Flags().StringVar(&inventoryGroup, "group", "", "Show hierarchy for a specific group")
 	inventoryCmd.Flags().BoolVar(&inventoryList, "list", false, "List all hosts and groups")
 	inventoryCmd.Flags().BoolVar(&inventoryGraph, "graph", false, "Show group hierarchy as a graph")
+	inventoryCmd.Flags().BoolVar(&inventoryLenient, "lenient", false, "Lenient mode: skip inventory validation errors and process what is valid")
 }
 
 func runInventory(cmd *cobra.Command, args []string) error {
@@ -61,7 +63,18 @@ func runInventory(cmd *cobra.Command, args []string) error {
 	// Create inventory manager
 	templateEngine := template.NewEngine()
 	playbookParser := parser.NewEnhancedParser(templateEngine, log)
+
+	// Enable lenient mode if requested
+	if inventoryLenient {
+		playbookParser.SetLenient(true)
+	}
+
 	invManager := inventory.NewManager(playbookParser, log, cacheManager)
+
+	// Enable lenient mode in manager if requested
+	if inventoryLenient {
+		invManager.SetLenient(true)
+	}
 
 	// Load inventory
 	if err := invManager.LoadInventory(ctx, inventoryFile); err != nil {

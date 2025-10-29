@@ -25,6 +25,7 @@ type Manager struct {
 	hostFilters  []HostFilter
 	groupFilters []GroupFilter
 	lastUpdated  time.Time
+	lenient      bool // NEW: Lenient mode for parsing
 }
 
 // HostFilter defines a function type for filtering hosts
@@ -41,6 +42,15 @@ func NewManager(parser interfaces.PlaybookParser, logger interfaces.Logger, cach
 		cache:        cache,
 		hostFilters:  make([]HostFilter, 0),
 		groupFilters: make([]GroupFilter, 0),
+		lenient:      false, // Default to strict mode
+	}
+}
+
+// SetLenient sets lenient mode for inventory processing
+func (m *Manager) SetLenient(lenient bool) {
+	m.lenient = lenient
+	if lenient {
+		m.logger.Info("Lenient mode enabled for inventory manager")
 	}
 }
 
@@ -320,12 +330,20 @@ func (m *Manager) resolveGroupInheritance(inventory *types.Inventory) error {
 
 		group, exists := inventory.Groups[groupName]
 		if !exists {
+			if m.lenient {
+				m.logger.Warn("Group '%s' not found during inheritance resolution", groupName)
+				return nil
+			}
 			return fmt.Errorf("group '%s' not found", groupName)
 		}
 
 		// Resolve children first
 		for _, childName := range group.Children {
 			if err := resolve(childName); err != nil {
+				if m.lenient {
+					m.logger.Warn("Failed to resolve child group '%s' of '%s': %v", childName, groupName, err)
+					continue // Skip this child in lenient mode
+				}
 				return err
 			}
 
@@ -361,6 +379,10 @@ func (m *Manager) resolveGroupInheritance(inventory *types.Inventory) error {
 	// Resolve all groups
 	for groupName := range inventory.Groups {
 		if err := resolve(groupName); err != nil {
+			if m.lenient {
+				m.logger.Warn("Failed to resolve group '%s': %v", groupName, err)
+				continue // Skip this group in lenient mode
+			}
 			return err
 		}
 	}

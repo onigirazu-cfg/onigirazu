@@ -29,6 +29,7 @@ var (
 	healthcheckChecks          string
 	healthcheckVerbose         bool
 	healthcheckSkipUnavailable bool
+	healthcheckLenient         bool
 )
 
 var healthcheckCmd = &cobra.Command{
@@ -50,6 +51,7 @@ func init() {
 	healthcheckCmd.Flags().StringVar(&healthcheckChecks, "checks", "connectivity,disk_space,memory", "Comma-separated list of checks to perform")
 	healthcheckCmd.Flags().BoolVar(&healthcheckVerbose, "verbose", false, "Verbose output")
 	healthcheckCmd.Flags().BoolVar(&healthcheckSkipUnavailable, "skip-unavailable", false, "Skip unavailable hosts instead of failing")
+	healthcheckCmd.Flags().BoolVar(&healthcheckLenient, "lenient", false, "Lenient mode: skip inventory validation errors and process what is valid")
 }
 
 func runHealthcheck(cmd *cobra.Command, args []string) error {
@@ -82,7 +84,18 @@ func runHealthcheck(cmd *cobra.Command, args []string) error {
 	// Load inventory
 	templateEngine := template.NewEngine()
 	playbookParser := parser.NewEnhancedParser(templateEngine, log)
+
+	// Enable lenient mode if requested
+	if healthcheckLenient {
+		playbookParser.SetLenient(true)
+	}
+
 	invManager := inventory.NewManager(playbookParser, log, cacheManager)
+
+	// Enable lenient mode in manager if requested
+	if healthcheckLenient {
+		invManager.SetLenient(true)
+	}
 
 	if err := invManager.LoadInventory(ctx, healthcheckInventoryFile); err != nil {
 		return fmt.Errorf("failed to load inventory: %w", err)
