@@ -95,6 +95,29 @@ func (m *Manager) LoadInventory(ctx context.Context, filePath string) error {
 	return nil
 }
 
+// SetInventory directly sets the inventory (used for pre-loaded/merged inventory)
+func (m *Manager) SetInventory(inv *types.Inventory) error {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	if inv == nil {
+		return fmt.Errorf("cannot set nil inventory")
+	}
+
+	// Process and validate inventory
+	if err := m.processInventory(inv); err != nil {
+		return fmt.Errorf("failed to process inventory: %w", err)
+	}
+
+	m.inventory = inv
+	m.lastUpdated = time.Now()
+
+	m.logger.Info("Successfully set inventory: %d groups, %d hosts",
+		len(inv.Groups), m.getTotalHostCount())
+
+	return nil
+}
+
 // GetHosts returns all hosts matching the given pattern
 func (m *Manager) GetHosts(pattern string) ([]types.Host, error) {
 	m.mutex.RLock()

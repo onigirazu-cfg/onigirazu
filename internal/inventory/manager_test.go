@@ -76,6 +76,11 @@ func (m *mockCache) Set(ctx context.Context, key string, value interface{}) erro
 	return nil
 }
 
+func (m *mockCache) SetWithTTL(ctx context.Context, key string, value interface{}, ttl time.Duration) error {
+	m.data[key] = value
+	return nil
+}
+
 func (m *mockCache) Delete(ctx context.Context, key string) error {
 	delete(m.data, key)
 	return nil

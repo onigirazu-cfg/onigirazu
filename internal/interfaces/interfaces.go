@@ -77,6 +77,7 @@ type ModuleRegistry interface {
 type CacheManager interface {
 	Get(ctx context.Context, key string) (interface{}, bool)
 	Set(ctx context.Context, key string, value interface{}) error
+	SetWithTTL(ctx context.Context, key string, value interface{}, ttl time.Duration) error
 	Delete(ctx context.Context, key string) error
 	Clear(ctx context.Context) error
 	Size() int

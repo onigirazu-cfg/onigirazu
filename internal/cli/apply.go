@@ -365,29 +365,46 @@ Examples:
 				log.Info("Tag filtering enabled: %s", tagFilter.String())
 			}
 
-			// Load inventory
-			var finalInventoryPath string
-			if inventoryPath != "" {
-				// Use specified inventory path
-				finalInventoryPath = inventoryPath
+			// Load inventory from multiple sources (files, directories, dynamic scripts)
+			var finalInventoryPaths []string
+			if len(inventoryPaths) > 0 {
+				// Use specified inventory paths
+				finalInventoryPaths = inventoryPaths
 			} else {
-				// Try to find inventory file in playbook directory
+				// Try to find inventory file in playbook directory (auto-discovery)
 				playbookDir := filepath.Dir(playbookPath)
 				foundPath, err := enhancedParser.FindInventoryFile(playbookDir)
 				if err != nil {
 					log.Warn("No inventory file found in playbook directory: %v", err)
 					log.Info("Continuing without inventory (only 'localhost' will be available)")
 				} else {
-					finalInventoryPath = foundPath
-					log.Info("Auto-detected inventory file: %s", finalInventoryPath)
+					finalInventoryPaths = []string{foundPath}
+					log.Info("Auto-detected inventory source: %s", foundPath)
 				}
 			}
 
-			// Load inventory if we have a path
-			if finalInventoryPath != "" {
-				log.Info("Loading inventory from: %s", finalInventoryPath)
-				if err := inventoryManager.LoadInventory(ctx, finalInventoryPath); err != nil {
-					return fmt.Errorf("failed to load inventory: %w", err)
+			// Load inventory from multiple sources if we have paths
+			if len(finalInventoryPaths) > 0 {
+				log.Info("Loading inventory from %d source(s) with last-occurrence-wins merge strategy",
+					len(finalInventoryPaths))
+
+				// Create multi-source loader
+				multiSourceLoader := inventory.NewMultiSourceLoader(
+					enhancedParser,
+					log,
+					cacheManager,
+					10*time.Minute, // Dynamic inventory cache TTL
+				)
+
+				// Load from all sources
+				mergedInventory, err := multiSourceLoader.LoadFromMultipleSources(ctx, finalInventoryPaths)
+				if err != nil {
+					return fmt.Errorf("failed to load inventory from multiple sources: %w", err)
+				}
+
+				// Update inventory manager with merged inventory
+				if err := inventoryManager.SetInventory(mergedInventory); err != nil {
+					return fmt.Errorf("failed to set merged inventory: %w", err)
 				}
 
 				// Print inventory info with formatter using stats
@@ -400,8 +417,11 @@ Examples:
 				if hostsCnt, ok := stats["total_hosts"].(int); ok {
 					hostCount = hostsCnt
 				}
+
+				// Show merged inventory info
+				sourcesStr := strings.Join(finalInventoryPaths, ", ")
 				log.PrintInventoryLoaded(logger.InventoryInfo{
-					Path:       finalInventoryPath,
+					Path:       sourcesStr,
 					GroupCount: groupCount,
 					HostCount:  hostCount,
 				})
@@ -485,7 +505,9 @@ Examples:
 
 			// Start audit recording
 			if auditRecorder != nil {
-				executionID, err = auditRecorder.StartExecution(playbookPath, finalInventoryPath, []string{})
+				// Create a single inventory path string for audit recording
+				inventoryPathForAudit := strings.Join(finalInventoryPaths, ", ")
+				executionID, err = auditRecorder.StartExecution(playbookPath, inventoryPathForAudit, []string{})
 				if err != nil {
 					log.Warn("Failed to start audit recording: %v", err)
 				} else {

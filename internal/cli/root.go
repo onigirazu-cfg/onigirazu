@@ -12,12 +12,12 @@ import (
 
 var (
 	// Global flags
-	configPath    string
-	inventoryPath string
-	statePath     string
-	verbose       bool
-	noColor       bool
-	showDebug     bool
+	configPath     string
+	inventoryPaths []string // Changed to support multiple paths
+	statePath      string
+	verbose        bool
+	noColor        bool
+	showDebug      bool
 
 	// Legacy flags for backward compatibility
 	playbookPath string
@@ -49,7 +49,7 @@ across your infrastructure with a focus on simplicity and reliability.`,
 
 	// Global flags
 	rootCmd.PersistentFlags().StringVarP(&configPath, "config", "c", "", "Path to configuration file")
-	rootCmd.PersistentFlags().StringVarP(&inventoryPath, "inventory", "i", "", "Path to inventory file")
+	rootCmd.PersistentFlags().StringSliceVarP(&inventoryPaths, "inventory", "i", []string{}, "Path to inventory file or directory (can be specified multiple times)")
 	rootCmd.PersistentFlags().StringVarP(&statePath, "state", "s", ".onigirazu-state", "Path to state file")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Verbose output")
 	rootCmd.PersistentFlags().BoolVar(&noColor, "no-color", false, "Disable colored output")
@@ -108,7 +108,9 @@ func handleLegacyMode(cmd *cobra.Command, args []string) {
 
 	// Copy global flags to apply command
 	_ = applyCmd.Flags().Set("config", configPath)
-	_ = applyCmd.Flags().Set("inventory", inventoryPath)
+	for _, invPath := range inventoryPaths {
+		_ = applyCmd.Flags().Set("inventory", invPath)
+	}
 	_ = applyCmd.Flags().Set("state", statePath)
 	_ = applyCmd.Flags().Set("verbose", fmt.Sprintf("%t", verbose))
 	_ = applyCmd.Flags().Set("no-color", fmt.Sprintf("%t", noColor))

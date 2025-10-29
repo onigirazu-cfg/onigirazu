@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -60,10 +61,9 @@ func runPlan(cmd *cobra.Command, args []string) error {
 
 	// Get flags
 	verbose, _ := cmd.Flags().GetBool("verbose")
-	inventoryPath, _ := cmd.Flags().GetString("inventory")
 	limitHosts, _ := cmd.Flags().GetString("limit")
 	detailed, _ := cmd.Flags().GetBool("detailed")
-	statePath, _ := cmd.Flags().GetString("state")
+	// Note: inventoryPaths is now a global variable accessible from root.go
 
 	fmt.Printf("📋 Generating execution plan for: %s\n\n", playbookPath)
 
@@ -96,11 +96,11 @@ func runPlan(cmd *cobra.Command, args []string) error {
 	}
 
 	// Note: Inventory loading would be implemented here
-	// For now, we'll just note if inventory path is provided
+	// For now, we'll just note if inventory paths are provided
 	var hosts []string
-	if inventoryPath != "" {
+	if len(inventoryPaths) > 0 {
 		if verbose {
-			fmt.Printf("📦 Inventory file: %s\n", inventoryPath)
+			fmt.Printf("📦 Inventory sources (%d): %s\n", len(inventoryPaths), strings.Join(inventoryPaths, ", "))
 		}
 		// TODO: Load inventory when needed
 	}

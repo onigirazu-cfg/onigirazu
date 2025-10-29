@@ -203,9 +203,9 @@ func runAdHocCommand(
 	// Initialize SSH connection pool with logger
 	sshpkg.InitializeGlobalPoolWithLogger(cfg, log)
 
-	// Load inventory
-	if inventoryPath == "" {
-		return fmt.Errorf("inventory file is required (use -i/--inventory)")
+	// Load inventory from multiple sources (files, directories, dynamic scripts)
+	if len(inventoryPaths) == 0 {
+		return fmt.Errorf("inventory source is required (use -i/--inventory)")
 	}
 
 	// Initialize required components for inventory manager
@@ -240,9 +240,27 @@ func runAdHocCommand(
 		return sshPool.CloseAll()
 	})
 
-	// Load inventory file
-	if err := inventoryMgr.LoadInventory(ctx, inventoryPath); err != nil {
-		return fmt.Errorf("failed to load inventory: %w", err)
+	// Load inventory from multiple sources
+	log.Info("Loading inventory from %d source(s) with last-occurrence-wins merge strategy",
+		len(inventoryPaths))
+
+	// Create multi-source loader
+	multiSourceLoader := inventory.NewMultiSourceLoader(
+		enhancedParser,
+		log,
+		cacheManager,
+		10*time.Minute, // Dynamic inventory cache TTL
+	)
+
+	// Load from all sources
+	mergedInventory, err := multiSourceLoader.LoadFromMultipleSources(ctx, inventoryPaths)
+	if err != nil {
+		return fmt.Errorf("failed to load inventory from multiple sources: %w", err)
+	}
+
+	// Update inventory manager with merged inventory
+	if err := inventoryMgr.SetInventory(mergedInventory); err != nil {
+		return fmt.Errorf("failed to set merged inventory: %w", err)
 	}
 
 	// Apply SSH overrides if provided
