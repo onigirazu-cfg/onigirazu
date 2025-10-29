@@ -54,6 +54,7 @@ func NewApplyCommand() *cobra.Command {
 		listTasks      bool
 		verboseOutput  bool
 		backgroundMode bool
+		lenient        bool
 	)
 
 	cmd := &cobra.Command{
@@ -321,7 +322,18 @@ Examples:
 
 			// Initialize parser and inventory manager
 			enhancedParser := parser.NewEnhancedParser(templateEngine, log)
+
+			// Enable lenient mode if requested
+			if lenient {
+				enhancedParser.SetLenient(true)
+			}
+
 			inventoryManager := inventory.NewManager(enhancedParser, log, cacheManager)
+
+			// Enable lenient mode in manager if requested
+			if lenient {
+				inventoryManager.SetLenient(true)
+			}
 
 			// Initialize execution engine
 			executionEngine := engine.NewExecutionEngine(
@@ -857,6 +869,9 @@ Examples:
 	cmd.Flags().BoolVar(&listTasks, "list-tasks", false, "List tasks that would execute with current filters")
 	cmd.Flags().BoolVar(&verboseOutput, "verbose-output", false, "Use verbose output formatting (more details)")
 	cmd.Flags().BoolVar(&backgroundMode, "background", false, "Run in background mode (returns immediately, use show-execution to view results)")
+
+	// Inventory flags
+	cmd.Flags().BoolVar(&lenient, "lenient", false, "Lenient mode: skip inventory validation errors and process what is valid")
 
 	return cmd
 }

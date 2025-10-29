@@ -44,6 +44,9 @@ func newRunCmd() *cobra.Command {
 		// SSH connection options
 		sshUser    string
 		sshKeyFile string
+
+		// Inventory options
+		lenient bool
 	)
 
 	cmd := &cobra.Command{
@@ -138,6 +141,7 @@ Examples:
 				extraVars,
 				sshUser,
 				sshKeyFile,
+				lenient,
 			)
 		},
 	}
@@ -163,6 +167,9 @@ Examples:
 	cmd.Flags().StringVarP(&sshUser, "user", "u", "", "SSH user (overrides inventory)")
 	cmd.Flags().StringVarP(&sshKeyFile, "key-file", "k", "", "SSH private key file (overrides inventory)")
 
+	// Inventory flags
+	cmd.Flags().BoolVar(&lenient, "lenient", false, "Lenient mode: skip inventory validation errors and process what is valid")
+
 	return cmd
 }
 
@@ -181,6 +188,7 @@ func runAdHocCommand(
 	extraVars map[string]string,
 	sshUser string,
 	sshKeyFile string,
+	lenient bool,
 ) error {
 	// Load configuration
 	cfg, err := config.LoadConfig(configPath)
@@ -205,8 +213,18 @@ func runAdHocCommand(
 	enhancedParser := parser.NewEnhancedParser(templateEngine, log)
 	cacheManager := cache.NewManager(5 * time.Minute) // 5 minute cache TTL
 
+	// Enable lenient mode if requested
+	if lenient {
+		enhancedParser.SetLenient(true)
+	}
+
 	// Create inventory manager
 	inventoryMgr := inventory.NewManager(enhancedParser, log, cacheManager)
+
+	// Enable lenient mode in manager if requested
+	if lenient {
+		inventoryMgr.SetLenient(true)
+	}
 
 	// Create context with graceful shutdown support
 	ctx := context.Background()
