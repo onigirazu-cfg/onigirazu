@@ -368,6 +368,11 @@ func (m *MockCacheManager) Set(ctx context.Context, key string, value interface{
 	return args.Error(0)
 }
 
+func (m *MockCacheManager) SetWithTTL(ctx context.Context, key string, value interface{}, ttl time.Duration) error {
+	args := m.Called(ctx, key, value, ttl)
+	return args.Error(0)
+}
+
 func (m *MockCacheManager) Delete(ctx context.Context, key string) error {
 	args := m.Called(ctx, key)
 	return args.Error(0)

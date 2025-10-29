@@ -150,7 +150,7 @@ func (m *WaitForModule) Execute(ctx context.Context, host types.Host, args map[s
 }
 
 func (m *WaitForModule) checkPort(host string, port int, state string) (bool, error) {
-	addr := fmt.Sprintf("%s:%d", host, port)
+	addr := net.JoinHostPort(host, fmt.Sprintf("%d", port))
 	conn, err := net.Dial("tcp", addr)
 
 	if state == "started" {
