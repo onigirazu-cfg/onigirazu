@@ -29,8 +29,6 @@ type secretCache struct {
 }
 
 type cachedSecret struct {
-	value     string
-	timestamp time.Time
 }
 
 // NewVaultClient creates a new Vault client
