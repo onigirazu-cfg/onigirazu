@@ -374,7 +374,7 @@ func (ms *ModuleScaffold) generateParameterValidation() string {
 		validations = append(validations, fmt.Sprintf("\tif params[\"%s\"] == \"\" {\n\t\treturn fmt.Errorf(\"%s parameter is required\")\n\t}", param, param))
 	}
 
-	paramExtraction := fmt.Sprintf("\tparams := task.Args.(map[string]interface{})\n")
+	paramExtraction := "\tparams := task.Args.(map[string]interface{})\n"
 	return paramExtraction + strings.Join(validations, "\n")
 }
 
