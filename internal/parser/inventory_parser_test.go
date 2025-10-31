@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"sort"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -1096,13 +1097,18 @@ all:
 	assert.NotNil(t, inv)
 	assert.Len(t, inv.Hosts, 2)
 
-	// Check first host
+	// Sort hosts by name for deterministic comparison (Go maps are unordered)
+	sort.Slice(inv.Hosts, func(i, j int) bool {
+		return inv.Hosts[i].Name < inv.Hosts[j].Name
+	})
+
+	// Check first host (web1)
 	assert.Equal(t, "web1", inv.Hosts[0].Name)
 	assert.Equal(t, "192.168.1.10", inv.Hosts[0].Address)
 	assert.Equal(t, "deploy", inv.Hosts[0].User)
 	assert.Equal(t, 22, inv.Hosts[0].Port)
 
-	// Check second host
+	// Check second host (web2)
 	assert.Equal(t, "web2", inv.Hosts[1].Name)
 	assert.Equal(t, "192.168.1.11", inv.Hosts[1].Address)
 	assert.Equal(t, "deploy", inv.Hosts[1].User)
