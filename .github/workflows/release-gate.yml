@@ -167,7 +167,7 @@ jobs:
         if [ "$GOOS" = "windows" ]; then
           BINARY_NAME="${BINARY_NAME}.exe"
         fi
-        go build -ldflags="-s -w -X main.version=${{ github.ref_name }} -X main.commit=${{ github.sha }}" \
+        go build -ldflags="-s -w -X github.com/onigirazu-cfg/onigirazu/internal/version.Version=${{ github.ref_name }} -X github.com/onigirazu-cfg/onigirazu/internal/version.Commit=${{ github.sha }}" \
           -o dist/${BINARY_NAME}-${GOOS}-${GOARCH} ./cmd/onigirazu
 
   lint:

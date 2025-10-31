@@ -52,8 +52,7 @@ func main() {
 }
 
 func printHelp() {
-	fmt.Println(`
-╔════════════════════════════════════════════════════════════════╗
+	fmt.Print(`╔════════════════════════════════════════════════════════════════╗
 ║         Onigirazu Module Scaffolding Tool                      ║
 ║  Generate boilerplate code for new Onigirazu modules           ║
 ╚════════════════════════════════════════════════════════════════╝
@@ -125,7 +124,7 @@ BEST PRACTICES:
   • Use table-driven tests for multiple cases
   • Document all parameters in validation
   • Run: go test ./internal/modules -cover
-`)
+` + "\n")
 }
 
 func printSummary(scaffold *ModuleScaffold) {

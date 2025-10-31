@@ -145,13 +145,23 @@ func TestNewClient_DefaultPort(t *testing.T) {
 	}
 
 	// This will fail to connect, but we're testing the port defaulting logic
-	client, err := NewClient(host)
-	// Connection will fail, but error should mention port 22
-	if err != nil {
-		assert.Contains(t, err.Error(), "192.168.1.100:22")
-	}
-	if client != nil {
-		client.Close()
+	// Set a timeout to prevent test from hanging
+	done := make(chan error, 1)
+	go func() {
+		client, err := NewClient(host)
+		done <- err
+		if client != nil {
+			client.Close()
+		}
+	}()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			assert.Contains(t, err.Error(), "192.168.1.100:22")
+		}
+	case <-time.After(10 * time.Second):
+		t.Error("test timeout: connection attempt took too long")
 	}
 }
 

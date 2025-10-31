@@ -111,10 +111,10 @@ func TestSignalHandler_Cancel(t *testing.T) {
 
 	handlerCtx := handler.Context()
 
-	// Context should not be cancelled initially
+	// Context should not be canceled initially
 	select {
 	case <-handlerCtx.Done():
-		t.Fatal("Context should not be cancelled initially")
+		t.Fatal("Context should not be canceled initially")
 	default:
 		// Expected
 	}
@@ -122,12 +122,12 @@ func TestSignalHandler_Cancel(t *testing.T) {
 	// Call Cancel
 	handler.Cancel()
 
-	// Now context should be cancelled
+	// Now context should be canceled
 	select {
 	case <-handlerCtx.Done():
 		// Expected
 	case <-time.After(100 * time.Millisecond):
-		t.Fatal("Context should be cancelled after Cancel() call")
+		t.Fatal("Context should be canceled after Cancel() call")
 	}
 }
 
@@ -169,8 +169,11 @@ func TestSignalHandler_CleanupFunctionsExecution(t *testing.T) {
 }
 
 func TestSignalHandler_MultipleInstances(t *testing.T) {
-	ctx1 := context.Background()
-	ctx2 := context.Background()
+	ctx1, cancel1 := context.WithCancel(context.Background())
+	ctx2, cancel2 := context.WithCancel(context.Background())
+
+	defer cancel1()
+	defer cancel2()
 
 	handler1 := NewSignalHandler(ctx1, 30*time.Second)
 	handler2 := NewSignalHandler(ctx2, 30*time.Second)

@@ -168,6 +168,7 @@ func (m *%sModule) IsIdempotent() bool {
 		ms.ModuleName,
 		capitalize(ms.ModuleName),
 		capitalize(ms.ModuleName),
+		capitalize(ms.ModuleName),
 	)
 }
 
@@ -283,6 +284,7 @@ func Benchmark%sModule(b *testing.B) {
 		ms.ModuleName,
 		capitalize(ms.ModuleName),
 		testCases,
+		capitalize(ms.ModuleName),
 		capitalize(ms.ModuleName),
 		capitalize(ms.ModuleName),
 		capitalize(ms.ModuleName),

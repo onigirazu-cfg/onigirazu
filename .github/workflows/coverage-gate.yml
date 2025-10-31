@@ -1,0 +1,189 @@
+name: Coverage Gate
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+  push:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+env:
+  GO_VERSION: '1.24.9'
+  # Minimum coverage thresholds per package
+  MIN_COVERAGE_OVERALL: 60
+  MIN_COVERAGE_CRITICAL: 70
+
+jobs:
+  coverage-check:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v5
+      with:
+        fetch-depth: 0
+
+    - name: Set up Go
+      uses: actions/setup-go@v6
+      with:
+        go-version: ${{ env.GO_VERSION }}
+        cache: true
+
+    - name: Download dependencies
+      run: go mod download
+
+    - name: Run tests with coverage
+      run: go test -race -coverprofile=coverage.out -covermode=atomic -timeout=10m ./...
+
+    - name: Generate coverage report
+      run: |
+        go tool cover -html=coverage.out -o coverage.html
+        go tool cover -func=coverage.out > coverage.txt
+
+    - name: Calculate coverage percentage
+      run: |
+        COVERAGE=$(grep total coverage.txt | awk '{print $NF}' | sed 's/%//')
+        echo "TOTAL_COVERAGE=$COVERAGE" >> $GITHUB_ENV
+        echo "Overall coverage: $COVERAGE%"
+
+    - name: Check critical package coverage
+      run: |
+        echo "=== Critical Packages Coverage Check ==="
+
+        declare -A CRITICAL_PACKAGES=(
+          ["internal/execution"]="70"
+          ["internal/ssh"]="70"
+          ["internal/cli"]="70"
+          ["internal/modules"]="70"
+          ["internal/facts"]="70"
+          ["internal/output"]="70"
+          ["internal/checksum"]="70"
+          ["internal/adhoc"]="70"
+          ["pkg/errors"]="90"
+          ["pkg/types"]="70"
+          ["internal/config"]="75"
+          ["internal/engine"]="75"
+          ["internal/executor"]="70"
+          ["internal/audit"]="70"
+          ["internal/parser"]="70"
+          ["internal/validator"]="75"
+          ["internal/workflow"]="75"
+        )
+
+        FAILED_PACKAGES=()
+
+        for package in "${!CRITICAL_PACKAGES[@]}"; do
+          threshold=${CRITICAL_PACKAGES[$package]}
+          coverage=$(go tool cover -func=coverage.out | grep "^.*/$package/" | grep total | awk '{print $NF}' | sed 's/%//')
+
+          if [ -z "$coverage" ]; then
+            coverage=0
+          fi
+
+          echo "Package: $package - Coverage: ${coverage}% (Required: ${threshold}%)"
+
+          if (( $(echo "$coverage < $threshold" | bc -l) )); then
+            FAILED_PACKAGES+=("$package: ${coverage}% < ${threshold}%")
+          fi
+        done
+
+        if [ ${#FAILED_PACKAGES[@]} -gt 0 ]; then
+          echo ""
+          echo "❌ Coverage gate FAILED for the following packages:"
+          for fail in "${FAILED_PACKAGES[@]}"; do
+            echo "  - $fail"
+          done
+          exit 1
+        else
+          echo ""
+          echo "✅ All critical packages meet coverage requirements"
+        fi
+
+    - name: Check overall coverage threshold
+      run: |
+        COVERAGE=${{ env.TOTAL_COVERAGE }}
+        THRESHOLD=${{ env.MIN_COVERAGE_OVERALL }}
+
+        if (( $(echo "$COVERAGE < $THRESHOLD" | bc -l) )); then
+          echo "❌ Overall coverage $COVERAGE% is below threshold $THRESHOLD%"
+          exit 1
+        else
+          echo "✅ Overall coverage $COVERAGE% meets threshold $THRESHOLD%"
+        fi
+
+    - name: Generate coverage badge data
+      if: always()
+      run: |
+        COVERAGE=${{ env.TOTAL_COVERAGE }}
+
+        if (( $(echo "$COVERAGE >= 80" | bc -l) )); then
+          COLOR="green"
+        elif (( $(echo "$COVERAGE >= 60" | bc -l) )); then
+          COLOR="yellow"
+        else
+          COLOR="red"
+        fi
+
+        echo "Coverage: $COVERAGE%"
+        echo "Color: $COLOR"
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v5
+      with:
+        files: ./coverage.out
+        flags: coverage-gate
+        name: coverage-gate-check
+        token: ${{ secrets.CODECOV_TOKEN }}
+      if: always()
+
+    - name: Comment PR with coverage results
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          const coverage = '${{ env.TOTAL_COVERAGE }}';
+          const threshold = '${{ env.MIN_COVERAGE_OVERALL }}';
+
+          const comment = `## Coverage Report
+
+          **Overall Coverage:** \`${coverage}%\`
+          **Threshold:** \`${threshold}%\`
+
+          ${Number(coverage) >= Number(threshold) ? '✅ Coverage check passed' : '❌ Coverage check failed'}
+
+          See the [Coverage Gate workflow](${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}) for details.
+          `;
+
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: comment
+          });
+
+    - name: Upload coverage artifacts
+      if: always()
+      uses: actions/upload-artifact@v5
+      with:
+        name: coverage-reports
+        path: |
+          coverage.out
+          coverage.html
+          coverage.txt
+        retention-days: 30
+
+  quality-gate-coverage:
+    runs-on: ubuntu-latest
+    needs: coverage-check
+    if: always()
+
+    steps:
+    - name: Check coverage gate status
+      run: |
+        if [ "${{ needs.coverage-check.result }}" != "success" ]; then
+          echo "❌ Coverage gate failed"
+          exit 1
+        else
+          echo "✅ Coverage gate passed"
+        fi

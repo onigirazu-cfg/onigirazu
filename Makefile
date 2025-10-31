@@ -5,7 +5,7 @@ BINARY_NAME=onigirazu
 VERSION?=$(shell git describe --tags --always --dirty)
 COMMIT?=$(shell git rev-parse HEAD)
 DATE?=$(shell date -u +%Y-%m-%dT%H:%M:%SZ)
-LDFLAGS=-ldflags "-s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.date=$(DATE)"
+LDFLAGS=-ldflags "-s -w -X github.com/onigirazu-cfg/onigirazu/internal/version.Version=$(VERSION) -X github.com/onigirazu-cfg/onigirazu/internal/version.Commit=$(COMMIT) -X github.com/onigirazu-cfg/onigirazu/internal/version.Date=$(DATE)"
 
 # Build project
 build:
