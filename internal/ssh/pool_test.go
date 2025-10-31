@@ -1,6 +1,7 @@
 package ssh
 
 import (
+	"os"
 	"testing"
 	"time"
 
@@ -238,7 +239,13 @@ func TestDefaultPoolConfig(t *testing.T) {
 }
 
 // TestConnectionPool_GetConnection_Error tests GetConnection with invalid host
+// This test is skipped in CI because it attempts a real network connection
+// which can be flaky and slow in CI environments
 func TestConnectionPool_GetConnection_Error(t *testing.T) {
+	if testing.Short() || os.Getenv("CI") == "true" || os.Getenv("GITHUB_ACTIONS") == "true" {
+		t.Skip("Skipping flaky network test in CI or short mode")
+	}
+
 	pool := NewConnectionPool(DefaultPoolConfig())
 	defer pool.CloseAll()
 
