@@ -9,10 +9,12 @@ import (
 )
 
 // Manager implements a thread-safe in-memory cache with TTL support
+// FIXED in Phase 1: Consolidated separate mutexes into single RWMutex
 type Manager struct {
-	entries map[string]*types.CacheEntry
-	mutex   sync.RWMutex
-	ttl     time.Duration
+	mu          sync.RWMutex // Single mutex for all operations (FIXED in Phase 1)
+	entries     map[string]*types.CacheEntry
+	ttl         time.Duration
+	accessOrder []string // LRU tracking (protected by mu)
 
 	// Cleanup goroutine control
 	stopCleanup chan struct{}
@@ -23,10 +25,6 @@ type Manager struct {
 	misses    int64
 	evictions int64
 	maxSize   int
-
-	// LRU tracking
-	accessOrder []string
-	accessMutex sync.Mutex
 }
 
 // NewManager creates a new cache manager
@@ -52,29 +50,27 @@ func NewManagerWithSize(defaultTTL time.Duration, maxSize int) *Manager {
 }
 
 // Get retrieves a value from the cache
+// FIXED in Phase 1: Single lock for atomic operation, no race condition
 func (m *Manager) Get(ctx context.Context, key string) (interface{}, bool) {
-	m.mutex.RLock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	entry, exists := m.entries[key]
-	m.mutex.RUnlock()
-
 	if !exists {
-		m.recordMiss()
+		m.recordMissLocked()
 		return nil, false
 	}
 
-	// Check if expired
+	// Check if expired (inside lock - atomic with read)
 	if time.Now().After(entry.ExpiresAt) {
-		// Remove expired entry
-		m.mutex.Lock()
 		delete(m.entries, key)
-		m.mutex.Unlock()
-		m.recordMiss()
+		m.recordMissLocked()
 		return nil, false
 	}
 
-	// Update access order for LRU
-	m.updateAccessOrder(key)
-	m.recordHit()
+	// Update access order within same lock (atomic)
+	m.updateAccessOrderLocked(key)
+	m.recordHitLocked()
 
 	return entry.Value, true
 }
@@ -85,13 +81,14 @@ func (m *Manager) Set(ctx context.Context, key string, value interface{}) error 
 }
 
 // SetWithTTL stores a value in the cache with custom TTL
+// FIXED in Phase 1: Single lock for all operations
 func (m *Manager) SetWithTTL(ctx context.Context, key string, value interface{}, ttl time.Duration) error {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
 	// Check if we need to evict entries to make room
 	if len(m.entries) >= m.maxSize {
-		m.evictLRU()
+		m.evictLRULocked()
 	}
 
 	now := time.Now()
@@ -104,14 +101,14 @@ func (m *Manager) SetWithTTL(ctx context.Context, key string, value interface{},
 	}
 
 	m.entries[key] = entry
-	m.updateAccessOrder(key)
+	m.updateAccessOrderLocked(key)
 	return nil
 }
 
 // Delete removes a value from the cache
 func (m *Manager) Delete(ctx context.Context, key string) error {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
 	delete(m.entries, key)
 	return nil
@@ -119,25 +116,26 @@ func (m *Manager) Delete(ctx context.Context, key string) error {
 
 // Clear removes all entries from the cache
 func (m *Manager) Clear(ctx context.Context) error {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
 	m.entries = make(map[string]*types.CacheEntry)
+	m.accessOrder = make([]string, 0)
 	return nil
 }
 
 // Size returns the number of entries in the cache
 func (m *Manager) Size() int {
-	m.mutex.RLock()
-	defer m.mutex.RUnlock()
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 
 	return len(m.entries)
 }
 
 // Keys returns all keys in the cache
 func (m *Manager) Keys() []string {
-	m.mutex.RLock()
-	defer m.mutex.RUnlock()
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 
 	keys := make([]string, 0, len(m.entries))
 	for key := range m.entries {
@@ -149,8 +147,8 @@ func (m *Manager) Keys() []string {
 
 // Stats returns cache statistics
 func (m *Manager) Stats() CacheStats {
-	m.mutex.RLock()
-	defer m.mutex.RUnlock()
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 
 	now := time.Now()
 	expired := 0
@@ -208,8 +206,8 @@ func (m *Manager) cleanupExpired() {
 
 // removeExpiredEntries removes all expired entries
 func (m *Manager) removeExpiredEntries() {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
 	now := time.Now()
 	for key, entry := range m.entries {
@@ -224,8 +222,8 @@ func (m *Manager) Close() error {
 	close(m.stopCleanup)
 	<-m.cleanupDone
 
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.entries = make(map[string]*types.CacheEntry)
 
 	return nil
@@ -273,25 +271,21 @@ func (m *Manager) GetOrSetWithTTL(ctx context.Context, key string, ttl time.Dura
 	return value, nil
 }
 
-// recordHit increments the hit counter
-func (m *Manager) recordHit() {
-	m.accessMutex.Lock()
-	defer m.accessMutex.Unlock()
+// recordHitLocked increments the hit counter (must be called with lock held)
+// FIXED in Phase 1: Uses single mutex
+func (m *Manager) recordHitLocked() {
 	m.hits++
 }
 
-// recordMiss increments the miss counter
-func (m *Manager) recordMiss() {
-	m.accessMutex.Lock()
-	defer m.accessMutex.Unlock()
+// recordMissLocked increments the miss counter (must be called with lock held)
+// FIXED in Phase 1: Uses single mutex
+func (m *Manager) recordMissLocked() {
 	m.misses++
 }
 
-// updateAccessOrder updates the LRU access order
-func (m *Manager) updateAccessOrder(key string) {
-	m.accessMutex.Lock()
-	defer m.accessMutex.Unlock()
-
+// updateAccessOrderLocked updates the LRU access order (must be called with lock held)
+// FIXED in Phase 1: Uses single mutex
+func (m *Manager) updateAccessOrderLocked(key string) {
 	// Remove key from current position
 	for i, k := range m.accessOrder {
 		if k == key {
@@ -304,8 +298,9 @@ func (m *Manager) updateAccessOrder(key string) {
 	m.accessOrder = append(m.accessOrder, key)
 }
 
-// evictLRU evicts the least recently used entry
-func (m *Manager) evictLRU() {
+// evictLRULocked evicts the least recently used entry (must be called with lock held)
+// FIXED in Phase 1: Uses single mutex
+func (m *Manager) evictLRULocked() {
 	if len(m.accessOrder) == 0 {
 		return
 	}
@@ -325,8 +320,8 @@ func (m *Manager) evictLRU() {
 
 // Exists checks if a key exists in the cache (without updating access order)
 func (m *Manager) Exists(ctx context.Context, key string) bool {
-	m.mutex.RLock()
-	defer m.mutex.RUnlock()
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 
 	entry, exists := m.entries[key]
 	if !exists {
@@ -339,8 +334,8 @@ func (m *Manager) Exists(ctx context.Context, key string) bool {
 
 // GetTTL returns the remaining TTL for a key
 func (m *Manager) GetTTL(ctx context.Context, key string) (time.Duration, bool) {
-	m.mutex.RLock()
-	defer m.mutex.RUnlock()
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 
 	entry, exists := m.entries[key]
 	if !exists {
@@ -357,8 +352,8 @@ func (m *Manager) GetTTL(ctx context.Context, key string) (time.Duration, bool) 
 
 // Extend extends the TTL of an existing entry
 func (m *Manager) Extend(ctx context.Context, key string, additionalTTL time.Duration) bool {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
 	entry, exists := m.entries[key]
 	if !exists {

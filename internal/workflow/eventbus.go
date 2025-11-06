@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"github.com/onigirazu-cfg/onigirazu/internal/logger"
 )
 
 // EventBus manages event publishing and subscription
@@ -12,6 +14,7 @@ type EventBus struct {
 	mutex       sync.RWMutex
 	eventLog    []Event
 	maxLogSize  int
+	logger      *logger.Logger
 }
 
 // EventHandler handles events
@@ -33,6 +36,7 @@ func NewEventBus() *EventBus {
 		subscribers: make(map[string][]EventHandler),
 		eventLog:    make([]Event, 0),
 		maxLogSize:  1000,
+		logger:      logger.New(false),
 	}
 }
 
@@ -77,16 +81,7 @@ func (eb *EventBus) Publish(eventType string, data interface{}) {
 
 	if exists {
 		for _, handler := range handlers {
-			go func(h EventHandler) {
-				defer func() {
-					if r := recover(); r != nil {
-						// Log panic but don't crash
-						// In production, you might want to log this properly
-						_ = r
-					}
-				}()
-				h(event)
-			}(handler) // Handle asynchronously with panic recovery
+			go eb.callHandlerSafely(eventType, handler, event)
 		}
 	}
 }
@@ -112,6 +107,18 @@ func (eb *EventBus) addToLog(event Event) {
 	if len(eb.eventLog) > eb.maxLogSize {
 		eb.eventLog = eb.eventLog[len(eb.eventLog)-eb.maxLogSize:]
 	}
+}
+
+// callHandlerSafely calls a handler with panic recovery and logging
+// (FIXED in Phase 1: Proper panic handling with logging)
+func (eb *EventBus) callHandlerSafely(eventType string, handler EventHandler, event Event) {
+	defer func() {
+		if r := recover(); r != nil {
+			eb.logger.Error("Handler panic for event type '%s': %v", eventType, r)
+		}
+	}()
+
+	handler(event)
 }
 
 // generateEventID generates a unique event ID

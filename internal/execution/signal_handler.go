@@ -7,9 +7,12 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
+
+	"github.com/onigirazu-cfg/onigirazu/internal/logger"
 )
 
 // SignalHandler manages graceful shutdown with user confirmation and cleanup
@@ -23,6 +26,8 @@ type SignalHandler struct {
 	onForceCancel    func() error
 	gracefulShutdown bool
 	cleanupFuncs     []func() error
+	mu               sync.Mutex     // FIXED in Phase 1: Added mutex for thread safety
+	logger           *logger.Logger // FIXED in Phase 1: Added logger for proper logging
 }
 
 // NewSignalHandler creates a new signal handler with specified timeout
@@ -34,14 +39,15 @@ func NewSignalHandler(ctx context.Context, shutdownTimeout time.Duration) *Signa
 		cancel:          cancel,
 		sigChan:         make(chan os.Signal, 2), // Buffer for multiple signals
 		shutdownTimeout: shutdownTimeout,
+		logger:          logger.New(false), // FIXED in Phase 1: Initialize logger
 	}
 
 	// Start signal listener
-	fmt.Fprintf(os.Stderr, "[DEBUG] Registering signal handlers for SIGINT and SIGTERM\n")
+	sh.logger.Debug("Registering signal handlers for SIGINT and SIGTERM") // FIXED in Phase 1: Use logger
 	signal.Notify(sh.sigChan, syscall.SIGINT, syscall.SIGTERM)
-	fmt.Fprintf(os.Stderr, "[DEBUG] Starting signal handler goroutine\n")
+	sh.logger.Debug("Starting signal handler goroutine") // FIXED in Phase 1: Use logger
 	go sh.handleSignals()
-	fmt.Fprintf(os.Stderr, "[DEBUG] Signal handler initialized\n")
+	sh.logger.Debug("Signal handler initialized") // FIXED in Phase 1: Use logger
 
 	return sh
 }
@@ -66,16 +72,16 @@ func (sh *SignalHandler) RegisterCleanup(cleanupFunc func() error) {
 func (sh *SignalHandler) executeCleanups() {
 	for _, cleanupFunc := range sh.cleanupFuncs {
 		if err := cleanupFunc(); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: cleanup error: %v\n", err)
+			sh.logger.Warn("Cleanup error: %v", err) // FIXED in Phase 1: Use logger
 		}
 	}
 }
 
 // handleSignals processes incoming signals
 func (sh *SignalHandler) handleSignals() {
-	fmt.Fprintf(os.Stderr, "[DEBUG] Signal handler goroutine started\n")
+	sh.logger.Debug("Signal handler goroutine started") // FIXED in Phase 1: Use logger
 	for sig := range sh.sigChan {
-		fmt.Fprintf(os.Stderr, "[DEBUG] Signal received: %v\n", sig)
+		sh.logger.Debug("Signal received: %v", sig) // FIXED in Phase 1: Use logger
 		count := sh.interruptCount.Add(1)
 
 		switch count {
@@ -91,7 +97,7 @@ func (sh *SignalHandler) handleSignals() {
 
 // handleFirstInterrupt prompts user for confirmation
 func (sh *SignalHandler) handleFirstInterrupt(sig os.Signal) {
-	fmt.Fprintf(os.Stderr, "[DEBUG] handleFirstInterrupt called\n")
+	sh.logger.Debug("handleFirstInterrupt called") // FIXED in Phase 1: Use logger
 	fmt.Println()
 	fmt.Println("╔══════════════════════════════════════════════════════════╗")
 	fmt.Println("║         Interrupt Signal Received (Ctrl+C)              ║")
@@ -117,7 +123,7 @@ func (sh *SignalHandler) handleFirstInterrupt(sig os.Signal) {
 	// Call the confirmation callback
 	if sh.onConfirmCancel != nil {
 		if err := sh.onConfirmCancel(saveState); err != nil {
-			fmt.Fprintf(os.Stderr, "Error during graceful shutdown: %v\n", err)
+			sh.logger.Error("Error during graceful shutdown: %v", err) // FIXED in Phase 1: Use logger
 		}
 	}
 
