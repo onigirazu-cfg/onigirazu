@@ -44,7 +44,9 @@ func (hm *HandlerManager) LoadHandlers(projectPath string) ([]*Handler, error) {
 	hm.mu.RLock()
 	if cached, found := hm.cache.Get(projectPath); found {
 		hm.mu.RUnlock()
-		return cached.([]*Handler), nil
+		if handlers, ok := cached.([]*Handler); ok {
+			return handlers, nil
+		}
 	}
 	hm.mu.RUnlock()
 

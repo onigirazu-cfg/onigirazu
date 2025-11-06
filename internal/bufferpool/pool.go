@@ -22,7 +22,11 @@ var StringsBuilderPool = sync.Pool{
 
 // GetBytesBuffer gets a buffer from the pool
 func GetBytesBuffer() *bytes.Buffer {
-	buf := BytesBufferPool.Get().(*bytes.Buffer)
+	buf, ok := BytesBufferPool.Get().(*bytes.Buffer)
+	if !ok {
+		// Fallback: create a new buffer if type assertion fails
+		buf = new(bytes.Buffer)
+	}
 	buf.Reset() // Ensure buffer is clean
 	return buf
 }
@@ -43,7 +47,11 @@ func PutBytesBuffer(buf *bytes.Buffer) {
 
 // GetStringsBuilder gets a strings.Builder from the pool
 func GetStringsBuilder() *strings.Builder {
-	sb := StringsBuilderPool.Get().(*strings.Builder)
+	sb, ok := StringsBuilderPool.Get().(*strings.Builder)
+	if !ok {
+		// Fallback: create a new builder if type assertion fails
+		sb = new(strings.Builder)
+	}
 	sb.Reset() // Ensure builder is clean
 	return sb
 }

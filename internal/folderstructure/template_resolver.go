@@ -34,7 +34,9 @@ func (tr *TemplateResolver) ResolveTemplate(templatePath string, projectPath str
 	tr.mu.RLock()
 	if cached, found := tr.cache.Get(cacheKey); found {
 		tr.mu.RUnlock()
-		return cached.(*ResolutionResult)
+		if result, ok := cached.(*ResolutionResult); ok {
+			return result
+		}
 	}
 	tr.mu.RUnlock()
 

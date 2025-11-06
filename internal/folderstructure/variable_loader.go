@@ -38,7 +38,9 @@ func (vl *VariableLoader) LoadVariables(projectPath string) (*VariableSet, error
 	vl.mu.RLock()
 	if cached, found := vl.cache.Get(projectPath); found {
 		vl.mu.RUnlock()
-		return cached.(*VariableSet), nil
+		if varSet, ok := cached.(*VariableSet); ok {
+			return varSet, nil
+		}
 	}
 	vl.mu.RUnlock()
 

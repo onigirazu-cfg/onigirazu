@@ -34,7 +34,9 @@ func (fr *FileResolver) ResolveFile(filePath string, projectPath string) *Resolu
 	fr.mu.RLock()
 	if cached, found := fr.cache.Get(cacheKey); found {
 		fr.mu.RUnlock()
-		return cached.(*ResolutionResult)
+		if result, ok := cached.(*ResolutionResult); ok {
+			return result
+		}
 	}
 	fr.mu.RUnlock()
 

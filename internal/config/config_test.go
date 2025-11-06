@@ -734,7 +734,9 @@ func TestLoadConfigUnreadableFile(t *testing.T) {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
 
-	tmpFile.WriteString("max_concurrency: 20\n")
+	if _, err := tmpFile.WriteString("max_concurrency: 20\n"); err != nil {
+		t.Fatalf("Failed to write to temp file: %v", err)
+	}
 	tmpFile.Close()
 
 	// Make file unreadable (Unix-only)

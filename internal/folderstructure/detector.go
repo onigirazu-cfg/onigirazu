@@ -38,7 +38,9 @@ func (d *Detector) Detect(startPath string) (*ProjectStructure, error) {
 	d.mu.RLock()
 	if cached, found := d.cache.Get(startPath); found {
 		d.mu.RUnlock()
-		return cached.(*ProjectStructure), nil
+		if ps, ok := cached.(*ProjectStructure); ok {
+			return ps, nil
+		}
 	}
 	d.mu.RUnlock()
 

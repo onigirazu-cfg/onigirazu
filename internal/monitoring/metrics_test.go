@@ -352,8 +352,12 @@ func TestRuntimeCollector(t *testing.T) {
 	for _, m := range metrics {
 		if m.Name == "runtime_num_cpu" {
 			foundCPU = true
-			if m.Value.(int) <= 0 {
-				t.Error("Expected NumCPU > 0")
+			if cpuVal, ok := m.Value.(int); ok {
+				if cpuVal <= 0 {
+					t.Error("Expected NumCPU > 0")
+				}
+			} else {
+				t.Errorf("Expected int value for NumCPU, got %T", m.Value)
 			}
 		}
 		if m.Name == "runtime_cgo_calls_total" {
