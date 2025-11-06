@@ -57,6 +57,12 @@ Welcome to the Onigirazu documentation directory! This contains comprehensive do
 - **[Interactive Mode](INTERACTIVE_MODE.md)** - Interactive playbook execution
 - **[Tag Filtering](TAG_FILTERING.md)** - Running specific tasks by tags
 
+### Developer Documentation
+
+- **[Module Scaffolding Guide](MODULE_SCAFFOLDING_GUIDE.md)** ⭐ NEW - Generate new modules with complete boilerplate and tests in seconds
+- **[Module Development Guide](MODULE_DEVELOPMENT_GUIDE.md)** - Deep dive into module architecture, patterns, and executor safety
+- **[Plugin Integration Guide](PLUGIN_INTEGRATION.md)** - Extend Onigirazu with custom plugins
+
 ## 🛠 Documentation Commands
 
 | Command | Description |

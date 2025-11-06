@@ -89,7 +89,11 @@ func (fr *FileResolver) ResolveFile(filePath string, projectPath string) *Resolu
 
 	// Try current working directory
 	if fr.fileExists(filePath) {
-		result.Path, _ = filepath.Abs(filePath)
+		absPath, err := filepath.Abs(filePath)
+		if err != nil {
+			absPath = filePath
+		}
+		result.Path = absPath
 		result.Found = true
 		result.Source = "cwd"
 		fr.mu.Lock()

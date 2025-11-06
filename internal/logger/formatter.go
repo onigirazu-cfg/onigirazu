@@ -554,7 +554,10 @@ func (f *DebugFormatter) FormatInitialization(config InitConfig) string {
 		"plugins":         config.Plugins,
 	}
 
-	jsonBytes, _ := json.MarshalIndent(data, "", "  ")
+	jsonBytes, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		return ""
+	}
 	return string(jsonBytes) + "\n\n"
 }
 
@@ -568,7 +571,10 @@ func (f *DebugFormatter) FormatInventoryLoaded(inventory InventoryInfo) string {
 		"details":     inventory.Details,
 	}
 
-	jsonBytes, _ := json.MarshalIndent(data, "", "  ")
+	jsonBytes, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		return ""
+	}
 	return string(jsonBytes) + "\n\n"
 }
 
@@ -582,7 +588,10 @@ func (f *DebugFormatter) FormatPlaybookLoaded(playbook PlaybookInfo) string {
 		"details":    playbook.Details,
 	}
 
-	jsonBytes, _ := json.MarshalIndent(data, "", "  ")
+	jsonBytes, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		return ""
+	}
 	return string(jsonBytes) + "\n\n"
 }
 
@@ -592,7 +601,10 @@ func (f *DebugFormatter) FormatExecutionStart() string {
 		"timestamp": time.Now().Format(time.RFC3339Nano),
 	}
 
-	jsonBytes, _ := json.MarshalIndent(data, "", "  ")
+	jsonBytes, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		return ""
+	}
 	return string(jsonBytes) + "\n\n"
 }
 
@@ -605,7 +617,10 @@ func (f *DebugFormatter) FormatPlayStart(playName string, playIndex int, hostCou
 		"host_count": hostCount,
 	}
 
-	jsonBytes, _ := json.MarshalIndent(data, "", "  ")
+	jsonBytes, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		return ""
+	}
 	return string(jsonBytes) + "\n"
 }
 
@@ -617,7 +632,10 @@ func (f *DebugFormatter) FormatTaskStart(taskName, host string) string {
 		"host":      host,
 	}
 
-	jsonBytes, _ := json.MarshalIndent(data, "", "  ")
+	jsonBytes, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		return ""
+	}
 	return string(jsonBytes) + "\n"
 }
 
@@ -635,7 +653,10 @@ func (f *DebugFormatter) FormatTaskEnd(task TaskResult) string {
 		"details":   task.Details,
 	}
 
-	jsonBytes, _ := json.MarshalIndent(data, "", "  ")
+	jsonBytes, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		return ""
+	}
 	return string(jsonBytes) + "\n"
 }
 
@@ -654,7 +675,10 @@ func (f *DebugFormatter) FormatExecutionEnd(summary ExecutionSummary) string {
 		"host_results":   summary.HostResults,
 	}
 
-	jsonBytes, _ := json.MarshalIndent(data, "", "  ")
+	jsonBytes, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		return ""
+	}
 	return string(jsonBytes) + "\n\n"
 }
 
@@ -666,6 +690,9 @@ func (f *DebugFormatter) FormatError(err string, context map[string]interface{})
 		"context":   context,
 	}
 
-	jsonBytes, _ := json.MarshalIndent(data, "", "  ")
+	jsonBytes, jsonErr := json.MarshalIndent(data, "", "  ")
+	if jsonErr != nil {
+		return ""
+	}
 	return string(jsonBytes) + "\n\n"
 }

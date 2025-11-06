@@ -89,7 +89,11 @@ func (tr *TemplateResolver) ResolveTemplate(templatePath string, projectPath str
 
 	// Try current working directory
 	if tr.fileExists(templatePath) {
-		result.Path, _ = filepath.Abs(templatePath)
+		absPath, err := filepath.Abs(templatePath)
+		if err != nil {
+			absPath = templatePath
+		}
+		result.Path = absPath
 		result.Found = true
 		result.Source = "cwd"
 		tr.mu.Lock()

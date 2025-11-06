@@ -16,6 +16,7 @@ Onigirazu is a modern, high-performance configuration management tool written in
 - **📚 44 Built-in Modules**: Complete automation capabilities with system control, archive, and more (v1.57.0+)
 - **📖 Complete Documentation**: 2,500+ lines of guides for configuration, security, and testing
 - **🖥️ Interactive Mode (v1.54.0+)**: Real-time TUI dashboard with live logs, mode switching, and graceful control
+- **⚙️ Module Scaffolding Tool**: Rapidly generate new modules with boilerplate, tests, and best practices in seconds
 
 ## Features
 
@@ -52,6 +53,7 @@ Onigirazu is a modern, high-performance configuration management tool written in
 - **Audit & Analytics**: Track execution history, performance metrics, and audit data with `audit` command
 - **Complete Configuration Reference**: 35+ configuration options fully documented
 - **Security Policy Guide**: 13+ security options fully documented
+- **Module Scaffolding Tool**: Generate new modules with complete boilerplate, unit tests, idempotency tests, and benchmarks in seconds
 
 ## Installation
 

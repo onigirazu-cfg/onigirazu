@@ -79,6 +79,76 @@ By participating in this project, you agree to abide by our Code of Conduct. Ple
    go test ./...
    ```
 
+## Module Development
+
+### ⚡ Using Module Scaffolding (Recommended)
+
+For new module development, use the **Module Scaffolding Tool** to generate boilerplate:
+
+```bash
+cd /Users/denys.rastiegaiev/work/onigirazu_project/onigirazu
+go run ./scripts/module_scaffold \
+  -name my_new_module \
+  -desc "Module description" \
+  -params "param1,param2"
+```
+
+This generates:
+
+- ✅ Complete module implementation
+- ✅ Unit tests with table-driven approach
+- ✅ Idempotency tests
+- ✅ Benchmark tests
+
+**Benefits**: Save hours of boilerplate writing and follow best practices automatically!
+
+📖 **Full Guide**: See [Module Scaffolding Guide](docs/MODULE_SCAFFOLDING_GUIDE.md)
+
+### Testing Generated Modules
+
+```bash
+# Run tests
+go test ./internal/modules -run MyModule -v
+
+# Check coverage
+go test ./internal/modules -run MyModule -cover
+
+# Run benchmarks
+go test ./internal/modules -bench=MyModule -benchmem
+
+# Target: 100% coverage for new modules
+```
+
+### Executor Safety Requirements
+
+When developing modules, always follow these critical patterns:
+
+✅ **DO Use BaseExecutorModule** (Recommended):
+
+```go
+type MyModule struct {
+    *BaseExecutorModule
+}
+
+func (m *MyModule) Execute(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
+    return m.WithExecutorResult(host, func(exec *executor.CommandExecutor) (types.TaskResult, error) {
+        output, err := exec.Execute("command")
+        // Process output...
+    })
+}
+```
+
+❌ **DON'T Cache Executors**:
+
+```go
+type MyModule struct {
+    *BaseModule
+    executor *executor.CommandExecutor  // ❌ BUG: All hosts use first host's connection!
+}
+```
+
+📖 **Full Details**: See [Module Development Guide](docs/MODULE_DEVELOPMENT_GUIDE.md)
+
 5. Install golangci-lint (if not already installed):
 
    ```bash

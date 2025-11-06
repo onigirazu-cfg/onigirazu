@@ -168,7 +168,9 @@ func TestManager_ComputeFile_PermissionDenied(t *testing.T) {
 
 	err := os.WriteFile(filePath, []byte("restricted content"), 0000)
 	require.NoError(t, err)
-	defer os.Chmod(filePath, 0644) // Restore permissions
+	defer func() {
+		_ = os.Chmod(filePath, 0644) // Restore permissions
+	}()
 
 	result, err := manager.ComputeFile(filePath)
 	assert.Error(t, err, "Should return error for unreadable file")

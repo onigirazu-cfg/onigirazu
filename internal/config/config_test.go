@@ -742,7 +742,9 @@ func TestLoadConfigUnreadableFile(t *testing.T) {
 		t.Fatalf("Failed to change permissions: %v", err)
 	}
 	defer os.Remove(tmpFile.Name())
-	defer os.Chmod(tmpFile.Name(), 0644)
+	defer func() {
+		_ = os.Chmod(tmpFile.Name(), 0644)
+	}()
 
 	cfg, err := LoadConfig(tmpFile.Name())
 	if err == nil {
