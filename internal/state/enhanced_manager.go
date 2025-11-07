@@ -33,10 +33,9 @@ type EnhancedManager struct {
 	backupCount      int
 	saveWg           sync.WaitGroup     // Track background save operations
 	ctx              context.Context    // Parent context for cancellation
-	cancel           context.CancelFunc // Cancel function
-	checksumCache    sync.Map           // Caches task checksums (task ID -> checksum)
-	fileChecksumLock sync.RWMutex       // Separate lock for file checksum operations
-	fileChecksum     map[string]string  // Caches file checksums
+	cancel        context.CancelFunc // Cancel function
+	checksumCache sync.Map           // Caches task checksums (task ID -> checksum)
+	fileChecksum  map[string]string  // Caches file checksums
 }
 
 // NewEnhanced creates a new enhanced state manager

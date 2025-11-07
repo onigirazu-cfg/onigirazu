@@ -278,7 +278,9 @@ func (r *Recorder) Close() error {
 		r.currentRecord.ErrorMessage = "execution interrupted"
 		r.currentRecord.EndTime = time.Now()
 		r.currentRecord.Duration = r.currentRecord.EndTime.Sub(r.currentRecord.StartTime).Seconds()
-		_ = r.storage.SaveRecord(r.currentRecord)
+		if err := r.storage.SaveRecord(r.currentRecord); err != nil {
+			r.logger.Error("Failed to save interrupted execution record: %v", err)
+		}
 		r.started = false
 	}
 

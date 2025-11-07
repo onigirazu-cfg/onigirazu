@@ -44,7 +44,9 @@ func TestStorage_ListRecords_WithPagination(t *testing.T) {
 			FailedTasks:   0,
 			AffectedHosts: []string{"localhost"},
 		}
-		storage.SaveRecord(record)
+		if err := storage.SaveRecord(record); err != nil {
+			t.Errorf("SaveRecord failed: %v", err)
+		}
 	}
 
 	// Test limit
@@ -97,7 +99,9 @@ func TestStorage_ListRecords_UsesMetadataOnly(t *testing.T) {
 		FailedTasks:   0,
 		AffectedHosts: []string{"localhost"},
 	}
-	storage.SaveRecord(record)
+	if err := storage.SaveRecord(record); err != nil {
+		t.Errorf("SaveRecord failed: %v", err)
+	}
 
 	// Verify metadata file exists
 	metadataPath := filepath.Join(tmpDir, "test-record-1", "metadata.json")
@@ -149,7 +153,9 @@ func TestStorage_LoadRecordMetadata(t *testing.T) {
 		FailedTasks:   5,
 		AffectedHosts: []string{"host1", "host2"},
 	}
-	storage.SaveRecord(record)
+	if err := storage.SaveRecord(record); err != nil {
+		t.Errorf("SaveRecord failed: %v", err)
+	}
 
 	// Load and verify metadata
 	meta, err := storage.loadRecordMetadata("test-record-2")
@@ -227,7 +233,9 @@ func TestStorage_GetStatistics_OptimizedForLargeDatasets(t *testing.T) {
 			AffectedHosts: []string{"localhost"},
 		}
 
-		storage.SaveRecord(record)
+		if err := storage.SaveRecord(record); err != nil {
+			t.Errorf("SaveRecord failed: %v", err)
+		}
 	}
 
 	// Get statistics
@@ -368,7 +376,9 @@ func TestStorage_MetadataIncludesAffectedHostCount(t *testing.T) {
 		AffectedHosts: []string{"host1", "host2", "host3", "host4"},
 	}
 
-	storage.SaveRecord(record)
+	if err := storage.SaveRecord(record); err != nil {
+		t.Errorf("SaveRecord failed: %v", err)
+	}
 
 	// Load metadata
 	meta, err := storage.loadRecordMetadata("test-hosts")
@@ -406,7 +416,9 @@ func TestStorage_ListRecords_PerformanceWithManyRecords(t *testing.T) {
 			FailedTasks:   0,
 			AffectedHosts: []string{"localhost"},
 		}
-		storage.SaveRecord(record)
+		if err := storage.SaveRecord(record); err != nil {
+			t.Errorf("SaveRecord failed: %v", err)
+		}
 	}
 
 	// List with pagination should be fast
