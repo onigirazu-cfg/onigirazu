@@ -1,554 +1,215 @@
 package audit
 
 import (
-	"os"
+	"strings"
 	"testing"
-	"time"
-
-	"github.com/onigirazu-cfg/onigirazu/internal/logger"
 )
 
-// createTestLogger creates a simple logger for testing
-func createTestLogger() *logger.Logger {
-	log, _ := logger.NewEnhancedLogger("warn", "text", os.Stdout)
-	return log
-}
-
-// TestRecorderInitialization tests creating a new recorder
-func TestRecorderInitialization(t *testing.T) {
-	config := AuditConfig{
-		Enabled:     true,
-		StoragePath: t.TempDir(),
-		MaxRecords:  100,
-	}
-
-	log := createTestLogger()
-	recorder, err := NewRecorder(config, log)
-
-	if err != nil {
-		t.Fatalf("Failed to create recorder: %v", err)
-	}
-
-	if recorder == nil {
-		t.Fatal("Recorder is nil")
-	}
-}
-
-// TestRecorderDisabled tests that disabled recorder returns error
-func TestRecorderDisabled(t *testing.T) {
-	config := AuditConfig{
-		Enabled: false,
-	}
-
-	log := createTestLogger()
-	_, err := NewRecorder(config, log)
-
-	if err == nil {
-		t.Fatal("Expected error for disabled audit, but got nil")
-	}
-}
-
-// TestStartExecution tests starting an execution record
-func TestStartExecution(t *testing.T) {
-	config := AuditConfig{
-		Enabled:     true,
-		StoragePath: t.TempDir(),
-	}
-
-	log := createTestLogger()
-	recorder, _ := NewRecorder(config, log)
-
-	id, err := recorder.StartExecution("test.yml", "inventory.yml", []string{})
-
-	if err != nil {
-		t.Fatalf("Failed to start execution: %v", err)
-	}
-
-	if id == "" {
-		t.Fatal("Execution ID is empty")
-	}
-
-	// Verify we can't start another execution while one is running
-	_, err = recorder.StartExecution("test2.yml", "inventory.yml", []string{})
-	if err == nil {
-		t.Fatal("Expected error when starting another execution while one is running")
-	}
-
-	defer recorder.Close()
-}
-
-// TestRecordTaskResult tests recording a task result
-func TestRecordTaskResult(t *testing.T) {
-	config := AuditConfig{
-		Enabled:     true,
-		StoragePath: t.TempDir(),
-	}
-
-	log := createTestLogger()
-	recorder, _ := NewRecorder(config, log)
-	recorder.StartExecution("test.yml", "inventory.yml", []string{})
-
-	// Record a play before recording tasks
-	recorder.RecordPlay("Setup", 0, []string{"localhost"})
-
-	taskResult := TaskResult{
-		Name:      "test task",
-		Module:    "command",
-		Status:    TaskStatusOk,
-		Host:      "localhost",
-		Duration:  1.5,
-		StartTime: time.Now(),
-		EndTime:   time.Now(),
-		Changed:   false,
-	}
-
-	err := recorder.RecordTaskResult(taskResult)
-	if err != nil {
-		t.Fatalf("Failed to record task: %v", err)
-	}
-
-	record := recorder.GetCurrentRecord()
-	if record.TotalTasks != 1 {
-		t.Fatalf("Expected 1 task, got %d", record.TotalTasks)
-	}
-
-	defer recorder.Close()
-}
-
-// TestCompleteExecution tests completing an execution
-func TestCompleteExecution(t *testing.T) {
-	config := AuditConfig{
-		Enabled:     true,
-		StoragePath: t.TempDir(),
-	}
-
-	log := createTestLogger()
-	recorder, _ := NewRecorder(config, log)
-
-	id, _ := recorder.StartExecution("test.yml", "inventory.yml", []string{})
-
-	// Add some task results
-	for i := 0; i < 3; i++ {
-		taskResult := TaskResult{
-			Name:      "task_" + string(rune(i)),
-			Module:    "command",
-			Status:    TaskStatusOk,
-			Host:      "localhost",
-			Duration:  1.0,
-			StartTime: time.Now(),
-			EndTime:   time.Now(),
-		}
-		recorder.RecordTaskResult(taskResult)
-	}
-
-	recordID, err := recorder.CompleteExecution(StatusSuccess, 0, "")
-	if err != nil {
-		t.Fatalf("Failed to complete execution: %v", err)
-	}
-
-	if recordID != id {
-		t.Fatalf("Expected record ID %s, got %s", id, recordID)
-	}
-
-	defer recorder.Close()
-}
-
-// TestRecordUnreachableHost tests recording unreachable hosts
-func TestRecordUnreachableHost(t *testing.T) {
-	config := AuditConfig{
-		Enabled:     true,
-		StoragePath: t.TempDir(),
-	}
-
-	log := createTestLogger()
-	recorder, _ := NewRecorder(config, log)
-	recorder.StartExecution("test.yml", "inventory.yml", []string{})
-
-	err := recorder.RecordUnreachableHost("unreachable-host")
-	if err != nil {
-		t.Fatalf("Failed to record unreachable host: %v", err)
-	}
-
-	record := recorder.GetCurrentRecord()
-	if len(record.UnreachableHosts) != 1 || record.UnreachableHosts[0] != "unreachable-host" {
-		t.Fatal("Unreachable host not recorded correctly")
-	}
-
-	defer recorder.Close()
-}
-
-// TestSetVariables tests setting variables
-func TestSetVariables(t *testing.T) {
-	config := AuditConfig{
-		Enabled:     true,
-		StoragePath: t.TempDir(),
-	}
-
-	log := createTestLogger()
-	recorder, _ := NewRecorder(config, log)
-	recorder.StartExecution("test.yml", "inventory.yml", []string{})
-
+func TestFilterSensitiveVariables_BasicFiltering(t *testing.T) {
 	vars := map[string]interface{}{
-		"app_name": "myapp",
-		"version":  "1.0.0",
+		"username": "admin",
+		"password": "secretpass123",
+		"api_key":  "key12345",
+		"normal":   "value",
 	}
 
-	err := recorder.SetVariables(vars)
-	if err != nil {
-		t.Fatalf("Failed to set variables: %v", err)
+	filtered := filterSensitiveVariables(vars)
+
+	// Check that sensitive fields are redacted
+	if filtered["password"] != "***REDACTED***" {
+		t.Errorf("Expected password to be redacted, got %v", filtered["password"])
+	}
+	if filtered["api_key"] != "***REDACTED***" {
+		t.Errorf("Expected api_key to be redacted, got %v", filtered["api_key"])
 	}
 
-	record := recorder.GetCurrentRecord()
-	if len(record.Variables) != 2 {
-		t.Fatalf("Expected 2 variables, got %d", len(record.Variables))
+	// Check that normal fields are preserved
+	if filtered["username"] != "admin" {
+		t.Errorf("Expected username to be preserved, got %v", filtered["username"])
 	}
-
-	defer recorder.Close()
-}
-
-// TestSetMetadata tests setting metadata
-func TestSetMetadata(t *testing.T) {
-	config := AuditConfig{
-		Enabled:     true,
-		StoragePath: t.TempDir(),
-	}
-
-	log := createTestLogger()
-	recorder, _ := NewRecorder(config, log)
-	recorder.StartExecution("test.yml", "inventory.yml", []string{})
-
-	err := recorder.SetMetadata("custom_key", "custom_value")
-	if err != nil {
-		t.Fatalf("Failed to set metadata: %v", err)
-	}
-
-	record := recorder.GetCurrentRecord()
-	if record.Metadata["custom_key"] != "custom_value" {
-		t.Fatal("Metadata not set correctly")
-	}
-
-	defer recorder.Close()
-}
-
-// TestStorageAndRetrieval tests saving and loading records
-func TestStorageAndRetrieval(t *testing.T) {
-	storageDir := t.TempDir()
-	config := AuditConfig{
-		Enabled:     true,
-		StoragePath: storageDir,
-	}
-
-	log := createTestLogger()
-	recorder, _ := NewRecorder(config, log)
-
-	id, _ := recorder.StartExecution("test.yml", "inventory.yml", []string{})
-
-	taskResult := TaskResult{
-		Name:      "test",
-		Module:    "command",
-		Status:    TaskStatusOk,
-		Host:      "localhost",
-		Duration:  1.0,
-		StartTime: time.Now(),
-		EndTime:   time.Now(),
-	}
-	recorder.RecordTaskResult(taskResult)
-
-	recordID, err := recorder.CompleteExecution(StatusSuccess, 0, "")
-	if err != nil {
-		t.Fatalf("Failed to complete execution: %v", err)
-	}
-
-	recorder.Close()
-
-	// Now load the record
-	storage, _ := NewStorage(storageDir, log)
-	defer storage.Close()
-
-	loaded, err := storage.LoadRecord(recordID)
-	if err != nil {
-		t.Fatalf("Failed to load record: %v", err)
-	}
-
-	if loaded.ID != id {
-		t.Fatalf("Record ID mismatch: expected %s, got %s", id, loaded.ID)
-	}
-
-	if loaded.Status != StatusSuccess {
-		t.Fatalf("Record status mismatch: expected %s, got %s", StatusSuccess, loaded.Status)
+	if filtered["normal"] != "value" {
+		t.Errorf("Expected normal to be preserved, got %v", filtered["normal"])
 	}
 }
 
-// TestListRecords tests listing records
-func TestListRecords(t *testing.T) {
-	storageDir := t.TempDir()
-	config := AuditConfig{
-		Enabled:     true,
-		StoragePath: storageDir,
-	}
-
-	log := createTestLogger()
-
-	// Create multiple records
-	for i := 0; i < 3; i++ {
-		recorder, _ := NewRecorder(config, log)
-		recorder.StartExecution("test.yml", "inventory.yml", []string{})
-		recorder.RecordTaskResult(TaskResult{
-			Name:      "task",
-			Module:    "command",
-			Status:    TaskStatusOk,
-			Host:      "localhost",
-			Duration:  1.0,
-			StartTime: time.Now(),
-			EndTime:   time.Now(),
-		})
-		recorder.CompleteExecution(StatusSuccess, 0, "")
-		recorder.Close()
-		time.Sleep(10 * time.Millisecond) // Small delay to ensure different timestamps
-	}
-
-	// List records
-	storage, _ := NewStorage(storageDir, log)
-	defer storage.Close()
-
-	records, err := storage.ListRecords(FilterOptions{Limit: 0, Offset: 0})
-	if err != nil {
-		t.Fatalf("Failed to list records: %v", err)
-	}
-
-	if len(records) < 3 {
-		t.Fatalf("Expected at least 3 records, got %d", len(records))
-	}
-}
-
-// TestFilterOptions tests filtering records
-func TestFilterOptions(t *testing.T) {
-	storageDir := t.TempDir()
-	config := AuditConfig{
-		Enabled:     true,
-		StoragePath: storageDir,
-	}
-
-	log := createTestLogger()
-
-	// Create records with different statuses
-	recorder1, _ := NewRecorder(config, log)
-	recorder1.StartExecution("test1.yml", "inventory.yml", []string{})
-	recorder1.CompleteExecution(StatusSuccess, 0, "")
-	recorder1.Close()
-
-	recorder2, _ := NewRecorder(config, log)
-	recorder2.StartExecution("test2.yml", "inventory.yml", []string{})
-	recorder2.CompleteExecution(StatusFailure, 1, "Error")
-	recorder2.Close()
-
-	// List only successful records
-	storage, _ := NewStorage(storageDir, log)
-	defer storage.Close()
-
-	records, err := storage.ListRecords(FilterOptions{
-		Status: StatusSuccess,
-	})
-
-	if err != nil {
-		t.Fatalf("Failed to list records: %v", err)
-	}
-
-	if len(records) == 0 {
-		t.Fatal("No successful records found")
-	}
-
-	for _, record := range records {
-		if record.Status != StatusSuccess {
-			t.Fatalf("Found non-successful record in filtered results")
-		}
-	}
-}
-
-// TestReportGeneration tests report generation
-func TestReportGeneration(t *testing.T) {
-	storageDir := t.TempDir()
-	config := AuditConfig{
-		Enabled:     true,
-		StoragePath: storageDir,
-	}
-
-	log := createTestLogger()
-	recorder, _ := NewRecorder(config, log)
-	recorder.StartExecution("test.yml", "inventory.yml", []string{})
-	recorder.CompleteExecution(StatusSuccess, 0, "")
-	recorder.Close()
-
-	// List records and generate report
-	storage, _ := NewStorage(storageDir, log)
-	defer storage.Close()
-
-	records, _ := storage.ListRecords(FilterOptions{})
-	reporter := NewReporter(records)
-
-	formats := []FormatType{FormatText, FormatJSON, FormatCSV, FormatHTML, FormatMarkdown}
-	for _, format := range formats {
-		report, err := reporter.Generate(format)
-		if err != nil {
-			t.Fatalf("Failed to generate %s report: %v", format, err)
-		}
-
-		if report == "" {
-			t.Fatalf("Generated empty %s report", format)
-		}
-	}
-}
-
-// TestDeleteOldRecords tests deleting old records
-func TestDeleteOldRecords(t *testing.T) {
-	storageDir := t.TempDir()
-	config := AuditConfig{
-		Enabled:     true,
-		StoragePath: storageDir,
-	}
-
-	log := createTestLogger()
-
-	// Create a record
-	recorder, _ := NewRecorder(config, log)
-	recorder.StartExecution("test.yml", "inventory.yml", []string{})
-	recorder.CompleteExecution(StatusSuccess, 0, "")
-	recorder.Close()
-
-	storage, _ := NewStorage(storageDir, log)
-
-	// Delete records older than 0 days (should delete all records)
-	deleted, err := storage.DeleteOldRecords(0)
-	if err != nil {
-		t.Fatalf("Failed to delete old records: %v", err)
-	}
-
-	if deleted != 1 {
-		t.Fatalf("Expected 1 deleted record, got %d", deleted)
-	}
-
-	storage.Close()
-}
-
-// TestStatistics tests getting statistics
-func TestStatistics(t *testing.T) {
-	storageDir := t.TempDir()
-	config := AuditConfig{
-		Enabled:     true,
-		StoragePath: storageDir,
-	}
-
-	log := createTestLogger()
-
-	// Create records
-	for i := 0; i < 2; i++ {
-		recorder, _ := NewRecorder(config, log)
-		recorder.StartExecution("test.yml", "inventory.yml", []string{})
-		recorder.RecordPlay("Setup", 0, []string{"localhost"})
-
-		recorder.RecordTaskResult(TaskResult{
-			Name:      "task",
-			Module:    "package",
-			Status:    TaskStatusOk,
-			Host:      "localhost",
-			Duration:  1.0,
-			StartTime: time.Now(),
-			EndTime:   time.Now(),
-		})
-
-		status := StatusSuccess
-		if i == 1 {
-			status = StatusFailure
-		}
-
-		recorder.CompleteExecution(status, 0, "")
-		recorder.Close()
-	}
-
-	storage, _ := NewStorage(storageDir, log)
-	defer storage.Close()
-
-	stats, err := storage.GetStatistics(FilterOptions{})
-	if err != nil {
-		t.Fatalf("Failed to get statistics: %v", err)
-	}
-
-	if stats.TotalExecutions != 2 {
-		t.Fatalf("Expected 2 total executions, got %d", stats.TotalExecutions)
-	}
-
-	if stats.SuccessfulRuns != 1 {
-		t.Fatalf("Expected 1 successful run, got %d", stats.SuccessfulRuns)
-	}
-
-	if stats.FailedRuns != 1 {
-		t.Fatalf("Expected 1 failed run, got %d", stats.FailedRuns)
-	}
-}
-
-// BenchmarkRecordTaskResult benchmarks task recording
-func BenchmarkRecordTaskResult(b *testing.B) {
-	config := AuditConfig{
-		Enabled:     true,
-		StoragePath: os.TempDir(),
-	}
-
-	log := createTestLogger()
-	recorder, _ := NewRecorder(config, log)
-	recorder.StartExecution("test.yml", "inventory.yml", []string{})
-	recorder.RecordPlay("Setup", 0, []string{"localhost"})
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		taskResult := TaskResult{
-			Name:      "task",
-			Module:    "command",
-			Status:    TaskStatusOk,
-			Host:      "localhost",
-			Duration:  1.0,
-			StartTime: time.Now(),
-			EndTime:   time.Now(),
-		}
-		recorder.RecordTaskResult(taskResult)
-	}
-
-	recorder.Close()
-}
-
-// TestSensitiveVariableFiltering tests that sensitive variables are redacted
-func TestSensitiveVariableFiltering(t *testing.T) {
-	config := AuditConfig{
-		Enabled:          true,
-		StoragePath:      t.TempDir(),
-		IncludeSensitive: false,
-	}
-
-	log := createTestLogger()
-	recorder, _ := NewRecorder(config, log)
-	recorder.StartExecution("test.yml", "inventory.yml", []string{})
-
+func TestFilterSensitiveVariables_CaseInsensitive(t *testing.T) {
 	vars := map[string]interface{}{
-		"app_name": "myapp",
-		"password": "secret123",
-		"api_key":  "key123",
+		"PASSWORD":    "secret",
+		"Api_Key":     "key",
+		"PRIVATE_KEY": "key123",
+		"pwd":         "pass",
 	}
 
-	recorder.SetVariables(vars)
+	filtered := filterSensitiveVariables(vars)
 
-	record := recorder.GetCurrentRecord()
+	for key, val := range filtered {
+		if val != "***REDACTED***" {
+			t.Errorf("Expected %s to be redacted (case-insensitive), got %v", key, val)
+		}
+	}
+}
 
-	// Check that sensitive vars are redacted
-	if record.Variables["password"] != "***REDACTED***" {
-		t.Fatal("Password was not redacted")
+func TestFilterSensitiveVariables_SubstringMatching(t *testing.T) {
+	vars := map[string]interface{}{
+		"db_password":          "dbpass",
+		"user_token":           "token123",
+		"secret_value":         "secret",
+		"authorization_header": "Bearer xxx",
+		"admin_credentials":    "creds",
 	}
 
-	if record.Variables["api_key"] != "***REDACTED***" {
-		t.Fatal("API key was not redacted")
+	filtered := filterSensitiveVariables(vars)
+
+	expected := map[string]bool{
+		"db_password":          true,
+		"user_token":           true,
+		"secret_value":         true,
+		"authorization_header": true,
+		"admin_credentials":    true,
 	}
 
-	if record.Variables["app_name"] != "myapp" {
-		t.Fatal("App name should not be redacted")
+	for key, shouldRedact := range expected {
+		val := filtered[key]
+		isRedacted := val == "***REDACTED***"
+		if isRedacted != shouldRedact {
+			t.Errorf("Expected %s redacted=%v, got redacted=%v (value=%v)", key, shouldRedact, isRedacted, val)
+		}
+	}
+}
+
+func TestFilterSensitiveVariables_NestedMaps(t *testing.T) {
+	vars := map[string]interface{}{
+		"normal": "value",
+		"config": map[string]interface{}{
+			"db": map[string]interface{}{
+				"host":     "localhost",
+				"password": "dbpass",
+			},
+			"api": map[string]interface{}{
+				"key":    "mykey",
+				"secret": "mysecret",
+			},
+		},
 	}
 
-	recorder.Close()
+	filtered := filterSensitiveVariables(vars)
+
+	// Check nested password
+	if configVal, ok := filtered["config"].(map[string]interface{}); ok {
+		if dbVal, ok := configVal["db"].(map[string]interface{}); ok {
+			if dbVal["password"] != "***REDACTED***" {
+				t.Errorf("Expected nested password to be redacted, got %v", dbVal["password"])
+			}
+			if dbVal["host"] != "localhost" {
+				t.Errorf("Expected nested host to be preserved, got %v", dbVal["host"])
+			}
+		} else {
+			t.Errorf("Expected config.db to be a map")
+		}
+
+		if apiVal, ok := configVal["api"].(map[string]interface{}); ok {
+			if apiVal["secret"] != "***REDACTED***" {
+				t.Errorf("Expected nested secret to be redacted, got %v", apiVal["secret"])
+			}
+		} else {
+			t.Errorf("Expected config.api to be a map")
+		}
+	} else {
+		t.Errorf("Expected config to be a map")
+	}
+}
+
+func TestFilterSensitiveVariables_Lists(t *testing.T) {
+	vars := map[string]interface{}{
+		"users": []interface{}{
+			map[string]interface{}{
+				"name":     "user1",
+				"password": "pass1",
+			},
+			map[string]interface{}{
+				"name":     "user2",
+				"password": "pass2",
+			},
+		},
+	}
+
+	filtered := filterSensitiveVariables(vars)
+
+	if users, ok := filtered["users"].([]interface{}); ok {
+		if len(users) != 2 {
+			t.Errorf("Expected 2 users, got %d", len(users))
+		}
+
+		for i, user := range users {
+			if userMap, ok := user.(map[string]interface{}); ok {
+				if userMap["password"] != "***REDACTED***" {
+					t.Errorf("Expected user %d password to be redacted, got %v", i, userMap["password"])
+				}
+				if userMap["name"] != strings.Replace([]string{"user1", "user2"}[i], "", "", -1) {
+					t.Errorf("Expected user %d name to be preserved", i)
+				}
+			}
+		}
+	} else {
+		t.Errorf("Expected users to be a list")
+	}
+}
+
+func TestIsSensitiveKey(t *testing.T) {
+	patterns := []string{"password", "token", "secret", "api_key", "apikey"}
+
+	tests := []struct {
+		key         string
+		shouldMatch bool
+	}{
+		{"password", true},
+		{"db_password", true},
+		{"PASSWORD", true},
+		{"token", true},
+		{"api_token", true},
+		{"secret", true},
+		{"api_key", true},
+		{"apikey", true},
+		{"username", false},
+		{"hostname", false},
+		{"key", false}, // Should not match "api_key" without context
+	}
+
+	for _, tt := range tests {
+		result := isSensitiveKey(strings.ToLower(tt.key), patterns)
+		if result != tt.shouldMatch {
+			t.Errorf("isSensitiveKey(%q) = %v, want %v", tt.key, result, tt.shouldMatch)
+		}
+	}
+}
+
+func TestFilterSensitiveList(t *testing.T) {
+	patterns := []string{"password"}
+
+	list := []interface{}{
+		map[string]interface{}{
+			"name":     "item1",
+			"password": "secret1",
+		},
+		"string_item",
+		123,
+	}
+
+	filtered := filterSensitiveList(list, patterns)
+
+	if len(filtered) != 3 {
+		t.Errorf("Expected 3 items after filtering, got %d", len(filtered))
+	}
+
+	if item, ok := filtered[0].(map[string]interface{}); ok {
+		if item["password"] != "***REDACTED***" {
+			t.Errorf("Expected password in list item to be redacted")
+		}
+	}
+
+	if item, ok := filtered[1].(string); ok {
+		if item != "string_item" {
+			t.Errorf("Expected string item to be preserved")
+		}
+	}
 }

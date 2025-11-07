@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/user"
+	"strings"
 	"sync"
 	"time"
 
@@ -349,6 +350,8 @@ func contains(arr []string, val string) bool {
 	return false
 }
 
+// filterSensitiveVariables recursively filters out sensitive data from variables
+// Uses case-insensitive substring matching for better pattern detection
 func filterSensitiveVariables(vars map[string]interface{}) map[string]interface{} {
 	sensitiveKeys := []string{
 		"password", "passwd", "pwd",
@@ -358,23 +361,51 @@ func filterSensitiveVariables(vars map[string]interface{}) map[string]interface{
 		"auth", "credential", "credentials",
 	}
 
+	// Pre-compile lowercase patterns for faster matching
+	sensitivePatterns := make([]string, len(sensitiveKeys))
+	for i, k := range sensitiveKeys {
+		sensitivePatterns[i] = strings.ToLower(k)
+	}
+
 	filtered := make(map[string]interface{})
 	for k, v := range vars {
-		isSensitive := false
-		for _, sensitive := range sensitiveKeys {
-			if contains([]string{k}, sensitive) {
-				isSensitive = true
-				break
-			}
-		}
-
-		if isSensitive {
+		// Check if key is sensitive using case-insensitive substring matching
+		if isSensitiveKey(strings.ToLower(k), sensitivePatterns) {
 			filtered[k] = "***REDACTED***"
+		} else if nestedMap, ok := v.(map[string]interface{}); ok {
+			// Recursively filter nested maps
+			filtered[k] = filterSensitiveVariables(nestedMap)
+		} else if nestedList, ok := v.([]interface{}); ok {
+			// Filter items in lists that are maps
+			filtered[k] = filterSensitiveList(nestedList, sensitivePatterns)
 		} else {
 			filtered[k] = v
 		}
 	}
 
+	return filtered
+}
+
+// isSensitiveKey checks if a key matches any sensitive patterns using substring matching
+func isSensitiveKey(key string, patterns []string) bool {
+	for _, pattern := range patterns {
+		if strings.Contains(key, pattern) {
+			return true
+		}
+	}
+	return false
+}
+
+// filterSensitiveList filters list items recursively, handling nested maps
+func filterSensitiveList(list []interface{}, patterns []string) []interface{} {
+	filtered := make([]interface{}, len(list))
+	for i, item := range list {
+		if nestedMap, ok := item.(map[string]interface{}); ok {
+			filtered[i] = filterSensitiveVariables(nestedMap)
+		} else {
+			filtered[i] = item
+		}
+	}
 	return filtered
 }
 

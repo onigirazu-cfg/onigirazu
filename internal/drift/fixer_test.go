@@ -375,7 +375,9 @@ func TestFixerExecuteFixModuleValidationFails(t *testing.T) {
 			return types.TaskResult{}, fmt.Errorf("execution failed")
 		},
 	}
-	registry.Register("failing", failingModule)
+	if err := registry.Register("failing", failingModule); err != nil {
+		t.Fatalf("Failed to register module: %v", err)
+	}
 
 	fixer := NewFixer(registry, logger, &DriftConfig{})
 
@@ -403,7 +405,9 @@ func TestFixDriftWithSuccessfulFix(t *testing.T) {
 			return types.TaskResult{Success: true}, nil
 		},
 	}
-	registry.Register("file", successModule)
+	if err := registry.Register("file", successModule); err != nil {
+		t.Fatalf("Failed to register module: %v", err)
+	}
 
 	config := &DriftConfig{
 		AutoFix:         true,
@@ -460,7 +464,9 @@ func TestFixDriftWithFailedFix(t *testing.T) {
 			return types.TaskResult{Success: false, Error: "permission denied"}, nil
 		},
 	}
-	registry.Register("file", failingModule)
+	if err := registry.Register("file", failingModule); err != nil {
+		t.Fatalf("Failed to register module: %v", err)
+	}
 
 	config := &DriftConfig{
 		AutoFix:         true,
@@ -513,7 +519,9 @@ func TestFixDriftMultipleItems(t *testing.T) {
 			return types.TaskResult{Success: true}, nil
 		},
 	}
-	registry.Register("file", successModule)
+	if err := registry.Register("file", successModule); err != nil {
+		t.Fatalf("Failed to register module: %v", err)
+	}
 
 	config := &DriftConfig{
 		AutoFix:         true,

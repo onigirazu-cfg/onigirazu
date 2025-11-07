@@ -23,35 +23,49 @@ type ExecutionState struct {
 
 // EnhancedManager provides thread-safe state management with advanced features
 type EnhancedManager struct {
-	stateFile     string
-	mutex         sync.RWMutex
-	state         *types.State
-	executions    map[string]*ExecutionState  // Per-execution isolation
-	taskStates    map[string]*types.TaskState // Legacy compatibility
-	currentExecID string                      // Track current execution
-	autoSave      bool
-	backupCount   int
+	stateFile        string
+	mutex            sync.RWMutex
+	state            *types.State
+	executions       map[string]*ExecutionState  // Per-execution isolation
+	taskStates       map[string]*types.TaskState // Legacy compatibility
+	currentExecID    string                      // Track current execution
+	autoSave         bool
+	backupCount      int
+	saveWg           sync.WaitGroup     // Track background save operations
+	ctx              context.Context    // Parent context for cancellation
+	cancel           context.CancelFunc // Cancel function
+	checksumCache    sync.Map           // Caches task checksums (task ID -> checksum)
+	fileChecksumLock sync.RWMutex       // Separate lock for file checksum operations
+	fileChecksum     map[string]string  // Caches file checksums
 }
 
 // NewEnhanced creates a new enhanced state manager
 func NewEnhanced(stateFile string, autoSave bool, backupCount int) *EnhancedManager {
+	ctx, cancel := context.WithCancel(context.Background())
 	return &EnhancedManager{
-		stateFile:   stateFile,
-		taskStates:  make(map[string]*types.TaskState), // Legacy compatibility
-		executions:  make(map[string]*ExecutionState),  // Per-execution isolation
-		autoSave:    autoSave,
-		backupCount: backupCount,
+		stateFile:    stateFile,
+		taskStates:   make(map[string]*types.TaskState), // Legacy compatibility
+		executions:   make(map[string]*ExecutionState),  // Per-execution isolation
+		autoSave:     autoSave,
+		backupCount:  backupCount,
+		ctx:          ctx,
+		cancel:       cancel,
+		fileChecksum: make(map[string]string), // Initialize checksum cache
 	}
 }
 
 // NewEnhancedManager creates a new enhanced state manager with logger
 func NewEnhancedManager(stateFile string, logger interface{}) *EnhancedManager {
+	ctx, cancel := context.WithCancel(context.Background())
 	return &EnhancedManager{
-		stateFile:   stateFile,
-		taskStates:  make(map[string]*types.TaskState), // Legacy compatibility
-		executions:  make(map[string]*ExecutionState),  // Per-execution isolation
-		autoSave:    true,
-		backupCount: 5,
+		stateFile:    stateFile,
+		taskStates:   make(map[string]*types.TaskState), // Legacy compatibility
+		executions:   make(map[string]*ExecutionState),  // Per-execution isolation
+		autoSave:     true,
+		backupCount:  5,
+		ctx:          ctx,
+		cancel:       cancel,
+		fileChecksum: make(map[string]string), // Initialize checksum cache
 	}
 }
 
@@ -145,10 +159,10 @@ func (m *EnhancedManager) SaveState(ctx context.Context, state *types.State) err
 
 	m.state = state
 
-	// Cleanup old backups
+	// Cleanup old backups (don't fail on backup cleanup errors)
 	if err := m.cleanupOldBackups(); err != nil {
-		// Log error but don't fail the save operation
-		fmt.Printf("Warning: failed to cleanup old backups: %v\n", err)
+		// Note: This is not critical for the main operation, so we skip it
+		_ = err
 	}
 
 	return nil
@@ -226,9 +240,11 @@ func (m *EnhancedManager) SetTaskState(taskID string, taskState *types.TaskState
 
 	// Auto-save if enabled
 	if m.autoSave && m.state != nil {
-		// This is a simplified auto-save, in production you might want to batch these
+		// Track goroutine with WaitGroup and use parent context for cancellation
+		m.saveWg.Add(1)
 		go func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer m.saveWg.Done()
+			ctx, cancel := context.WithTimeout(m.ctx, 5*time.Second)
 			defer cancel()
 			// Ignore error in background save, as this is best-effort
 			_ = m.SaveState(ctx, m.state)
@@ -251,6 +267,26 @@ func (m *EnhancedManager) Clear() error {
 	m.currentExecID = ""
 
 	return nil
+}
+
+// Shutdown gracefully shuts down the manager, waiting for all pending save operations
+// It cancels the context, waits for goroutines to complete, and cleans up resources
+func (m *EnhancedManager) Shutdown(timeout time.Duration) error {
+	m.cancel() // Signal all goroutines to stop
+
+	// Wait for background save operations with timeout
+	done := make(chan struct{})
+	go func() {
+		m.saveWg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		return nil
+	case <-time.After(timeout):
+		return fmt.Errorf("shutdown timeout: background save operations did not complete within %v", timeout)
+	}
 }
 
 // ==================== EXECUTION ISOLATION (Phase 1 Fix) ====================
@@ -415,14 +451,27 @@ func (m *EnhancedManager) IsTaskUpToDate(task types.Task, host types.Host) bool 
 		return false
 	}
 
-	// Check if task arguments have changed
-	currentChecksum := m.calculateTaskChecksum(task, host)
+	// Check if task arguments have changed (using cached checksum)
+	currentChecksum := m.getOrCalcTaskChecksum(taskID, task, host)
 	return taskState.Checksum == currentChecksum
 }
 
 // generateTaskID generates a unique ID for a task on a specific host
 func (m *EnhancedManager) generateTaskID(task types.Task, host types.Host) string {
 	return fmt.Sprintf("%s-%s-%s", host.Name, task.Module, task.Name)
+}
+
+// getOrCalcTaskChecksum gets cached checksum or calculates it if not cached
+func (m *EnhancedManager) getOrCalcTaskChecksum(taskID string, task types.Task, host types.Host) string {
+	// Check cache first (lock-free read with sync.Map)
+	if cached, ok := m.checksumCache.Load(taskID); ok {
+		return cached.(string)
+	}
+
+	// Calculate and cache
+	checksum := m.calculateTaskChecksum(task, host)
+	m.checksumCache.Store(taskID, checksum)
+	return checksum
 }
 
 // calculateTaskChecksum calculates checksum for task arguments
@@ -696,10 +745,10 @@ func (m *EnhancedManager) SaveStateWithCompression(ctx context.Context, state *t
 
 	m.state = state
 
-	// Cleanup old backups
+	// Cleanup old backups (don't fail on backup cleanup errors)
 	if err := m.cleanupOldBackups(); err != nil {
-		// Log error but don't fail the save operation
-		fmt.Printf("Warning: failed to cleanup old backups: %v\n", err)
+		// Note: This is not critical for the main operation, so we skip it
+		_ = err
 	}
 
 	return nil

@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/signal"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -26,7 +25,6 @@ type SignalHandler struct {
 	onForceCancel    func() error
 	gracefulShutdown bool
 	cleanupFuncs     []func() error
-	mu               sync.Mutex     // FIXED in Phase 1: Added mutex for thread safety
 	logger           *logger.Logger // FIXED in Phase 1: Added logger for proper logging
 }
 

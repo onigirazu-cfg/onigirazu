@@ -37,7 +37,11 @@ func NewDetector(
 	// Set default report directory
 	reportDir := config.ReportPath
 	if reportDir == "" {
-		homeDir, _ := os.UserHomeDir()
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			// Fallback to /tmp if home directory cannot be determined
+			homeDir = "/tmp"
+		}
 		reportDir = filepath.Join(homeDir, ".onigirazu", "drift-reports")
 	}
 

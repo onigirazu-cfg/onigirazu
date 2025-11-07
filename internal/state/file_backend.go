@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"time"
 
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
@@ -223,6 +224,7 @@ func (fb *FileBackend) createBackup() error {
 }
 
 // cleanupOldBackups removes old backups exceeding the backup count limit
+// Backups are sorted by modification time, oldest first
 func (fb *FileBackend) cleanupOldBackups() error {
 	entries, err := os.ReadDir(fb.backupDir)
 	if err != nil {
@@ -234,13 +236,35 @@ func (fb *FileBackend) cleanupOldBackups() error {
 		return nil
 	}
 
-	// Sort by modification time and delete oldest
-	// For simplicity, just delete until we're at the limit
-	toDelete := len(entries) - fb.config.BackupCount
+	// Create list of backup files with their modification times for sorting
+	type BackupFile struct {
+		name    string
+		modTime time.Time
+	}
 
-	for i := 0; i < toDelete && i < len(entries); i++ {
-		backupPath := filepath.Join(fb.backupDir, entries[i].Name())
+	var backups []BackupFile
+	for _, entry := range entries {
+		info, err := entry.Info()
+		if err != nil {
+			continue // Skip entries we can't stat
+		}
+		backups = append(backups, BackupFile{
+			name:    entry.Name(),
+			modTime: info.ModTime(),
+		})
+	}
+
+	// Sort by modification time (oldest first)
+	sort.Slice(backups, func(i, j int) bool {
+		return backups[i].modTime.Before(backups[j].modTime)
+	})
+
+	// Delete oldest backups until we're within the limit
+	toDelete := len(backups) - fb.config.BackupCount
+	for i := 0; i < toDelete; i++ {
+		backupPath := filepath.Join(fb.backupDir, backups[i].name)
 		if err := os.Remove(backupPath); err != nil {
+			// Don't fail entire cleanup on individual file errors
 			fmt.Fprintf(os.Stderr, "warning: failed to delete old backup %s: %v\n", backupPath, err)
 		}
 	}

@@ -89,6 +89,12 @@ func (s *Storage) SaveRecord(record *ExecutionRecord) error {
 	return nil
 }
 
+// recordMeta represents metadata for a record
+type recordMeta struct {
+	ID       string
+	Metadata map[string]interface{}
+}
+
 // LoadRecord loads an execution record from disk
 func (s *Storage) LoadRecord(recordID string) (*ExecutionRecord, error) {
 	recordPath := filepath.Join(s.path, recordID, "record.json")
@@ -107,71 +113,143 @@ func (s *Storage) LoadRecord(recordID string) (*ExecutionRecord, error) {
 	return &record, nil
 }
 
-// ListRecords lists all available execution records
+// ListRecords lists execution records with efficient pagination
+// Uses metadata files for filtering when possible to avoid loading full records
 func (s *Storage) ListRecords(filter FilterOptions) ([]ExecutionRecord, error) {
 	entries, err := os.ReadDir(s.path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read storage directory: %w", err)
 	}
 
-	var records []ExecutionRecord
-	count := 0
+	// First pass: collect metadata for all records
+	var allMeta []recordMeta
 
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
 		}
 
-		record, err := s.LoadRecord(entry.Name())
+		// Try to load metadata first (faster than full record)
+		meta, err := s.loadRecordMetadata(entry.Name())
 		if err != nil {
-			s.logger.Debug("Failed to load record %s: %v", entry.Name(), err)
+			s.logger.Debug("Failed to load metadata for %s: %v", entry.Name(), err)
 			continue
 		}
+		allMeta = append(allMeta, recordMeta{ID: entry.Name(), Metadata: meta})
+	}
 
-		// Apply filters
-		if !matchesFilter(*record, filter) {
-			continue
-		}
-
-		records = append(records, *record)
-		count++
-
-		// Stop if we've reached the limit
-		if filter.Limit > 0 && count >= filter.Limit+filter.Offset {
-			break
+	// Filter based on metadata only (efficient)
+	var filtered []recordMeta
+	for _, m := range allMeta {
+		if matchesMetadataFilter(m.Metadata, filter) {
+			filtered = append(filtered, m)
 		}
 	}
 
-	// Sort records
-	sortRecords(records, filter.SortBy, filter.SortOrder)
+	// Sort filtered metadata
+	sortMetadata(filtered, filter.SortBy, filter.SortOrder)
 
-	// Apply offset and limit
-	if filter.Offset > 0 || filter.Limit > 0 {
-		start := filter.Offset
-		end := len(records)
-
-		if filter.Limit > 0 {
-			end = start + filter.Limit
-			if end > len(records) {
-				end = len(records)
-			}
+	// Apply offset and limit to metadata only
+	start := filter.Offset
+	end := len(filtered)
+	if filter.Limit > 0 {
+		end = start + filter.Limit
+		if end > len(filtered) {
+			end = len(filtered)
 		}
+	}
+	if start > len(filtered) {
+		return []ExecutionRecord{}, nil
+	}
 
-		if start > len(records) {
-			return []ExecutionRecord{}, nil
+	// Load only the records we need (page)
+	var records []ExecutionRecord
+	for i := start; i < end && i < len(filtered); i++ {
+		record, err := s.LoadRecord(filtered[i].ID)
+		if err != nil {
+			s.logger.Debug("Failed to load record %s: %v", filtered[i].ID, err)
+			continue
 		}
-
-		records = records[start:end]
+		records = append(records, *record)
 	}
 
 	return records, nil
 }
 
-// GetStatistics retrieves statistics for all or filtered records
-func (s *Storage) GetStatistics(filter FilterOptions) (*AuditStatistics, error) {
-	records, err := s.ListRecords(FilterOptions{Limit: 0, Offset: 0})
+// loadRecordMetadata efficiently loads only the metadata file for a record
+func (s *Storage) loadRecordMetadata(recordID string) (map[string]interface{}, error) {
+	metadataPath := filepath.Join(s.path, recordID, "metadata.json")
+
+	data, err := os.ReadFile(metadataPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list records: %w", err)
+		return nil, fmt.Errorf("failed to read metadata file: %w", err)
+	}
+
+	var metadata map[string]interface{}
+	err = json.Unmarshal(data, &metadata)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal metadata: %w", err)
+	}
+
+	return metadata, nil
+}
+
+// matchesMetadataFilter checks if metadata matches the filter criteria
+func matchesMetadataFilter(metadata map[string]interface{}, filter FilterOptions) bool {
+	// Quick field-based filtering without loading full record
+	if filter.Status != "" {
+		if status, ok := metadata["status"].(string); ok {
+			if ExecutionStatus(status) != filter.Status {
+				return false
+			}
+		}
+	}
+
+	// Note: Other filters that require full record content will be handled
+	// after loading in a second pass if needed
+	return true
+}
+
+// sortMetadata sorts records by metadata fields
+func sortMetadata(records []recordMeta, sortBy, sortOrder string) {
+	sort.Slice(records, func(i, j int) bool {
+		var iVal, jVal interface{}
+
+		if sortBy == "" || sortBy == "start_time" {
+			iVal = records[i].Metadata["start_time"]
+			jVal = records[j].Metadata["start_time"]
+		} else {
+			iVal = records[i].Metadata[sortBy]
+			jVal = records[j].Metadata[sortBy]
+		}
+
+		// Compare based on type
+		switch iV := iVal.(type) {
+		case string:
+			if jV, ok := jVal.(string); ok {
+				if sortOrder == "desc" {
+					return iV > jV
+				}
+				return iV < jV
+			}
+		case float64:
+			if jV, ok := jVal.(float64); ok {
+				if sortOrder == "desc" {
+					return iV > jV
+				}
+				return iV < jV
+			}
+		}
+		return false
+	})
+}
+
+// GetStatistics retrieves statistics for all or filtered records
+// Optimized to use metadata first, then load full records only for detailed analysis
+func (s *Storage) GetStatistics(filter FilterOptions) (*AuditStatistics, error) {
+	entries, err := os.ReadDir(s.path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read storage directory: %w", err)
 	}
 
 	stats := &AuditStatistics{
@@ -181,25 +259,64 @@ func (s *Storage) GetStatistics(filter FilterOptions) (*AuditStatistics, error) 
 
 	errorCounts := make(map[string]int)
 	moduleCounts := make(map[string]int)
+	var totalDuration float64
 
-	for _, record := range records {
+	// Load all metadata first (fast, minimal I/O)
+	var recordIDs []string
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		meta, err := s.loadRecordMetadata(entry.Name())
+		if err != nil {
+			s.logger.Debug("Failed to load metadata for %s: %v", entry.Name(), err)
+			continue
+		}
+
+		// Use metadata for basic counts
 		stats.TotalExecutions++
 
-		if record.Status == StatusSuccess {
-			stats.SuccessfulRuns++
-		} else if record.Status == StatusFailure {
-			stats.FailedRuns++
+		if status, ok := meta["status"].(string); ok {
+			if ExecutionStatus(status) == StatusSuccess {
+				stats.SuccessfulRuns++
+			} else if ExecutionStatus(status) == StatusFailure {
+				stats.FailedRuns++
+			}
 		}
 
-		stats.TotalTasks += record.TotalTasks
-		stats.TotalFailedTasks += record.FailedTasks
-
-		if stats.FirstExecution.IsZero() || record.StartTime.Before(stats.FirstExecution) {
-			stats.FirstExecution = record.StartTime
+		if totalTasks, ok := meta["total_tasks"].(float64); ok {
+			stats.TotalTasks += int(totalTasks)
+		}
+		if failedTasks, ok := meta["failed_tasks"].(float64); ok {
+			stats.TotalFailedTasks += int(failedTasks)
+		}
+		if duration, ok := meta["duration"].(float64); ok {
+			totalDuration += duration
 		}
 
-		if record.EndTime.After(stats.LastExecution) {
-			stats.LastExecution = record.EndTime
+		// Store ID for detailed analysis
+		recordIDs = append(recordIDs, entry.Name())
+	}
+
+	// Calculate average duration from metadata
+	if stats.TotalExecutions > 0 {
+		stats.AvgDuration = totalDuration / float64(stats.TotalExecutions)
+	}
+
+	// Load full records only for detailed error and module analysis (pagination)
+	// Limit detailed analysis to first 100 records for performance
+	detailedLimit := 100
+	if len(recordIDs) > detailedLimit {
+		recordIDs = recordIDs[:detailedLimit]
+	}
+
+	for _, id := range recordIDs {
+		record, err := s.LoadRecord(id)
+		if err != nil {
+			s.logger.Debug("Failed to load record %s: %v", id, err)
+			continue
 		}
 
 		// Collect error messages
@@ -213,15 +330,14 @@ func (s *Storage) GetStatistics(filter FilterOptions) (*AuditStatistics, error) 
 				moduleCounts[task.Module]++
 			}
 		}
-	}
 
-	// Calculate average duration
-	if stats.TotalExecutions > 0 {
-		totalDuration := 0.0
-		for _, record := range records {
-			totalDuration += record.Duration
+		// Update first/last execution times from full records
+		if stats.FirstExecution.IsZero() || record.StartTime.Before(stats.FirstExecution) {
+			stats.FirstExecution = record.StartTime
 		}
-		stats.AvgDuration = totalDuration / float64(stats.TotalExecutions)
+		if record.EndTime.After(stats.LastExecution) {
+			stats.LastExecution = record.EndTime
+		}
 	}
 
 	// Get top errors

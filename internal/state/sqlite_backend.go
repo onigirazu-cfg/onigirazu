@@ -51,8 +51,10 @@ func NewSQLiteBackend(config *SQLiteConfig) (*SQLiteBackend, error) {
 	}
 
 	// Configure connection pool
+	// Note: For SQLite, max connections should be reasonable but typically 5-10 is sufficient
 	db.SetMaxOpenConns(config.MaxConnections)
-	db.SetMaxIdleConns(1)
+	// Set idle connections to 50% of max to avoid recreating connections under load
+	db.SetMaxIdleConns(config.MaxConnections / 2)
 	db.SetConnMaxLifetime(time.Hour)
 
 	// Test connection
