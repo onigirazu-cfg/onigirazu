@@ -1,5 +1,34 @@
 # Module Development Guide
 
+## ⚡ Quick Start with Module Scaffolding
+
+Before diving into manual module development, consider using the **Module Scaffolding Tool** to jumpstart your development!
+
+### Generate Boilerplate in Seconds
+
+```bash
+cd /Users/denys.rastiegaiev/work/onigirazu_project/onigirazu
+go run ./scripts/module_scaffold \
+  -name my_awesome_module \
+  -desc "Your module description" \
+  -params "param1,param2,param3"
+```
+
+This generates:
+
+- ✅ Complete module implementation skeleton
+- ✅ Comprehensive unit tests
+- ✅ Idempotency tests
+- ✅ Benchmark tests
+- ✅ Proper imports and Go conventions
+- ✅ BaseModule integration
+
+**Result**: A fully structured, test-ready module in seconds instead of hours!
+
+👉 **Full Documentation**: See [Module Scaffolding Guide](MODULE_SCAFFOLDING_GUIDE.md)
+
+---
+
 ## Executor Safety: Critical Best Practices
 
 ### ⚠️ The Problem: Executor Caching Bug
