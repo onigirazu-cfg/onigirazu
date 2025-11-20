@@ -40,7 +40,7 @@ linters:
 
   settings:
     dupl:
-      threshold: 100
+      threshold: 150  # Increased from 100 to reduce false positives for similar patterns
     funlen:
       lines: 150
       statements: 120
