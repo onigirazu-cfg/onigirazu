@@ -23,16 +23,16 @@ type ExecutionState struct {
 
 // EnhancedManager provides thread-safe state management with advanced features
 type EnhancedManager struct {
-	stateFile        string
-	mutex            sync.RWMutex
-	state            *types.State
-	executions       map[string]*ExecutionState  // Per-execution isolation
-	taskStates       map[string]*types.TaskState // Legacy compatibility
-	currentExecID    string                      // Track current execution
-	autoSave         bool
-	backupCount      int
-	saveWg           sync.WaitGroup     // Track background save operations
-	ctx              context.Context    // Parent context for cancellation
+	stateFile     string
+	mutex         sync.RWMutex
+	state         *types.State
+	executions    map[string]*ExecutionState  // Per-execution isolation
+	taskStates    map[string]*types.TaskState // Legacy compatibility
+	currentExecID string                      // Track current execution
+	autoSave      bool
+	backupCount   int
+	saveWg        sync.WaitGroup     // Track background save operations
+	ctx           context.Context    // Parent context for cancellation
 	cancel        context.CancelFunc // Cancel function
 	checksumCache sync.Map           // Caches task checksums (task ID -> checksum)
 	fileChecksum  map[string]string  // Caches file checksums

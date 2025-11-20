@@ -121,6 +121,7 @@ linters:
           - funlen
           - goconst
           - mnd
+          - dupl  # Test code duplication is acceptable
       - path: cmd/
         linters:
           - funlen

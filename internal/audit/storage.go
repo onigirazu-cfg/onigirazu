@@ -478,5 +478,3 @@ func (s *Storage) Close() error {
 	// Storage doesn't need explicit closing, but method is here for interface consistency
 	return nil
 }
-
-
