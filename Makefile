@@ -9,7 +9,7 @@ LDFLAGS=-ldflags "-s -w -X github.com/onigirazu-cfg/onigirazu/internal/version.V
 
 # Build project
 build:
-	CGO_ENABLED=0 go build $(LDFLAGS) -o bin/$(BINARY_NAME) cmd/onigirazu/main.go
+	CGO_ENABLED=0 go build -trimpath $(LDFLAGS) -o bin/$(BINARY_NAME) cmd/onigirazu/main.go
 
 # Build for all platforms
 build-all:
@@ -72,6 +72,12 @@ security-full:
 	gosec ./... || true
 	govulncheck ./... || true
 	staticcheck ./... || true
+
+# Vulnerability check (Quick Win addition)
+vuln-check:
+	@echo "Running vulnerability check..."
+	@which govulncheck > /dev/null 2>&1 || (echo "Installing govulncheck..." && go install golang.org/x/vuln/cmd/govulncheck@latest)
+	@$(shell go env GOPATH)/bin/govulncheck ./...
 
 # Clean artifacts
 clean:

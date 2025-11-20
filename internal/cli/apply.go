@@ -880,7 +880,6 @@ Examples:
 
 			if result.Failed {
 				log.Error("Playbook execution failed")
-				// TODO: Implement displayExecutionSummary function
 				// Print formatted execution end
 				log.PrintExecutionEnd(summary)
 
@@ -920,7 +919,6 @@ Examples:
 			}
 
 			log.Info("Playbook execution successful")
-			// TODO: Implement displayExecutionSummary function
 			// Print formatted execution end
 			log.PrintExecutionEnd(summary)
 

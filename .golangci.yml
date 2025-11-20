@@ -20,19 +20,23 @@ linters:
     - ineffassign
     - unconvert
 
+    # Additional quality linters (Quick Win improvements)
+    - bodyclose      # Ensure HTTP response bodies are closed
+    - gocyclo        # Cyclomatic complexity detection
+    - unused         # Detect unused code
+    - gocritic       # Comprehensive Go code checks
+    - dupl           # Code duplication detection
+
   disable:
-    - bodyclose
     - copyloopvar
     - depguard
     - dogsled
     - gochecknoinits
     - goconst
-    - gocritic
     - goprintffuncname
     - noctx
     - rowserrcheck
     - unparam
-    - unused
 
   settings:
     dupl:
@@ -52,7 +56,7 @@ linters:
         - performance
         - style
     gocyclo:
-      min-complexity: 30
+      min-complexity: 20  # Reduced from 30 for better code quality
     govet:
       enable:
         - shadow
