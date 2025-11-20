@@ -745,7 +745,9 @@ func TestLoadConfigUnreadableFile(t *testing.T) {
 	}
 	defer os.Remove(tmpFile.Name())
 	defer func() {
-		_ = os.Chmod(tmpFile.Name(), 0644)
+		if err := os.Chmod(tmpFile.Name(), 0644); err != nil {
+			t.Fatalf("failed to chmod file: %v", err)
+		}
 	}()
 
 	cfg, err := LoadConfig(tmpFile.Name())

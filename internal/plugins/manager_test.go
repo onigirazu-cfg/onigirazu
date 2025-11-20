@@ -200,9 +200,15 @@ func TestManager_List(t *testing.T) {
 	plugin2 := newMockModulePlugin("module2")
 	plugin3 := newMockCallbackPlugin("callback1")
 
-	manager.Register(ctx, plugin1)
-	manager.Register(ctx, plugin2)
-	manager.Register(ctx, plugin3)
+	if err := manager.Register(ctx, plugin1); err != nil {
+		t.Fatalf("Register failed: %v", err)
+	}
+	if err := manager.Register(ctx, plugin2); err != nil {
+		t.Fatalf("Register failed: %v", err)
+	}
+	if err := manager.Register(ctx, plugin3); err != nil {
+		t.Fatalf("Register failed: %v", err)
+	}
 
 	// List module plugins
 	modulePlugins := manager.List(PluginTypeModule)
@@ -227,9 +233,15 @@ func TestManager_ListAll(t *testing.T) {
 	plugin2 := newMockModulePlugin("module2")
 	plugin3 := newMockCallbackPlugin("callback1")
 
-	manager.Register(ctx, plugin1)
-	manager.Register(ctx, plugin2)
-	manager.Register(ctx, plugin3)
+	if err := manager.Register(ctx, plugin1); err != nil {
+		t.Fatalf("Register failed: %v", err)
+	}
+	if err := manager.Register(ctx, plugin2); err != nil {
+		t.Fatalf("Register failed: %v", err)
+	}
+	if err := manager.Register(ctx, plugin3); err != nil {
+		t.Fatalf("Register failed: %v", err)
+	}
 
 	// List all plugins
 	allPlugins := manager.ListAll()
@@ -285,8 +297,12 @@ func TestManager_Shutdown(t *testing.T) {
 	plugin1 := newMockModulePlugin("module1")
 	plugin2 := newMockModulePlugin("module2")
 
-	manager.Register(ctx, plugin1)
-	manager.Register(ctx, plugin2)
+	if err := manager.Register(ctx, plugin1); err != nil {
+		t.Fatalf("Register failed: %v", err)
+	}
+	if err := manager.Register(ctx, plugin2); err != nil {
+		t.Fatalf("Register failed: %v", err)
+	}
 
 	// Shutdown
 	err := manager.Shutdown(ctx)
@@ -311,9 +327,15 @@ func TestManager_GetStats(t *testing.T) {
 	plugin2 := newMockModulePlugin("module2")
 	plugin3 := newMockCallbackPlugin("callback1")
 
-	manager.Register(ctx, plugin1)
-	manager.Register(ctx, plugin2)
-	manager.Register(ctx, plugin3)
+	if err := manager.Register(ctx, plugin1); err != nil {
+		t.Fatalf("Register failed: %v", err)
+	}
+	if err := manager.Register(ctx, plugin2); err != nil {
+		t.Fatalf("Register failed: %v", err)
+	}
+	if err := manager.Register(ctx, plugin3); err != nil {
+		t.Fatalf("Register failed: %v", err)
+	}
 
 	// Get stats
 	stats := manager.GetStats()
@@ -339,8 +361,12 @@ func BenchmarkManager_Register(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		plugin := newMockModulePlugin("test-module")
-		manager.Register(ctx, plugin)
-		manager.Unregister(ctx, "test-module", PluginTypeModule)
+		if err := manager.Register(ctx, plugin); err != nil {
+			b.Fatalf("Register failed: %v", err)
+		}
+		if err := manager.Unregister(ctx, "test-module", PluginTypeModule); err != nil {
+			b.Fatalf("Unregister failed: %v", err)
+		}
 	}
 }
 
@@ -350,7 +376,9 @@ func BenchmarkManager_Get(b *testing.B) {
 	manager := NewManager(loader)
 
 	plugin := newMockModulePlugin("test-module")
-	manager.Register(ctx, plugin)
+	if err := manager.Register(ctx, plugin); err != nil {
+		b.Fatalf("Register failed: %v", err)
+	}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -366,7 +394,9 @@ func BenchmarkManager_List(b *testing.B) {
 	// Register 10 plugins
 	for i := 0; i < 10; i++ {
 		plugin := newMockModulePlugin("module" + string(rune(i)))
-		manager.Register(ctx, plugin)
+		if err := manager.Register(ctx, plugin); err != nil {
+			b.Fatalf("Register failed: %v", err)
+		}
 	}
 
 	b.ResetTimer()
