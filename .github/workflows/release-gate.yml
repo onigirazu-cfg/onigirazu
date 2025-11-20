@@ -34,7 +34,7 @@ jobs:
       uses: actions/setup-go@v6
       with:
         go-version: ${{ env.GO_VERSION }}
-        cache: true
+        cache: false  # Temporarily disabled due to cache corruption
 
     - name: Run Gosec Security Scanner
       continue-on-error: true
@@ -69,7 +69,7 @@ jobs:
       uses: actions/setup-go@v6
       with:
         go-version: ${{ env.GO_VERSION }}
-        cache: true
+        cache: false  # Temporarily disabled due to cache corruption
 
     - name: Install quality tools
       run: |
@@ -112,7 +112,7 @@ jobs:
       uses: actions/setup-go@v6
       with:
         go-version: ${{ env.GO_VERSION }}
-        cache: true
+        cache: false  # Temporarily disabled due to cache corruption
 
     - name: Download dependencies
       run: go mod download
@@ -154,7 +154,7 @@ jobs:
       uses: actions/setup-go@v6
       with:
         go-version: ${{ env.GO_VERSION }}
-        cache: true
+        cache: false  # Temporarily disabled due to cache corruption
 
     - name: Build binary
       env:
@@ -182,7 +182,7 @@ jobs:
       uses: actions/setup-go@v6
       with:
         go-version: ${{ env.GO_VERSION }}
-        cache: true
+        cache: false  # Temporarily disabled due to cache corruption
 
     - name: golangci-lint
       uses: golangci/golangci-lint-action@v8

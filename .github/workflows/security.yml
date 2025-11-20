@@ -31,7 +31,7 @@ jobs:
       uses: actions/setup-go@v6
       with:
         go-version: ${{ env.GO_VERSION }}
-        cache: true
+        cache: false  # Temporarily disabled due to cache corruption
         cache-dependency-path: go.sum
 
     - name: Download dependencies
@@ -124,7 +124,7 @@ jobs:
       uses: actions/setup-go@v6
       with:
         go-version: ${{ env.GO_VERSION }}
-        cache: true
+        cache: false  # Temporarily disabled due to cache corruption
         cache-dependency-path: go.sum
 
     - name: Download dependencies
