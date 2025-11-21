@@ -27,7 +27,7 @@ func TestFileBackend_BackupCleanup_SortsOldestFirst(t *testing.T) {
 
 	// Set modification times (oldest first)
 	baseTime := time.Now().Add(-time.Hour * 72)
-	_ = os.Chtimes(oldBackup, baseTime, baseTime)                                    
+	_ = os.Chtimes(oldBackup, baseTime, baseTime)
 	_ = os.Chtimes(midBackup, baseTime.Add(time.Hour*24), baseTime.Add(time.Hour*24))
 	_ = os.Chtimes(newBackup, baseTime.Add(time.Hour*48), baseTime.Add(time.Hour*48))
 
