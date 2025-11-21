@@ -210,7 +210,7 @@ func TestExecutionLifecycle(t *testing.T) {
 	}
 
 	// Test EndExecution with cleanup
-	if err := manager.EndExecution(execID, true); err != nil { //nolint:errcheck // Test cleanup
+	if err := manager.EndExecution(execID, true); err != nil {
 		t.Fatalf("EndExecution with cleanup failed: %v", err)
 	}
 
