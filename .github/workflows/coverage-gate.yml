@@ -99,31 +99,33 @@ jobs:
         token: ${{ secrets.CODECOV_TOKEN }}
       if: always()
 
-    - name: Comment PR with coverage results
-      if: github.event_name == 'pull_request'
-      uses: actions/github-script@v7
-      with:
-        script: |
-          const fs = require('fs');
-          const coverage = '${{ env.TOTAL_COVERAGE }}';
-          const threshold = '${{ env.MIN_COVERAGE_OVERALL }}';
-
-          const comment = `## Coverage Report
-
-          **Overall Coverage:** \`${coverage}%\`
-          **Threshold:** \`${threshold}%\`
-
-          ${Number(coverage) >= Number(threshold) ? '✅ Coverage check passed' : '❌ Coverage check failed'}
-
-          See the [Coverage Gate workflow](${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}) for details.
-          `;
-
-          github.rest.issues.createComment({
-            issue_number: context.issue.number,
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            body: comment
-          });
+    # PR comments disabled due to permissions issues
+    # Coverage results are visible in workflow logs
+    # - name: Comment PR with coverage results
+    #   if: github.event_name == 'pull_request'
+    #   uses: actions/github-script@v7
+    #   with:
+    #     script: |
+    #       const fs = require('fs');
+    #       const coverage = '${{ env.TOTAL_COVERAGE }}';
+    #       const threshold = '${{ env.MIN_COVERAGE_OVERALL }}';
+    #
+    #       const comment = `## Coverage Report
+    #
+    #       **Overall Coverage:** \`${coverage}%\`
+    #       **Threshold:** \`${threshold}%\`
+    #
+    #       ${Number(coverage) >= Number(threshold) ? '✅ Coverage check passed' : '❌ Coverage check failed'}
+    #
+    #       See the [Coverage Gate workflow](${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}) for details.
+    #       `;
+    #
+    #       github.rest.issues.createComment({
+    #         issue_number: context.issue.number,
+    #         owner: context.repo.owner,
+    #         repo: context.repo.repo,
+    #         body: comment
+    #       });
 
     - name: Upload coverage artifacts
       if: always()
