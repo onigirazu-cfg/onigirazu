@@ -230,7 +230,7 @@ func TestGetExecutionTaskState(t *testing.T) {
 
 	// Create execution and add task state
 	execID := "exec-get-test"
-	_ = manager.BeginExecution(execID) //nolint:errcheck // Test
+	_ = manager.BeginExecution(execID)
 	manager.currentExecID = execID
 
 	taskID := "task-123"
@@ -310,7 +310,7 @@ func TestExecutionErrorHandling(t *testing.T) {
 
 	// Test duplicate execution
 	execID := "exec-duplicate"
-	_ = manager.BeginExecution(execID) //nolint:errcheck // Test
+	_ = manager.BeginExecution(execID)
 	err = manager.BeginExecution(execID)
 	if err == nil {
 		t.Error("Expected error for duplicate execution ID")
@@ -382,7 +382,7 @@ func TestHighConcurrency(t *testing.T) {
 				manager.mutex.Unlock()
 			}
 
-			_ = manager.EndExecution(execID, false) //nolint:errcheck // Test
+			_ = manager.EndExecution(execID, false)
 		}(i)
 	}
 
@@ -442,7 +442,7 @@ func TestListExecutions(t *testing.T) {
 	// Add some executions
 	for i := 1; i <= 5; i++ {
 		execID := fmt.Sprintf("exec-%d", i)
-		_ = manager.BeginExecution(execID) //nolint:errcheck // Test
+		_ = manager.BeginExecution(execID)
 	}
 
 	execs = manager.ListExecutions()
@@ -451,7 +451,7 @@ func TestListExecutions(t *testing.T) {
 	}
 
 	// Remove one with cleanup
-	_ = manager.EndExecution("exec-3", true) //nolint:errcheck // Test cleanup
+	_ = manager.EndExecution("exec-3", true)
 
 	execs = manager.ListExecutions()
 	if len(execs) != 4 {

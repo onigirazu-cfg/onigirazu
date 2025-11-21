@@ -124,7 +124,7 @@ func TestManager_Delete(t *testing.T) {
 	value := "test-value"
 
 	// Set and verify
-	_ = m.Set(ctx, key, value) //nolint:errcheck // Test setup
+	_ = m.Set(ctx, key, value)
 	if _, found := m.Get(ctx, key); !found {
 		t.Fatal("Expected to find value before delete")
 	}
@@ -150,7 +150,7 @@ func TestManager_Clear(t *testing.T) {
 
 	// Add multiple entries
 	for i := 0; i < 10; i++ {
-		_ = m.Set(ctx, fmt.Sprintf("key-%d", i), fmt.Sprintf("value-%d", i)) //nolint:errcheck // Test setup
+		_ = m.Set(ctx, fmt.Sprintf("key-%d", i), fmt.Sprintf("value-%d", i))
 	}
 
 	if m.Size() != 10 {
@@ -182,7 +182,7 @@ func TestManager_Size(t *testing.T) {
 
 	// Add entries
 	for i := 0; i < 5; i++ {
-		_ = m.Set(ctx, fmt.Sprintf("key-%d", i), i) //nolint:errcheck // Test setup
+		_ = m.Set(ctx, fmt.Sprintf("key-%d", i), i)
 	}
 
 	if m.Size() != 5 {
@@ -190,7 +190,7 @@ func TestManager_Size(t *testing.T) {
 	}
 
 	// Delete one
-	_ = m.Delete(ctx, "key-0") //nolint:errcheck // Test setup
+	_ = m.Delete(ctx, "key-0")
 
 	if m.Size() != 4 {
 		t.Errorf("Expected size 4 after delete, got %d", m.Size())
@@ -212,7 +212,7 @@ func TestManager_Keys(t *testing.T) {
 	}
 
 	for key := range expected {
-		_ = m.Set(ctx, key, "value") //nolint:errcheck // Test setup
+		_ = m.Set(ctx, key, "value")
 	}
 
 	// Get keys
@@ -237,8 +237,8 @@ func TestManager_Stats(t *testing.T) {
 	ctx := context.Background()
 
 	// Add entries
-	_ = m.Set(ctx, "key-1", "value-1") //nolint:errcheck // Test setup
-	_ = m.Set(ctx, "key-2", "value-2") //nolint:errcheck // Test setup
+	_ = m.Set(ctx, "key-1", "value-1")
+	_ = m.Set(ctx, "key-2", "value-2")
 
 	// Generate hits
 	m.Get(ctx, "key-1")
@@ -378,7 +378,7 @@ func TestManager_Exists(t *testing.T) {
 	}
 
 	// Set value
-	m.Set(ctx, key, "value")
+	_ = m.Set(ctx, key, "value")
 
 	// Should exist now
 	if !m.Exists(ctx, key) {
@@ -386,7 +386,7 @@ func TestManager_Exists(t *testing.T) {
 	}
 
 	// Delete
-	m.Delete(ctx, key)
+	_ = m.Delete(ctx, key)
 
 	// Should not exist after delete
 	if m.Exists(ctx, key) {
@@ -410,7 +410,7 @@ func TestManager_GetTTL(t *testing.T) {
 	}
 
 	// Set with TTL
-	m.SetWithTTL(ctx, key, "value", ttl)
+	_ = m.SetWithTTL(ctx, key, "value", ttl)
 
 	// Get TTL
 	remainingTTL, found := m.GetTTL(ctx, key)
@@ -434,7 +434,7 @@ func TestManager_Extend(t *testing.T) {
 	extension := 500 * time.Millisecond
 
 	// Set with short TTL
-	m.SetWithTTL(ctx, key, "value", initialTTL)
+	_ = m.SetWithTTL(ctx, key, "value", initialTTL)
 
 	// Wait a bit
 	time.Sleep(100 * time.Millisecond)
@@ -475,9 +475,9 @@ func TestManager_GetMultiple(t *testing.T) {
 	ctx := context.Background()
 
 	// Set multiple values
-	m.Set(ctx, "key-1", "value-1")
-	m.Set(ctx, "key-2", "value-2")
-	m.Set(ctx, "key-3", "value-3")
+	_ = m.Set(ctx, "key-1", "value-1")
+	_ = m.Set(ctx, "key-2", "value-2")
+	_ = m.Set(ctx, "key-3", "value-3")
 
 	// Get multiple
 	keys := []string{"key-1", "key-2", "non-existent"}
@@ -539,16 +539,16 @@ func TestManager_LRUEviction(t *testing.T) {
 	ctx := context.Background()
 
 	// Fill cache to max
-	m.Set(ctx, "key-1", "value-1")
-	m.Set(ctx, "key-2", "value-2")
-	m.Set(ctx, "key-3", "value-3")
+	_ = m.Set(ctx, "key-1", "value-1")
+	_ = m.Set(ctx, "key-2", "value-2")
+	_ = m.Set(ctx, "key-3", "value-3")
 
 	if m.Size() != maxSize {
 		t.Errorf("Expected size %d, got %d", maxSize, m.Size())
 	}
 
 	// Add one more - should evict key-1 (least recently used)
-	m.Set(ctx, "key-4", "value-4")
+	_ = m.Set(ctx, "key-4", "value-4")
 
 	if m.Size() != maxSize {
 		t.Errorf("Expected size to remain %d, got %d", maxSize, m.Size())
@@ -586,15 +586,15 @@ func TestManager_LRUAccessOrder(t *testing.T) {
 	ctx := context.Background()
 
 	// Fill cache
-	m.Set(ctx, "key-1", "value-1")
-	m.Set(ctx, "key-2", "value-2")
-	m.Set(ctx, "key-3", "value-3")
+	_ = m.Set(ctx, "key-1", "value-1")
+	_ = m.Set(ctx, "key-2", "value-2")
+	_ = m.Set(ctx, "key-3", "value-3")
 
 	// Access key-1 to make it most recently used
 	m.Get(ctx, "key-1")
 
 	// Add new key - should evict key-2 (now least recently used)
-	m.Set(ctx, "key-4", "value-4")
+	_ = m.Set(ctx, "key-4", "value-4")
 
 	// key-2 should be evicted
 	if _, found := m.Get(ctx, "key-2"); found {
@@ -624,7 +624,7 @@ func TestManager_ConcurrentAccess(t *testing.T) {
 			defer wg.Done()
 			for j := 0; j < numOperations; j++ {
 				key := fmt.Sprintf("key-%d-%d", id, j)
-				m.Set(ctx, key, j)
+				_ = m.Set(ctx, key, j)
 			}
 		}(i)
 	}
@@ -644,7 +644,7 @@ func TestManager_ConcurrentAccess(t *testing.T) {
 	wg.Wait()
 
 	// Verify cache is still functional
-	m.Set(ctx, "test", "value")
+	_ = m.Set(ctx, "test", "value")
 	if _, found := m.Get(ctx, "test"); !found {
 		t.Error("Cache not functional after concurrent access")
 	}
@@ -658,9 +658,9 @@ func TestManager_CleanupExpired(t *testing.T) {
 	ctx := context.Background()
 
 	// Set entries with short TTL
-	m.SetWithTTL(ctx, "key-1", "value-1", 50*time.Millisecond)
-	m.SetWithTTL(ctx, "key-2", "value-2", 50*time.Millisecond)
-	m.SetWithTTL(ctx, "key-3", "value-3", 5*time.Minute) // Long TTL
+	_ = m.SetWithTTL(ctx, "key-1", "value-1", 50*time.Millisecond)
+	_ = m.SetWithTTL(ctx, "key-2", "value-2", 50*time.Millisecond)
+	_ = m.SetWithTTL(ctx, "key-3", "value-3", 5*time.Minute) // Long TTL
 
 	// Wait for expiration
 	time.Sleep(100 * time.Millisecond)
@@ -687,7 +687,7 @@ func TestManager_Close(t *testing.T) {
 	m := NewManager(5 * time.Minute)
 
 	ctx := context.Background()
-	m.Set(ctx, "key", "value")
+	_ = m.Set(ctx, "key", "value")
 
 	// Close should not panic
 	err := m.Close()
@@ -709,8 +709,8 @@ func TestManager_StatsWithExpired(t *testing.T) {
 	ctx := context.Background()
 
 	// Add entries with different TTLs
-	m.SetWithTTL(ctx, "key-1", "value-1", 50*time.Millisecond)
-	m.SetWithTTL(ctx, "key-2", "value-2", 5*time.Minute)
+	_ = m.SetWithTTL(ctx, "key-1", "value-1", 50*time.Millisecond)
+	_ = m.SetWithTTL(ctx, "key-2", "value-2", 5*time.Minute)
 
 	// Wait for one to expire
 	time.Sleep(100 * time.Millisecond)
@@ -742,7 +742,7 @@ func BenchmarkManager_Set(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		key := fmt.Sprintf("key-%d", i)
-		m.Set(ctx, key, i)
+		_ = m.Set(ctx, key, i)
 	}
 }
 
@@ -756,7 +756,7 @@ func BenchmarkManager_Get(b *testing.B) {
 	// Pre-populate cache
 	for i := 0; i < 1000; i++ {
 		key := fmt.Sprintf("key-%d", i)
-		m.Set(ctx, key, i)
+		_ = m.Set(ctx, key, i)
 	}
 
 	b.ResetTimer()
@@ -794,7 +794,7 @@ func BenchmarkManager_ConcurrentAccess(b *testing.B) {
 
 	// Pre-populate
 	for i := 0; i < 100; i++ {
-		m.Set(ctx, fmt.Sprintf("key-%d", i), i)
+		_ = m.Set(ctx, fmt.Sprintf("key-%d", i), i)
 	}
 
 	b.ResetTimer()

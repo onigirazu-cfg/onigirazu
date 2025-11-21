@@ -25,12 +25,12 @@ func TestNewConnectionPool(t *testing.T) {
 	}
 
 	// Cleanup
-	_ = pool.CloseAll() //nolint: errcheck
+	_ = pool.CloseAll()
 }
 
 func TestConnectionPoolGetStats(t *testing.T) {
 	pool := NewConnectionPool(DefaultPoolConfig())
-	defer func() { _ = pool.CloseAll() }() //nolint: errcheck
+	defer func() { _ = pool.CloseAll() }()
 
 	stats := pool.GetStats()
 	if stats.TotalConnections != 0 {
@@ -44,7 +44,7 @@ func TestConnectionPoolGetStats(t *testing.T) {
 
 func TestConnectionPoolGetConnectionKey(t *testing.T) {
 	pool := NewConnectionPool(DefaultPoolConfig())
-	defer func() { _ = pool.CloseAll() }() //nolint: errcheck
+	defer func() { _ = pool.CloseAll() }()
 
 	host := types.Host{
 		Name:    "test",
@@ -63,7 +63,7 @@ func TestConnectionPoolGetConnectionKey(t *testing.T) {
 
 func TestConnectionPoolGetConnectionKeyDefaultPort(t *testing.T) {
 	pool := NewConnectionPool(DefaultPoolConfig())
-	defer func() { _ = pool.CloseAll() }() //nolint: errcheck
+	defer func() { _ = pool.CloseAll() }()
 
 	host := types.Host{
 		Name:    "test",
@@ -82,7 +82,7 @@ func TestConnectionPoolGetConnectionKeyDefaultPort(t *testing.T) {
 
 func TestConnectionPoolReleaseConnection(t *testing.T) {
 	pool := NewConnectionPool(DefaultPoolConfig())
-	defer func() { _ = pool.CloseAll() }() //nolint: errcheck
+	defer func() { _ = pool.CloseAll() }()
 
 	host := types.Host{
 		Name:    "test",
@@ -97,7 +97,7 @@ func TestConnectionPoolReleaseConnection(t *testing.T) {
 
 func TestConnectionPoolCloseConnection(t *testing.T) {
 	pool := NewConnectionPool(DefaultPoolConfig())
-	defer func() { _ = pool.CloseAll() }() //nolint: errcheck
+	defer func() { _ = pool.CloseAll() }()
 
 	host := types.Host{
 		Name:    "test",
@@ -119,7 +119,7 @@ func TestConnectionWrapperValidation(t *testing.T) {
 		MaxLifetime: 2 * time.Second,
 		CleanupTick: 100 * time.Millisecond,
 	})
-	defer func() { _ = pool.CloseAll() }() //nolint: errcheck
+	defer func() { _ = pool.CloseAll() }()
 
 	now := time.Now()
 
@@ -194,7 +194,7 @@ func TestGlobalPool(t *testing.T) {
 	}
 
 	// Cleanup
-	_ = customPool.CloseAll() //nolint: errcheck
+	_ = customPool.CloseAll()
 }
 
 func TestPoolStats(t *testing.T) {
@@ -247,7 +247,7 @@ func TestConnectionPool_GetConnection_Error(t *testing.T) {
 	}
 
 	pool := NewConnectionPool(DefaultPoolConfig())
-	defer func() { _ = pool.CloseAll() }() //nolint: errcheck
+	defer func() { _ = pool.CloseAll() }()
 
 	host := types.Host{
 		Name:    "test",
@@ -273,7 +273,7 @@ func TestConnectionPool_Cleanup(t *testing.T) {
 		MaxLifetime: 200 * time.Millisecond,
 		CleanupTick: 50 * time.Millisecond,
 	})
-	defer func() { _ = pool.CloseAll() }() //nolint: errcheck
+	defer func() { _ = pool.CloseAll() }()
 
 	// Add a mock connection that will become stale
 	host := types.Host{
@@ -312,7 +312,7 @@ func TestConnectionPool_Cleanup(t *testing.T) {
 // TestConnectionPool_CloseConnection_WithError tests CloseConnection when Close fails
 func TestConnectionPool_CloseConnection_WithError(t *testing.T) {
 	pool := NewConnectionPool(DefaultPoolConfig())
-	defer func() { _ = pool.CloseAll() }() //nolint: errcheck
+	defer func() { _ = pool.CloseAll() }()
 
 	host := types.Host{
 		Name:    "test",
@@ -354,7 +354,7 @@ func TestConnectionPool_CloseConnection_WithError(t *testing.T) {
 // TestConnectionPool_GetStats_WithConnections tests GetStats with active and idle connections
 func TestConnectionPool_GetStats_WithConnections(t *testing.T) {
 	pool := NewConnectionPool(DefaultPoolConfig())
-	defer func() { _ = pool.CloseAll() }() //nolint: errcheck
+	defer func() { _ = pool.CloseAll() }()
 
 	host1 := types.Host{Name: "test1", Address: "localhost", User: "user1", Port: 22}
 	host2 := types.Host{Name: "test2", Address: "localhost", User: "user2", Port: 22}
@@ -454,7 +454,7 @@ func TestConnectionPool_NewConnectionPool_ZeroConfig(t *testing.T) {
 		MaxLifetime: 0,
 		CleanupTick: 0,
 	})
-	defer func() { _ = pool.CloseAll() }() //nolint: errcheck
+	defer func() { _ = pool.CloseAll() }()
 
 	// Should use default values
 	if pool.maxIdle != 5*time.Minute {
@@ -473,7 +473,7 @@ func TestConnectionPool_NewConnectionPool_ZeroConfig(t *testing.T) {
 // TestConnectionPool_GetConnection_ReuseValid tests reusing a valid connection
 func TestConnectionPool_GetConnection_ReuseValid(t *testing.T) {
 	pool := NewConnectionPool(DefaultPoolConfig())
-	defer func() { _ = pool.CloseAll() }() //nolint: errcheck
+	defer func() { _ = pool.CloseAll() }()
 
 	host := types.Host{
 		Name:    "test",
@@ -521,7 +521,7 @@ func TestConnectionPool_GetConnection_InvalidConnection(t *testing.T) {
 		MaxLifetime: 200 * time.Millisecond,
 		CleanupTick: 50 * time.Millisecond,
 	})
-	defer func() { _ = pool.CloseAll() }() //nolint: errcheck
+	defer func() { _ = pool.CloseAll() }()
 
 	host := types.Host{
 		Name:    "test",
@@ -566,7 +566,7 @@ func TestConnectionPool_GetConnection_InvalidConnection(t *testing.T) {
 // TestConnectionPool_ReleaseConnection_Existing tests releasing an existing connection
 func TestConnectionPool_ReleaseConnection_Existing(t *testing.T) {
 	pool := NewConnectionPool(DefaultPoolConfig())
-	defer func() { _ = pool.CloseAll() }() //nolint: errcheck
+	defer func() { _ = pool.CloseAll() }()
 
 	host := types.Host{
 		Name:    "test",

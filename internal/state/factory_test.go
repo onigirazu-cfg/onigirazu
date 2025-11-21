@@ -125,7 +125,7 @@ func TestFactoryCreateBackend_SQLiteBackend(t *testing.T) {
 	}
 
 	// Clean up
-	backend.DeleteState(context.Background())
+	_ = backend.DeleteState(context.Background())
 }
 
 func TestFactoryCreateBackend_Remote_NotImplemented(t *testing.T) {
@@ -221,7 +221,7 @@ func TestFactoryCreateSQLiteBackend(t *testing.T) {
 	}
 
 	// Clean up
-	backend.DeleteState(context.Background())
+	_ = backend.DeleteState(context.Background())
 }
 
 func TestFactoryGetBackendType(t *testing.T) {

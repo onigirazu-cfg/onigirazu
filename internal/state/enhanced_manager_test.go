@@ -16,7 +16,7 @@ func TestEnhancedManager_Shutdown(t *testing.T) {
 	manager := NewEnhanced(tmpFile, true, 5)
 
 	// Simulate loading state
-	manager.LoadState(context.Background())
+	_, _ = manager.LoadState(context.Background())
 
 	// Create some goroutines by calling SetTaskState multiple times
 	taskState := &types.TaskState{
@@ -326,7 +326,7 @@ func TestEnhancedManager_Clear(t *testing.T) {
 	manager := NewEnhanced(tmpFile, false, 5)
 
 	// Add some data
-	manager.LoadState(context.Background())
+	_, _ = manager.LoadState(context.Background())
 	manager.taskStates["task1"] = &types.TaskState{Host: "localhost", Module: "test"}
 
 	manager.mutex.Lock()
@@ -367,7 +367,7 @@ func TestEnhancedManager_SaveStateWithAutoSave(t *testing.T) {
 
 	manager := NewEnhanced(tmpFile, true, 5) // Auto-save enabled
 
-	manager.LoadState(context.Background())
+	_, _ = manager.LoadState(context.Background())
 
 	// Set task state should trigger auto-save
 	taskState := &types.TaskState{
