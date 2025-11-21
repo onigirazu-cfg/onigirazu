@@ -210,7 +210,7 @@ func TestExecutionLifecycle(t *testing.T) {
 	}
 
 	// Test EndExecution with cleanup
-	if err := manager.EndExecution(execID, true); err != nil {
+	if err := manager.EndExecution(execID, true); err != nil { //nolint:errcheck // Test cleanup
 		t.Fatalf("EndExecution with cleanup failed: %v", err)
 	}
 
@@ -451,7 +451,7 @@ func TestListExecutions(t *testing.T) {
 	}
 
 	// Remove one with cleanup
-	manager.EndExecution("exec-3", true)
+	_ = manager.EndExecution("exec-3", true) //nolint:errcheck // Test cleanup
 
 	execs = manager.ListExecutions()
 	if len(execs) != 4 {
