@@ -84,7 +84,7 @@ func TestConfigValidate_FileBackendNegativeBackupCount(t *testing.T) {
 }
 
 func TestConfigValidate_SQLiteBackend(t *testing.T) {
-	homeDir, _ := os.UserHomeDir()
+	homeDir, _ := os.UserHomeDir() //nolint:errcheck // Test
 	cfg := &Config{
 		Backend: BackendTypeSQLite,
 		SQLite: &SQLiteConfig{
@@ -100,7 +100,7 @@ func TestConfigValidate_SQLiteBackend(t *testing.T) {
 }
 
 func TestConfigValidate_SQLiteLowMaxConnections(t *testing.T) {
-	homeDir, _ := os.UserHomeDir()
+	homeDir, _ := os.UserHomeDir() //nolint:errcheck // Test
 	cfg := &Config{
 		Backend: BackendTypeSQLite,
 		SQLite: &SQLiteConfig{
@@ -120,7 +120,7 @@ func TestConfigValidate_SQLiteLowMaxConnections(t *testing.T) {
 }
 
 func TestConfigValidate_SQLiteLowBusyTimeout(t *testing.T) {
-	homeDir, _ := os.UserHomeDir()
+	homeDir, _ := os.UserHomeDir() //nolint:errcheck // Test
 	cfg := &Config{
 		Backend: BackendTypeSQLite,
 		SQLite: &SQLiteConfig{
@@ -218,7 +218,7 @@ func TestConfigValidate_UnknownBackend(t *testing.T) {
 }
 
 func TestGetDirectory(t *testing.T) {
-	homeDir, _ := os.UserHomeDir()
+	homeDir, _ := os.UserHomeDir() //nolint:errcheck // Test
 	expectedDir := filepath.Join(homeDir, ".onigirazu", "states")
 
 	cfg := NewDefaultConfig()
@@ -230,7 +230,7 @@ func TestGetDirectory(t *testing.T) {
 }
 
 func TestGetDirectory_Nil(t *testing.T) {
-	homeDir, _ := os.UserHomeDir()
+	homeDir, _ := os.UserHomeDir() //nolint:errcheck // Test
 	expectedDir := filepath.Join(homeDir, ".onigirazu", "states")
 
 	cfg := &Config{

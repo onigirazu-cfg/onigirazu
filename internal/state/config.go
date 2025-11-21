@@ -89,7 +89,7 @@ type Config struct {
 
 // NewDefaultConfig returns a default configuration
 func NewDefaultConfig() *Config {
-	homeDir, _ := os.UserHomeDir()
+	homeDir, _ := os.UserHomeDir() //nolint:errcheck // Fallback to empty string
 
 	return &Config{
 		Backend: BackendTypeFile,
@@ -169,6 +169,6 @@ func (c *Config) GetDirectory() string {
 	if c.File != nil {
 		return c.File.Directory
 	}
-	homeDir, _ := os.UserHomeDir()
+	homeDir, _ := os.UserHomeDir() //nolint:errcheck // Fallback to empty string
 	return filepath.Join(homeDir, ".onigirazu", "states")
 }

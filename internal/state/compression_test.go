@@ -282,7 +282,7 @@ func TestCompressionRoundTrip(t *testing.T) {
 func createGzipData(data []byte) []byte {
 	var buf bytes.Buffer
 	gz := gzip.NewWriter(&buf)
-	gz.Write(data)
+	_, _ = gz.Write(data) //nolint:errcheck // Test data
 	gz.Close()
 	return buf.Bytes()
 }

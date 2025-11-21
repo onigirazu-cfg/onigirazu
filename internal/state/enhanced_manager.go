@@ -251,7 +251,7 @@ func (m *EnhancedManager) SetTaskState(taskID string, taskState *types.TaskState
 			ctx, cancel := context.WithTimeout(m.ctx, 5*time.Second)
 			defer cancel()
 			// Ignore error in background save, as this is best-effort
-			_ = m.SaveState(ctx, stateCopy)
+			_ = m.SaveState(ctx, stateCopy) //nolint:errcheck // Background save is best-effort
 		}()
 		return
 	}
