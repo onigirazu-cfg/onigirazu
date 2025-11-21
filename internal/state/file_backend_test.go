@@ -13,7 +13,7 @@ import (
 func TestFileBackend_BackupCleanup_SortsOldestFirst(t *testing.T) {
 	tmpDir := t.TempDir()
 	backupDir := filepath.Join(tmpDir, "backups")
-	os.MkdirAll(backupDir, 0750)
+	_ = os.MkdirAll(backupDir, 0750) //nolint:errcheck // Test setup
 
 	// Create mock backup files with different modification times
 	oldBackup := filepath.Join(backupDir, "state.2024-01-01-100000")
@@ -27,9 +27,9 @@ func TestFileBackend_BackupCleanup_SortsOldestFirst(t *testing.T) {
 
 	// Set modification times (oldest first)
 	baseTime := time.Now().Add(-time.Hour * 72)
-	os.Chtimes(oldBackup, baseTime, baseTime)
-	os.Chtimes(midBackup, baseTime.Add(time.Hour*24), baseTime.Add(time.Hour*24))
-	os.Chtimes(newBackup, baseTime.Add(time.Hour*48), baseTime.Add(time.Hour*48))
+	_ = os.Chtimes(oldBackup, baseTime, baseTime)                                     //nolint:errcheck // Test setup
+	_ = os.Chtimes(midBackup, baseTime.Add(time.Hour*24), baseTime.Add(time.Hour*24)) //nolint:errcheck // Test setup
+	_ = os.Chtimes(newBackup, baseTime.Add(time.Hour*48), baseTime.Add(time.Hour*48)) //nolint:errcheck // Test setup
 
 	// Create backend with BackupCount=2 (should keep 2, delete 1 oldest)
 	config := &FileConfig{
@@ -67,7 +67,7 @@ func TestFileBackend_BackupCleanup_SortsOldestFirst(t *testing.T) {
 func TestFileBackend_BackupCleanup_DoesNotCleanIfUnderLimit(t *testing.T) {
 	tmpDir := t.TempDir()
 	backupDir := filepath.Join(tmpDir, "backups")
-	os.MkdirAll(backupDir, 0750)
+	_ = os.MkdirAll(backupDir, 0750) //nolint:errcheck // Test setup
 
 	// Create 2 backup files
 	backup1 := filepath.Join(backupDir, "state.backup.1")
@@ -107,7 +107,7 @@ func TestFileBackend_BackupCleanup_DoesNotCleanIfUnderLimit(t *testing.T) {
 func TestFileBackend_BackupCleanup_DeletesMultipleWhenNeeded(t *testing.T) {
 	tmpDir := t.TempDir()
 	backupDir := filepath.Join(tmpDir, "backups")
-	os.MkdirAll(backupDir, 0750)
+	_ = os.MkdirAll(backupDir, 0750) //nolint:errcheck // Test setup
 
 	// Create 10 backup files
 	backups := make([]string, 10)
@@ -117,7 +117,7 @@ func TestFileBackend_BackupCleanup_DeletesMultipleWhenNeeded(t *testing.T) {
 
 		// Set different modification times
 		modTime := time.Now().Add(-time.Hour * time.Duration(10-i))
-		os.Chtimes(backups[i], modTime, modTime)
+		_ = os.Chtimes(backups[i], modTime, modTime) //nolint:errcheck // Test setup
 	}
 
 	// Create backend with BackupCount=3 (should keep 3, delete 7 oldest)
@@ -170,9 +170,9 @@ func TestFileBackend_BackupCreation(t *testing.T) {
 
 	// Create initial state file
 	testState := []byte(`{"variables": {}, "checksums": {}, "last_run": "2024-01-01T00:00:00Z"}`)
-	os.WriteFile(stateFile, testState, 0600)
+	_ = os.WriteFile(stateFile, testState, 0600) //nolint:errcheck // Test setup
 
-	os.MkdirAll(backupDir, 0750)
+	_ = os.MkdirAll(backupDir, 0750) //nolint:errcheck // Test setup
 
 	backend := &FileBackend{
 		config: &FileConfig{
@@ -216,7 +216,7 @@ func TestFileBackend_SaveState_CreatesBackup(t *testing.T) {
 	stateFile := filepath.Join(tmpDir, ".onigirazu-state")
 	backupDir := filepath.Join(tmpDir, "backups")
 
-	os.MkdirAll(backupDir, 0750)
+	_ = os.MkdirAll(backupDir, 0750) //nolint:errcheck // Test setup
 
 	config := &FileConfig{
 		Directory:   tmpDir,
