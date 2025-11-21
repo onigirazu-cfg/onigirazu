@@ -124,7 +124,7 @@ func TestManager_Delete(t *testing.T) {
 	value := "test-value"
 
 	// Set and verify
-	m.Set(ctx, key, value)
+	_ = m.Set(ctx, key, value) //nolint:errcheck // Test setup
 	if _, found := m.Get(ctx, key); !found {
 		t.Fatal("Expected to find value before delete")
 	}
@@ -150,7 +150,7 @@ func TestManager_Clear(t *testing.T) {
 
 	// Add multiple entries
 	for i := 0; i < 10; i++ {
-		m.Set(ctx, fmt.Sprintf("key-%d", i), fmt.Sprintf("value-%d", i))
+		_ = m.Set(ctx, fmt.Sprintf("key-%d", i), fmt.Sprintf("value-%d", i)) //nolint:errcheck // Test setup
 	}
 
 	if m.Size() != 10 {
@@ -182,7 +182,7 @@ func TestManager_Size(t *testing.T) {
 
 	// Add entries
 	for i := 0; i < 5; i++ {
-		m.Set(ctx, fmt.Sprintf("key-%d", i), i)
+		_ = m.Set(ctx, fmt.Sprintf("key-%d", i), i) //nolint:errcheck // Test setup
 	}
 
 	if m.Size() != 5 {
@@ -190,7 +190,7 @@ func TestManager_Size(t *testing.T) {
 	}
 
 	// Delete one
-	m.Delete(ctx, "key-0")
+	_ = m.Delete(ctx, "key-0") //nolint:errcheck // Test setup
 
 	if m.Size() != 4 {
 		t.Errorf("Expected size 4 after delete, got %d", m.Size())
@@ -212,7 +212,7 @@ func TestManager_Keys(t *testing.T) {
 	}
 
 	for key := range expected {
-		m.Set(ctx, key, "value")
+		_ = m.Set(ctx, key, "value") //nolint:errcheck // Test setup
 	}
 
 	// Get keys
@@ -237,8 +237,8 @@ func TestManager_Stats(t *testing.T) {
 	ctx := context.Background()
 
 	// Add entries
-	m.Set(ctx, "key-1", "value-1")
-	m.Set(ctx, "key-2", "value-2")
+	_ = m.Set(ctx, "key-1", "value-1") //nolint:errcheck // Test setup
+	_ = m.Set(ctx, "key-2", "value-2") //nolint:errcheck // Test setup
 
 	// Generate hits
 	m.Get(ctx, "key-1")

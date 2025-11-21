@@ -117,7 +117,10 @@ func TestStorage_ListRecords_UsesMetadataOnly(t *testing.T) {
 
 	// Verify metadata content
 	if status, ok := meta["status"]; ok {
-		statusStr := status.(string)
+		statusStr, ok := status.(string)
+		if !ok {
+			t.Errorf("Expected status to be string, got %T", status)
+		}
 		if statusStr != string(StatusSuccess) {
 			t.Errorf("Expected status to be %s, got %s", StatusSuccess, statusStr)
 		}
@@ -126,8 +129,12 @@ func TestStorage_ListRecords_UsesMetadataOnly(t *testing.T) {
 	}
 
 	if totalTasks, ok := meta["total_tasks"]; ok {
-		if totalTasks.(float64) != 10 {
-			t.Errorf("Expected total_tasks to be 10, got %v", totalTasks)
+		val, ok := totalTasks.(float64)
+		if !ok {
+			t.Errorf("Expected total_tasks to be float64, got %T", totalTasks)
+		}
+		if val != 10 {
+			t.Errorf("Expected total_tasks to be 10, got %v", val)
 		}
 	} else {
 		t.Errorf("Expected total_tasks in metadata")
@@ -388,8 +395,12 @@ func TestStorage_MetadataIncludesAffectedHostCount(t *testing.T) {
 
 	// Verify affected hosts count
 	if hostCount, ok := meta["affected_hosts"]; ok {
-		if hostCount.(float64) != 4 {
-			t.Errorf("Expected affected_hosts count to be 4, got %v", hostCount)
+		val, ok := hostCount.(float64)
+		if !ok {
+			t.Errorf("Expected affected_hosts to be float64, got %T", hostCount)
+		}
+		if val != 4 {
+			t.Errorf("Expected affected_hosts count to be 4, got %v", val)
 		}
 	} else {
 		t.Errorf("Expected affected_hosts in metadata")
