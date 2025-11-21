@@ -224,7 +224,6 @@ func (m *EnhancedManager) GetTaskState(taskID string) (*types.TaskState, bool) {
 // SetTaskState stores task state in the current execution or legacy storage
 func (m *EnhancedManager) SetTaskState(taskID string, taskState *types.TaskState) {
 	m.mutex.Lock()
-	defer m.mutex.Unlock()
 
 	// Store in current execution's isolated state if available
 	if m.currentExecID != "" {
@@ -239,16 +238,25 @@ func (m *EnhancedManager) SetTaskState(taskID string, taskState *types.TaskState
 
 	// Auto-save if enabled
 	if m.autoSave && m.state != nil {
-		// Track goroutine with WaitGroup and use parent context for cancellation
+		// Capture state while holding lock to avoid race
+		stateCopy := m.state
+		// Add to WaitGroup while holding mutex
 		m.saveWg.Add(1)
+		// Release mutex before launching goroutine
+		m.mutex.Unlock()
+
+		// Launch goroutine for background save
 		go func() {
 			defer m.saveWg.Done()
 			ctx, cancel := context.WithTimeout(m.ctx, 5*time.Second)
 			defer cancel()
 			// Ignore error in background save, as this is best-effort
-			_ = m.SaveState(ctx, m.state)
+			_ = m.SaveState(ctx, stateCopy)
 		}()
+		return
 	}
+
+	m.mutex.Unlock()
 }
 
 // Clear clears all state data
