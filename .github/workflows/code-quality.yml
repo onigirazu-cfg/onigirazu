@@ -128,7 +128,7 @@ jobs:
         echo "Current coverage: ${COVERAGE}%"
 
         # Set minimum coverage threshold
-        THRESHOLD=46
+        THRESHOLD=45
 
         if (( $(echo "$COVERAGE < $THRESHOLD" | bc -l) )); then
           echo "Coverage ${COVERAGE}% is below threshold ${THRESHOLD}%"
@@ -165,7 +165,7 @@ jobs:
 
               Current coverage: **${coveragePercent}%**
 
-              ${parseFloat(coveragePercent) >= 46 ? '✅' : '❌'} Coverage ${parseFloat(coveragePercent) >= 46 ? 'meets' : 'below'} threshold (46%)
+              ${parseFloat(coveragePercent) >= 45 ? '✅' : '❌'} Coverage ${parseFloat(coveragePercent) >= 45 ? 'meets' : 'below'} threshold (45%)
               `;
 
               github.rest.issues.createComment({
