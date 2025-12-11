@@ -380,7 +380,7 @@ func TestGetURLModule_HTTPServer(t *testing.T) {
 	testContent := "test file content"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(testContent))
+		_, _ = w.Write([]byte(testContent))
 	}))
 	defer server.Close()
 
@@ -401,7 +401,7 @@ func TestGetURLModule_HTTPServerNotFound(t *testing.T) {
 	// Create a test HTTP server that returns 404
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte("Not Found"))
+		_, _ = w.Write([]byte("Not Found"))
 	}))
 	defer server.Close()
 

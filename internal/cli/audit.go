@@ -298,7 +298,7 @@ var auditClearCmd = &cobra.Command{
 		if !force {
 			fmt.Printf("This will delete audit records older than %d days. Continue? (y/n): ", days)
 			var response string
-			fmt.Scanln(&response)
+			_, _ = fmt.Scanln(&response)
 			if strings.ToLower(response) != "y" {
 				fmt.Println("Canceled.")
 				return nil
@@ -426,7 +426,7 @@ func init() {
 	// Export flags
 	auditExportCmd.Flags().StringP("format", "f", "json", "Output format: json, csv, html, markdown")
 	auditExportCmd.Flags().StringP("output", "o", "", "Output file path (required)")
-	auditExportCmd.MarkFlagRequired("output")
+	_ = auditExportCmd.MarkFlagRequired("output")
 
 	// Clear flags
 	auditClearCmd.Flags().IntP("days", "d", 30, "Delete records older than this many days")

@@ -360,16 +360,16 @@ func BenchmarkPhase1_IdempotentVsMultipleRuns(b *testing.B) {
 	b.Run("FirstRun", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			module.stateStore = make(map[string]int) // Reset
-			module.Execute(ctx, host, args)
+			_ = module.Execute(ctx, host, args)
 		}
 	})
 
 	// First set the state
-	module.Execute(ctx, host, args)
+	_ = module.Execute(ctx, host, args)
 
 	b.Run("IdempotentRun", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			module.Execute(ctx, host, args)
+			_ = module.Execute(ctx, host, args)
 		}
 	})
 }

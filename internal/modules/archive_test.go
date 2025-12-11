@@ -185,10 +185,18 @@ func TestArchiveCollectFiles(t *testing.T) {
 	testDir := filepath.Join(tmpDir, "subdir")
 	testFile3 := filepath.Join(testDir, "test3.txt")
 
-	os.MkdirAll(testDir, 0o755)
-	os.WriteFile(testFile1, []byte("content1"), 0o644)
-	os.WriteFile(testFile2, []byte("content2"), 0o644)
-	os.WriteFile(testFile3, []byte("content3"), 0o644)
+	if err := os.MkdirAll(testDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	if err := os.WriteFile(testFile1, []byte("content1"), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+	if err := os.WriteFile(testFile2, []byte("content2"), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+	if err := os.WriteFile(testFile3, []byte("content3"), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
 
 	// Test collecting files with glob
 	pattern := filepath.Join(tmpDir, "*.txt")
