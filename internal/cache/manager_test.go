@@ -781,7 +781,7 @@ func BenchmarkManager_GetOrSet(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		key := fmt.Sprintf("key-%d", i%100) // Reuse keys to test caching
-		m.GetOrSet(ctx, key, factory)
+		_, _ = m.GetOrSet(ctx, key, factory)
 	}
 }
 
@@ -805,7 +805,7 @@ func BenchmarkManager_ConcurrentAccess(b *testing.B) {
 			if i%2 == 0 {
 				m.Get(ctx, key)
 			} else {
-				m.Set(ctx, key, i)
+				_ = m.Set(ctx, key, i)
 			}
 			i++
 		}

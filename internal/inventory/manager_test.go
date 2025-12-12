@@ -362,7 +362,9 @@ func TestManager_ClearFilters(t *testing.T) {
 func TestManager_GetInventoryStats(t *testing.T) {
 	manager := createTestManager()
 	ctx := context.Background()
-	_ = manager.LoadInventory(ctx, "test.yml")
+	if err := manager.LoadInventory(ctx, "test.yml"); err != nil {
+		t.Fatalf("LoadInventory() error = %v", err)
+	}
 
 	stats := manager.GetInventoryStats()
 

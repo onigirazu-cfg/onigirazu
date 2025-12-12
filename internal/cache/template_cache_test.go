@@ -138,7 +138,7 @@ func TestTemplateCache_Clear(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		templateStr := "Template {{ .value }}"
 		tmpl, _ := template.New("test").Parse(templateStr)
-		cache.Set(ctx, templateStr, tmpl)
+		_ = cache.Set(ctx, templateStr, tmpl)
 	}
 
 	if cache.Size() != 1 { // All templates are the same, so only 1 unique hash
@@ -171,7 +171,7 @@ func TestTemplateCache_LRUEviction(t *testing.T) {
 
 	for _, templateStr := range templates {
 		tmpl, _ := template.New("test").Parse(templateStr)
-		cache.Set(ctx, templateStr, tmpl)
+		_ = cache.Set(ctx, templateStr, tmpl)
 	}
 
 	// Cache should have 3 entries
@@ -208,7 +208,7 @@ func TestTemplateCache_Stats(t *testing.T) {
 	tmpl, _ := template.New("test").Parse(templateStr)
 
 	// Set template
-	cache.Set(ctx, templateStr, tmpl)
+	_ = cache.Set(ctx, templateStr, tmpl)
 
 	// Hit
 	cache.Get(ctx, templateStr)
@@ -249,7 +249,7 @@ func TestTemplateCache_ConcurrentAccess(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		go func() {
 			for j := 0; j < 100; j++ {
-				cache.GetOrParse(ctx, templateStr, funcMap)
+				_, _ = cache.GetOrParse(ctx, templateStr, funcMap)
 			}
 			done <- true
 		}()
@@ -285,8 +285,8 @@ func TestTemplateCache_HashCollision(t *testing.T) {
 	tmpl2, _ := template.New("test2").Parse(template2)
 
 	// Set both templates
-	cache.Set(ctx, template1, tmpl1)
-	cache.Set(ctx, template2, tmpl2)
+	_ = cache.Set(ctx, template1, tmpl1)
+	_ = cache.Set(ctx, template2, tmpl2)
 
 	// Both should be retrievable
 	cached1, found1 := cache.Get(ctx, template1)
