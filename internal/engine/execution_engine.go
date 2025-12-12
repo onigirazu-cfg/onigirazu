@@ -747,7 +747,7 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 		}
 
 		if attempt < maxAttempts {
-			delay := time.Duration(task.RetryDelay) * time.Second
+			delay := task.RetryDelay
 			if delay <= 0 {
 				delay = 1 * time.Second
 			}
