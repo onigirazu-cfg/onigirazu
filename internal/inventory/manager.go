@@ -773,10 +773,7 @@ func (m *Manager) isValidHostname(hostname string) bool {
 
 	// Check for valid characters
 	for _, char := range hostname {
-		if !((char >= 'a' && char <= 'z') ||
-			(char >= 'A' && char <= 'Z') ||
-			(char >= '0' && char <= '9') ||
-			char == '-' || char == '.') {
+		if (char < 'a' || char > 'z') && (char < 'A' || char > 'Z') && (char < '0' || char > '9') && char != '-' && char != '.' {
 			return false
 		}
 	}

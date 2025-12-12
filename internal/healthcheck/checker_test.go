@@ -477,12 +477,8 @@ func TestCheckAllSkipUnavailableHosts(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	report, err := checker.CheckAll(ctx)
+	report, _ := checker.CheckAll(ctx)
 
-	// Should not error when skip is enabled
-	if err != nil && config.SkipUnavailableHosts {
-		// This is OK if err is nil, but we're testing that it doesn't crash
-	}
 	if report == nil {
 		t.Error("Expected report even when skip is enabled")
 	}

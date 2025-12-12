@@ -76,9 +76,7 @@ func NewEngineWithPlugins(pluginManager *plugins.Manager) *Engine {
 	// Register built-in filter plugin
 	ctx := context.Background()
 	builtinFilters := plugins.NewBuiltinFiltersPlugin()
-	if err := pluginManager.Register(ctx, builtinFilters); err != nil {
-		// Log error but continue - built-in filters are already in funcMap
-	}
+	_ = pluginManager.Register(ctx, builtinFilters)
 
 	// Load custom filter plugins and add them to funcMap
 	engine.loadFilterPlugins(ctx)

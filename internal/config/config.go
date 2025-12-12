@@ -229,7 +229,7 @@ func LoadConfig(path string) (*Config, error) {
 // LoadConfigWithDiscovery loads configuration with priority-based discovery
 func LoadConfigWithDiscovery(path, playbookDir string) (*Config, error) {
 	// First try explicit path or discovery
-	configPath, priority := DiscoverConfigFilePath(path, playbookDir)
+	configPath, _ := DiscoverConfigFilePath(path, playbookDir)
 
 	// If no path found, return default config
 	if configPath == "" {
@@ -248,11 +248,6 @@ func LoadConfigWithDiscovery(path, playbookDir string) (*Config, error) {
 
 	if err := config.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid configuration: %w", err)
-	}
-
-	if priority > 0 {
-		// Log which priority level was used (in a non-verbose way)
-		// The logger is not available in this package, so we'll let the caller log if needed
 	}
 
 	return config, nil

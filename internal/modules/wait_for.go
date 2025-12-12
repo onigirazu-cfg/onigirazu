@@ -114,18 +114,13 @@ func (m *WaitForModule) Execute(ctx context.Context, host types.Host, args map[s
 
 		// Check condition based on parameters
 		conditionMet := false
-		var err error
 
 		if port > 0 {
-			conditionMet, err = m.checkPort(hostVal, port, state)
+			conditionMet, _ = m.checkPort(hostVal, port, state)
 		} else if path != "" && searchRegex == "" {
-			conditionMet, err = m.checkPath(path, state)
+			conditionMet, _ = m.checkPath(path, state)
 		} else if path != "" && searchRegex != "" {
-			conditionMet, err = m.checkPathRegex(path, searchRegex)
-		}
-
-		if err != nil && state != "absent" {
-			// Continue waiting if not absent state
+			conditionMet, _ = m.checkPathRegex(path, searchRegex)
 		}
 
 		if conditionMet {

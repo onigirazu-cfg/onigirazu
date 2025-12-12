@@ -229,15 +229,6 @@ func (v *Validator) validateMetadata(metadata *types.ExecutionMetadata) *Validat
 		Errors: []ValidationError{},
 	}
 
-	// These are all optional, but if they exist and are non-empty, validate them
-	if metadata.User == "" && v.strictMode {
-		// User can be empty but ideally shouldn't be
-	}
-
-	if metadata.Hostname == "" && v.strictMode {
-		// Hostname can be empty but ideally shouldn't be
-	}
-
 	return vr
 }
 

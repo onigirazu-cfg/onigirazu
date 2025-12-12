@@ -60,7 +60,7 @@ func (m *Manager) ComputeFile(filepath string) (*ChecksumResult, error) {
 	if cached := m.getFromCache(filepath); cached != nil {
 		// Verify file hasn't changed
 		info, err := os.Stat(filepath)
-		if err == nil && info.ModTime() == cached.Result.ModTime && info.Size() == cached.Result.Size {
+		if err == nil && info.ModTime().Equal(cached.Result.ModTime) && info.Size() == cached.Result.Size {
 			return cached.Result, nil
 		}
 		// Cache miss - file was modified

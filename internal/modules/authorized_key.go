@@ -172,9 +172,7 @@ func (m *AuthorizedKeyModule) Execute(ctx context.Context, host types.Host, args
 		}
 
 		// Set proper permissions
-		if err := os.Chown(authKeysPath, os.Getuid(), os.Getgid()); err != nil {
-			// Continue anyway - may fail if not running as root
-		}
+		_ = os.Chown(authKeysPath, os.Getuid(), os.Getgid())
 	}
 
 	result.Output["user"] = username
