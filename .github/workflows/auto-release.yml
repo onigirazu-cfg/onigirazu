@@ -99,20 +99,37 @@ jobs:
     - name: Calculate next version
       id: version
       run: |
+        set -e
+        
         # Get the latest tag
         LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
         echo "Current version: $LATEST_TAG"
 
         # Remove 'v' prefix for semver calculation
         CURRENT_VERSION=${LATEST_TAG#v}
+        echo "Parsed version: $CURRENT_VERSION"
 
-        # Parse version numbers
-        IFS='.' read -r MAJOR MINOR PATCH PRERELEASE <<< "$CURRENT_VERSION"
+        # Use parameter expansion to extract version parts
+        # Convert "1.62.6" to array via replace
+        VERSION_STRING="${CURRENT_VERSION%-*}"  # Remove prerelease if exists
+        
+        # Split on dots using awk for safety
+        MAJOR=$(echo "$VERSION_STRING" | awk -F. '{print $1}')
+        MINOR=$(echo "$VERSION_STRING" | awk -F. '{print $2}')
+        PATCH=$(echo "$VERSION_STRING" | awk -F. '{print $3}')
+        
+        # Default to 0 if empty
+        MAJOR=${MAJOR:-0}
         MINOR=${MINOR:-0}
         PATCH=${PATCH:-0}
+        
+        echo "Version parts: MAJOR=$MAJOR MINOR=$MINOR PATCH=$PATCH"
 
         # Calculate next version based on release type
-        case "${{ needs.check-changes.outputs.release_type }}" in
+        RELEASE_TYPE=${{ needs.check-changes.outputs.release_type }}
+        echo "Release type: ${RELEASE_TYPE}"
+        
+        case "${RELEASE_TYPE}" in
           "major")
             NEXT_VERSION="$((MAJOR + 1)).0.0"
             ;;
@@ -126,7 +143,7 @@ jobs:
             NEXT_VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))"-alpha
             ;;
           *)
-            echo "Invalid release type: ${{ needs.check-changes.outputs.release_type }}"
+            echo "Invalid release type: $RELEASE_TYPE"
             exit 1
             ;;
         esac
