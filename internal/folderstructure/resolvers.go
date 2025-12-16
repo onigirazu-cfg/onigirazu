@@ -18,11 +18,11 @@ type FileResolver struct {
 
 func NewFileResolver(detector *Detector) *FileResolver {
 	config := ResolverConfig{
-		DirectoryName: "files",
-		CacheKeyPrefix: "file",
+		DirectoryName:     "files",
+		CacheKeyPrefix:    "file",
 		HasDirectoryField: func(ps *ProjectStructure) bool { return ps.HasFiles },
-		TTL: 1 * time.Hour,
-		MaxCacheSize: 1000,
+		TTL:               1 * time.Hour,
+		MaxCacheSize:      1000,
 		NotFoundMessage: func(path string) string {
 			return fmt.Sprintf("file not found: %s", path)
 		},
@@ -50,11 +50,11 @@ type TemplateResolver struct {
 
 func NewTemplateResolver(detector *Detector) *TemplateResolver {
 	config := ResolverConfig{
-		DirectoryName: "templates",
-		CacheKeyPrefix: "template",
+		DirectoryName:     "templates",
+		CacheKeyPrefix:    "template",
 		HasDirectoryField: func(ps *ProjectStructure) bool { return ps.HasTemplates },
-		TTL: 30 * time.Minute,
-		MaxCacheSize: 500,
+		TTL:               30 * time.Minute,
+		MaxCacheSize:      500,
 		NotFoundMessage: func(path string) string {
 			return fmt.Sprintf("template not found: %s", path)
 		},

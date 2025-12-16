@@ -10,12 +10,12 @@ import (
 )
 
 type ResolverConfig struct {
-	DirectoryName string
-	CacheKeyPrefix string
+	DirectoryName     string
+	CacheKeyPrefix    string
 	HasDirectoryField func(*ProjectStructure) bool
-	TTL time.Duration
-	MaxCacheSize int
-	NotFoundMessage func(path string) string
+	TTL               time.Duration
+	MaxCacheSize      int
+	NotFoundMessage   func(path string) string
 }
 
 type BaseResolver struct {
