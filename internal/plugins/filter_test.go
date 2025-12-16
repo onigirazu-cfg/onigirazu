@@ -334,7 +334,7 @@ func BenchmarkUpperFilter(b *testing.B) {
 	input := "hello world this is a test string"
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		UpperFilter(input)
+		_ = UpperFilter(input)
 	}
 }
 
@@ -342,7 +342,7 @@ func BenchmarkLowerFilter(b *testing.B) {
 	input := "HELLO WORLD THIS IS A TEST STRING"
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		LowerFilter(input)
+		_ = LowerFilter(input)
 	}
 }
 
@@ -351,7 +351,7 @@ func BenchmarkReplaceFilter(b *testing.B) {
 	args := []interface{}{"world", "go"}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		ReplaceFilter(input, args...)
+		_, _ = ReplaceFilter(input, args...)
 	}
 }
 
@@ -360,7 +360,7 @@ func BenchmarkJoinFilter(b *testing.B) {
 	args := []interface{}{","}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		JoinFilter(input, args...)
+		_, _ = JoinFilter(input, args...)
 	}
 }
 

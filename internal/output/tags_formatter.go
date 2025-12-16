@@ -104,11 +104,11 @@ func FormatTagsCSV(result *tagdiscovery.ListTagsResult) string {
 	w := csv.NewWriter(&output)
 
 	// Write header
-	w.Write([]string{"Tag Name", "Type", "Count", "Tasks"})
+	_ = w.Write([]string{"Tag Name", "Type", "Count", "Tasks"})
 
 	// Write regular tags
 	for _, tag := range result.GetSortedTags() {
-		w.Write([]string{
+		_ = w.Write([]string{
 			tag.Name,
 			"regular",
 			fmt.Sprintf("%d", tag.Count),
@@ -119,7 +119,7 @@ func FormatTagsCSV(result *tagdiscovery.ListTagsResult) string {
 	// Write special tags
 	for _, tag := range result.GetSortedSpecialTags() {
 		tagType := "special"
-		w.Write([]string{
+		_ = w.Write([]string{
 			tag.Name,
 			tagType,
 			fmt.Sprintf("%d", tag.Count),

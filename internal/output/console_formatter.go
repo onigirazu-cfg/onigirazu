@@ -21,7 +21,7 @@ func NewConsoleFormatter(noColor bool) *ConsoleFormatter {
 	width := 80
 	// Try to detect terminal width from environment or use default
 	if w := os.Getenv("COLUMNS"); w != "" {
-		fmt.Sscanf(w, "%d", &width)
+		_, _ = fmt.Sscanf(w, "%d", &width)
 	}
 
 	return &ConsoleFormatter{

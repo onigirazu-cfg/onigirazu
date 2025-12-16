@@ -127,7 +127,7 @@ func FormatTasksCSV(result *taskpreview.PreviewResult) string {
 	w := csv.NewWriter(&output)
 
 	// Write header
-	w.Write([]string{"Play", "Task Name", "Tags", "Module", "Status", "Skip Reason"})
+	_ = w.Write([]string{"Play", "Task Name", "Tags", "Module", "Status", "Skip Reason"})
 
 	for _, play := range result.Plays {
 		for _, task := range play.Tasks {
@@ -136,7 +136,7 @@ func FormatTasksCSV(result *taskpreview.PreviewResult) string {
 				status = "skip"
 			}
 
-			w.Write([]string{
+			_ = w.Write([]string{
 				play.Name,
 				task.Name,
 				strings.Join(task.Tags, "; "),
