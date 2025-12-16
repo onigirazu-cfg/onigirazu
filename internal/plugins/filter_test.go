@@ -334,7 +334,7 @@ func BenchmarkUpperFilter(b *testing.B) {
 	input := "hello world this is a test string"
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = UpperFilter(input)
+		_, _ = UpperFilter(input)
 	}
 }
 
@@ -342,7 +342,7 @@ func BenchmarkLowerFilter(b *testing.B) {
 	input := "HELLO WORLD THIS IS A TEST STRING"
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = LowerFilter(input)
+		_, _ = LowerFilter(input)
 	}
 }
 
