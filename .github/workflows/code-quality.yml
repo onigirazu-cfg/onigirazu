@@ -138,7 +138,7 @@ jobs:
         fi
 
     - name: Upload coverage reports
-      uses: actions/upload-artifact@v5
+      uses: actions/upload-artifact@v6
       with:
         name: coverage-report
         path: |
@@ -224,7 +224,7 @@ jobs:
         echo "Documentation generated successfully"
 
     - name: Upload documentation
-      uses: actions/upload-artifact@v5
+      uses: actions/upload-artifact@v6
       with:
         name: documentation
         path: docs/api/
@@ -257,7 +257,7 @@ jobs:
         fi
 
     - name: Upload benchmark results
-      uses: actions/upload-artifact@v5
+      uses: actions/upload-artifact@v6
       with:
         name: benchmark-results
         path: benchmark.txt
