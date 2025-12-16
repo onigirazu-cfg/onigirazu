@@ -55,7 +55,7 @@ func (m *RebootModule) Execute(ctx context.Context, host types.Host, args map[st
 		// Notify users about reboot if delay is set
 		if delaySeconds > 0 {
 			notifyCmd := fmt.Sprintf("wall '%s' || echo 'Warning message could not be broadcast'", msgText)
-			exec.Execute("sh", "-c", notifyCmd)
+			_, _ = exec.Execute("sh", "-c", notifyCmd)
 			result.Output["msg"] = msgText
 			result.Output["pre_reboot_delay"] = delaySeconds
 

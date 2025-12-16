@@ -45,7 +45,7 @@ func (m *PauseModule) Execute(ctx context.Context, host types.Host, args map[str
 		if secsInt, ok := secsVal.(float64); ok {
 			seconds = int(secsInt)
 		} else if secsStr, ok := secsVal.(string); ok {
-			fmt.Sscanf(secsStr, "%d", &seconds)
+			_, _ = fmt.Sscanf(secsStr, "%d", &seconds)
 		}
 	}
 
@@ -54,7 +54,7 @@ func (m *PauseModule) Execute(ctx context.Context, host types.Host, args map[str
 		if minsInt, ok := minsVal.(float64); ok {
 			minutes = int(minsInt)
 		} else if minsStr, ok := minsVal.(string); ok {
-			fmt.Sscanf(minsStr, "%d", &minutes)
+			_, _ = fmt.Sscanf(minsStr, "%d", &minutes)
 		}
 	}
 

@@ -157,7 +157,7 @@ func (suite *IdempotencyTestSuite) TestPreCheckOptimization(
 	ctx := context.Background()
 
 	// First run - warm up
-	fullModule.Execute(ctx, host, args)
+	_, _ = fullModule.Execute(ctx, host, args)
 
 	// Second run - should be faster if pre-check is working
 	startTime := time.Now()

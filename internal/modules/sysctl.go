@@ -205,10 +205,10 @@ func (m *SysctlModule) handleAbsent(ctx context.Context, exec *executor.CommandE
 			newContent := strings.Join(newLines, "\n")
 			if newContent != "" {
 				writeCmd := fmt.Sprintf("echo '%s' | tee '%s' > /dev/null", strings.ReplaceAll(newContent, "'", "'\\''"), sysctlFile)
-				exec.Execute("sh", "-c", writeCmd)
+				_, _ = exec.Execute("sh", "-c", writeCmd)
 			} else {
 				// Remove empty file
-				exec.Execute("rm", "-f", sysctlFile)
+				_, _ = exec.Execute("rm", "-f", sysctlFile)
 			}
 
 			result.Output["removed_from_file"] = sysctlFile
@@ -217,7 +217,7 @@ func (m *SysctlModule) handleAbsent(ctx context.Context, exec *executor.CommandE
 
 	// Reload sysctl settings if requested
 	if reload {
-		exec.Execute("sysctl", "-p")
+		_, _ = exec.Execute("sysctl", "-p")
 	}
 
 	result.Changed = true

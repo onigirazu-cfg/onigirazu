@@ -118,7 +118,7 @@ func (m *MountModule) handlePresent(ctx context.Context, exec *executor.CommandE
 		cmd := fmt.Sprintf("echo '%s' >> /etc/fstab", strings.ReplaceAll(fstabEntry, "'", "'\\''"))
 		if backup {
 			// Backup fstab first
-			exec.Execute("cp", "/etc/fstab", "/etc/fstab.bak")
+			_, _ = exec.Execute("cp", "/etc/fstab", "/etc/fstab.bak")
 		}
 		_, err := exec.Execute("sh", "-c", cmd)
 		if err != nil {
@@ -131,7 +131,7 @@ func (m *MountModule) handlePresent(ctx context.Context, exec *executor.CommandE
 	// Mount if not mounted
 	if !isMounted {
 		// Ensure mount point exists
-		exec.Execute("mkdir", "-p", path)
+		_, _ = exec.Execute("mkdir", "-p", path)
 
 		// Mount the filesystem
 		_, err := exec.Execute("mount", path)
@@ -171,7 +171,7 @@ func (m *MountModule) handleAbsent(ctx context.Context, exec *executor.CommandEx
 	// Remove from fstab
 	if inFstab {
 		if backup {
-			exec.Execute("cp", "/etc/fstab", "/etc/fstab.bak")
+			_, _ = exec.Execute("cp", "/etc/fstab", "/etc/fstab.bak")
 		}
 		// Remove the line from fstab
 		sedCmd := fmt.Sprintf("sed -i '%d d' /etc/fstab", line)

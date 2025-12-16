@@ -1500,7 +1500,9 @@ func (m *EnhancedTUIModel) handleModalKeypress(msg tea.KeyMsg) (tea.Model, tea.C
 
 			// Trigger graceful stop
 			if m.stopCallback != nil {
-				go m.stopCallback()
+				go func() {
+					_ = m.stopCallback()
+				}()
 			}
 		}
 
