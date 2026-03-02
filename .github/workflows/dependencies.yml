@@ -187,7 +187,7 @@ jobs:
         govulncheck ./... >> security-report.md 2>&1 || echo "Scan completed with findings" >> security-report.md
 
     - name: Upload security report
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: security-audit-report
         path: security-report.md

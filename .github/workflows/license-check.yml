@@ -35,7 +35,7 @@ jobs:
         go-licenses report ./... > licenses.txt || echo "License report generation completed with warnings"
 
     - name: Upload license report
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: license-report
         path: licenses.txt
