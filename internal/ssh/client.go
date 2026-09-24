@@ -147,7 +147,7 @@ func (c *Client) ExecuteCommand(command string) (string, error) {
 
 	output, err := session.CombinedOutput(command)
 	if err != nil {
-		return string(output), fmt.Errorf("command failed: %v", err)
+		return string(output), fmt.Errorf("command failed: %w", err)
 	}
 
 	return string(output), nil
@@ -220,6 +220,21 @@ func (c *Client) IsAlive() bool {
 
 // IsLocal checks if the host is localhost
 func IsLocal(host types.Host) bool {
+	// An explicit connection type wins
+	for _, key := range []string{"onigirazu_connection", "ansible_connection"} {
+		switch host.Vars[key] {
+		case "local":
+			return true
+		case "ssh":
+			return false
+		}
+	}
+
+	// A non-default SSH port on a loopback address is a forwarded remote (container, tunnel)
+	if host.Port != 0 && host.Port != 22 {
+		return false
+	}
+
 	if host.Address == "localhost" || host.Address == "127.0.0.1" || host.Address == "::1" {
 		return true
 	}

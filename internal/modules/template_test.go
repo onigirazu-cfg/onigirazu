@@ -480,7 +480,7 @@ func TestTemplateModule_Execute_WithHostVars(t *testing.T) {
 		Port:    2222,
 		Address: "127.0.0.1",
 		User:    "testuser",
-		Vars:    make(map[string]interface{}),
+		Vars:    map[string]interface{}{"onigirazu_connection": "local"},
 	}
 
 	args := map[string]interface{}{

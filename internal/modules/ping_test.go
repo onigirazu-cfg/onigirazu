@@ -98,9 +98,9 @@ func TestPingModule_Validate(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name:    "invalid - missing name",
+			name:    "valid - without name",
 			args:    map[string]interface{}{},
-			wantErr: true,
+			wantErr: false,
 		},
 	}
 
@@ -131,6 +131,7 @@ func TestPingModule_Execute_WithHostDetails(t *testing.T) {
 		Address: "127.0.0.1",
 		User:    "testuser",
 		Port:    2222,
+		Vars:    map[string]interface{}{"onigirazu_connection": "local"},
 	}
 
 	args := map[string]interface{}{

@@ -605,3 +605,22 @@ func TestClient_Close_WithRealClient(t *testing.T) {
 	err := client.Close()
 	assert.NoError(t, err)
 }
+
+// TestIsLocal tests local host detection
+func TestIsLocal_ConnectionAndPort(t *testing.T) {
+	tests := []struct {
+		name string
+		host types.Host
+		want bool
+	}{
+		{"loopback", types.Host{Address: "127.0.0.1"}, true},
+		{"localhost port 22", types.Host{Address: "localhost", Port: 22}, true},
+		{"forwarded port", types.Host{Address: "127.0.0.1", Port: 2222}, false},
+		{"explicit ssh", types.Host{Address: "127.0.0.1", Vars: map[string]interface{}{"onigirazu_connection": "ssh"}}, false},
+		{"explicit local", types.Host{Address: "10.255.255.1", Port: 2222, Vars: map[string]interface{}{"onigirazu_connection": "local"}}, true},
+		{"remote", types.Host{Address: "192.0.2.10"}, false},
+	}
+	for _, tt := range tests {
+		assert.Equal(t, tt.want, IsLocal(tt.host), tt.name)
+	}
+}

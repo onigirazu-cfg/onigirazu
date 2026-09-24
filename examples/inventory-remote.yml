@@ -9,8 +9,7 @@ groups:
         onigirazu_host: cs.rastiegaiev.com
         onigirazu_user: usx
         onigirazu_ssh_private_key_file: /Users/denys.rastiegaiev/.ssh/id_rsa
-        onigirazu_ssh_port: 22
-        onigirazu_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+        onigirazu_port: 22
         # onigirazu_become: true  # uncomment if sudo is needed
         # onigirazu_become_user: root  # uncomment if sudo is needed
 
@@ -20,8 +19,7 @@ groups:
         onigirazu_host: cs.rastiegaiev.com
         onigirazu_user: usx
         onigirazu_ssh_private_key_file: /Users/denys.rastiegaiev/.ssh/id_rsa
-        onigirazu_ssh_port: 22
-        onigirazu_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+        onigirazu_port: 22
 
 # Alternative configuration with password authentication
 # (not recommended for production)
