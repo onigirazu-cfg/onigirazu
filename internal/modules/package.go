@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sync"
 	"sync/atomic"
@@ -449,7 +448,7 @@ func (m *UnifiedPackageModule) PreCheckState(ctx context.Context, host types.Hos
 	currentState := make(map[string]interface{})
 
 	for _, pkg := range packageSpecs {
-		installed := m.isPackageInstalled(ctx, pkg.Name)
+		installed := m.isPackageInstalled(ctx, host, args, pkg.Name)
 		currentState[pkg.Name] = installed
 
 		if state == "present" && !installed {
@@ -478,29 +477,15 @@ func (m *UnifiedPackageModule) PreCheckState(ctx context.Context, host types.Hos
 	}, nil
 }
 
-// isPackageInstalled checks if a package is installed (fast check ~30-50ms)
-func (m *UnifiedPackageModule) isPackageInstalled(ctx context.Context, pkgName string) bool {
-	// Try dpkg first (Debian/Ubuntu)
-	cmd := exec.CommandContext(ctx, "dpkg", "-l", pkgName)
-	if cmd.Run() == nil {
-		return true
-	}
-
-	// Try rpm (RedHat/CentOS/Fedora)
-	cmd = exec.CommandContext(ctx, "rpm", "-q", pkgName)
-	if cmd.Run() == nil {
-		return true
-	}
-
-	// Try pacman (Arch Linux)
-	cmd = exec.CommandContext(ctx, "pacman", "-Q", pkgName)
-	if cmd.Run() == nil {
-		return true
-	}
-
-	// Try zypper (SUSE/openSUSE)
-	cmd = exec.CommandContext(ctx, "zypper", "se", "-i", pkgName)
-	return cmd.Run() == nil
+// isPackageInstalled checks on the target host whether a package is installed
+func (m *UnifiedPackageModule) isPackageInstalled(ctx context.Context, host types.Host, args map[string]interface{}, pkgName string) bool {
+	p := shellQuote(pkgName)
+	script := "if command -v dpkg-query >/dev/null 2>&1; then dpkg-query -W -f='${Status}' " + p + " 2>/dev/null | grep -q 'install ok installed'; " +
+		"elif command -v rpm >/dev/null 2>&1; then rpm -q " + p + " >/dev/null 2>&1; " +
+		"elif command -v pacman >/dev/null 2>&1; then pacman -Q " + p + " >/dev/null 2>&1; " +
+		"else exit 1; fi"
+	_, err := runShellOnHost(ctx, host, args, script)
+	return err == nil
 }
 
 // Execute manages system packages with all features
@@ -1015,20 +1000,8 @@ func (m *UnifiedPackageModule) Validate(args map[string]interface{}) error {
 		return fmt.Errorf("name parameter is required")
 	}
 
-	if state, exists := args["state"]; exists {
-		if stateStr, ok := state.(string); ok {
-			validStates := []string{"present", "absent", "latest"}
-			valid := false
-			for _, validState := range validStates {
-				if stateStr == validState {
-					valid = true
-					break
-				}
-			}
-			if !valid {
-				return fmt.Errorf("invalid state: %s (must be one of: present, absent, latest)", stateStr)
-			}
-		}
+	if err := validatePackageState(args); err != nil {
+		return err
 	}
 
 	return nil
@@ -1226,4 +1199,17 @@ func generateStateHash(name, version, repository string) string {
 	data := fmt.Sprintf("%s:%s:%s", name, version, repository)
 	hash := sha256.Sum256([]byte(data))
 	return hex.EncodeToString(hash[:])
+}
+
+// validatePackageState checks the optional state argument of package modules
+func validatePackageState(args map[string]interface{}) error {
+	state, exists := args["state"]
+	if !exists {
+		return nil
+	}
+	switch state {
+	case "present", "absent", "latest":
+		return nil
+	}
+	return fmt.Errorf("invalid state: %v (must be one of: present, absent, latest)", state)
 }

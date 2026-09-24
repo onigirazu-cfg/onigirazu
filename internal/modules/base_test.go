@@ -52,7 +52,7 @@ func TestBaseModule_Execute(t *testing.T) {
 	}
 
 	args := map[string]interface{}{
-		"name": "Test Task",
+		"_task_name": "Test Task",
 	}
 
 	result, err := module.Execute(context.Background(), host, args)
@@ -150,14 +150,9 @@ func TestBaseModule_Validate(t *testing.T) {
 		t.Errorf("Expected validation to pass, got error: %v", err)
 	}
 
-	// Missing name
-	args = map[string]interface{}{}
-	err = module.Validate(args)
-	if err == nil {
-		t.Error("Expected validation error for missing name")
-	}
-	if err.Error() != "argument 'name' is required" {
-		t.Errorf("Expected required error message, got: %v", err)
+	// "name" is module-specific; the base module does not require it
+	if err := module.Validate(map[string]interface{}{}); err != nil {
+		t.Errorf("Expected validation to pass without name, got: %v", err)
 	}
 }
 

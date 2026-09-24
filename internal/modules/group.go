@@ -3,7 +3,6 @@ package modules
 import (
 	"context"
 	"fmt"
-	"os/exec"
 	"time"
 
 	"github.com/onigirazu-cfg/onigirazu/internal/executor"
@@ -49,8 +48,8 @@ func (m *GroupModuleFixed) PreCheckState(ctx context.Context, host types.Host, a
 	}
 
 	// Check current group existence using getent (fast: ~30ms)
-	cmd := exec.CommandContext(ctx, "getent", "group", groupname)
-	groupExists := cmd.Run() == nil
+	_, err := runOnHost(ctx, host, args, "getent", "group", groupname)
+	groupExists := err == nil
 
 	currentState := map[string]interface{}{
 		"exists": groupExists,
@@ -87,7 +86,7 @@ func (m *GroupModuleFixed) Execute(ctx context.Context, host types.Host, args ma
 	startTime := time.Now()
 
 	result := types.TaskResult{
-		TaskName:  getStringArg(args, "name", ""),
+		TaskName:  taskName(args),
 		Host:      host.Name,
 		Module:    m.name,
 		Timestamp: startTime,

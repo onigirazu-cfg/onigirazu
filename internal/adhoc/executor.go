@@ -162,13 +162,15 @@ func (e *Executor) executeOnHost(
 	for k, v := range task.Args {
 		moduleArgs[k] = v
 	}
-	if _, exists := moduleArgs["name"]; !exists {
-		// Use task name or generate a default one
-		if task.Name != "" {
-			moduleArgs["name"] = task.Name
-		} else {
-			moduleArgs["name"] = fmt.Sprintf("ad-hoc %s", task.Module)
-		}
+	moduleArgs["_task_name"] = task.Name
+	if task.Name == "" {
+		moduleArgs["_task_name"] = fmt.Sprintf("ad-hoc %s", task.Module)
+	}
+
+	if err := module.Validate(moduleArgs); err != nil {
+		result.Error = fmt.Errorf("invalid arguments for %s: %w", task.Module, err)
+		result.Duration = time.Since(startTime)
+		return result
 	}
 
 	// Execute module

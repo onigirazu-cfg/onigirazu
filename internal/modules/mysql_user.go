@@ -186,3 +186,8 @@ func (m *MySQLUserModule) grantPrivileges(ctx context.Context, exec *executor.Co
 
 	return nil
 }
+
+// Validate validates mysql_user module arguments
+func (m *MySQLUserModule) Validate(args map[string]interface{}) error {
+	return requireStringArg(args, "name")
+}
