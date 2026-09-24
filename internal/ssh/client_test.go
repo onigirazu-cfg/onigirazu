@@ -131,50 +131,18 @@ func TestNewClient_InvalidKeyFormat(t *testing.T) {
 	assert.Contains(t, err.Error(), "unable to parse private key")
 }
 
-// TestNewClient_DefaultPort tests that port defaults to 22
-// This test attempts a real SSH connection to a non-existent host
-// It may be flaky depending on network timeouts, so we skip it in CI environments
-func TestNewClient_DefaultPort(t *testing.T) {
-	// Skip in CI to avoid flaky network timeouts
-	if os.Getenv("CI") == "true" || os.Getenv("GITHUB_ACTIONS") == "true" {
-		t.Skip("Skipping flaky network test in CI environment")
+// TestDialAddress tests port defaulting and address formatting
+func TestDialAddress(t *testing.T) {
+	tests := []struct {
+		host types.Host
+		want string
+	}{
+		{types.Host{Address: "192.168.1.100"}, "192.168.1.100:22"},
+		{types.Host{Address: "192.168.1.100", Port: 2222}, "192.168.1.100:2222"},
+		{types.Host{Address: "::1"}, "[::1]:22"},
 	}
-
-	// Create temporary key file with valid SSH key
-	tmpDir := t.TempDir()
-	keyFile := filepath.Join(tmpDir, "test_key")
-
-	// Generate a valid test private key
-	keyBytes := generateTestPrivateKey(t)
-	err := os.WriteFile(keyFile, keyBytes, 0600)
-	require.NoError(t, err)
-
-	host := types.Host{
-		Name:    "test-host",
-		Address: "192.168.1.100",
-		User:    "testuser",
-		Port:    0, // Should default to 22
-		KeyFile: keyFile,
-	}
-
-	// This will fail to connect, but we're testing the port defaulting logic
-	// Set a timeout to prevent test from hanging
-	done := make(chan error, 1)
-	go func() {
-		client, err := NewClient(host)
-		done <- err
-		if client != nil {
-			client.Close()
-		}
-	}()
-
-	select {
-	case err := <-done:
-		if err != nil {
-			assert.Contains(t, err.Error(), "192.168.1.100:22")
-		}
-	case <-time.After(30 * time.Second):
-		t.Error("test timeout: connection attempt took too long")
+	for _, tt := range tests {
+		assert.Equal(t, tt.want, dialAddress(tt.host))
 	}
 }
 
