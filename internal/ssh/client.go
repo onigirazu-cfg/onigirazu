@@ -267,6 +267,9 @@ func (c *Client) WriteFile(remotePath string, data []byte, mode os.FileMode) err
 	if _, err := remoteFile.Write(data); err != nil {
 		return fmt.Errorf("failed to write to remote file %s: %v", remotePath, err)
 	}
+	if err := remoteFile.Close(); err != nil {
+		return fmt.Errorf("failed to close remote file %s: %v", remotePath, err)
+	}
 
 	// Set file permissions
 	if err := sftpClient.Chmod(remotePath, mode); err != nil {
@@ -317,6 +320,20 @@ func (c *Client) StatFile(remotePath string) (os.FileInfo, error) {
 	}
 
 	return fileInfo, nil
+}
+
+// Chmod changes permissions of a file on the remote host using SFTP
+func (c *Client) Chmod(remotePath string, mode os.FileMode) error {
+	sftpClient, err := sftp.NewClient(c.client)
+	if err != nil {
+		return fmt.Errorf("failed to create SFTP client: %v", err)
+	}
+	defer sftpClient.Close()
+
+	if err := sftpClient.Chmod(remotePath, mode); err != nil {
+		return fmt.Errorf("failed to set permissions on %s: %v", remotePath, err)
+	}
+	return nil
 }
 
 // getDefaultSSHKey returns the path to the default SSH key
