@@ -21,7 +21,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- `template` reports that `owner`/`group` are not supported yet instead of silently failing
+- **Security policy:** nothing is restricted by default (the built-in defaults blocked 23 of 44 modules and every path outside /tmp, /var/tmp, /home, /opt). A policy file is loaded from `--security-policy`, `$ONIGIRAZU_SECURITY_POLICY`, `./security-policy.json`, `~/.onigirazu/security-policy.json` or `/etc/onigirazu/security-policy.json`; heuristic checks need `"strict": true`; `allowed_hosts`, `allowed_ports` and `allowed_file_types` are now enforced
+- Modules act on the target host: `apt`, `yum`, `script` and the pre-checks of `user`, `group`, `service`, `package` ran on the control machine
+- The task title is no longer passed as the module's `name` argument
+- `owner`/`group` work in `template`, `copy` and `get_url`
+- `--check` no longer writes the state file or a rollback snapshot
 - Build artifacts and session reports removed from the repository
 
 Release notes for 1.62.1–1.62.7 are on [GitHub Releases](https://github.com/onigirazu-cfg/onigirazu/releases).

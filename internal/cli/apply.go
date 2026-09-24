@@ -26,6 +26,7 @@ import (
 	"github.com/onigirazu-cfg/onigirazu/internal/plugins"
 	"github.com/onigirazu-cfg/onigirazu/internal/progress"
 	"github.com/onigirazu-cfg/onigirazu/internal/rollback"
+	"github.com/onigirazu-cfg/onigirazu/internal/security"
 	sshpkg "github.com/onigirazu-cfg/onigirazu/internal/ssh"
 	"github.com/onigirazu-cfg/onigirazu/internal/state"
 	"github.com/onigirazu-cfg/onigirazu/internal/tagdiscovery"
@@ -348,6 +349,17 @@ Examples:
 				executionPool,
 				cacheManager,
 			)
+
+			policy, policySource, err := security.LoadPolicy(securityPolicyPath)
+			if err != nil {
+				return err
+			}
+			executionEngine.SetSecurityPolicy(policy)
+			if policySource != "" {
+				log.Info("Security policy loaded from %s", policySource)
+			} else {
+				log.Debug("No security policy file found, running without restrictions")
+			}
 
 			// Set execution timeout
 			if timeout > 0 {

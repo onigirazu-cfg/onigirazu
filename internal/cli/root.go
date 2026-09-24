@@ -19,6 +19,8 @@ var (
 	noColor        bool
 	showDebug      bool
 
+	securityPolicyPath string
+
 	// Legacy flags for backward compatibility
 	playbookPath string
 )
@@ -54,6 +56,7 @@ across your infrastructure with a focus on simplicity and reliability.`,
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Verbose output")
 	rootCmd.PersistentFlags().BoolVar(&noColor, "no-color", false, "Disable colored output")
 	rootCmd.PersistentFlags().BoolVar(&showDebug, "show-debug", false, "Show debug and info messages")
+	rootCmd.PersistentFlags().StringVar(&securityPolicyPath, "security-policy", "", "Path to security policy file (default: $ONIGIRAZU_SECURITY_POLICY, ./security-policy.json, ~/.onigirazu/security-policy.json, /etc/onigirazu/security-policy.json)")
 
 	// Legacy flags for backward compatibility (hidden from help)
 	rootCmd.PersistentFlags().StringVarP(&playbookPath, "playbook", "p", "", "Path to playbook file (legacy)")
