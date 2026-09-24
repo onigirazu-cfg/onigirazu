@@ -236,3 +236,8 @@ func (m *DockerImageModule) buildImage(ctx context.Context, exec *executor.Comma
 
 	return nil
 }
+
+// Validate validates docker_image module arguments
+func (m *DockerImageModule) Validate(args map[string]interface{}) error {
+	return requireStringArg(args, "name")
+}

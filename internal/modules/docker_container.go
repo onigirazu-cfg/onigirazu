@@ -278,3 +278,8 @@ func (m *DockerContainerModule) removeContainer(ctx context.Context, exec *execu
 	}
 	return nil
 }
+
+// Validate validates docker_container module arguments
+func (m *DockerContainerModule) Validate(args map[string]interface{}) error {
+	return requireStringArg(args, "name")
+}

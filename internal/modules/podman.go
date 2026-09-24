@@ -285,3 +285,8 @@ func (m *PodmanModule) removeContainer(ctx context.Context, name string, args ma
 	}
 	return nil
 }
+
+// Validate validates podman module arguments
+func (m *PodmanModule) Validate(args map[string]interface{}) error {
+	return requireStringArg(args, "name")
+}

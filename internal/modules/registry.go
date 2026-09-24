@@ -163,13 +163,8 @@ func (r *Registry) ExecuteTask(ctx context.Context, task *types.Task, host types
 		args[key] = value
 	}
 
-	// Add task name only if not already specified in args
-	if _, exists := args["name"]; !exists {
-		args["name"] = task.Name
-	}
-
-	// Always add task name as special parameter (for diff/state tracking)
-	// This preserves the display name even when "name" is used as a parameter
+	// The task name travels separately: "name" belongs to the module
+	// (user name, package name, ...) and must not be filled from the task title
 	args["_task_name"] = task.Name
 
 	// Add variables to args
@@ -186,5 +181,9 @@ func (r *Registry) ExecuteTask(ctx context.Context, task *types.Task, host types
 		args["_become_method"] = task.BecomeMethod
 	}
 
-	return module.Execute(ctx, host, args)
+	result, err := module.Execute(ctx, host, args)
+	if result.TaskName == "" {
+		result.TaskName = task.Name
+	}
+	return result, err
 }

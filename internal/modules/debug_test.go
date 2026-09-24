@@ -253,11 +253,11 @@ func TestDebugModule_Validate(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "missing_name",
+			name: "without_name",
 			args: map[string]interface{}{
 				"msg": "Hello",
 			},
-			wantErr: true,
+			wantErr: false,
 		},
 	}
 

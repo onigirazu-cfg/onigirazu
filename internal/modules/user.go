@@ -3,7 +3,6 @@ package modules
 import (
 	"context"
 	"fmt"
-	"os/exec"
 	"time"
 
 	"github.com/onigirazu-cfg/onigirazu/internal/executor"
@@ -49,8 +48,8 @@ func (m *UserModuleFixed) PreCheckState(ctx context.Context, host types.Host, ar
 	}
 
 	// Check current user existence using getent (fast: ~30ms)
-	cmd := exec.CommandContext(ctx, "getent", "passwd", username)
-	userExists := cmd.Run() == nil
+	_, err := runOnHost(ctx, host, args, "getent", "passwd", username)
+	userExists := err == nil
 
 	currentState := map[string]interface{}{
 		"exists": userExists,
@@ -87,7 +86,7 @@ func (m *UserModuleFixed) Execute(ctx context.Context, host types.Host, args map
 	startTime := time.Now()
 
 	result := types.TaskResult{
-		TaskName:  getStringArg(args, "name", ""),
+		TaskName:  taskName(args),
 		Host:      host.Name,
 		Module:    m.name,
 		Timestamp: startTime,

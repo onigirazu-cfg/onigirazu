@@ -1,10 +1,9 @@
 package modules
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
@@ -65,15 +64,14 @@ func (m *YumModule) PreCheckState(ctx context.Context, host types.Host, args map
 	allCorrect := true
 
 	for _, pkgName := range pkgNames {
-		cmd := exec.CommandContext(ctx, "rpm", "-q", pkgName)
-		isInstalled := cmd.Run() == nil
+		_, err := runOnHost(ctx, host, args, "rpm", "-q", pkgName)
+		isInstalled := err == nil
 
 		currentState[pkgName] = isInstalled
 
 		// Check if desired state matches current state
-		if state == "present" && !isInstalled {
-			allCorrect = false
-		} else if state == "absent" && isInstalled {
+		// "latest" cannot be decided without asking yum, so it always runs
+		if state == "latest" || (state == "present" && !isInstalled) || (state == "absent" && isInstalled) {
 			allCorrect = false
 		}
 	}
@@ -101,7 +99,7 @@ func (m *YumModule) Execute(ctx context.Context, host types.Host, args map[strin
 	startTime := time.Now()
 
 	result := types.TaskResult{
-		TaskName:  getStringArg(args, "name", ""),
+		TaskName:  taskName(args),
 		Host:      host.Name,
 		Module:    m.name,
 		Timestamp: startTime,
@@ -176,7 +174,7 @@ func (m *YumModule) Execute(ctx context.Context, host types.Host, args map[strin
 
 	// Update cache if requested
 	if updateCache {
-		if err := m.updateYumCache(ctx); err != nil {
+		if err := m.updateYumCache(ctx, host, args); err != nil {
 			result.Success = false
 			result.Error = fmt.Sprintf("failed to update cache: %v", err)
 			result.Duration = time.Since(startTime)
@@ -188,15 +186,16 @@ func (m *YumModule) Execute(ctx context.Context, host types.Host, args map[strin
 	// Handle package operations
 	if len(pkgNames) > 0 {
 		if state == "present" || state == "latest" {
-			if err := m.installPackages(ctx, pkgNames, state == "latest", enableRepoList, disableRepoList, security); err != nil {
+			changed, err := m.installPackages(ctx, host, args, pkgNames, state == "latest", enableRepoList, disableRepoList, security)
+			if err != nil {
 				result.Success = false
 				result.Error = fmt.Sprintf("failed to install packages: %v", err)
 				result.Duration = time.Since(startTime)
 				return result, nil
 			}
-			result.Changed = true
+			result.Changed = result.Changed || changed
 		} else if state == "absent" {
-			if err := m.removePackages(ctx, pkgNames); err != nil {
+			if err := m.removePackages(ctx, host, args, pkgNames); err != nil {
 				result.Success = false
 				result.Error = fmt.Sprintf("failed to remove packages: %v", err)
 				result.Duration = time.Since(startTime)
@@ -214,68 +213,66 @@ func (m *YumModule) Execute(ctx context.Context, host types.Host, args map[strin
 	return result, nil
 }
 
-func (m *YumModule) updateYumCache(ctx context.Context) error {
-	cmd := exec.CommandContext(ctx, "yum", "check-update")
-	return cmd.Run()
+// yumRun runs yum on the target host
+func yumRun(ctx context.Context, host types.Host, args map[string]interface{}, yumArgs ...string) (string, error) {
+	out, err := runOnHost(ctx, host, args, append([]string{"yum"}, yumArgs...)...)
+	if err != nil {
+		return out, fmt.Errorf("yum %s failed: %w", yumArgs[0], err)
+	}
+	return out, nil
 }
 
-func (m *YumModule) installPackages(ctx context.Context, packages []string, upgrade bool, enableRepo, disableRepo string, security bool) error {
-	args := []string{"install", "-y"}
+// updateYumCache refreshes metadata; check-update is not used because it exits 100
+// whenever updates are available
+func (m *YumModule) updateYumCache(ctx context.Context, host types.Host, args map[string]interface{}) error {
+	_, err := yumRun(ctx, host, args, "makecache")
+	return err
+}
 
-	// Add repo options
+// installPackages installs packages (upgrading them for latest/security) and reports
+// whether yum changed anything
+func (m *YumModule) installPackages(ctx context.Context, host types.Host, args map[string]interface{}, packages []string, upgrade bool, enableRepo, disableRepo string, security bool) (bool, error) {
+	var repoArgs []string
 	if enableRepo != "" {
-		args = append(args, "--enablerepo="+enableRepo)
+		repoArgs = append(repoArgs, "--enablerepo="+enableRepo)
 	}
 	if disableRepo != "" {
-		args = append(args, "--disablerepo="+disableRepo)
+		repoArgs = append(repoArgs, "--disablerepo="+disableRepo)
 	}
 
-	// Handle security updates
-	if security {
-		args = []string{"update", "-y", "--security"}
-		if enableRepo != "" {
-			args = append(args, "--enablerepo="+enableRepo)
-		}
-		if disableRepo != "" {
-			args = append(args, "--disablerepo="+disableRepo)
-		}
-	} else if upgrade {
-		args = []string{"update", "-y"}
-		if enableRepo != "" {
-			args = append(args, "--enablerepo="+enableRepo)
-		}
-		if disableRepo != "" {
-			args = append(args, "--disablerepo="+disableRepo)
-		}
-		args = append(args, packages...)
-	} else {
-		args = append(args, packages...)
+	var runs [][]string
+	switch {
+	case security:
+		runs = append(runs, append([]string{"update", "-y", "--security"}, repoArgs...))
+	case upgrade:
+		// update is a no-op for packages that are not installed yet
+		runs = append(runs, append(append([]string{"install", "-y"}, repoArgs...), packages...))
+		runs = append(runs, append(append([]string{"update", "-y"}, repoArgs...), packages...))
+	default:
+		runs = append(runs, append(append([]string{"install", "-y"}, repoArgs...), packages...))
 	}
 
-	cmd := exec.CommandContext(ctx, "yum", args...)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("yum failed: %s", stderr.String())
+	changed := false
+	for _, run := range runs {
+		out, err := yumRun(ctx, host, args, run...)
+		if err != nil {
+			return changed, err
+		}
+		if !strings.Contains(out, "Nothing to do") {
+			changed = true
+		}
 	}
-	return nil
+	return changed, nil
 }
 
-func (m *YumModule) removePackages(ctx context.Context, packages []string) error {
-	args := []string{"remove", "-y"}
-	args = append(args, packages...)
-
-	cmd := exec.CommandContext(ctx, "yum", args...)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("yum failed: %s", stderr.String())
-	}
-	return nil
+func (m *YumModule) removePackages(ctx context.Context, host types.Host, args map[string]interface{}, packages []string) error {
+	_, err := yumRun(ctx, host, args, append([]string{"remove", "-y"}, packages...)...)
+	return err
 }
 
 func (m *YumModule) Validate(args map[string]interface{}) error {
-	return m.BaseModule.Validate(args)
+	if err := m.BaseModule.Validate(args); err != nil {
+		return err
+	}
+	return validatePackageState(args)
 }

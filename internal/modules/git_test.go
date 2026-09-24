@@ -126,13 +126,12 @@ func TestGitModuleFixed_Validate(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "missing name",
+			name: "without name",
 			args: map[string]interface{}{
 				"repo": "https://github.com/user/repo.git",
 				"dest": "/opt/repo",
 			},
-			wantErr: true,
-			errMsg:  "argument 'name' is required",
+			wantErr: false,
 		},
 		{
 			name: "missing repo",

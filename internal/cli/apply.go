@@ -884,15 +884,17 @@ Examples:
 					currentState.Results = result.Plays
 				}
 
-				if err := stateManager.SaveState(ctx, currentState); err != nil {
-					log.Warn("Failed to save state after failure (manager): %v", err)
-				}
+				if !cfg.IsCheckMode() {
+					if err := stateManager.SaveState(ctx, currentState); err != nil {
+						log.Warn("Failed to save state after failure (manager): %v", err)
+					}
 
-				// Also save to backend
-				if err := stateBackend.SaveState(ctx, currentState); err != nil {
-					log.Warn("Failed to save state to backend: %v", err)
-				} else {
-					log.Info("State file saved to backend (failure recorded)")
+					// Also save to backend
+					if err := stateBackend.SaveState(ctx, currentState); err != nil {
+						log.Warn("Failed to save state to backend: %v", err)
+					} else {
+						log.Info("State file saved to backend (failure recorded)")
+					}
 				}
 
 				// Complete audit with failure status
@@ -909,8 +911,8 @@ Examples:
 			// Print formatted execution end
 			log.PrintExecutionEnd(summary)
 
-			// Create snapshot for rollback capability
-			if homeDir != "" {
+			// Create snapshot for rollback capability (check mode changed nothing)
+			if homeDir != "" && !cfg.IsCheckMode() {
 				snapshotDir := filepath.Join(homeDir, ".onigirazu", "snapshots")
 				snapshotMgr := rollback.NewSnapshotManager(snapshotDir)
 
@@ -981,17 +983,21 @@ Examples:
 				currentState.Results = result.Plays
 			}
 
-			log.Info("Saving state to: %s", cfg.StateFile)
-			if err := stateManager.SaveState(ctx, currentState); err != nil {
-				log.Warn("Failed to save final state (manager): %v", err)
-			}
-
-			// Also save to backend
-			if err := stateBackend.SaveState(ctx, currentState); err != nil {
-				log.Warn("Failed to save final state to backend: %v", err)
+			if cfg.IsCheckMode() {
+				log.Info("Check mode: state file and snapshot left untouched")
 			} else {
-				log.Info("State file successfully saved to backend with %d play results", len(currentState.Results))
-				log.Debug("State backend path: %s", stateBackend.GetPath())
+				log.Info("Saving state to: %s", cfg.StateFile)
+				if err := stateManager.SaveState(ctx, currentState); err != nil {
+					log.Warn("Failed to save final state (manager): %v", err)
+				}
+
+				// Also save to backend
+				if err := stateBackend.SaveState(ctx, currentState); err != nil {
+					log.Warn("Failed to save final state to backend: %v", err)
+				} else {
+					log.Info("State file successfully saved to backend with %d play results", len(currentState.Results))
+					log.Debug("State backend path: %s", stateBackend.GetPath())
+				}
 			}
 
 			// Complete audit with success status

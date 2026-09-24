@@ -264,30 +264,18 @@ func (m *GetURLModule) Execute(ctx context.Context, host types.Host, args map[st
 		return result, err
 	}
 
-	// Set file permissions
 	if mode != "" {
-		chmodCmd := fmt.Sprintf("chmod %s %s", mode, dest)
-		_, err = exec.ExecuteWithContext(ctx, "sh", "-c", chmodCmd)
-		if err != nil {
-			result.Output["warning"] = fmt.Sprintf("Failed to set permissions: %v", err)
+		if _, err := runOnHost(ctx, host, args, "chmod", mode, dest); err != nil {
+			result.Failed = true
+			result.Error = fmt.Sprintf("failed to set permissions: %v", err)
+			return result, err
 		}
 	}
 
-	// Set file ownership
-	if owner != "" || group != "" {
-		chownArg := owner
-		if group != "" {
-			if owner != "" {
-				chownArg = fmt.Sprintf("%s:%s", owner, group)
-			} else {
-				chownArg = fmt.Sprintf(":%s", group)
-			}
-		}
-		chownCmd := fmt.Sprintf("chown %s %s", chownArg, dest)
-		_, err = exec.ExecuteWithContext(ctx, "sh", "-c", chownCmd)
-		if err != nil {
-			result.Output["warning"] = fmt.Sprintf("Failed to set ownership: %v", err)
-		}
+	if _, err := ensureOwnership(ctx, host, args, dest, owner, group); err != nil {
+		result.Failed = true
+		result.Error = err.Error()
+		return result, err
 	}
 
 	result.Changed = true

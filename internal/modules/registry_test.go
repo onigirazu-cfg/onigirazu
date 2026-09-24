@@ -248,7 +248,7 @@ func TestRegistry_ExecuteTask(t *testing.T) {
 	mockModule := NewMockModule("test_module")
 	mockModule.executeFunc = func(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
 		return types.TaskResult{
-			TaskName: args["name"].(string),
+			TaskName: taskName(args),
 			Host:     host.Name,
 			Module:   "test_module",
 			Success:  true,
@@ -345,7 +345,7 @@ func TestRegistry_ExecuteTask_ArgumentMerging(t *testing.T) {
 	mockModule.executeFunc = func(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
 		receivedArgs = args
 		return types.TaskResult{
-			TaskName: args["name"].(string),
+			TaskName: taskName(args),
 			Host:     host.Name,
 			Module:   "test_module",
 			Success:  true,
@@ -375,9 +375,9 @@ func TestRegistry_ExecuteTask_ArgumentMerging(t *testing.T) {
 		t.Fatalf("Expected successful execution, got error: %v", err)
 	}
 
-	// Check that task name was added
-	if receivedArgs["name"] != "Test Task" {
-		t.Errorf("Expected name 'Test Task', got '%v'", receivedArgs["name"])
+	// Task name is passed separately, never as "name"
+	if receivedArgs["_task_name"] != "Test Task" {
+		t.Errorf("Expected _task_name 'Test Task', got '%v'", receivedArgs["_task_name"])
 	}
 
 	// Check that task args were passed
@@ -434,5 +434,36 @@ func BenchmarkRegistry_ExecuteTask(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_, _ = registry.ExecuteTask(context.Background(), task, host, nil)
+	}
+}
+
+// TestRegistry_ExecuteTask_TaskNameNotUsedAsName checks that the task title
+// never becomes the module's "name" argument (e.g. a user or package name)
+func TestRegistry_ExecuteTask_TaskNameNotUsedAsName(t *testing.T) {
+	registry := &Registry{modules: make(map[string]types.Module)}
+	var gotArgs map[string]interface{}
+	mockModule := NewMockModule("test_module")
+	mockModule.executeFunc = func(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
+		gotArgs = args
+		return types.TaskResult{Success: true}, nil
+	}
+	registry.RegisterModule(mockModule)
+
+	task := &types.Task{Name: "Create deploy user", Module: "test_module", Args: map[string]interface{}{"state": "present"}}
+	result, err := registry.ExecuteTask(context.Background(), task, types.Host{Name: "h"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, exists := gotArgs["name"]; exists {
+		t.Errorf("name must not be injected, got %v", gotArgs["name"])
+	}
+	if result.TaskName != "Create deploy user" {
+		t.Errorf("expected task name to be filled in, got %q", result.TaskName)
+	}
+}
+
+func TestUserModule_ValidateRequiresName(t *testing.T) {
+	if err := NewUserModule().Validate(map[string]interface{}{"state": "present", "_task_name": "Create deploy user"}); err == nil {
+		t.Error("expected an error when name is missing")
 	}
 }

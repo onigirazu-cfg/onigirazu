@@ -279,3 +279,8 @@ func (m *MySQLDBModule) importDatabase(ctx context.Context, exec *executor.Comma
 
 	return nil
 }
+
+// Validate validates mysql_db module arguments
+func (m *MySQLDBModule) Validate(args map[string]interface{}) error {
+	return requireStringArg(args, "name")
+}

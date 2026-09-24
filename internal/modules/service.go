@@ -3,7 +3,6 @@ package modules
 import (
 	"context"
 	"fmt"
-	"os/exec"
 	"strings"
 	"time"
 
@@ -106,12 +105,12 @@ func (m *ServiceModuleFixed) PreCheckState(ctx context.Context, host types.Host,
 		}
 	} else {
 		// Check if service is running (fast: ~50ms via systemctl)
-		isRunningCmd := exec.CommandContext(ctx, "systemctl", "is-active", name)
-		isRunning = isRunningCmd.Run() == nil
+		_, runErr := runOnHost(ctx, host, args, "systemctl", "is-active", name)
+		isRunning = runErr == nil
 
 		// Check if service is enabled (fast: ~50ms via systemctl)
-		isEnabledCmd := exec.CommandContext(ctx, "systemctl", "is-enabled", name)
-		isEnabled = isEnabledCmd.Run() == nil
+		_, enabledErr := runOnHost(ctx, host, args, "systemctl", "is-enabled", name)
+		isEnabled = enabledErr == nil
 	}
 
 	currentState := map[string]interface{}{

@@ -30,7 +30,7 @@ func (m *PauseModule) Execute(ctx context.Context, host types.Host, args map[str
 	startTime := time.Now()
 
 	result := types.TaskResult{
-		TaskName:  getStringArg(args, "name", ""),
+		TaskName:  taskName(args),
 		Host:      host.Name,
 		Module:    m.name,
 		Timestamp: startTime,
