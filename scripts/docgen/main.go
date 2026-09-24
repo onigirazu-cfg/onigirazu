@@ -228,7 +228,7 @@ func main() {
 	if err != nil {
 		fmt.Printf("Error executing template: %v\n", err)
 		_ = file.Close() // os.Exit skips deferred calls
-		os.Exit(1) //nolint:gocritic // file is closed explicitly above
+		os.Exit(1)       //nolint:gocritic // file is closed explicitly above
 	}
 
 	// Ensure data is flushed to disk before closing

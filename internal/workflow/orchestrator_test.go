@@ -278,8 +278,9 @@ func TestWorkflowOrchestrator_ExecuteWorkflow_Simple(t *testing.T) {
 	status := execution.Status
 	execution.mutex.RUnlock()
 
-	if status != StatusPending {
-		t.Errorf("Expected status pending, got '%s'", status)
+	// The execution runs in a goroutine, so it may already be running
+	if status != StatusPending && status != StatusRunning {
+		t.Errorf("Expected status pending or running, got '%s'", status)
 	}
 
 	if execution.Context == nil {

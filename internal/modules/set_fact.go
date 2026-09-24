@@ -3,6 +3,7 @@ package modules
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
@@ -28,7 +29,7 @@ func (m *SetFactModule) Execute(ctx context.Context, host types.Host, args map[s
 	startTime := time.Now()
 
 	result := types.TaskResult{
-		TaskName:  getTaskName(args),
+		TaskName:  taskName(args),
 		Host:      host.Name,
 		Module:    m.name,
 		Timestamp: startTime,
@@ -37,17 +38,7 @@ func (m *SetFactModule) Execute(ctx context.Context, host types.Host, args map[s
 		Output:    make(map[string]interface{}),
 	}
 
-	// Remove reserved fields from args to get only the facts to set
-	reservedFields := map[string]bool{
-		"name": true,
-	}
-
-	facts := make(map[string]interface{})
-	for key, value := range args {
-		if !reservedFields[key] {
-			facts[key] = value
-		}
-	}
+	facts := factArgs(args)
 
 	if len(facts) == 0 {
 		result.Success = false
@@ -73,18 +64,7 @@ func (m *SetFactModule) Validate(args map[string]interface{}) error {
 		return err
 	}
 
-	// Check that at least one fact is provided (excluding reserved fields)
-	reservedFields := map[string]bool{
-		"name": true,
-	}
-
-	hasFactToSet := false
-	for key := range args {
-		if !reservedFields[key] {
-			hasFactToSet = true
-			break
-		}
-	}
+	hasFactToSet := len(factArgs(args)) > 0
 
 	if !hasFactToSet {
 		return fmt.Errorf("set_fact module requires at least one fact to set")
@@ -93,10 +73,13 @@ func (m *SetFactModule) Validate(args map[string]interface{}) error {
 	return nil
 }
 
-// Helper function to safely get task name
-func getTaskName(args map[string]interface{}) string {
-	if name, ok := args["name"].(string); ok {
-		return name
+// factArgs returns the facts to set: every argument except internal "_" keys
+func factArgs(args map[string]interface{}) map[string]interface{} {
+	facts := make(map[string]interface{})
+	for key, value := range args {
+		if !strings.HasPrefix(key, "_") {
+			facts[key] = value
+		}
 	}
-	return "unnamed task"
+	return facts
 }

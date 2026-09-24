@@ -37,6 +37,9 @@ type SecurityConfig struct {
 	RequiredPermissions map[string]string `json:"required_permissions"`
 	AuditEnabled        bool              `json:"audit_enabled"`
 	LogLevel            string            `json:"log_level"`
+	// Strict enables heuristic checks: command chaining/substitution, dangerous
+	// patterns such as "rm -rf", system users/groups, ".." in paths
+	Strict bool `json:"strict"`
 }
 
 // ValidationRule represents a security validation rule
@@ -122,16 +125,25 @@ type SecurityWarning struct {
 	Metadata   map[string]interface{} `json:"metadata,omitempty"`
 }
 
-// DefaultSecurityConfig returns a default security configuration
+// DefaultSecurityConfig returns the default policy: no restrictions. Limits come
+// from a policy file (see LoadPolicy).
 func DefaultSecurityConfig() SecurityConfig {
 	return SecurityConfig{
-		AllowedHosts:        []string{"*"}, // Allow all hosts by default
+		RequiredPermissions: map[string]string{},
+		AuditEnabled:        true,
+		LogLevel:            "info",
+	}
+}
+
+// StrictSecurityConfig returns a restrictive example policy
+func StrictSecurityConfig() SecurityConfig {
+	return SecurityConfig{
+		AllowedHosts:        []string{"*"},
 		AllowedPorts:        []int{22, 80, 443, 8080, 9090},
 		AllowedModules:      []string{"command", "shell", "file", "copy", "fetch", "get_url", "template", "service", "package", "user", "group", "git", "debug", "set_fact", "stat", "lineinfile", "config", "cron", "systemd", "firewall", "find"},
 		BlockedCommands:     []string{"rm -rf /", "dd if=", "mkfs", "fdisk", "format"},
 		MaxFileSize:         100 * 1024 * 1024, // 100MB
 		AllowedFileTypes:    []string{".txt", ".conf", ".cfg", ".ini", ".yaml", ".yml", ".json", ".xml"},
-		RequireEncryption:   false,
 		MaxRetries:          3,
 		MaxTimeout:          time.Minute * 30,
 		AllowedDirectories:  []string{"/tmp", "/var/tmp", "/home", "/opt"},
@@ -139,6 +151,7 @@ func DefaultSecurityConfig() SecurityConfig {
 		RequiredPermissions: map[string]string{},
 		AuditEnabled:        true,
 		LogLevel:            "info",
+		Strict:              true,
 	}
 }
 
@@ -209,6 +222,17 @@ func (sv *SecurityValidator) ValidateHost(host types.Host) ValidationResult {
 	return result
 }
 
+// ValidateHostAccess checks a host against allowed_hosts and allowed_ports only
+func (sv *SecurityValidator) ValidateHostAccess(host types.Host) error {
+	if !sv.isAllowedHost(host.Address) && !sv.isAllowedHost(host.Name) {
+		return fmt.Errorf("host %s is not in allowed_hosts", host.Address)
+	}
+	if host.Port > 0 && !sv.isAllowedPort(host.Port) {
+		return fmt.Errorf("port %d of host %s is not in allowed_ports", host.Port, host.Name)
+	}
+	return nil
+}
+
 // ValidateTask validates task configuration
 func (sv *SecurityValidator) ValidateTask(task types.Task) ValidationResult {
 	startTime := time.Now()
@@ -228,14 +252,14 @@ func (sv *SecurityValidator) ValidateTask(task types.Task) ValidationResult {
 	}
 
 	// Validate timeout
-	if task.Timeout > sv.config.MaxTimeout {
+	if sv.config.MaxTimeout > 0 && task.Timeout > sv.config.MaxTimeout {
 		result.addViolation("timeout_too_long", RuleTypeCustom, SeverityMedium,
 			fmt.Sprintf("Task timeout %v exceeds maximum allowed timeout %v", task.Timeout, sv.config.MaxTimeout),
 			task.Timeout, fmt.Sprintf("Set timeout to less than %v", sv.config.MaxTimeout))
 	}
 
 	// Validate retries
-	if task.Retries > sv.config.MaxRetries {
+	if sv.config.MaxRetries > 0 && task.Retries > sv.config.MaxRetries {
 		result.addViolation("too_many_retries", RuleTypeCustom, SeverityMedium,
 			fmt.Sprintf("Task retries %d exceeds maximum allowed retries %d", task.Retries, sv.config.MaxRetries),
 			task.Retries, fmt.Sprintf("Set retries to less than %d", sv.config.MaxRetries))
@@ -245,7 +269,9 @@ func (sv *SecurityValidator) ValidateTask(task types.Task) ValidationResult {
 	sv.validateTaskArgs(task, &result)
 
 	// Check for dangerous patterns in task name or arguments
-	sv.checkDangerousPatterns(task, &result)
+	if sv.config.Strict {
+		sv.checkDangerousPatterns(task, &result)
+	}
 
 	result.Duration = time.Since(startTime)
 	result.calculateScore()
@@ -508,7 +534,7 @@ func (sv *SecurityValidator) validateKeyFile(keyFile string) error {
 
 func (sv *SecurityValidator) validateFilePath(path string) error {
 	// Check for path traversal patterns in original path
-	if strings.Contains(path, "..") {
+	if sv.config.Strict && strings.Contains(path, "..") {
 		return fmt.Errorf("path traversal detected")
 	}
 
@@ -581,6 +607,11 @@ func (sv *SecurityValidator) validateTaskArgs(task types.Task, result *Validatio
 						fmt.Sprintf("Destination path validation failed: %v", err),
 						destStr, "Use a valid destination path")
 				}
+				if !sv.isAllowedFileType(destStr) {
+					result.addViolation("file_type_not_allowed", RuleTypeFile, SeverityMedium,
+						fmt.Sprintf("Destination file type of %s is not in allowed_file_types", destStr),
+						destStr, "Add the extension to allowed_file_types")
+				}
 			}
 		}
 	case "file":
@@ -598,7 +629,7 @@ func (sv *SecurityValidator) validateTaskArgs(task types.Task, result *Validatio
 		if content, exists := task.Args["content"]; exists {
 			if contentStr, ok := content.(string); ok {
 				contentSize := int64(len(contentStr))
-				if contentSize > sv.config.MaxFileSize {
+				if sv.config.MaxFileSize > 0 && contentSize > sv.config.MaxFileSize {
 					result.addViolation("content_too_large", RuleTypeFile, SeverityHigh,
 						fmt.Sprintf("Content size %d bytes exceeds maximum allowed size %d bytes", contentSize, sv.config.MaxFileSize),
 						contentSize, fmt.Sprintf("Reduce content size to less than %d bytes", sv.config.MaxFileSize))
@@ -606,6 +637,9 @@ func (sv *SecurityValidator) validateTaskArgs(task types.Task, result *Validatio
 			}
 		}
 	case "user":
+		if !sv.config.Strict {
+			return
+		}
 		// Check for system user modifications
 		if name, exists := task.Args["name"]; exists {
 			if nameStr, ok := name.(string); ok {
@@ -637,6 +671,9 @@ func (sv *SecurityValidator) validateTaskArgs(task types.Task, result *Validatio
 			}
 		}
 	case "group":
+		if !sv.config.Strict {
+			return
+		}
 		// Check for system group modifications
 		if name, exists := task.Args["name"]; exists {
 			if nameStr, ok := name.(string); ok {
@@ -678,6 +715,10 @@ func (sv *SecurityValidator) validateCommand(command string, result *ValidationR
 				fmt.Sprintf("Command contains blocked pattern: %s", blocked),
 				command, "Remove blocked command pattern")
 		}
+	}
+
+	if !sv.config.Strict {
+		return
 	}
 
 	// Check for command substitution patterns

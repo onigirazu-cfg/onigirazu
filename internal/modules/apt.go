@@ -1,10 +1,9 @@
 package modules
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
@@ -67,15 +66,11 @@ func (m *AptModule) PreCheckState(ctx context.Context, host types.Host, args map
 	allCorrect := true
 
 	for _, pkgName := range pkgNames {
-		cmd := exec.CommandContext(ctx, "dpkg", "-l", pkgName)
-		isInstalled := cmd.Run() == nil
-
+		isInstalled := debPackageInstalled(ctx, host, args, pkgName)
 		currentState[pkgName] = isInstalled
 
-		// Check if desired state matches current state
-		if state == "present" && !isInstalled {
-			allCorrect = false
-		} else if state == "absent" && isInstalled {
+		// "latest" cannot be decided without asking apt, so it always runs
+		if state == "latest" || (state == "present" && !isInstalled) || (state == "absent" && isInstalled) {
 			allCorrect = false
 		}
 	}
@@ -103,7 +98,7 @@ func (m *AptModule) Execute(ctx context.Context, host types.Host, args map[strin
 	startTime := time.Now()
 
 	result := types.TaskResult{
-		TaskName:  getStringArg(args, "name", ""),
+		TaskName:  taskName(args),
 		Host:      host.Name,
 		Module:    m.name,
 		Timestamp: startTime,
@@ -182,7 +177,7 @@ func (m *AptModule) Execute(ctx context.Context, host types.Host, args map[strin
 
 	// Update cache if requested
 	if updateCache {
-		if err := m.updateAptCache(ctx); err != nil {
+		if err := m.updateAptCache(ctx, host, args); err != nil {
 			result.Success = false
 			result.Error = fmt.Sprintf("failed to update cache: %v", err)
 			result.Duration = time.Since(startTime)
@@ -194,15 +189,16 @@ func (m *AptModule) Execute(ctx context.Context, host types.Host, args map[strin
 	// Handle package operations
 	if len(pkgNames) > 0 {
 		if state == "present" || state == "latest" {
-			if err := m.installPackages(ctx, pkgNames, state == "latest"); err != nil {
+			changed, err := m.installPackages(ctx, host, args, pkgNames)
+			if err != nil {
 				result.Success = false
 				result.Error = fmt.Sprintf("failed to install packages: %v", err)
 				result.Duration = time.Since(startTime)
 				return result, nil
 			}
-			result.Changed = true // ✅ CORRECT: We actually made changes
+			result.Changed = result.Changed || changed
 		} else if state == "absent" {
-			if err := m.removePackages(ctx, pkgNames); err != nil {
+			if err := m.removePackages(ctx, host, args, pkgNames); err != nil {
 				result.Success = false
 				result.Error = fmt.Sprintf("failed to remove packages: %v", err)
 				result.Duration = time.Since(startTime)
@@ -214,7 +210,7 @@ func (m *AptModule) Execute(ctx context.Context, host types.Host, args map[strin
 
 	// Autoremove if requested
 	if autoremove {
-		if err := m.autoremovePackages(ctx); err != nil {
+		if err := m.autoremovePackages(ctx, host, args); err != nil {
 			result.Success = false
 			result.Error = fmt.Sprintf("failed to autoremove: %v", err)
 			result.Duration = time.Since(startTime)
@@ -225,7 +221,7 @@ func (m *AptModule) Execute(ctx context.Context, host types.Host, args map[strin
 
 	// Autoclean if requested
 	if autoclean {
-		if err := m.autocleanPackages(ctx); err != nil {
+		if err := m.autocleanPackages(ctx, host, args); err != nil {
 			result.Success = false
 			result.Error = fmt.Sprintf("failed to autoclean: %v", err)
 			result.Duration = time.Since(startTime)
@@ -242,52 +238,56 @@ func (m *AptModule) Execute(ctx context.Context, host types.Host, args map[strin
 	return result, nil
 }
 
-func (m *AptModule) updateAptCache(ctx context.Context) error {
-	cmd := exec.CommandContext(ctx, "apt-get", "update")
-	return cmd.Run()
-}
-
-func (m *AptModule) installPackages(ctx context.Context, packages []string, upgrade bool) error {
-	args := []string{"install", "-y"}
-	if upgrade {
-		args = []string{"install", "-y", "--only-upgrade"}
+// aptGet runs apt-get non-interactively on the target host
+func aptGet(ctx context.Context, host types.Host, args map[string]interface{}, aptArgs ...string) (string, error) {
+	argv := append([]string{"env", "DEBIAN_FRONTEND=noninteractive", "apt-get"}, aptArgs...)
+	out, err := runOnHost(ctx, host, args, argv...)
+	if err != nil {
+		return out, fmt.Errorf("apt-get %s failed: %w", aptArgs[0], err)
 	}
-	args = append(args, packages...)
+	return out, nil
+}
 
-	cmd := exec.CommandContext(ctx, "apt-get", args...)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
+// debPackageInstalled reports whether a package is fully installed on the host
+// (dpkg -l also lists removed packages that left config files behind)
+func debPackageInstalled(ctx context.Context, host types.Host, args map[string]interface{}, pkg string) bool {
+	out, err := runOnHost(ctx, host, args, "dpkg-query", "-W", "-f=${Status}", pkg)
+	return err == nil && strings.TrimSpace(out) == "install ok installed"
+}
 
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("apt-get failed: %s", stderr.String())
+func (m *AptModule) updateAptCache(ctx context.Context, host types.Host, args map[string]interface{}) error {
+	_, err := aptGet(ctx, host, args, "update")
+	return err
+}
+
+// installPackages installs packages or upgrades them to the latest version and
+// reports whether apt changed anything
+func (m *AptModule) installPackages(ctx context.Context, host types.Host, args map[string]interface{}, packages []string) (bool, error) {
+	out, err := aptGet(ctx, host, args, append([]string{"install", "-y"}, packages...)...)
+	if err != nil {
+		return false, err
 	}
-	return nil
+	return !strings.Contains(out, "0 upgraded, 0 newly installed"), nil
 }
 
-func (m *AptModule) removePackages(ctx context.Context, packages []string) error {
-	args := []string{"remove", "-y"}
-	args = append(args, packages...)
-
-	cmd := exec.CommandContext(ctx, "apt-get", args...)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("apt-get failed: %s", stderr.String())
-	}
-	return nil
+func (m *AptModule) removePackages(ctx context.Context, host types.Host, args map[string]interface{}, packages []string) error {
+	_, err := aptGet(ctx, host, args, append([]string{"remove", "-y"}, packages...)...)
+	return err
 }
 
-func (m *AptModule) autoremovePackages(ctx context.Context) error {
-	cmd := exec.CommandContext(ctx, "apt-get", "autoremove", "-y")
-	return cmd.Run()
+func (m *AptModule) autoremovePackages(ctx context.Context, host types.Host, args map[string]interface{}) error {
+	_, err := aptGet(ctx, host, args, "autoremove", "-y")
+	return err
 }
 
-func (m *AptModule) autocleanPackages(ctx context.Context) error {
-	cmd := exec.CommandContext(ctx, "apt-get", "autoclean")
-	return cmd.Run()
+func (m *AptModule) autocleanPackages(ctx context.Context, host types.Host, args map[string]interface{}) error {
+	_, err := aptGet(ctx, host, args, "autoclean")
+	return err
 }
 
 func (m *AptModule) Validate(args map[string]interface{}) error {
-	return m.BaseModule.Validate(args)
+	if err := m.BaseModule.Validate(args); err != nil {
+		return err
+	}
+	return validatePackageState(args)
 }

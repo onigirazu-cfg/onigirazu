@@ -597,8 +597,8 @@ func TestUserModule_Execute_AbsentState2(t *testing.T) {
 
 	// Result might fail on local machine if user doesn't exist or permission denied
 	// But structure should be valid
-	if result.TaskName != "testuser" {
-		t.Errorf("Expected task name 'testuser', got '%s'", result.TaskName)
+	if result.Module != "user" {
+		t.Errorf("Expected module 'user', got '%s'", result.Module)
 	}
 
 	if result.Host != "localhost" {

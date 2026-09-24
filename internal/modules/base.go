@@ -39,7 +39,7 @@ func (m *BaseModule) Execute(ctx context.Context, host types.Host, args map[stri
 	startTime := time.Now()
 
 	result := types.TaskResult{
-		TaskName:  getStringArg(args, "name", ""),
+		TaskName:  taskName(args),
 		Host:      host.Name,
 		Module:    m.name,
 		Timestamp: startTime,
@@ -67,10 +67,20 @@ func (m *BaseModule) Execute(ctx context.Context, host types.Host, args map[stri
 
 // Validate validates argument correctness
 func (m *BaseModule) Validate(args map[string]interface{}) error {
-	if _, exists := args["name"]; !exists {
-		return fmt.Errorf("argument 'name' is required")
+	return nil
+}
+
+// requireStringArg fails unless args[key] is a non-empty string
+func requireStringArg(args map[string]interface{}, key string) error {
+	if v, ok := args[key].(string); !ok || v == "" {
+		return fmt.Errorf("argument '%s' is required and must be a non-empty string", key)
 	}
 	return nil
+}
+
+// taskName returns the display name of the task the module runs for
+func taskName(args map[string]interface{}) string {
+	return getStringArg(args, "_task_name", "")
 }
 
 // Helper functions for argument parsing

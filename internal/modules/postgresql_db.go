@@ -232,3 +232,8 @@ func (m *PostgreSQLDBModule) restoreDatabase(ctx context.Context, exec *executor
 
 	return nil
 }
+
+// Validate validates postgresql_db module arguments
+func (m *PostgreSQLDBModule) Validate(args map[string]interface{}) error {
+	return requireStringArg(args, "name")
+}

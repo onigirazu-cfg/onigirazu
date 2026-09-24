@@ -52,7 +52,7 @@ Onigirazu is a modern, high-performance configuration management tool written in
 - **Error Handling**: Comprehensive error handling and reporting
 - **Audit & Analytics**: Track execution history, performance metrics, and audit data with `audit` command
 - **Complete Configuration Reference**: 35+ configuration options fully documented
-- **Security Policy Guide**: 13+ security options fully documented
+- **Security Policy**: optional JSON policy (modules, hosts, paths, commands); nothing is restricted without one
 - **Module Scaffolding Tool**: Generate new modules with complete boilerplate, unit tests, idempotency tests, and benchmarks in seconds
 
 ## Installation
@@ -867,7 +867,7 @@ All components implement well-defined interfaces for:
 These comprehensive guides cover all configuration options and security policies:
 
 - **[Complete Configuration Reference](docs/CONFIGURATION_REFERENCE.md)** - All 35+ configuration options with examples
-- **[Security Policy Guide](docs/SECURITY_POLICY_GUIDE.md)** - All 13+ security policy options with real-world examples
+- **[Security Policy Guide](docs/SECURITY_POLICY_GUIDE.md)** - Optional policy file: where it is loaded from and every key
 - **[Quick Start Configuration](docs/QUICK_START_CONFIGURATION.md)** - Get configured in 5 minutes
 - **[Configuration & Security Index](docs/INDEX_CONFIGURATION_SECURITY.md)** - Find answers by problem or role
 
