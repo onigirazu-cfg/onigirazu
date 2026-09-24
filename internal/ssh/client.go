@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/pkg/sftp"
@@ -120,13 +121,7 @@ func NewClientWithHostKeyManagerAndLogger(host types.Host, hostKeyManager *HostK
 		Timeout:         30 * time.Second,
 	}
 
-	// Default port to 22 if not specified
-	port := host.Port
-	if port == 0 {
-		port = 22
-	}
-
-	address := fmt.Sprintf("%s:%d", host.Address, port)
+	address := dialAddress(host)
 	lg.Debug("Attempting to connect to %s as user %s", address, host.User)
 	client, err := ssh.Dial("tcp", address, config)
 	if err != nil {
@@ -219,7 +214,7 @@ func (c *Client) IsAlive() bool {
 	if err != nil {
 		return false
 	}
-	session.Close()
+	_ = session.Close()
 	return true
 }
 
@@ -359,4 +354,13 @@ func (c *Client) CopyFile(localPath, remotePath string, mode os.FileMode) error 
 
 	// Write to remote
 	return c.WriteFile(remotePath, data, mode)
+}
+
+// dialAddress returns host:port for the SSH connection, defaulting the port to 22.
+func dialAddress(host types.Host) string {
+	port := host.Port
+	if port == 0 {
+		port = 22
+	}
+	return net.JoinHostPort(host.Address, strconv.Itoa(port))
 }

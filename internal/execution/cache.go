@@ -108,7 +108,7 @@ func (cm *CacheManager) Save(result *ExecutionResult) error {
 
 	// Also update "current.json" symlink
 	currentFile := filepath.Join(cm.cacheDir, "current.json")
-	os.Remove(currentFile) // Ignore error if file doesn't exist
+	_ = os.Remove(currentFile) // Ignore error if file doesn't exist
 	if err := os.WriteFile(currentFile, data, 0644); err != nil {
 		// Non-critical error
 		fmt.Fprintf(os.Stderr, "Warning: failed to update current.json: %v\n", err)

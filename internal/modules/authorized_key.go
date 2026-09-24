@@ -33,7 +33,7 @@ func (m *AuthorizedKeyModule) Execute(ctx context.Context, host types.Host, args
 	startTime := time.Now()
 
 	result := types.TaskResult{
-		TaskName:  args["name"].(string),
+		TaskName:  getStringArg(args, "name", ""),
 		Host:      host.Name,
 		Module:    m.name,
 		Timestamp: startTime,
@@ -142,7 +142,7 @@ func (m *AuthorizedKeyModule) Execute(ctx context.Context, host types.Host, args
 	} else if state == "absent" {
 		if keyExists {
 			// Remove the key
-			newKeys = append(existingKeys[:keyIndex], existingKeys[keyIndex+1:]...)
+			newKeys = append(append([]string{}, existingKeys[:keyIndex]...), existingKeys[keyIndex+1:]...)
 			result.Changed = true
 		}
 	}

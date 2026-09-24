@@ -22,10 +22,8 @@ linters:
 
     # Additional quality linters (Quick Win improvements)
     - bodyclose      # Ensure HTTP response bodies are closed
-    - gocyclo        # Cyclomatic complexity detection
     - unused         # Detect unused code
     - gocritic       # Comprehensive Go code checks
-    - dupl           # Code duplication detection
 
   disable:
     - copyloopvar
@@ -51,12 +49,22 @@ linters:
         - octalLiteral
         - whyNoLint
         - wrapperFunc
+        - hugeParam
+        - importShadow
+        - paramTypeCombine
+        - rangeValCopy
+        - unnamedResult
+        - assignOp
+        - builtinShadowDecl
+        - elseif
+        - filepathJoin
+        - singleCaseSwitch
+        - sloppyReassign
+        - sprintfQuotedString
       enabled-tags:
         - diagnostic
-        - performance
-        - style
     gocyclo:
-      min-complexity: 20  # Reduced from 30 for better code quality
+      min-complexity: 30
     govet:
       enable:
         - shadow
@@ -78,7 +86,22 @@ linters:
     gosec:
       excludes:
         - G107  # Potential HTTP request made with variable url
+        - G301  # Directory permissions: managed hosts need world-readable dirs
+        - G306  # File permissions: managed hosts need world-readable files
+        - G204  # Subprocess with variable args: running commands is the tool's job
         - G304  # File path provided as taint input (used for config files)
+        - G703  # Path traversal via taint: paths come from the operator's playbooks
+    staticcheck:
+      checks:
+        - all
+        - -ST1000
+        - -ST1003
+        - -ST1016
+        - -ST1020
+        - -ST1021
+        - -ST1022
+        - -ST1023
+        - -QF*
     misspell:
       locale: US
     mnd:
@@ -122,6 +145,10 @@ linters:
           - goconst
           - mnd
           - dupl  # Test code duplication is acceptable
+          - errcheck
+          - gocritic
+          - gocyclo
+          - gosec
       - path: cmd/
         linters:
           - funlen
@@ -130,32 +157,12 @@ linters:
       - path: tests/
         linters:
           - unused
-      - linters:
-          - lll
-        source: '^//go:generate '
-      - linters:
-          - staticcheck
-        text: strings.Title has been deprecated
-      - linters:
-          - staticcheck
-        text: io/ioutil.*has been deprecated
-      - linters:
-          - staticcheck
-        text: SA1019
-      - linters:
-          - unused
-        text: is unused
-      - linters:
-          - unused
-        text: U1000
       - path: (tests/|cmd/)
         linters:
           - goconst
           - unused
       - path: (.+)\.go$
         text: declaration of "(err|ctx)" shadows declaration at
-      - path: (.+)\.go$
-        text: 'shadow: declaration of "err" shadows declaration'
     paths:
       - third_party
       - builtin

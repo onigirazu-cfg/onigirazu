@@ -59,7 +59,7 @@ func NewSQLiteBackend(config *SQLiteConfig) (*SQLiteBackend, error) {
 
 	// Test connection
 	if err := db.PingContext(context.Background()); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("cannot connect to sqlite database: %w", err)
 	}
 
@@ -70,7 +70,7 @@ func NewSQLiteBackend(config *SQLiteConfig) (*SQLiteBackend, error) {
 
 	// Run migrations
 	if err := backend.Migrate(context.Background()); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("migration failed: %w", err)
 	}
 
@@ -201,8 +201,9 @@ func (sb *SQLiteBackend) GetStats() map[string]interface{} {
 
 	// Record count
 	var recordCount int64
-	sb.db.QueryRow("SELECT COUNT(*) FROM states").Scan(&recordCount)
-	stats["record_count"] = recordCount
+	if err := sb.db.QueryRow("SELECT COUNT(*) FROM states").Scan(&recordCount); err == nil {
+		stats["record_count"] = recordCount
+	}
 
 	// Configuration
 	stats["auto_vacuum"] = sb.config.AutoVacuum

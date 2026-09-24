@@ -224,7 +224,6 @@ Examples:
 
 			// Initialize plugin system
 			var pluginManager *plugins.Manager
-			var pluginInfos []logger.PluginInfo
 			if pluginsConfig != "" {
 				log.Info("Loading plugins from configuration: %s", pluginsConfig)
 				pluginConfig, err := plugins.LoadConfig(pluginsConfig)
@@ -246,12 +245,6 @@ Examples:
 						totalPlugins := 0
 						for _, pluginList := range allPlugins {
 							totalPlugins += len(pluginList)
-							for _, plugin := range pluginList {
-								pluginInfos = append(pluginInfos, logger.PluginInfo{
-									Name:    plugin.GetName(),
-									Version: plugin.GetVersion(),
-								})
-							}
 						}
 						log.Info("Plugins loaded successfully: %d plugins registered", totalPlugins)
 					}
@@ -275,12 +268,6 @@ Examples:
 								totalPlugins := 0
 								for _, pluginList := range allPlugins {
 									totalPlugins += len(pluginList)
-									for _, plugin := range pluginList {
-										pluginInfos = append(pluginInfos, logger.PluginInfo{
-											Name:    plugin.GetName(),
-											Version: plugin.GetVersion(),
-										})
-									}
 								}
 								log.Info("Auto-detected plugins loaded: %d plugins registered", totalPlugins)
 							}

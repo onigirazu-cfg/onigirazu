@@ -208,7 +208,10 @@ func (m *ConfigModule) executeDelete(ctx context.Context, result types.TaskResul
 			return m.failResult(result, fmt.Sprintf("failed to load config: %v", err))
 		}
 
-		keyStr := key.(string)
+		keyStr, ok := key.(string)
+		if !ok {
+			return m.failResult(result, "argument 'key' must be a string")
+		}
 		if m.deleteNestedKey(config, keyStr) {
 			result.Changed = true
 			if err := m.saveConfig(path, format, config); err != nil {
@@ -541,8 +544,7 @@ func (m *ConfigModule) validateConfig(config map[string]interface{}, schema inte
 
 // validateAgainstSchema performs basic schema validation
 func (m *ConfigModule) validateAgainstSchema(config, schema map[string]interface{}) error {
-	required, ok := schema["required"].([]interface{})
-	if ok {
+	if required, ok := schema["required"].([]interface{}); ok {
 		for _, req := range required {
 			if reqStr, ok := req.(string); ok {
 				if _, exists := config[reqStr]; !exists {

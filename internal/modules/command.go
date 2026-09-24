@@ -34,7 +34,7 @@ func (m *CommandModuleFixed) Execute(ctx context.Context, host types.Host, args 
 	startTime := time.Now()
 
 	result := types.TaskResult{
-		TaskName:  args["name"].(string),
+		TaskName:  getStringArg(args, "name", ""),
 		Host:      host.Name,
 		Module:    m.name,
 		Timestamp: startTime,
@@ -58,7 +58,7 @@ func (m *CommandModuleFixed) Execute(ctx context.Context, host types.Host, args 
 		return result, nil
 	}
 
-	command := args["command"].(string)
+	command, _ := args["command"].(string)
 	shell := false
 	if shellVal, exists := args["shell"]; exists {
 		if shellBool, ok := shellVal.(bool); ok {
@@ -92,12 +92,13 @@ func (m *CommandModuleFixed) Validate(args map[string]interface{}) error {
 		command = cmd
 	}
 
-	if _, ok := command.(string); !ok {
+	cmdStr, ok := command.(string)
+	if !ok {
 		return fmt.Errorf("argument 'command' must be a string")
 	}
 
 	// Check if command is not empty
-	if strings.TrimSpace(command.(string)) == "" {
+	if strings.TrimSpace(cmdStr) == "" {
 		return fmt.Errorf("command cannot be empty")
 	}
 

@@ -645,9 +645,9 @@ func (wo *WorkflowOrchestrator) executeStepActions(execution *WorkflowExecution,
 func (wo *WorkflowOrchestrator) executeAction(execution *WorkflowExecution, action StepAction) error {
 	switch action.Type {
 	case ActionTypeSetVariable:
-		if name, exists := action.Parameters["name"]; exists {
+		if name, ok := action.Parameters["name"].(string); ok {
 			if value, exists := action.Parameters["value"]; exists {
-				execution.Variables[name.(string)] = value
+				execution.Variables[name] = value
 			}
 		}
 	case ActionTypeNotify:

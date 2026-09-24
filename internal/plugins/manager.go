@@ -284,13 +284,14 @@ func (m *Manager) GetStats() map[string]interface{} {
 	defer m.mu.RUnlock()
 
 	stats := make(map[string]interface{})
-	stats["total"] = 0
+	total := 0
 
 	for pluginType, plugins := range m.plugins {
 		count := len(plugins)
 		stats[string(pluginType)] = count
-		stats["total"] = stats["total"].(int) + count
+		total += count
 	}
+	stats["total"] = total
 
 	return stats
 }

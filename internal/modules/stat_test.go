@@ -173,7 +173,7 @@ func TestStatModule_Execute_FileExists(t *testing.T) {
 	}
 
 	// Verify mode exists
-	if _, ok := output["mode"].(string); !ok {
+	if _, isString := output["mode"].(string); !isString {
 		t.Errorf("Expected mode to be string, got %T", output["mode"])
 	}
 

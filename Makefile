@@ -91,29 +91,13 @@ docs-clean:
 	rm -f docs/api/*.md docs/api/index.html
 	@echo "✅ Documentation cleaned"
 
-# Run example
+# Run example against localhost
 run-example: build
-	./bin/onigirazu -playbook examples/simple-playbook.yml -inventory examples/simple-inventory.yml -verbose
+	./bin/onigirazu apply examples/system-info.yml -i examples/inventory-localhost.yml
 
-# Run in check mode
+# Run example in check mode
 check-example: build
-	./bin/onigirazu -playbook examples/simple-playbook.yml -inventory examples/simple-inventory.yml -verbose -check
-
-# Run command example
-run-command: build
-	./bin/onigirazu -playbook examples/command-playbook.yml -inventory examples/simple-inventory.yml -verbose
-
-# Run advanced command example
-run-advanced: build
-	./bin/onigirazu -playbook examples/advanced-command-playbook.yml -inventory examples/simple-inventory.yml -verbose
-
-# Run user/group management example
-run-users: build
-	./bin/onigirazu -playbook examples/user-group-playbook.yml -inventory examples/simple-inventory.yml -verbose
-
-# Run macOS user/group example
-run-macos-users: build
-	./bin/onigirazu -playbook examples/macos-user-group-playbook.yml -inventory examples/simple-inventory.yml -verbose
+	./bin/onigirazu apply examples/system-info.yml -i examples/inventory-localhost.yml --check
 
 # Test release process locally
 release-test:
@@ -224,10 +208,6 @@ help:
 	@echo "Example commands:"
 	@echo "  run-example   - Run simple example"
 	@echo "  check-example - Run example in check mode"
-	@echo "  run-command   - Run command module example"
-	@echo "  run-advanced  - Run advanced command example"
-	@echo "  run-users     - Run user/group management example"
-	@echo "  run-macos-users - Run macOS user/group example"
 	@echo ""
 	@echo "Release commands:"
 	@echo "  release-test  - Test release process locally"

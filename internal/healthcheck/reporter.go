@@ -67,7 +67,7 @@ func (r *Reporter) printHostReport(report *HostHealthReport) {
 		}
 	}
 
-	w.Flush()
+	_ = w.Flush()
 }
 
 // printSummary prints the report summary

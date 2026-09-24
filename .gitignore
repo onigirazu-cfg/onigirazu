@@ -55,3 +55,12 @@ test-state-local*
 test-inventory-local.yml
 test_*.yml
 inventory.txt
+
+# Local build outputs and reports
+/onigirazu
+/module_scaffold
+/release/
+coverage.txt
+*_report.txt
+*_result.txt
+lint_output.txt

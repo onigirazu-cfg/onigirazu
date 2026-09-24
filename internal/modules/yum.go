@@ -101,7 +101,7 @@ func (m *YumModule) Execute(ctx context.Context, host types.Host, args map[strin
 	startTime := time.Now()
 
 	result := types.TaskResult{
-		TaskName:  args["name"].(string),
+		TaskName:  getStringArg(args, "name", ""),
 		Host:      host.Name,
 		Module:    m.name,
 		Timestamp: startTime,

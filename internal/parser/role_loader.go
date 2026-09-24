@@ -336,9 +336,9 @@ func (rl *RoleLoader) loadDependencies(ctx context.Context, role *types.Role) er
 // loadDependenciesRecursive recursively loads role dependencies with cycle detection
 func (rl *RoleLoader) loadDependenciesRecursive(ctx context.Context, role *types.Role, visited map[string]bool, stack []string) error {
 	// Check for cycles
-	for _, s := range stack {
+	for i, s := range stack {
 		if s == role.Name {
-			return fmt.Errorf("circular dependency detected: %s -> ... -> %s", stack[0], role.Name)
+			return fmt.Errorf("circular dependency detected: %s -> ... -> %s", stack[i], role.Name)
 		}
 	}
 

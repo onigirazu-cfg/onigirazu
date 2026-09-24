@@ -126,7 +126,7 @@ func (cv *CustomValidator) fileReadable(ctx context.Context, value interface{}, 
 	if err != nil {
 		return false, fmt.Errorf("file is not readable: %v", err)
 	}
-	file.Close()
+	_ = file.Close()
 
 	return true, nil
 }
@@ -485,7 +485,7 @@ func testDirWritable(dirPath string) error {
 		return err
 	}
 	defer os.Remove(tempFile.Name())
-	tempFile.Close()
+	_ = tempFile.Close()
 	return nil
 }
 

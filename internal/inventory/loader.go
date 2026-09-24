@@ -319,10 +319,10 @@ func (msl *MultiSourceLoader) parseDynamicInventoryOutput(
 	defer os.Remove(tempFile.Name())
 
 	if _, err := tempFile.Write(output); err != nil {
-		tempFile.Close()
+		_ = tempFile.Close()
 		return err
 	}
-	tempFile.Close()
+	_ = tempFile.Close()
 
 	// Parse using the standard parser
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

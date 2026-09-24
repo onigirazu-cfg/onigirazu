@@ -30,7 +30,7 @@ func (m *LineinfileModule) Execute(ctx context.Context, host types.Host, args ma
 	startTime := time.Now()
 
 	result := types.TaskResult{
-		TaskName:  args["name"].(string),
+		TaskName:  getStringArg(args, "name", ""),
 		Host:      host.Name,
 		Module:    m.name,
 		Timestamp: startTime,
@@ -54,8 +54,8 @@ func (m *LineinfileModule) Execute(ctx context.Context, host types.Host, args ma
 	}
 	defer exec.Close()
 
-	path := args["path"].(string)
-	line := args["line"].(string)
+	path, _ := args["path"].(string)
+	line, _ := args["line"].(string)
 
 	// Get optional parameters
 	state := "present"
@@ -298,7 +298,7 @@ func (m *LineinfileModule) ensureLine(lines []string, line string, pattern *rege
 	}
 
 	// No insert position specified, append at end
-	newLines = append(lines, line)
+	newLines = append(append([]string{}, lines...), line)
 	return newLines, true
 }
 
