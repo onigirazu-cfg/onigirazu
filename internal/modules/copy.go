@@ -85,7 +85,7 @@ func (m *CopyModule) Execute(ctx context.Context, host types.Host, args map[stri
 			result.Output["source_mode"] = "remote"
 			sourceChecksum := "" // Will be calculated after reading from remote
 
-			return m.executeRemote(host, dest, nil, backup, force, remoteSrc, mode, owner, group, src, sourceChecksum, result)
+			return m.applyOwnership(ctx, host, args, dest, owner, group)(m.executeRemote(host, dest, nil, backup, force, remoteSrc, mode, owner, group, src, sourceChecksum, result))
 		}
 
 		// Read from source file (local - either control machine or local host)
@@ -111,9 +111,9 @@ func (m *CopyModule) Execute(ctx context.Context, host types.Host, args map[stri
 	isLocal := sshpkg.IsLocal(host)
 
 	if isLocal {
-		return m.executeLocal(dest, sourceData, backup, force, mode, owner, group, sourceChecksum, result)
+		return m.applyOwnership(ctx, host, args, dest, owner, group)(m.executeLocal(dest, sourceData, backup, force, mode, owner, group, sourceChecksum, result))
 	} else {
-		return m.executeRemote(host, dest, sourceData, backup, force, remoteSrc, mode, owner, group, "", sourceChecksum, result)
+		return m.applyOwnership(ctx, host, args, dest, owner, group)(m.executeRemote(host, dest, sourceData, backup, force, remoteSrc, mode, owner, group, "", sourceChecksum, result))
 	}
 }
 
@@ -192,11 +192,6 @@ func (m *CopyModule) executeLocal(dest string, sourceData []byte, backup, force 
 	result.Success = true
 	result.Output["dest"] = dest
 	result.Output["size"] = len(sourceData)
-
-	// Set ownership if specified
-	if owner != "" || group != "" {
-		result.Output["ownership_warning"] = "ownership setting not implemented yet"
-	}
 
 	// Get final file info
 	if finalInfo, err := os.Stat(dest); err == nil {
@@ -317,11 +312,6 @@ func (m *CopyModule) executeRemote(host types.Host, dest string, sourceData []by
 	result.Output["dest"] = dest
 	result.Output["size"] = len(sourceData)
 
-	// Set ownership if specified
-	if owner != "" || group != "" {
-		result.Output["ownership_warning"] = "ownership setting not implemented yet"
-	}
-
 	// Get final file info
 	if finalInfo, err := sshClient.StatFile(dest); err == nil {
 		result.Output["mode_actual"] = finalInfo.Mode().String()
@@ -419,4 +409,22 @@ func copyFile(src, dst string) error {
 	}
 
 	return os.Chmod(dst, sourceInfo.Mode())
+}
+
+// applyOwnership enforces owner/group on dest after a successful copy
+func (m *CopyModule) applyOwnership(ctx context.Context, host types.Host, args map[string]interface{}, dest, owner, group string) func(types.TaskResult, error) (types.TaskResult, error) {
+	return func(result types.TaskResult, err error) (types.TaskResult, error) {
+		if err != nil || !result.Success {
+			return result, err
+		}
+		changed, err := ensureOwnership(ctx, host, args, dest, owner, group)
+		if err != nil {
+			result.Success = false
+			result.Failed = true
+			result.Error = err.Error()
+			return result, err
+		}
+		result.Changed = result.Changed || changed
+		return result, nil
+	}
 }

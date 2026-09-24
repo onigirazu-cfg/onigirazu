@@ -17,8 +17,7 @@ import (
 // TemplateModule handles template file processing
 type TemplateModule struct {
 	*BaseModule
-	engine   *template.Engine
-	executor *sshpkg.Client
+	engine *template.Engine
 }
 
 // TemplateOptions holds template processing options
@@ -63,25 +62,21 @@ func (m *TemplateModule) Execute(ctx context.Context, host types.Host, args map[
 		Timestamp: startTime,
 	}
 
-	// Check if we need to get/cache SSH executor for this host
-	if m.executor == nil {
-		if !sshpkg.IsLocal(host) {
-			pool := sshpkg.GetGlobalPool()
-			executor, err := pool.GetConnection(host)
-			if err != nil {
-				result.Error = fmt.Sprintf("failed to get SSH connection: %v", err)
-				result.Duration = time.Since(startTime)
-				return result, fmt.Errorf("%s", result.Error)
-			}
-			m.executor = executor
-		}
-	}
-
-	// Determine if this is a local or remote operation
 	if sshpkg.IsLocal(host) {
 		return m.executeLocal(ctx, host, args, result, startTime)
 	}
-	return m.executeRemote(ctx, host, args, result, startTime)
+
+	// The module instance is shared by all hosts, so the connection is per call
+	pool := sshpkg.GetGlobalPool()
+	client, err := pool.GetConnection(host)
+	if err != nil {
+		result.Error = fmt.Sprintf("failed to get SSH connection: %v", err)
+		result.Duration = time.Since(startTime)
+		return result, fmt.Errorf("%s", result.Error)
+	}
+	defer pool.ReleaseConnection(host)
+
+	return m.executeRemote(ctx, host, client, args, result, startTime)
 }
 
 // executeLocal handles template operations on localhost
@@ -179,37 +174,6 @@ func (m *TemplateModule) executeLocal(ctx context.Context, host types.Host, args
 		needsUpdate = true
 	}
 
-	if !needsUpdate {
-		// File is already up to date
-		result.Success = true
-		result.Changed = false
-		result.Output["message"] = "Template is already up to date"
-		result.Output["dest"] = dest
-		result.Output["checksum"] = oldChecksum
-		result.Duration = time.Since(startTime)
-		return result, nil
-	}
-
-	// Create backup if requested and file exists
-	if backup && len(originalContent) > 0 {
-		backupPath := dest + ".backup." + time.Now().Format("20060102-150405")
-		if err := os.WriteFile(backupPath, originalContent, 0600); err != nil {
-			result.Error = fmt.Sprintf("failed to create backup: %v", err)
-			result.Duration = time.Since(startTime)
-			return result, fmt.Errorf("%s", result.Error)
-		}
-		result.Output["backup_file"] = backupPath
-	}
-
-	// Create destination directory if it doesn't exist
-	destDir := filepath.Dir(dest)
-	if err := os.MkdirAll(destDir, 0750); err != nil {
-		result.Error = fmt.Sprintf("failed to create destination directory: %v", err)
-		result.Duration = time.Since(startTime)
-		return result, fmt.Errorf("%s", result.Error)
-	}
-
-	// Parse file mode
 	fileMode, err := parseFileMode(mode)
 	if err != nil {
 		result.Error = fmt.Sprintf("invalid file mode: %v", err)
@@ -217,33 +181,59 @@ func (m *TemplateModule) executeLocal(ctx context.Context, host types.Host, args
 		return result, fmt.Errorf("%s", result.Error)
 	}
 
-	// Write rendered content to destination
-	if err := os.WriteFile(dest, []byte(renderedContent), fileMode); err != nil {
-		result.Error = fmt.Sprintf("failed to write template to destination: %v", err)
+	changed := false
+	if needsUpdate {
+		// Create backup if requested and file exists
+		if backup && len(originalContent) > 0 {
+			backupPath := dest + ".backup." + time.Now().Format("20060102-150405")
+			if err := os.WriteFile(backupPath, originalContent, 0600); err != nil {
+				result.Error = fmt.Sprintf("failed to create backup: %v", err)
+				result.Duration = time.Since(startTime)
+				return result, fmt.Errorf("%s", result.Error)
+			}
+			result.Output["backup_file"] = backupPath
+		}
+
+		if err := os.MkdirAll(filepath.Dir(dest), 0750); err != nil {
+			result.Error = fmt.Sprintf("failed to create destination directory: %v", err)
+			result.Duration = time.Since(startTime)
+			return result, fmt.Errorf("%s", result.Error)
+		}
+
+		if err := os.WriteFile(dest, []byte(renderedContent), fileMode); err != nil {
+			result.Error = fmt.Sprintf("failed to write template to destination: %v", err)
+			result.Duration = time.Since(startTime)
+			return result, fmt.Errorf("%s", result.Error)
+		}
+		changed = true
+	}
+
+	// os.WriteFile keeps the mode of an existing file, so an explicit mode is enforced here
+	if _, modeSet := args["mode"]; modeSet {
+		info, err := os.Stat(dest)
+		if err == nil && info.Mode().Perm() != fileMode.Perm() {
+			if err := os.Chmod(dest, fileMode); err != nil {
+				result.Error = fmt.Sprintf("failed to set mode: %v", err)
+				result.Duration = time.Since(startTime)
+				return result, fmt.Errorf("%s", result.Error)
+			}
+			changed = true
+		}
+	}
+
+	ownershipChanged, err := ensureOwnership(ctx, host, args, dest, owner, group)
+	if err != nil {
+		result.Error = err.Error()
 		result.Duration = time.Since(startTime)
 		return result, fmt.Errorf("%s", result.Error)
 	}
+	changed = changed || ownershipChanged
 
-	if owner != "" || group != "" {
-		result.Output["ownership_warning"] = "owner/group are not supported by the template module yet"
-	}
-
-	result.Success = true
-	result.Changed = true
-	result.Output["message"] = "Template processed successfully"
-	if src != "" {
-		result.Output["src"] = src
-	}
-	result.Output["dest"] = dest
-	result.Output["size"] = len(renderedContent)
-	result.Output["checksum"] = newChecksum
-	result.Duration = time.Since(startTime)
-
-	return result, nil
+	return m.finishResult(result, startTime, changed, src, dest, renderedContent, newChecksum), nil
 }
 
 // executeRemote handles template operations on remote hosts via SFTP
-func (m *TemplateModule) executeRemote(ctx context.Context, host types.Host, args map[string]interface{}, result types.TaskResult, startTime time.Time) (types.TaskResult, error) {
+func (m *TemplateModule) executeRemote(ctx context.Context, host types.Host, client *sshpkg.Client, args map[string]interface{}, result types.TaskResult, startTime time.Time) (types.TaskResult, error) {
 	// Get parameters
 	src := getStringArg(args, "src", "")
 	content := getStringArg(args, "content", "")
@@ -264,6 +254,8 @@ func (m *TemplateModule) executeRemote(ctx context.Context, host types.Host, arg
 	// Get optional parameters
 	backup := getBoolArg(args, "backup", false)
 	mode := getStringArg(args, "mode", "0644")
+	owner := getStringArg(args, "owner", "")
+	group := getStringArg(args, "group", "")
 	variables := getMapArg(args, "vars", make(map[string]interface{}))
 	force := getBoolArg(args, "force", false)
 
@@ -314,50 +306,6 @@ func (m *TemplateModule) executeRemote(ctx context.Context, host types.Host, arg
 	// Calculate checksum of rendered content
 	newChecksum := fmt.Sprintf("%x", sha256.Sum256([]byte(renderedContent)))
 
-	// Check if destination file exists on remote host
-	var needsUpdate bool
-	var oldChecksum string
-
-	remoteFileInfo, err := m.executor.StatFile(dest)
-	if err == nil {
-		// File exists on remote host, read and compare
-		remoteContent, err := m.executor.ReadFile(dest)
-		if err != nil {
-			result.Error = fmt.Sprintf("failed to read remote file: %v", err)
-			result.Duration = time.Since(startTime)
-			return result, fmt.Errorf("%s", result.Error)
-		}
-
-		oldChecksum = fmt.Sprintf("%x", sha256.Sum256(remoteContent))
-		needsUpdate = oldChecksum != newChecksum || force
-
-		// Create backup if requested
-		if backup && needsUpdate {
-			backupPath := dest + ".backup." + time.Now().Format("20060102-150405")
-			if err := m.executor.WriteFile(backupPath, remoteContent, remoteFileInfo.Mode()); err != nil {
-				result.Error = fmt.Sprintf("failed to create backup on remote host: %v", err)
-				result.Duration = time.Since(startTime)
-				return result, fmt.Errorf("%s", result.Error)
-			}
-			result.Output["backup_file"] = backupPath
-		}
-	} else {
-		// File doesn't exist on remote host
-		needsUpdate = true
-	}
-
-	if !needsUpdate {
-		// File is already up to date
-		result.Success = true
-		result.Changed = false
-		result.Output["message"] = "Template is already up to date"
-		result.Output["dest"] = dest
-		result.Output["checksum"] = oldChecksum
-		result.Duration = time.Since(startTime)
-		return result, nil
-	}
-
-	// Parse file mode
 	fileMode, err := parseFileMode(mode)
 	if err != nil {
 		result.Error = fmt.Sprintf("invalid file mode: %v", err)
@@ -365,25 +313,73 @@ func (m *TemplateModule) executeRemote(ctx context.Context, host types.Host, arg
 		return result, fmt.Errorf("%s", result.Error)
 	}
 
-	// Write rendered content to remote destination
-	if err := m.executor.WriteFile(dest, []byte(renderedContent), fileMode); err != nil {
-		result.Error = fmt.Sprintf("failed to write template to remote destination: %v", err)
+	needsUpdate := true
+	remoteFileInfo, statErr := client.StatFile(dest)
+	if statErr == nil {
+		remoteContent, err := client.ReadFile(dest)
+		if err != nil {
+			result.Error = fmt.Sprintf("failed to read remote file: %v", err)
+			result.Duration = time.Since(startTime)
+			return result, fmt.Errorf("%s", result.Error)
+		}
+		needsUpdate = fmt.Sprintf("%x", sha256.Sum256(remoteContent)) != newChecksum || force
+
+		if backup && needsUpdate {
+			backupPath := dest + ".backup." + time.Now().Format("20060102-150405")
+			if err := client.WriteFile(backupPath, remoteContent, remoteFileInfo.Mode()); err != nil {
+				result.Error = fmt.Sprintf("failed to create backup on remote host: %v", err)
+				result.Duration = time.Since(startTime)
+				return result, fmt.Errorf("%s", result.Error)
+			}
+			result.Output["backup_file"] = backupPath
+		}
+	}
+
+	changed := false
+	if needsUpdate {
+		if err := client.WriteFile(dest, []byte(renderedContent), fileMode); err != nil {
+			result.Error = fmt.Sprintf("failed to write template to remote destination: %v", err)
+			result.Duration = time.Since(startTime)
+			return result, fmt.Errorf("%s", result.Error)
+		}
+		changed = true
+	} else if _, modeSet := args["mode"]; modeSet && remoteFileInfo.Mode().Perm() != fileMode.Perm() {
+		if err := client.Chmod(dest, fileMode); err != nil {
+			result.Error = err.Error()
+			result.Duration = time.Since(startTime)
+			return result, fmt.Errorf("%s", result.Error)
+		}
+		changed = true
+	}
+
+	ownershipChanged, err := ensureOwnership(ctx, host, args, dest, owner, group)
+	if err != nil {
+		result.Error = err.Error()
 		result.Duration = time.Since(startTime)
 		return result, fmt.Errorf("%s", result.Error)
 	}
+	changed = changed || ownershipChanged
 
+	return m.finishResult(result, startTime, changed, src, dest, renderedContent, newChecksum), nil
+}
+
+// finishResult fills a successful template result
+func (m *TemplateModule) finishResult(result types.TaskResult, startTime time.Time, changed bool, src, dest, rendered, checksum string) types.TaskResult {
 	result.Success = true
-	result.Changed = true
-	result.Output["message"] = "Template processed successfully on remote host"
+	result.Changed = changed
+	if changed {
+		result.Output["message"] = "Template processed successfully"
+	} else {
+		result.Output["message"] = "Template is already up to date"
+	}
 	if src != "" {
 		result.Output["src"] = src
 	}
 	result.Output["dest"] = dest
-	result.Output["size"] = len(renderedContent)
-	result.Output["checksum"] = newChecksum
+	result.Output["size"] = len(rendered)
+	result.Output["checksum"] = checksum
 	result.Duration = time.Since(startTime)
-
-	return result, nil
+	return result
 }
 
 // Validate validates template module arguments
