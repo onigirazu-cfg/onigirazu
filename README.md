@@ -1,6 +1,6 @@
 # Onigirazu
 
-**Current Release:** v1.57.0 — [System Control & Archive Module Release](https://github.com/onigirazu-cfg/onigirazu/releases/tag/v1.57.0)
+[![Release](https://img.shields.io/github/v/release/onigirazu-cfg/onigirazu)](https://github.com/onigirazu-cfg/onigirazu/releases/latest)
 
 Onigirazu is a modern, high-performance configuration management tool written in Go, inspired by Ansible. It provides a simple yet powerful way to automate infrastructure configuration, application deployment, and system administration tasks.
 
@@ -13,7 +13,7 @@ Onigirazu is a modern, high-performance configuration management tool written in
 - **🔄 Idempotent**: Safe to run multiple times
 - **📊 State Management**: Track changes and system state with rollback support
 - **🎯 5 Ad-hoc Input Formats**: Including unique natural language support
-- **📚 44 Built-in Modules**: Complete automation capabilities with system control, archive, and more (v1.57.0+)
+- **📚 44 Built-in Modules**: Complete automation capabilities with system control, archive, and more
 - **📖 Complete Documentation**: 2,500+ lines of guides for configuration, security, and testing
 - **🖥️ Interactive Mode (v1.54.0+)**: Real-time TUI dashboard with live logs, mode switching, and graceful control
 - **⚙️ Module Scaffolding Tool**: Rapidly generate new modules with boilerplate, tests, and best practices in seconds

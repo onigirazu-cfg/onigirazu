@@ -5,7 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.62.0] - 2025-01-08
+## [Unreleased]
+
+### Security
+
+- Go 1.26.6 and updated dependencies (x/crypto, x/net, x/text and others) close all govulncheck findings
+- Bitwarden password is passed to `bw login` through the environment instead of the command line
+
+### Fixed
+
+- Modules no longer panic when `name` is a list (e.g. `apt: {name: [curl, git]}`)
+- `archive` reports errors when finalizing tar, gzip and zip files
+- `config` rejects a non-string `key` instead of panicking
+- SSH client formats IPv6 addresses correctly
+
+### Changed
+
+- `template` reports that `owner`/`group` are not supported yet instead of silently failing
+- Build artifacts and session reports removed from the repository
+
+Release notes for 1.62.1–1.62.7 are on [GitHub Releases](https://github.com/onigirazu-cfg/onigirazu/releases).
+
+## [1.62.0] - 2025-10-30
 
 ### Added
 
@@ -50,7 +71,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Zero unnecessary network calls (intelligent caching)
 - Minimal memory footprint with configurable TTL
 
-## [1.61.1] - 2024-11-01
+## [1.61.1] - 2025-10-29
 
 ### Fixed
 
@@ -69,7 +90,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Internal implementation only - no user-facing changes
 
-## [1.61.0] - 2024-11-01
+## [1.61.0] - 2025-10-29
 
 ### Added
 
@@ -163,6 +184,6 @@ To use the new feature:
 
 See `docs/ANSIBLE_FOLDER_STRUCTURE.md` for detailed examples.
 
-## [1.60.0] - Previous Release
+## [1.60.0] - 2025-10-29
 
 (Previous changelog entries would go here)
