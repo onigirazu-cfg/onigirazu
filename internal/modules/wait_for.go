@@ -33,7 +33,7 @@ func (m *WaitForModule) Execute(ctx context.Context, host types.Host, args map[s
 	startTime := time.Now()
 
 	result := types.TaskResult{
-		TaskName:  args["name"].(string),
+		TaskName:  getStringArg(args, "name", ""),
 		Host:      host.Name,
 		Module:    m.name,
 		Timestamp: startTime,
@@ -150,7 +150,7 @@ func (m *WaitForModule) checkPort(host string, port int, state string) (bool, er
 
 	if state == "started" {
 		if err == nil {
-			conn.Close()
+			_ = conn.Close()
 			return true, nil
 		}
 		return false, err
@@ -159,7 +159,7 @@ func (m *WaitForModule) checkPort(host string, port int, state string) (bool, er
 			return true, nil
 		}
 		if conn != nil {
-			conn.Close()
+			_ = conn.Close()
 		}
 		return false, nil
 	}

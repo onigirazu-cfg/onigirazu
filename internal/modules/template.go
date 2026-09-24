@@ -224,12 +224,8 @@ func (m *TemplateModule) executeLocal(ctx context.Context, host types.Host, args
 		return result, fmt.Errorf("%s", result.Error)
 	}
 
-	// Set file ownership (if specified and running as root)
 	if owner != "" || group != "" {
-		if err := m.setFileOwnership(dest, owner, group); err != nil {
-			// Don't fail the task for ownership errors, just warn
-			result.Output["ownership_warning"] = fmt.Sprintf("failed to set ownership: %v", err)
-		}
+		result.Output["ownership_warning"] = "owner/group are not supported by the template module yet"
 	}
 
 	result.Success = true
@@ -470,12 +466,4 @@ func parseFileMode(mode string) (os.FileMode, error) {
 	}
 
 	return os.FileMode(modeInt), nil
-}
-
-// setFileOwnership sets file ownership (simplified implementation)
-func (m *TemplateModule) setFileOwnership(path, owner, group string) error {
-	// This is a simplified implementation
-	// In a real implementation, you would use os/user package to resolve
-	// user/group names to UIDs/GIDs and use syscall.Chown
-	return fmt.Errorf("ownership setting not implemented in this simplified version")
 }

@@ -87,7 +87,7 @@ func (m *UserModuleFixed) Execute(ctx context.Context, host types.Host, args map
 	startTime := time.Now()
 
 	result := types.TaskResult{
-		TaskName:  args["name"].(string),
+		TaskName:  getStringArg(args, "name", ""),
 		Host:      host.Name,
 		Module:    m.name,
 		Timestamp: startTime,
@@ -132,8 +132,8 @@ func (m *UserModuleFixed) Execute(ctx context.Context, host types.Host, args map
 		return result, nil
 	}
 
-	username := args["name"].(string)
-	state := args["state"].(string)
+	username, _ := args["name"].(string)
+	state, _ := args["state"].(string)
 
 	switch state {
 	case "present":

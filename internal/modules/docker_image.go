@@ -153,12 +153,11 @@ func (m *DockerImageModule) imageExists(ctx context.Context, exec *executor.Comm
 		return false, nil, err
 	}
 
-	info := &ImageInfo{
-		ID:         imageData["ID"].(string),
-		Repository: imageData["Repository"].(string),
-		Tag:        imageData["Tag"].(string),
-		Size:       imageData["Size"].(string),
-	}
+	info := &ImageInfo{}
+	info.ID, _ = imageData["ID"].(string)
+	info.Repository, _ = imageData["Repository"].(string)
+	info.Tag, _ = imageData["Tag"].(string)
+	info.Size, _ = imageData["Size"].(string)
 
 	return true, info, nil
 }

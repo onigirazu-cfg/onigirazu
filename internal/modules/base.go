@@ -39,7 +39,7 @@ func (m *BaseModule) Execute(ctx context.Context, host types.Host, args map[stri
 	startTime := time.Now()
 
 	result := types.TaskResult{
-		TaskName:  args["name"].(string),
+		TaskName:  getStringArg(args, "name", ""),
 		Host:      host.Name,
 		Module:    m.name,
 		Timestamp: startTime,

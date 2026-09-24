@@ -79,12 +79,10 @@ func runDiff(cmd *cobra.Command, args []string) error {
 	playbookPath := args[0]
 
 	// Get flags
-	verbose, _ := cmd.Flags().GetBool("verbose")
-	statePath, _ := cmd.Flags().GetString("state")
+	stateFile, _ := cmd.Flags().GetString("state")
 	changedOnly, _ := cmd.Flags().GetBool("changed-only")
 	detailed, _ := cmd.Flags().GetBool("detailed")
 	outputFormat, _ := cmd.Flags().GetString("output")
-	noColor, _ := cmd.Flags().GetBool("no-color")
 
 	// Check if playbook exists
 	if _, err := os.Stat(playbookPath); os.IsNotExist(err) {
@@ -119,10 +117,10 @@ func runDiff(cmd *cobra.Command, args []string) error {
 
 	// Load state
 	if verbose {
-		fmt.Printf("📊 Loading state from: %s\n", statePath)
+		fmt.Printf("📊 Loading state from: %s\n", stateFile)
 	}
 
-	stateManager := state.New(statePath)
+	stateManager := state.New(stateFile)
 	currentState, err := stateManager.LoadState()
 	if err != nil {
 		if verbose {

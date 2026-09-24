@@ -30,7 +30,7 @@ func (m *FileModule) Execute(ctx context.Context, host types.Host, args map[stri
 	startTime := time.Now()
 
 	result := types.TaskResult{
-		TaskName:  args["name"].(string),
+		TaskName:  getStringArg(args, "name", ""),
 		Host:      host.Name,
 		Module:    m.name,
 		Timestamp: startTime,
@@ -54,8 +54,8 @@ func (m *FileModule) Execute(ctx context.Context, host types.Host, args map[stri
 	}
 	defer exec.Close()
 
-	path := args["path"].(string)
-	state := args["state"].(string)
+	path, _ := args["path"].(string)
+	state, _ := args["state"].(string)
 
 	switch state {
 	case "present":
@@ -98,7 +98,7 @@ func (m *FileModule) Validate(args map[string]interface{}) error {
 	}
 
 	validStates := []string{"present", "absent", "directory", "touch"}
-	stateStr := state.(string)
+	stateStr, _ := state.(string)
 	for _, validState := range validStates {
 		if stateStr == validState {
 			return nil

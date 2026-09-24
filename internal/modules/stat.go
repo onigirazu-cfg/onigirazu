@@ -30,7 +30,7 @@ func (m *StatModule) Execute(ctx context.Context, host types.Host, args map[stri
 	startTime := time.Now()
 
 	result := types.TaskResult{
-		TaskName:  args["name"].(string),
+		TaskName:  getStringArg(args, "name", ""),
 		Host:      host.Name,
 		Module:    m.name,
 		Timestamp: startTime,
@@ -54,7 +54,7 @@ func (m *StatModule) Execute(ctx context.Context, host types.Host, args map[stri
 	}
 	defer exec.Close()
 
-	path := args["path"].(string)
+	path, _ := args["path"].(string)
 
 	// Get file info using remote stat command
 	statOutput, err := m.getRemoteFileStat(exec, path)

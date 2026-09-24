@@ -164,15 +164,21 @@ func (m *DockerContainerModule) getContainerState(ctx context.Context, exec *exe
 	}
 
 	container := containers[0]
+	id, _ := container["Id"].(string)
+	if len(id) > 12 {
+		id = id[:12]
+	}
+	containerConfig, _ := container["Config"].(map[string]interface{})
+	image, _ := containerConfig["Image"].(string)
 	state := &ContainerState{
 		Name:  name,
-		ID:    container["Id"].(string)[:12],
-		Image: container["Config"].(map[string]interface{})["Image"].(string),
+		ID:    id,
+		Image: image,
 	}
 
 	if stateMap, ok := container["State"].(map[string]interface{}); ok {
-		state.Running = stateMap["Running"].(bool)
-		state.Status = stateMap["Status"].(string)
+		state.Running, _ = stateMap["Running"].(bool)
+		state.Status, _ = stateMap["Status"].(string)
 		state.State = state.Status
 	}
 

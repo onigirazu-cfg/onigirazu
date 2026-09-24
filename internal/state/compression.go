@@ -66,7 +66,7 @@ func (cm *CompressionManager) CompressState(state *types.State) ([]byte, error) 
 	}
 
 	if _, err := gz.Write(jsonData); err != nil {
-		gz.Close()
+		_ = gz.Close()
 		return nil, fmt.Errorf("failed to write data to gzip: %w", err)
 	}
 
@@ -169,7 +169,7 @@ func (cm *CompressionManager) GetStats(state *types.State) (*CompressionStats, e
 	}
 
 	if _, err := gz.Write(jsonData); err != nil {
-		gz.Close()
+		_ = gz.Close()
 		return nil, fmt.Errorf("failed to write to gzip: %w", err)
 	}
 

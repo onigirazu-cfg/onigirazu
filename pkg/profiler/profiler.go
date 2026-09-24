@@ -76,7 +76,7 @@ func (pm *ProfileManager) StartProfiling() error {
 		pm.cpuFile = f
 
 		if err := pprof.StartCPUProfile(f); err != nil {
-			f.Close()
+			_ = f.Close()
 			return fmt.Errorf("failed to start CPU profile: %w", err)
 		}
 	}
@@ -91,7 +91,7 @@ func (pm *ProfileManager) StartProfiling() error {
 		pm.traceFile = f
 
 		if err := trace.Start(f); err != nil {
-			f.Close()
+			_ = f.Close()
 			return fmt.Errorf("failed to start trace: %w", err)
 		}
 	}
@@ -110,13 +110,13 @@ func (pm *ProfileManager) StopProfiling() error {
 	// Stop CPU profiling
 	if pm.cpuFile != nil {
 		pprof.StopCPUProfile()
-		pm.cpuFile.Close()
+		_ = pm.cpuFile.Close()
 	}
 
 	// Stop trace profiling
 	if pm.traceFile != nil {
 		trace.Stop()
-		pm.traceFile.Close()
+		_ = pm.traceFile.Close()
 	}
 
 	// Write memory profile if enabled

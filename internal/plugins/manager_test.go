@@ -382,7 +382,7 @@ func BenchmarkManager_Get(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = manager.Get("test-module", PluginTypeModule) //nolint:errcheck // Testing Get method
+		_, _ = manager.Get("test-module", PluginTypeModule)
 	}
 }
 
@@ -459,6 +459,6 @@ func BenchmarkCallbackManager_OnTaskStart(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = manager.OnTaskStart(ctx, task, host) //nolint:errcheck // Testing callback
+		_ = manager.OnTaskStart(ctx, task, host)
 	}
 }

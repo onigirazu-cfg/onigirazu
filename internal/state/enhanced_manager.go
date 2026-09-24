@@ -472,7 +472,9 @@ func (m *EnhancedManager) generateTaskID(task types.Task, host types.Host) strin
 func (m *EnhancedManager) getOrCalcTaskChecksum(taskID string, task types.Task, host types.Host) string {
 	// Check cache first (lock-free read with sync.Map)
 	if cached, ok := m.checksumCache.Load(taskID); ok {
-		return cached.(string)
+		if checksum, isString := cached.(string); isString {
+			return checksum
+		}
 	}
 
 	// Calculate and cache

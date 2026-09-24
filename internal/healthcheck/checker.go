@@ -505,7 +505,8 @@ func (c *Checker) checkServices(ctx context.Context, host types.Host, result *He
 	defer client.Close()
 
 	failedServices := []string{}
-	result.Details["services"] = make(map[string]string)
+	services := make(map[string]string)
+	result.Details["services"] = services
 
 	for _, service := range c.config.Services {
 		cmd := fmt.Sprintf("systemctl is-active %s", service)
@@ -513,9 +514,9 @@ func (c *Checker) checkServices(ctx context.Context, host types.Host, result *He
 
 		if err != nil {
 			failedServices = append(failedServices, service)
-			result.Details["services"].(map[string]string)[service] = "inactive"
+			services[service] = "inactive"
 		} else {
-			result.Details["services"].(map[string]string)[service] = "active"
+			services[service] = "active"
 		}
 	}
 

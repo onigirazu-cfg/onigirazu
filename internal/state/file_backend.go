@@ -129,7 +129,7 @@ func (fb *FileBackend) SaveState(ctx context.Context, state *types.State) error 
 	}
 
 	if err := os.Rename(tmpFile, fb.stateFile); err != nil {
-		os.Remove(tmpFile) // Clean up temp file
+		_ = os.Remove(tmpFile) // Clean up temp file
 		return fmt.Errorf("error renaming state file: %w", err)
 	}
 

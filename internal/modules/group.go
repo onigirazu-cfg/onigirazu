@@ -87,7 +87,7 @@ func (m *GroupModuleFixed) Execute(ctx context.Context, host types.Host, args ma
 	startTime := time.Now()
 
 	result := types.TaskResult{
-		TaskName:  args["name"].(string),
+		TaskName:  getStringArg(args, "name", ""),
 		Host:      host.Name,
 		Module:    m.name,
 		Timestamp: startTime,
@@ -135,8 +135,8 @@ func (m *GroupModuleFixed) Execute(ctx context.Context, host types.Host, args ma
 		return result, nil
 	}
 
-	groupname := args["name"].(string)
-	state := args["state"].(string)
+	groupname, _ := args["name"].(string)
+	state, _ := args["state"].(string)
 
 	switch state {
 	case "present":

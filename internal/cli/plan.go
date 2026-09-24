@@ -60,7 +60,6 @@ func runPlan(cmd *cobra.Command, args []string) error {
 	playbookPath := args[0]
 
 	// Get flags
-	verbose, _ := cmd.Flags().GetBool("verbose")
 	limitHosts, _ := cmd.Flags().GetString("limit")
 	detailed, _ := cmd.Flags().GetBool("detailed")
 	// Note: inventoryPaths is now a global variable accessible from root.go

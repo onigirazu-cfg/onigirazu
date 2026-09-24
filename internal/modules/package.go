@@ -214,8 +214,8 @@ func NewPackageStateCache(ttl time.Duration) *PackageStateCache {
 // Get retrieves a package state from cache
 func (c *PackageStateCache) Get(name string) (*PackageState, bool) {
 	if value, ok := c.cache.Load(name); ok {
-		state := value.(*PackageState)
-		if time.Since(state.LastChecked) < c.ttl {
+		state, isState := value.(*PackageState)
+		if isState && time.Since(state.LastChecked) < c.ttl {
 			atomic.AddInt64(&c.hits, 1)
 			return state, true
 		}

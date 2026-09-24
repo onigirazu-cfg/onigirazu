@@ -320,7 +320,8 @@ func runAdHocCommand(
 		// Check if error is due to context cancellation
 		if err == context.Canceled {
 			fmt.Fprintf(os.Stderr, "\n⚠️  Command execution interrupted by user\n")
-			os.Exit(130) // Standard exit code for SIGINT
+			signalHandler.Close() // os.Exit skips deferred calls
+			os.Exit(130) //nolint:gocritic // signalHandler is closed explicitly above
 		}
 		return fmt.Errorf("execution failed: %w", err)
 	}
