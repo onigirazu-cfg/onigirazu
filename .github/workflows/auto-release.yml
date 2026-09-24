@@ -22,6 +22,7 @@ on:
           - prerelease
 
 permissions:
+  actions: write
   contents: write
   pull-requests: write
 
@@ -53,9 +54,10 @@ jobs:
         echo "Commits since tag: $COMMITS_SINCE_TAG"
 
         # Check for conventional commit types
-        FEAT_COMMITS=$(git log ${LATEST_TAG}..HEAD --oneline --grep="^feat" --count)
-        FIX_COMMITS=$(git log ${LATEST_TAG}..HEAD --oneline --grep="^fix" --count)
-        BREAKING_COMMITS=$(git log ${LATEST_TAG}..HEAD --oneline --grep="BREAKING CHANGE" --count)
+        # git log has no --count; rev-list does
+        FEAT_COMMITS=$(git rev-list --count --grep="^feat" ${LATEST_TAG}..HEAD)
+        FIX_COMMITS=$(git rev-list --count --grep="^fix" ${LATEST_TAG}..HEAD)
+        BREAKING_COMMITS=$(git rev-list --count --grep="BREAKING CHANGE" ${LATEST_TAG}..HEAD)
 
         echo "Feature commits: $FEAT_COMMITS"
         echo "Fix commits: $FIX_COMMITS"
@@ -94,7 +96,6 @@ jobs:
       uses: actions/checkout@v6
       with:
         fetch-depth: 0
-        token: ${{ secrets.GH_TOKEN }}
 
     - name: Calculate next version
       id: version
@@ -228,7 +229,9 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Trigger release workflow
-      run: |
-        echo "Release ${{ steps.version.outputs.next_tag }} created successfully!"
-        echo "The release workflow will be triggered automatically."
+    # A tag pushed with GITHUB_TOKEN does not trigger other workflows,
+    # so the release gate (and through it the Release workflow) is started here
+    - name: Start release gate
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: gh workflow run release-gate.yml --ref ${{ steps.version.outputs.next_tag }}

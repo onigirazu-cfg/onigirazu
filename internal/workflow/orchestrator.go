@@ -16,6 +16,8 @@ type WorkflowOrchestrator struct {
 	eventBus   *EventBus
 	mutex      sync.RWMutex
 	config     OrchestratorConfig
+	// active counts started executions that have not finished yet
+	active atomic.Int64
 }
 
 // OrchestratorConfig holds orchestrator configuration
@@ -255,7 +257,8 @@ func (wo *WorkflowOrchestrator) ExecuteWorkflow(workflowID string, trigger *Work
 	}
 
 	// Check concurrent execution limit
-	if wo.countRunningExecutions() >= wo.config.MaxConcurrentWorkflows {
+	if wo.active.Add(1) > int64(wo.config.MaxConcurrentWorkflows) {
+		wo.active.Add(-1)
 		return nil, fmt.Errorf("maximum concurrent workflows reached")
 	}
 
@@ -290,6 +293,7 @@ func (wo *WorkflowOrchestrator) ExecuteWorkflow(workflowID string, trigger *Work
 
 // executeWorkflowAsync executes workflow asynchronously
 func (wo *WorkflowOrchestrator) executeWorkflowAsync(execution *WorkflowExecution, workflow *Workflow) {
+	defer wo.active.Add(-1)
 	defer execution.CancelFunc()
 
 	execution.mutex.Lock()
@@ -725,22 +729,6 @@ func (wo *WorkflowOrchestrator) calculateRetryDelay(policy RetryPolicy, attempt 
 	default:
 		return policy.Delay
 	}
-}
-
-func (wo *WorkflowOrchestrator) countRunningExecutions() int {
-	wo.mutex.RLock()
-	defer wo.mutex.RUnlock()
-
-	count := 0
-	for _, execution := range wo.executions {
-		execution.mutex.RLock()
-		isRunning := execution.Status == StatusRunning
-		execution.mutex.RUnlock()
-		if isRunning {
-			count++
-		}
-	}
-	return count
 }
 
 // GetWorkflow returns a workflow by ID
