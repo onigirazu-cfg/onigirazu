@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 env:
-  GO_VERSION: '1.25.5'
+  GO_VERSION: '1.26.6'
   # Minimum coverage thresholds per package
   # Adjusted to current baseline (45.3% from CI) - will be incrementally increased
   MIN_COVERAGE_OVERALL: 45
@@ -128,7 +128,7 @@ jobs:
 
     - name: Upload coverage artifacts
       if: always()
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: coverage-reports
         path: |
