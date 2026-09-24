@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -177,14 +178,9 @@ func (bc *BitwardenClient) authenticate(config map[string]interface{}) error {
 	}
 
 	// Check if BW_SESSION environment variable is set
-	cmd := exec.Command("sh", "-c", "echo $BW_SESSION")
-	output, err := cmd.Output()
-	if err == nil && len(output) > 0 {
-		token := strings.TrimSpace(string(output))
-		if token != "" {
-			bc.sessionToken = token
-			return nil
-		}
+	if token := strings.TrimSpace(os.Getenv("BW_SESSION")); token != "" {
+		bc.sessionToken = token
+		return nil
 	}
 
 	// Authenticate using email and password
@@ -202,9 +198,11 @@ func (bc *BitwardenClient) authenticate(config map[string]interface{}) error {
 	}
 
 	// Login
-	// #nosec G204 -- credentials are from trusted configuration
-	cmd = exec.Command("bw", "login", bc.email, bc.password, "--raw")
-	output, err = cmd.Output()
+	// Pass the password via the environment so it does not show up in the process list
+	// #nosec G204 -- email is from trusted configuration
+	cmd := exec.Command("bw", "login", bc.email, "--passwordenv", "ONIGIRAZU_BW_PASSWORD", "--raw")
+	cmd.Env = append(os.Environ(), "ONIGIRAZU_BW_PASSWORD="+bc.password)
+	output, err := cmd.Output()
 	if err != nil {
 		return fmt.Errorf("login failed: %w", err)
 	}
