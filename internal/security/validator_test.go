@@ -12,7 +12,7 @@ import (
 )
 
 func TestNewSecurityValidator(t *testing.T) {
-	config := DefaultSecurityConfig()
+	config := StrictSecurityConfig()
 	validator := NewSecurityValidator(config)
 
 	assert.NotNil(t, validator)
@@ -23,7 +23,7 @@ func TestNewSecurityValidator(t *testing.T) {
 }
 
 func TestSecurityValidator_ValidateCommandTask(t *testing.T) {
-	config := DefaultSecurityConfig()
+	config := StrictSecurityConfig()
 	validator := NewSecurityValidator(config)
 
 	tests := []struct {
@@ -123,7 +123,7 @@ func TestSecurityValidator_ValidateCommandTask(t *testing.T) {
 }
 
 func TestSecurityValidator_ValidateFileTask(t *testing.T) {
-	config := DefaultSecurityConfig()
+	config := StrictSecurityConfig()
 	validator := NewSecurityValidator(config)
 
 	tests := []struct {
@@ -202,7 +202,7 @@ func TestSecurityValidator_ValidateFileTask(t *testing.T) {
 }
 
 func TestSecurityValidator_ValidateUserTask(t *testing.T) {
-	config := DefaultSecurityConfig()
+	config := StrictSecurityConfig()
 	validator := NewSecurityValidator(config)
 
 	tests := []struct {
@@ -273,7 +273,7 @@ func TestSecurityValidator_ValidateUserTask(t *testing.T) {
 }
 
 func TestSecurityValidator_ValidateGroupTask(t *testing.T) {
-	config := DefaultSecurityConfig()
+	config := StrictSecurityConfig()
 	validator := NewSecurityValidator(config)
 
 	tests := []struct {
@@ -342,7 +342,7 @@ func TestSecurityValidator_ValidateGroupTask(t *testing.T) {
 }
 
 func TestSecurityValidator_ValidateVariables(t *testing.T) {
-	config := DefaultSecurityConfig()
+	config := StrictSecurityConfig()
 	validator := NewSecurityValidator(config)
 
 	tests := []struct {
@@ -395,7 +395,7 @@ func TestSecurityValidator_ValidateVariables(t *testing.T) {
 }
 
 func TestSecurityValidator_ValidatePlaybook(t *testing.T) {
-	config := DefaultSecurityConfig()
+	config := StrictSecurityConfig()
 	validator := NewSecurityValidator(config)
 
 	playbook := &types.Playbook{
@@ -436,7 +436,7 @@ func TestSecurityValidator_ValidatePlaybook(t *testing.T) {
 }
 
 func TestSecurityValidator_AddDangerousPattern(t *testing.T) {
-	config := DefaultSecurityConfig()
+	config := StrictSecurityConfig()
 	validator := NewSecurityValidator(config)
 
 	// Add valid pattern
@@ -449,7 +449,7 @@ func TestSecurityValidator_AddDangerousPattern(t *testing.T) {
 }
 
 func TestSecurityValidator_SetMaxFileSize(t *testing.T) {
-	config := DefaultSecurityConfig()
+	config := StrictSecurityConfig()
 	validator := NewSecurityValidator(config)
 
 	originalSize := validator.config.MaxFileSize
@@ -461,7 +461,7 @@ func TestSecurityValidator_SetMaxFileSize(t *testing.T) {
 }
 
 func TestSecurityValidator_AddBlockedPath(t *testing.T) {
-	config := DefaultSecurityConfig()
+	config := StrictSecurityConfig()
 	validator := NewSecurityValidator(config)
 
 	originalCount := len(validator.config.BlockedDirectories)
@@ -472,7 +472,7 @@ func TestSecurityValidator_AddBlockedPath(t *testing.T) {
 }
 
 func TestSecurityValidator_ValidateHost(t *testing.T) {
-	config := DefaultSecurityConfig()
+	config := StrictSecurityConfig()
 	validator := NewSecurityValidator(config)
 
 	tests := []struct {
@@ -555,7 +555,7 @@ func TestSecurityValidator_ValidateHost(t *testing.T) {
 }
 
 func TestSecurityValidator_ValidateFile(t *testing.T) {
-	config := DefaultSecurityConfig()
+	config := StrictSecurityConfig()
 	validator := NewSecurityValidator(config)
 
 	tests := []struct {
@@ -604,7 +604,7 @@ func TestSecurityValidator_ValidateFile(t *testing.T) {
 }
 
 func TestSecurityValidator_RemoveRule(t *testing.T) {
-	config := DefaultSecurityConfig()
+	config := StrictSecurityConfig()
 	validator := NewSecurityValidator(config)
 
 	// Add a custom rule
@@ -635,7 +635,7 @@ func TestSecurityValidator_RemoveRule(t *testing.T) {
 }
 
 func TestSecurityValidator_GetRules(t *testing.T) {
-	config := DefaultSecurityConfig()
+	config := StrictSecurityConfig()
 	validator := NewSecurityValidator(config)
 
 	rules := validator.GetRules()
@@ -713,7 +713,7 @@ func TestValidationResult_Error(t *testing.T) {
 }
 
 func TestSecurityValidator_HostValidation_Helpers(t *testing.T) {
-	config := DefaultSecurityConfig()
+	config := StrictSecurityConfig()
 	// Add specific allowed hosts for testing
 	config.AllowedHosts = []string{"192.168.1.100", "example.com", "*.test.com"}
 	validator := NewSecurityValidator(config)
@@ -761,7 +761,7 @@ func TestSecurityValidator_HostValidation_Helpers(t *testing.T) {
 }
 
 func TestSecurityValidator_ConcurrentValidation(t *testing.T) {
-	config := DefaultSecurityConfig()
+	config := StrictSecurityConfig()
 	validator := NewSecurityValidator(config)
 
 	// Test concurrent task validation
@@ -785,7 +785,7 @@ func TestSecurityValidator_ConcurrentValidation(t *testing.T) {
 }
 
 func TestSecurityValidator_ValidationScore(t *testing.T) {
-	config := DefaultSecurityConfig()
+	config := StrictSecurityConfig()
 	validator := NewSecurityValidator(config)
 
 	t.Run("perfect score", func(t *testing.T) {
@@ -816,7 +816,7 @@ func TestSecurityValidator_ValidationScore(t *testing.T) {
 }
 
 func TestSecurityValidator_ValidateKeyFile(t *testing.T) {
-	config := DefaultSecurityConfig()
+	config := StrictSecurityConfig()
 	validator := NewSecurityValidator(config)
 
 	t.Run("non-existent key file", func(t *testing.T) {
@@ -843,7 +843,7 @@ func TestSecurityValidator_ValidateKeyFile(t *testing.T) {
 }
 
 func TestSecurityAuditor(t *testing.T) {
-	config := DefaultSecurityConfig()
+	config := StrictSecurityConfig()
 	validator := NewSecurityValidator(config)
 	auditor := NewSecurityAuditor(validator)
 	assert.NotNil(t, auditor)
