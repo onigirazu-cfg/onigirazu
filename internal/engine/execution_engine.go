@@ -639,6 +639,11 @@ func (e *ExecutionEngine) executeTaskParallel(ctx context.Context, task *types.T
 	return firstError
 }
 
+// SetSecurityPolicy replaces the security policy tasks are validated against
+func (e *ExecutionEngine) SetSecurityPolicy(cfg security.SecurityConfig) {
+	e.securityValidator = security.NewSecurityValidator(cfg)
+}
+
 // executeTaskOnHost executes a task on a single host
 func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Task, host *types.Host,
 	variables map[string]interface{}, playResult *types.PlayResult) error {
@@ -682,6 +687,10 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 		Name:   task.Name,
 		Module: task.Module,
 		Args:   renderedArgs,
+	}
+	if err := e.securityValidator.ValidateHostAccess(*host); err != nil {
+		e.metricsManager.IncrementErrorByType("security_validation")
+		return fmt.Errorf("security validation failed: %w", err)
 	}
 	validationResult := e.securityValidator.ValidateTask(taskForValidation)
 	if !validationResult.Valid {
