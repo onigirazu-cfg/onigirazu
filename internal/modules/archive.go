@@ -272,6 +272,10 @@ func (m *ArchiveModule) createTarArchive(w io.Writer, files []string) (int64, er
 		}
 	}
 
+	if err := tw.Close(); err != nil {
+		return 0, fmt.Errorf("failed to finalize tar archive: %v", err)
+	}
+
 	if f, ok := w.(*os.File); ok {
 		stat, _ := f.Stat()
 		return stat.Size(), nil
@@ -293,8 +297,12 @@ func (m *ArchiveModule) createGzArchive(w io.Writer, files []string) (int64, err
 		}
 	}
 
-	tw.Close()
-	gw.Close()
+	if err := tw.Close(); err != nil {
+		return 0, fmt.Errorf("failed to finalize tar archive: %v", err)
+	}
+	if err := gw.Close(); err != nil {
+		return 0, fmt.Errorf("failed to finalize gzip stream: %v", err)
+	}
 
 	if f, ok := w.(*os.File); ok {
 		stat, _ := f.Stat()
@@ -328,7 +336,9 @@ func (m *ArchiveModule) createZipArchive(dest string, files []string) (int64, er
 		}
 	}
 
-	zw.Close()
+	if err := zw.Close(); err != nil {
+		return 0, fmt.Errorf("failed to finalize zip archive: %v", err)
+	}
 
 	stat, err := os.Stat(dest)
 	if err != nil {
