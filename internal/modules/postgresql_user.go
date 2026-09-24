@@ -188,3 +188,8 @@ func (m *PostgreSQLUserModule) grantPrivileges(ctx context.Context, exec *execut
 
 	return nil
 }
+
+// Validate validates postgresql_user module arguments
+func (m *PostgreSQLUserModule) Validate(args map[string]interface{}) error {
+	return requireStringArg(args, "name")
+}

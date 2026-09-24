@@ -19,8 +19,8 @@ func TestSetFactModule_Execute_SingleFact(t *testing.T) {
 	}
 
 	args := map[string]interface{}{
-		"name":    "test_set_fact",
-		"my_fact": "my_value",
+		"_task_name": "test_set_fact",
+		"my_fact":    "my_value",
 	}
 
 	ctx := context.Background()
@@ -60,11 +60,11 @@ func TestSetFactModule_Execute_MultipleFacts(t *testing.T) {
 	}
 
 	args := map[string]interface{}{
-		"name":  "test_set_fact",
-		"fact1": "value1",
-		"fact2": 123,
-		"fact3": true,
-		"fact4": []string{"a", "b", "c"},
+		"_task_name": "test_set_fact",
+		"fact1":      "value1",
+		"fact2":      123,
+		"fact3":      true,
+		"fact4":      []string{"a", "b", "c"},
 	}
 
 	ctx := context.Background()
@@ -126,7 +126,7 @@ func TestSetFactModule_Execute_ComplexFacts(t *testing.T) {
 	}
 
 	args := map[string]interface{}{
-		"name":         "test_set_fact",
+		"_task_name":   "test_set_fact",
 		"complex_fact": complexValue,
 	}
 
@@ -161,7 +161,7 @@ func TestSetFactModule_Execute_NoFacts(t *testing.T) {
 	}
 
 	args := map[string]interface{}{
-		"name": "test_set_fact",
+		"_task_name": "test_set_fact",
 	}
 
 	ctx := context.Background()
@@ -191,8 +191,8 @@ func TestSetFactModule_Execute_WithTimeout(t *testing.T) {
 	}
 
 	args := map[string]interface{}{
-		"name":    "test_set_fact",
-		"my_fact": "my_value",
+		"_task_name": "test_set_fact",
+		"my_fact":    "my_value",
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -221,34 +221,34 @@ func TestSetFactModule_Validate(t *testing.T) {
 		{
 			name: "valid_single_fact",
 			args: map[string]interface{}{
-				"name":    "test",
-				"my_fact": "value",
+				"_task_name": "test",
+				"my_fact":    "value",
 			},
 			wantErr: false,
 		},
 		{
 			name: "valid_multiple_facts",
 			args: map[string]interface{}{
-				"name":  "test",
-				"fact1": "value1",
-				"fact2": 123,
-				"fact3": true,
+				"_task_name": "test",
+				"fact1":      "value1",
+				"fact2":      123,
+				"fact3":      true,
 			},
 			wantErr: false,
 		},
 		{
 			name: "no_facts",
 			args: map[string]interface{}{
-				"name": "test",
+				"_task_name": "test",
 			},
 			wantErr: true,
 		},
 		{
-			name: "missing_name",
+			name: "without_name",
 			args: map[string]interface{}{
 				"my_fact": "value",
 			},
-			wantErr: true,
+			wantErr: false,
 		},
 	}
 
@@ -309,8 +309,8 @@ func TestSetFactModule_Execute_NilValues(t *testing.T) {
 	}
 
 	args := map[string]interface{}{
-		"name":     "test_set_fact",
-		"nil_fact": nil,
+		"_task_name": "test_set_fact",
+		"nil_fact":   nil,
 	}
 
 	ctx := context.Background()
@@ -342,7 +342,7 @@ func TestSetFactModule_Execute_EmptyStringFact(t *testing.T) {
 	}
 
 	args := map[string]interface{}{
-		"name":       "test_set_fact",
+		"_task_name": "test_set_fact",
 		"empty_fact": "",
 	}
 
@@ -373,7 +373,7 @@ func TestSetFactModule_Execute_ZeroValues(t *testing.T) {
 	}
 
 	args := map[string]interface{}{
-		"name":       "test_set_fact",
+		"_task_name": "test_set_fact",
 		"zero_int":   0,
 		"zero_float": 0.0,
 		"false_bool": false,
@@ -414,10 +414,10 @@ func BenchmarkSetFactModule_Execute(b *testing.B) {
 	}
 
 	args := map[string]interface{}{
-		"name":  "test_set_fact",
-		"fact1": "value1",
-		"fact2": 123,
-		"fact3": true,
+		"_task_name": "test_set_fact",
+		"fact1":      "value1",
+		"fact2":      123,
+		"fact3":      true,
 	}
 
 	ctx := context.Background()
@@ -433,9 +433,9 @@ func BenchmarkSetFactModule_Validate(b *testing.B) {
 	module := NewSetFactModule()
 
 	args := map[string]interface{}{
-		"name":  "test",
-		"fact1": "value1",
-		"fact2": 123,
+		"_task_name": "test",
+		"fact1":      "value1",
+		"fact2":      123,
 	}
 
 	b.ResetTimer()

@@ -301,10 +301,7 @@ func (e *CoreEngine) executeTask(task types.Task, host types.Host, checkMode boo
 			for key, value := range task.Args {
 				args[key] = value
 			}
-			// Add task name only if not already specified in args
-			if _, exists := args["name"]; !exists {
-				args["name"] = task.Name
-			}
+			args["_task_name"] = task.Name
 
 			if err := module.Validate(args); err != nil {
 				taskErr = err

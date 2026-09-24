@@ -3,6 +3,7 @@ package modules
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -11,7 +12,9 @@ import (
 	"strings"
 	"time"
 
+	sshpkg "github.com/onigirazu-cfg/onigirazu/internal/ssh"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
+	"golang.org/x/crypto/ssh"
 )
 
 // ScriptModule executes a local script on the remote host
@@ -34,7 +37,7 @@ func (m *ScriptModule) Execute(ctx context.Context, host types.Host, args map[st
 	startTime := time.Now()
 
 	result := types.TaskResult{
-		TaskName:  getStringArg(args, "name", ""),
+		TaskName:  taskName(args),
 		Host:      host.Name,
 		Module:    m.name,
 		Timestamp: startTime,
@@ -86,6 +89,10 @@ func (m *ScriptModule) Execute(ctx context.Context, host types.Host, args map[st
 		}
 	}
 
+	if !sshpkg.IsLocal(host) {
+		return m.executeRemote(ctx, host, args, scriptPath, argsStr, result, startTime)
+	}
+
 	// Prepare command
 	var cmd *exec.Cmd
 	if argsStr != "" {
@@ -121,6 +128,53 @@ func (m *ScriptModule) Execute(ctx context.Context, host types.Host, args map[st
 	result.Output["rc"] = rc
 	result.Output["args"] = argsStr
 
+	result.Duration = time.Since(startTime)
+	return result, nil
+}
+
+// executeRemote uploads the local script to the host, runs it there and removes it
+func (m *ScriptModule) executeRemote(ctx context.Context, host types.Host, args map[string]interface{}, scriptPath, argsStr string, result types.TaskResult, startTime time.Time) (types.TaskResult, error) {
+	fail := func(msg string) (types.TaskResult, error) {
+		result.Success = false
+		result.Error = msg
+		result.Duration = time.Since(startTime)
+		return result, nil
+	}
+
+	data, err := os.ReadFile(scriptPath) // #nosec G304 -- script path comes from the playbook
+	if err != nil {
+		return fail(fmt.Sprintf("failed to read script: %v", err))
+	}
+
+	pool := sshpkg.GetGlobalPool()
+	client, err := pool.GetConnection(host)
+	if err != nil {
+		return fail(fmt.Sprintf("failed to get SSH connection: %v", err))
+	}
+	defer pool.ReleaseConnection(host)
+
+	remotePath := fmt.Sprintf("/tmp/onigirazu-script-%d-%s", time.Now().UnixNano(), filepath.Base(scriptPath))
+	if err := client.WriteFile(remotePath, data, 0700); err != nil {
+		return fail(fmt.Sprintf("failed to upload script: %v", err))
+	}
+	defer func() { _, _ = runOnHost(context.WithoutCancel(ctx), host, nil, "rm", "-f", remotePath) }()
+
+	// args is a shell fragment, as in Ansible's script module
+	out, err := runShellOnHost(ctx, host, args, strings.TrimSpace("bash "+shellQuote(remotePath)+" "+argsStr))
+	rc := 0
+	if err != nil {
+		rc = -1
+		var exitErr *ssh.ExitError
+		if errors.As(err, &exitErr) {
+			rc = exitErr.ExitStatus()
+		}
+		result.Success = false
+		result.Error = fmt.Sprintf("script execution failed: %v", err)
+	}
+
+	result.Output["stdout"] = out
+	result.Output["rc"] = rc
+	result.Output["args"] = argsStr
 	result.Duration = time.Since(startTime)
 	return result, nil
 }

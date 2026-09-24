@@ -62,3 +62,10 @@ func TestCopy_OwnerMatchingCurrentUser(t *testing.T) {
 	_, err = NewCopyModule().Execute(context.Background(), host, args)
 	assert.Error(t, err)
 }
+
+func TestRunOnHost_QuotesArguments(t *testing.T) {
+	host := types.Host{Name: "localhost", Address: "localhost"}
+	out, err := runOnHost(context.Background(), host, nil, "printf", "%s|", "a b", "it's", "$HOME")
+	require.NoError(t, err)
+	assert.Equal(t, "a b|it's|$HOME|", out)
+}
