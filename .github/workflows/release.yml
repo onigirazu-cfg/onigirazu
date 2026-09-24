@@ -1,10 +1,7 @@
 name: Release
 
 on:
-  workflow_run:
-    workflows: ["Release Gate"]
-    types:
-      - completed
+  # Started by the Release Gate after its checks pass, or by hand
   workflow_dispatch:
     inputs:
       tag:
@@ -112,7 +109,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: validate
     # Skip tests if triggered by workflow_run (already tested in quality gate)
-    if: github.event_name == 'workflow_dispatch' && !github.event.inputs.skip_checks
+    if: github.event_name == 'workflow_dispatch' && !inputs.skip_checks
 
     steps:
     - name: Checkout
