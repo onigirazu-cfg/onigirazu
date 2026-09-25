@@ -1,2 +1,2 @@
 set -e
-test "$(cat /etc/onigirazu-e2e/uid)" = 0
+test "$(cat /root/onigirazu-e2e-uid)" = 0

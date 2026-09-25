@@ -5,4 +5,4 @@ plays:
     tasks:
       - name: Run a command as root
         command:
-          command: "sh -c 'id -u > /etc/onigirazu-e2e/uid'"
+          command: "sh -c 'id -u > /root/onigirazu-e2e-uid'"
