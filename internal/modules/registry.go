@@ -185,5 +185,13 @@ func (r *Registry) ExecuteTask(ctx context.Context, task *types.Task, host types
 	if result.TaskName == "" {
 		result.TaskName = task.Name
 	}
+	// Modules report some failures only through Success=false; the engine
+	// looks at Failed, so without this a failed apt-get counted as success
+	if err == nil && !result.Success && !result.Skipped && !result.Failed {
+		result.Failed = true
+		if result.Error == "" {
+			result.Error = fmt.Sprintf("module %s reported failure", task.Module)
+		}
+	}
 	return result, err
 }
