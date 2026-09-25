@@ -186,7 +186,8 @@ for c in $cases; do
 
   if [ -f "$dir/setup.sh" ]; then
     for h in $(jq -r 'keys[]' <<<"$hosts_json"); do
-      on_host "$h" 'sudo -n bash -s' < "$dir/setup.sh" >/dev/null 2>&1 || echo "  setup failed on $h"
+      out="$(cat "$HERE/setup-lib.sh" "$dir/setup.sh" | on_host "$h" 'sudo -n bash -s' 2>&1)" ||
+        echo "  setup failed on $h: $(echo "$out" | tail -3 | paste -sd' ' -)"
     done
   fi
 
