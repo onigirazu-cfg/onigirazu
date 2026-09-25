@@ -784,7 +784,8 @@ the expression is optional. A condition that cannot be evaluated fails the task.
 
 ### Variables
 
-Use variables for dynamic configurations:
+Use variables for dynamic configurations. An undefined variable fails the task;
+use `{{ var | default("x") }}` or `when: var is defined` for optional ones:
 
 ```yaml
 vars:

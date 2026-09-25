@@ -56,4 +56,24 @@ func TestRenderTaskArgs_ListsAndMapsKeepTheirType(t *testing.T) {
 	assert.Equal(t, map[string]interface{}{"A": "1"}, out["env"])
 	assert.Equal(t, "8080", out["port"])
 	assert.Equal(t, `pkgs: ["curl","git"]`, out["mixed"])
+
+func TestRender_UndefinedVariableFails(t *testing.T) {
+	e := NewEngine()
+	defer e.Close()
+	vars := map[string]interface{}{"name": "web"}
+
+	for _, tmpl := range []string{"{{ missing }}", "port={{ port }}", "{{ .missing }}", "{{ name }}-{{ nope.x }}"} {
+		_, err := e.Render(context.Background(), tmpl, vars)
+		assert.Error(t, err, tmpl)
+	}
+	for tmpl, want := range map[string]string{
+		`{{ missing | default("x") }}`:  "x",
+		`{{ default .missing "x" }}`:    "x",
+		`{% if missing %}a{% endif %}b`: "b",
+		"literal <no value> {{ name }}": "literal <no value> web",
+	} {
+		got, err := e.Render(context.Background(), tmpl, vars)
+		require.NoError(t, err, tmpl)
+		assert.Equal(t, want, got, tmpl)
+	}
 }

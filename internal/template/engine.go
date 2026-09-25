@@ -171,8 +171,16 @@ func (e *Engine) Render(ctx context.Context, templateStr string, variables map[s
 		return "", fmt.Errorf("failed to execute template: %w", err)
 	}
 
-	return restoreBlocks(buf.String(), values), nil
+	// Go templates print a missing variable as "<no value>"; treat it as an
+	// error, as Jinja does. default(...) and "is defined" still work.
+	out := buf.String()
+	if strings.Contains(out, noValue) && !strings.Contains(templateStr, noValue) {
+		return "", fmt.Errorf("undefined variable in %q", templateStr)
+	}
+	return restoreBlocks(out, values), nil
 }
+
+const noValue = "<no value>"
 
 var ifBlock = regexp.MustCompile(`\{%-?\s*(if|elif)\s+(.+?)\s*-?%\}`)
 
