@@ -130,6 +130,7 @@ done
 
 # --- run the cases -------------------------------------------------------------
 # Each case: playbook.yml, verify.sh (run on the host with sudo), optional
+# setup.sh (run on the host with sudo before the first apply) and
 # NOT_IDEMPOTENT marker. Steps: apply, verify, apply again (nothing changed),
 # verify again.
 apply() {  # case_dir label -> writes task_end events to $WORK/events.jsonl
@@ -143,6 +144,13 @@ apply() {  # case_dir label -> writes task_end events to $WORK/events.jsonl
     jq -c -R 'fromjson? | select(.fields.type == "task_end") | .fields' > "$WORK/events.jsonl" || true
 }
 
+# First error lines of the last apply, for the job log
+apply_errors() {
+  grep -o '{"timestamp".*' "$WORK/apply.log" |
+    jq -r -R 'fromjson? | select(.level == "ERROR" or .level == "WARN") | "      \(.level): \(.message)"' |
+    cut -c1-400 | head -"${1:-4}"
+}
+
 record() { printf '%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4" >> "$RESULTS"; echo "  [$3] $1 / $2 ${4:+- $4}"; }
 
 cases="${E2E_CASES:-$(cd "$HERE/cases" && ls)}"
@@ -150,6 +158,12 @@ for c in $cases; do
   dir="$HERE/cases/$c"
   [ -f "$dir/playbook.yml" ] || continue
   log "Case $c"
+
+  if [ -f "$dir/setup.sh" ]; then
+    for h in $(jq -r 'keys[]' <<<"$hosts_json"); do
+      on_host "$h" 'sudo -n bash -s' < "$dir/setup.sh" >/dev/null 2>&1 || echo "  setup failed on $h"
+    done
+  fi
 
   apply "$dir"
   passed=""
@@ -160,7 +174,11 @@ for c in $cases; do
       record "$c" "$h" FAIL "no task ran: $(grep -o '{"timestamp".*' "$WORK/apply.log" | jq -r -R 'fromjson? | select(.level == "ERROR") | .message' | head -1 | cut -c1-200)"
       continue
     fi
-    [ -z "$failed" ] || { record "$c" "$h" FAIL "apply failed: $(echo "$failed" | paste -sd, -)"; continue; }
+    if [ -n "$failed" ]; then
+      record "$c" "$h" FAIL "apply failed: $(echo "$failed" | paste -sd, -)"
+      apply_errors
+      continue
+    fi
     if [ -f "$dir/verify.sh" ] && ! out="$(on_host "$h" 'sudo -n bash -s' < "$dir/verify.sh" 2>&1)"; then
       record "$c" "$h" FAIL "verify: $(echo "$out" | tail -1)"; continue
     fi

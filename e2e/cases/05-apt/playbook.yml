@@ -5,5 +5,5 @@ plays:
     tasks:
       - name: Install a package
         apt:
-          name: [tree, jq]
+          name: [figlet, sl]
           state: present
