@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/onigirazu-cfg/onigirazu/internal/executor"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
@@ -26,167 +25,98 @@ func (m *PostgreSQLUserModule) Execute(ctx context.Context, host types.Host, arg
 	startTime := time.Now()
 	result := types.TaskResult{
 		TaskName: "postgresql_user", Host: host.Name, Module: m.GetName(),
-		Success: true, Changed: false, Output: make(map[string]interface{}), Timestamp: startTime,
+		Success: true, Output: make(map[string]interface{}), Timestamp: startTime,
 	}
-
-	userName, ok := args["name"].(string)
-	if !ok || userName == "" {
+	fail := func(err error) (types.TaskResult, error) {
 		result.Success = false
-		result.Error = "user name is required"
-		return result, fmt.Errorf("user name is required")
+		result.Error = err.Error()
+		result.Duration = time.Since(startTime)
+		return result, err
 	}
 
+	userName, _ := args["name"].(string)
+	if userName == "" {
+		return fail(fmt.Errorf("user name is required"))
+	}
 	state, _ := args["state"].(string)
 	if state == "" {
 		state = "present"
 	}
-
-	loginUser, _ := args["login_user"].(string)
-	if loginUser == "" {
-		loginUser = "postgres"
-	}
-
-	loginHost, _ := args["login_host"].(string)
-	if loginHost == "" {
-		loginHost = "localhost"
-	}
-
-	loginPort, _ := args["login_port"].(string)
-	if loginPort == "" {
-		loginPort = "5432"
-	}
-
-	// Use WithExecutor to get fresh executor for this host
-	err := m.WithExecutor(host, func(exec *executor.CommandExecutor) error {
-		exists, err := m.userExists(ctx, exec, userName, loginUser, loginHost, loginPort)
-		if err != nil {
-			result.Success = false
-			result.Error = fmt.Sprintf("failed to check user: %v", err)
-			return err
+	priv, _ := args["priv"].(string)
+	db, _ := args["db"].(string)
+	if priv != "" {
+		if db == "" {
+			return fail(fmt.Errorf("priv requires db"))
 		}
-
-		switch state {
-		case "present":
-			if !exists {
-				password, _ := args["password"].(string)
-				if err := m.createUser(ctx, exec, userName, password, args, loginUser, loginHost, loginPort); err != nil {
-					result.Success = false
-					result.Error = fmt.Sprintf("failed to create user: %v", err)
-					return err
+		for _, p := range strings.Split(priv, ",") {
+			for _, r := range strings.TrimSpace(p) {
+				if !(r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z' || r == ' ') {
+					return fail(fmt.Errorf("invalid privilege %q", p))
 				}
-				result.Changed = true
-				result.Output["action"] = "created"
 			}
+		}
+	}
 
-			if priv, ok := args["priv"].(string); ok && priv != "" {
-				db, _ := args["db"].(string)
-				if err := m.grantPrivileges(ctx, exec, userName, db, priv, loginUser, loginHost, loginPort); err != nil {
-					result.Success = false
-					result.Error = fmt.Sprintf("failed to grant privileges: %v", err)
-					return err
-				}
+	exec, err := m.CreateExecutor(host)
+	if err != nil {
+		return fail(fmt.Errorf("failed to create executor: %w", err))
+	}
+	defer exec.Close()
+
+	conn := dbConnFromArgs(args)
+	out, err := exec.Execute(conn.psql("", "SELECT count(*) FROM pg_roles WHERE rolname = "+pgString(userName)))
+	if err != nil {
+		return fail(fmt.Errorf("failed to check user: %w", err))
+	}
+	exists := strings.TrimSpace(out) != "0"
+
+	switch state {
+	case "present":
+		if !exists {
+			sql := "CREATE ROLE " + pgIdent(userName) + " LOGIN"
+			if password, _ := args["password"].(string); password != "" {
+				sql += " PASSWORD " + pgString(password)
+			}
+			if superuser, _ := args["superuser"].(bool); superuser {
+				sql += " SUPERUSER"
+			}
+			if createdb, _ := args["createdb"].(bool); createdb {
+				sql += " CREATEDB"
+			}
+			if _, err := exec.Execute(conn.psql("", sql)); err != nil {
+				return fail(fmt.Errorf("failed to create user: %w", err))
+			}
+			result.Changed = true
+			result.Output["action"] = "created"
+		}
+		if priv != "" {
+			acl := "SELECT datacl FROM pg_database WHERE datname = " + pgString(db)
+			before, _ := exec.Execute(conn.psql("", acl))
+			sql := fmt.Sprintf("GRANT %s ON DATABASE %s TO %s", priv, pgIdent(db), pgIdent(userName))
+			if _, err := exec.Execute(conn.psql("", sql)); err != nil {
+				return fail(fmt.Errorf("failed to grant privileges: %w", err))
+			}
+			if after, _ := exec.Execute(conn.psql("", acl)); after != before {
 				result.Changed = true
 				result.Output["privileges"] = "granted"
 			}
-
-		case "absent":
-			if exists {
-				if err := m.dropUser(ctx, exec, userName, loginUser, loginHost, loginPort); err != nil {
-					result.Success = false
-					result.Error = fmt.Sprintf("failed to drop user: %v", err)
-					return err
-				}
-				result.Changed = true
-				result.Output["action"] = "dropped"
-			}
 		}
 
-		return nil
-	})
+	case "absent":
+		if exists {
+			if _, err := exec.Execute(conn.psql("", "DROP ROLE "+pgIdent(userName))); err != nil {
+				return fail(fmt.Errorf("failed to drop user: %w", err))
+			}
+			result.Changed = true
+			result.Output["action"] = "dropped"
+		}
 
-	if err != nil && result.Success {
-		result.Success = false
-		result.Error = fmt.Sprintf("executor error: %v", err)
-		return result, err
+	default:
+		return fail(fmt.Errorf("unsupported state %q", state))
 	}
 
 	result.Duration = time.Since(startTime)
 	return result, nil
-}
-
-func (m *PostgreSQLUserModule) buildPsqlCmd(loginUser, loginHost, loginPort string) string {
-	cmdParts := []string{"psql"}
-	if loginUser != "" {
-		cmdParts = append(cmdParts, "-U", loginUser)
-	}
-	if loginHost != "" {
-		cmdParts = append(cmdParts, "-h", loginHost)
-	}
-	if loginPort != "" {
-		cmdParts = append(cmdParts, "-p", loginPort)
-	}
-	return strings.Join(cmdParts, " ")
-}
-
-func (m *PostgreSQLUserModule) userExists(ctx context.Context, exec *executor.CommandExecutor, userName, loginUser, loginHost, loginPort string) (bool, error) {
-	baseCmd := m.buildPsqlCmd(loginUser, loginHost, loginPort)
-	cmd := fmt.Sprintf("%s -tAc \"SELECT 1 FROM pg_roles WHERE rolname='%s'\"", baseCmd, userName)
-
-	stdout, err := exec.Execute(cmd)
-	if err != nil {
-		return false, nil
-	}
-
-	return strings.TrimSpace(stdout) == "1", nil
-}
-
-func (m *PostgreSQLUserModule) createUser(ctx context.Context, exec *executor.CommandExecutor, userName, password string, args map[string]interface{}, loginUser, loginHost, loginPort string) error {
-	baseCmd := m.buildPsqlCmd(loginUser, loginHost, loginPort)
-	createCmd := fmt.Sprintf("CREATE USER %s", userName)
-
-	if password != "" {
-		createCmd += fmt.Sprintf(" WITH PASSWORD '%s'", password)
-	}
-
-	if superuser, ok := args["superuser"].(bool); ok && superuser {
-		createCmd += " SUPERUSER"
-	}
-
-	if createdb, ok := args["createdb"].(bool); ok && createdb {
-		createCmd += " CREATEDB"
-	}
-
-	cmd := fmt.Sprintf("%s -c \"%s\"", baseCmd, createCmd)
-	_, err := exec.Execute(cmd)
-	if err != nil {
-		return fmt.Errorf("failed to create user: %s", err.Error())
-	}
-
-	return nil
-}
-
-func (m *PostgreSQLUserModule) dropUser(ctx context.Context, exec *executor.CommandExecutor, userName, loginUser, loginHost, loginPort string) error {
-	baseCmd := m.buildPsqlCmd(loginUser, loginHost, loginPort)
-	cmd := fmt.Sprintf("%s -c \"DROP USER %s\"", baseCmd, userName)
-
-	_, err := exec.Execute(cmd)
-	if err != nil {
-		return fmt.Errorf("failed to drop user: %s", err.Error())
-	}
-
-	return nil
-}
-
-func (m *PostgreSQLUserModule) grantPrivileges(ctx context.Context, exec *executor.CommandExecutor, userName, db, priv, loginUser, loginHost, loginPort string) error {
-	baseCmd := m.buildPsqlCmd(loginUser, loginHost, loginPort)
-	cmd := fmt.Sprintf("%s -c \"GRANT %s ON DATABASE %s TO %s\"", baseCmd, priv, db, userName)
-
-	_, err := exec.Execute(cmd)
-	if err != nil {
-		return fmt.Errorf("failed to grant privileges: %s", err.Error())
-	}
-
-	return nil
 }
 
 // Validate validates postgresql_user module arguments

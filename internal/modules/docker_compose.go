@@ -56,29 +56,28 @@ func (m *DockerComposeModule) Execute(ctx context.Context, host types.Host, args
 	}
 
 	composeFile, _ := args["file"].(string)
-	if composeFile == "" {
-		composeFile = "docker-compose.yml"
-	}
 
 	projectName, _ := args["project_name"].(string)
 
 	switch state {
 	case "present":
+		before := m.snapshot(exec, projectDir, composeFile, projectName)
 		if err := m.composeUp(ctx, exec, projectDir, composeFile, projectName, args); err != nil {
 			result.Success = false
 			result.Error = fmt.Sprintf("failed to start compose: %v", err)
 			return result, err
 		}
-		result.Changed = true
+		result.Changed = m.snapshot(exec, projectDir, composeFile, projectName) != before
 		result.Output["action"] = "started"
 
 	case "absent":
+		before := m.snapshot(exec, projectDir, composeFile, projectName)
 		if err := m.composeDown(ctx, exec, projectDir, composeFile, projectName, args); err != nil {
 			result.Success = false
 			result.Error = fmt.Sprintf("failed to stop compose: %v", err)
 			return result, err
 		}
-		result.Changed = true
+		result.Changed = m.snapshot(exec, projectDir, composeFile, projectName) != before
 		result.Output["action"] = "stopped"
 
 	case "restarted":
@@ -113,19 +112,42 @@ func (m *DockerComposeModule) Execute(ctx context.Context, host types.Host, args
 	return result, nil
 }
 
+// buildComposeCmd prefers the Compose v2 plugin and falls back to the v1
+// docker-compose binary. The file is passed only when set explicitly, so
+// compose.yaml and docker-compose.yml are both found by default.
 func (m *DockerComposeModule) buildComposeCmd(projectDir, composeFile, projectName string, baseCmd string) string {
-	cmdParts := []string{"cd", projectDir, "&&", "docker-compose"}
-
-	if composeFile != "" && composeFile != "docker-compose.yml" {
-		cmdParts = append(cmdParts, "-f", composeFile)
+	parts := []string{"c"}
+	if composeFile != "" {
+		parts = append(parts, "-f", shellQuote(composeFile))
 	}
-
 	if projectName != "" {
-		cmdParts = append(cmdParts, "-p", projectName)
+		parts = append(parts, "-p", shellQuote(projectName))
 	}
+	parts = append(parts, baseCmd)
+	script := `c() { if docker compose version >/dev/null 2>&1; then docker compose "$@"; else docker-compose "$@"; fi; }; ` +
+		"cd " + shellQuote(projectDir) + " && " + strings.Join(parts, " ")
+	return "sh -c " + shellQuote(script)
+}
 
-	cmdParts = append(cmdParts, baseCmd)
-	return strings.Join(cmdParts, " ")
+// snapshot lists all project containers and the running ones; comparing it
+// before and after tells whether up/down changed anything
+func (m *DockerComposeModule) snapshot(exec *executor.CommandExecutor, projectDir, composeFile, projectName string) string {
+	out, err := exec.Execute(m.buildComposeCmd(projectDir, composeFile, projectName, "ps -a -q; echo --; c "+composeArgs(composeFile, projectName)+"ps -q"))
+	if err != nil {
+		return "error: " + err.Error()
+	}
+	return out
+}
+
+func composeArgs(composeFile, projectName string) string {
+	s := ""
+	if composeFile != "" {
+		s += "-f " + shellQuote(composeFile) + " "
+	}
+	if projectName != "" {
+		s += "-p " + shellQuote(projectName) + " "
+	}
+	return s
 }
 
 func (m *DockerComposeModule) composeUp(ctx context.Context, exec *executor.CommandExecutor, projectDir, composeFile, projectName string, args map[string]interface{}) error {
