@@ -56,6 +56,7 @@ func TestRenderTaskArgs_ListsAndMapsKeepTheirType(t *testing.T) {
 	assert.Equal(t, map[string]interface{}{"A": "1"}, out["env"])
 	assert.Equal(t, "8080", out["port"])
 	assert.Equal(t, `pkgs: ["curl","git"]`, out["mixed"])
+}
 
 func TestRender_UndefinedVariableFails(t *testing.T) {
 	e := NewEngine()
