@@ -56,6 +56,35 @@ type ExecutionEngine struct {
 
 	// Observers for execution events
 	observers []ExecutionObserverI
+
+	// become settings of the play being executed; plays run one at a time
+	playBecome becomeSettings
+}
+
+// becomeSettings is the privilege escalation a task runs with
+type becomeSettings struct {
+	Become bool
+	User   string
+	Method string
+}
+
+// effectiveBecome applies the play's become settings to a task that does not
+// set become itself
+func effectiveBecome(task *types.Task, play becomeSettings) becomeSettings {
+	if task.Become {
+		return becomeSettings{Become: true, User: task.BecomeUser, Method: task.BecomeMethod}
+	}
+	if !play.Become {
+		return becomeSettings{}
+	}
+	user, method := task.BecomeUser, task.BecomeMethod
+	if user == "" {
+		user = play.User
+	}
+	if method == "" {
+		method = play.Method
+	}
+	return becomeSettings{Become: true, User: user, Method: method}
 }
 
 // ExecutionStats holds execution statistics
@@ -345,6 +374,15 @@ func (e *ExecutionEngine) ExecutePlaybook(ctx context.Context, playbook *types.P
 
 // executePlay executes a single play
 func (e *ExecutionEngine) executePlay(ctx context.Context, play *types.Play) (*types.PlayResult, error) {
+	e.mutex.Lock()
+	e.playBecome = becomeSettings{Become: play.Become, User: play.BecomeUser, Method: play.BecomeMethod}
+	e.mutex.Unlock()
+	defer func() {
+		e.mutex.Lock()
+		e.playBecome = becomeSettings{}
+		e.mutex.Unlock()
+	}()
+
 	// Get target hosts
 	hosts, err := e.getPlayHosts(play)
 	if err != nil {
@@ -718,6 +756,10 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 	e.metricsManager.IncrementModuleUsage(task.Module)
 	taskStartTime := time.Now()
 
+	e.mutex.RLock()
+	become := effectiveBecome(task, e.playBecome)
+	e.mutex.RUnlock()
+
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		// Check if we're in dry-run mode
 		if e.config.GetDryRun() {
@@ -746,9 +788,9 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 			Name:         task.Name,
 			Module:       task.Module,
 			Args:         renderedArgs,
-			Become:       task.Become,
-			BecomeUser:   task.BecomeUser,
-			BecomeMethod: task.BecomeMethod,
+			Become:       become.Become,
+			BecomeUser:   become.User,
+			BecomeMethod: become.Method,
 		}, *host, taskVars)
 
 		if err == nil && !result.Failed {
