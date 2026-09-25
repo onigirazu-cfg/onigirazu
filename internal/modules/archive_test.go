@@ -2,7 +2,6 @@ package modules
 
 import (
 	"archive/tar"
-	"archive/zip"
 	"compress/gzip"
 	"context"
 	"io"
@@ -259,35 +258,6 @@ func verifyGzArchiveContents(t *testing.T, archivePath string, expectedFiles []s
 		// Extract just the filename
 		name := filepath.Base(header.Name)
 		found[name] = true
-	}
-
-	// Check if all expected files were found
-	for _, expectedFile := range expectedFiles {
-		if !found[expectedFile] {
-			t.Logf("expected file %s not found in archive", expectedFile)
-			return false
-		}
-	}
-
-	return true
-}
-
-func verifyZipArchiveContents(t *testing.T, archivePath string, expectedFiles []string) bool {
-	reader, err := zip.OpenReader(archivePath)
-	if err != nil {
-		t.Logf("failed to open zip archive: %v", err)
-		return false
-	}
-	defer reader.Close()
-
-	found := make(map[string]bool)
-
-	for _, file := range reader.File {
-		// Extract just the filename
-		name := filepath.Base(file.Name)
-		if name != "" { // skip directories
-			found[name] = true
-		}
 	}
 
 	// Check if all expected files were found

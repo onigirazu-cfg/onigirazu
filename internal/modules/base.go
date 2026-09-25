@@ -3,6 +3,7 @@ package modules
 import (
 	"context"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -126,6 +127,9 @@ func toInt(val interface{}) (int, bool) {
 	case int64:
 		return int(v), true
 	case uint64:
+		if v > math.MaxInt {
+			return 0, false
+		}
 		return int(v), true
 	case float64:
 		return int(v), true
