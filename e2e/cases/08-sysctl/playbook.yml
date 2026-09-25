@@ -1,0 +1,10 @@
+plays:
+  - name: sysctl
+    hosts: all
+    become: true
+    tasks:
+      - name: swappiness
+        sysctl:
+          name: vm.swappiness
+          value: "13"
+          state: present

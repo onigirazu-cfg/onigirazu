@@ -1,0 +1,9 @@
+plays:
+  - name: apt
+    hosts: all
+    become: true
+    tasks:
+      - name: Install a package
+        apt:
+          name: [tree, jq]
+          state: present

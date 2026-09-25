@@ -1,0 +1,8 @@
+plays:
+  - name: command
+    hosts: all
+    become: true
+    tasks:
+      - name: Run a command as root
+        command:
+          command: "sh -c 'id -u > /etc/onigirazu-e2e/uid'"

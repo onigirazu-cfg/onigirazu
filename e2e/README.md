@@ -1,0 +1,27 @@
+# E2E tests
+
+Runs every case in `cases/` on disposable vSphere VMs cloned from the current
+`[latest]` Ubuntu golden images, then deletes the VMs.
+
+- Workflow `E2E`: by hand (optionally a subset of cases, or keep the VMs) and
+  nightly at 05:00 UTC; only on the self-hosted runner labelled `vsphere-e2e`.
+- VMs are named `tmp-e2e-onigirazu-<run>-<os>`, live in a dedicated folder and
+  carry a "TEMPORARY" note with the run link and expiry time.
+- `janitor.sh` runs hourly and deletes e2e VMs older than 3 hours from that
+  folder, covering cancelled runs.
+- Access: each run generates an SSH key and passes it as
+  `guestinfo.e2e_authorized_key`; the image creates user `e2e` on first boot.
+
+## A case
+
+`cases/<NN-name>/`:
+- `playbook.yml` — applied to all VMs (`hosts: all`);
+- `verify.sh` — runs on each VM as root after the apply and must exit 0;
+- `NOT_IDEMPOTENT` — optional; skips the second apply that must change nothing.
+
+## Configuration
+
+Repository secrets: `VSPHERE_SERVER`, `VSPHERE_USER`, `VSPHERE_PASSWORD`,
+`E2E_DATACENTER`, `E2E_CLUSTER`, `E2E_HOST`, `E2E_DATASTORE`, `E2E_NETWORK`,
+`E2E_FOLDER`, `E2E_LIBRARY`. Secrets rather than variables: Actions logs of a
+public repository are public.

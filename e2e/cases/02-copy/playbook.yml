@@ -1,0 +1,12 @@
+plays:
+  - name: copy
+    hosts: all
+    become: true
+    tasks:
+      - name: Copy content into /etc
+        copy:
+          content: "copied by onigirazu\n"
+          dest: /etc/onigirazu-e2e/copy.conf
+          owner: root
+          group: root
+          mode: "0640"

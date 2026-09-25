@@ -1,0 +1,17 @@
+plays:
+  - name: user and group
+    hosts: all
+    become: true
+    tasks:
+      - name: Group
+        group:
+          name: e2egrp
+          state: present
+          gid: 4242
+      - name: User
+        user:
+          name: e2euser
+          state: present
+          uid: 4242
+          group: e2egrp
+          shell: /bin/bash

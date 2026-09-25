@@ -1,0 +1,10 @@
+plays:
+  - name: lineinfile
+    hosts: all
+    become: true
+    tasks:
+      - name: Ensure a line
+        lineinfile:
+          path: /etc/onigirazu-e2e/lines.conf
+          line: "timeout=30"
+          create: true
