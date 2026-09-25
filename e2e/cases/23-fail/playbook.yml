@@ -1,0 +1,7 @@
+plays:
+  - name: fail
+    hosts: all
+    tasks:
+      - name: Fail on purpose
+        fail:
+          msg: expected failure

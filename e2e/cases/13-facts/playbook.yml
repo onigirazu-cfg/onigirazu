@@ -1,0 +1,19 @@
+plays:
+  - name: set_fact, register, stat, debug
+    hosts: all
+    become: true
+    tasks:
+      - name: Stat a file
+        stat:
+          path: /etc/passwd
+        register: st
+      - name: Set a fact
+        set_fact:
+          color: blue
+      - name: Debug
+        debug:
+          msg: "color is {{ color }}"
+      - name: Write what was registered
+        copy:
+          content: "{{ st.stat.exists }} {{ st.stat.isreg }} {{ color }}\n"
+          dest: /root/onigirazu-e2e-facts

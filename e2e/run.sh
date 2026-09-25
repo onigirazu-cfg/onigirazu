@@ -140,10 +140,11 @@ records() {
   jq -c -R 'split("{\"timestamp\"")[1:][] | ("{\"timestamp\"" + .) | sub("}[^}]*$"; "}") | fromjson?' "$WORK/apply.log"
 }
 
-apply() {  # case_dir label -> writes task_end events to $WORK/events.jsonl
+apply() {  # case_dir -> writes task_end events to $WORK/events.jsonl
   local dir="$1" state
   state="$WORK/state-$(basename "$1")"
-  (cd "$WORK" && "$BIN" apply "$dir/playbook.yml" -i "$INVENTORY" --state "$state" \
+  # Run from the case's own directory so relative paths (src, script) work
+  (cd "$dir" && "$BIN" apply playbook.yml -i "$INVENTORY" --state "$state" \
     --log-format json --no-color >"$WORK/apply.log" 2>&1) || true
   records | jq -c 'select(.fields.type == "task_end") | .fields' > "$WORK/events.jsonl" || true
 }
@@ -158,8 +159,10 @@ record() { printf '%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4" >> "$RESULTS"; echo "  
 
 cases="${E2E_CASES:-$(cd "$HERE/cases" && ls)}"
 for c in $cases; do
-  dir="$HERE/cases/$c"
-  [ -f "$dir/playbook.yml" ] || continue
+  [ -f "$HERE/cases/$c/playbook.yml" ] || continue
+  # Work on a copy: cases may write next to their playbook (fetch)
+  dir="$WORK/cases/$c"
+  mkdir -p "$WORK/cases" && cp -R "$HERE/cases/$c" "$dir"
   log "Case $c"
 
   if [ -f "$dir/setup.sh" ]; then
@@ -169,6 +172,18 @@ for c in $cases; do
   fi
 
   apply "$dir"
+
+  if [ -f "$dir/EXPECT_FAIL" ]; then
+    for h in $(jq -r 'keys[]' <<<"$hosts_json"); do
+      if jq -e --arg h "$h" 'select(.host == $h and .success != true)' "$WORK/events.jsonl" >/dev/null; then
+        record "$c" "$h" PASS "failed as expected"
+      else
+        record "$c" "$h" FAIL "expected the apply to fail"
+      fi
+    done
+    continue
+  fi
+
   passed=""
   for h in $(jq -r 'keys[]' <<<"$hosts_json"); do
     failed="$(jq -r --arg h "$h" 'select(.host == $h and .success != true) | .task' "$WORK/events.jsonl")"
@@ -184,6 +199,9 @@ for c in $cases; do
     fi
     if [ -f "$dir/verify.sh" ] && ! out="$(on_host "$h" 'sudo -n bash -s' < "$dir/verify.sh" 2>&1)"; then
       record "$c" "$h" FAIL "verify: $(echo "$out" | tail -1)"; continue
+    fi
+    if [ -f "$dir/verify-local.sh" ] && ! out="$(cd "$dir" && HOST="$h" bash verify-local.sh 2>&1)"; then
+      record "$c" "$h" FAIL "verify-local: $(echo "$out" | tail -1)"; continue
     fi
     record "$c" "$h" PASS "apply+verify"
     passed="$passed $h"

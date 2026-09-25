@@ -1,0 +1,11 @@
+plays:
+  - name: blockinfile
+    hosts: all
+    become: true
+    tasks:
+      - name: Block
+        blockinfile:
+          path: /etc/onigirazu-e2e-block.conf
+          block: |
+            alpha=1
+            beta=2

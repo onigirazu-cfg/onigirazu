@@ -1,0 +1,10 @@
+plays:
+  - name: authorized_key
+    hosts: all
+    become: true
+    tasks:
+      - name: Key for root
+        authorized_key:
+          user: root
+          key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPOnigirazuE2eTestKeyOnly0000000000000000000 e2e@onigirazu"
+          state: present

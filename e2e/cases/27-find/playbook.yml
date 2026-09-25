@@ -1,0 +1,15 @@
+plays:
+  - name: find
+    hosts: all
+    become: true
+    tasks:
+      - name: Find files
+        find:
+          path: /opt/onigirazu-e2e-find
+          pattern: "*.conf"
+          type: file
+        register: found
+      - name: Save the count
+        copy:
+          content: "{{ found.matched }}\n"
+          dest: /root/onigirazu-e2e-find

@@ -1,0 +1,10 @@
+plays:
+  - name: archive
+    hosts: all
+    become: true
+    tasks:
+      - name: Archive a directory
+        archive:
+          path: /opt/onigirazu-e2e-arch
+          dest: /root/onigirazu-e2e.tar.gz
+          format: gz

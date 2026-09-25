@@ -1,0 +1,14 @@
+plays:
+  - name: uri
+    hosts: all
+    become: true
+    tasks:
+      - name: HTTP request from the host
+        uri:
+          url: https://raw.githubusercontent.com/onigirazu-cfg/onigirazu/main/go.mod
+          status_code: 200
+        register: resp
+      - name: Save the status
+        copy:
+          content: "{{ resp.status }}\n"
+          dest: /root/onigirazu-e2e-uri
