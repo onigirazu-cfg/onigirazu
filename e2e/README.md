@@ -23,6 +23,9 @@ Runs every case in `cases/` on disposable vSphere VMs cloned from the current
 - `EXPECT_FAIL` — optional; the apply must fail (no verify, no second apply);
 - `NOT_IDEMPOTENT` — optional; skips the second apply that must change nothing.
 
+With `keep_vms` the run key and inventory stay on the runner in
+`~/.cache/onigirazu-e2e/<run>`.
+
 The playbook runs from a copy of its case directory, so relative paths work.
 
 ## Configuration

@@ -20,6 +20,7 @@ TF_DIR="$HERE/terraform"
 WORK="$(mktemp -d)"
 BIN="$WORK/onigirazu"
 KEY="$WORK/id_e2e"
+INVENTORY="$WORK/inventory.yml"
 RESULTS="$WORK/results.tsv"
 TFVARS="$WORK/run.tfvars.json"
 
@@ -36,6 +37,12 @@ cleanup() {
     log "Destroying VMs"
     terraform -chdir="$TF_DIR" destroy -auto-approve -input=false -var-file="$TFVARS" >/dev/null ||
       echo "destroy failed; the janitor will remove the VMs"
+  fi
+  if [ -n "${KEEP_VMS:-}" ] && [ -f "$KEY" ]; then
+    # Kept VMs are only reachable with this run's key; it stays on the runner
+    local keep="$HOME/.cache/onigirazu-e2e/$RUN_ID"
+    mkdir -p "$keep" && cp "$KEY" "$INVENTORY" "$keep/" 2>/dev/null && chmod 700 "$keep"
+    echo "kept VMs: key and inventory in $keep on the runner"
   fi
   rm -rf "$WORK"
   exit "$rc"
@@ -108,7 +115,6 @@ if [ -n "${GITHUB_ACTIONS:-}" ]; then
 fi
 echo "$hosts_json" | jq -r 'to_entries[] | "\(.key)\t\(.value)"'
 
-INVENTORY="$WORK/inventory.yml"
 {
   echo "groups:"
   echo "  e2e:"
