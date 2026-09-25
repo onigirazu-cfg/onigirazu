@@ -205,28 +205,24 @@ func (m *SystemdModule) handleUnit(ctx context.Context, exec *executor.CommandEx
 			unitPath = fmt.Sprintf("/etc/systemd/system/%s", name)
 		}
 
-		// Check if unit file exists
-		_, err := exec.Execute("test", "-f", unitPath)
-		unitExists := err == nil
-
 		if content != "" {
-			// Write unit file content
-			tmpFile := fmt.Sprintf("/tmp/%s", name)
-			if _, err := exec.Execute("sh", "-c", fmt.Sprintf("cat > %s << 'EOF'\n%s\nEOF", tmpFile, content)); err != nil {
-				return m.failResult(result, fmt.Sprintf("failed to write unit file: %v", err))
+			current, exists, err := readHostFile(ctx, host, args, unitPath)
+			if err != nil {
+				return m.failResult(result, err.Error())
 			}
-
-			// Move to systemd directory
-			if _, err := exec.Execute("mv", tmpFile, unitPath); err != nil {
-				return m.failResult(result, fmt.Sprintf("failed to move unit file: %v", err))
+			if !exists || string(current) != content {
+				if err := writeHostFile(ctx, host, args, unitPath, []byte(content), 0644); err != nil {
+					return m.failResult(result, fmt.Sprintf("failed to write unit file: %v", err))
+				}
+				changed = true
+				result.Output["action"] = "unit_written"
 			}
-
-			changed = true
-			result.Output["action"] = "unit_created"
+		} else if _, err := exec.Execute("test", "-f", unitPath); err != nil {
+			return m.failResult(result, fmt.Sprintf("unit file %s does not exist", unitPath))
 		}
 
-		// Reload systemd if unit was created or modified
-		if changed || !unitExists {
+		// Reload systemd only when a unit file changed
+		if changed {
 			if _, err := exec.Execute("systemctl", "daemon-reload"); err != nil {
 				return m.failResult(result, fmt.Sprintf("failed to reload systemd: %v", err))
 			}
