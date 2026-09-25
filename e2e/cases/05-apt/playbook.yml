@@ -7,3 +7,4 @@ plays:
         apt:
           name: [figlet, sl]
           state: present
+          update_cache: true
