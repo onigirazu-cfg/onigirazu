@@ -1,0 +1,10 @@
+plays:
+  - name: service
+    hosts: all
+    become: true
+    tasks:
+      - name: cron running and enabled
+        service:
+          name: cron
+          state: started
+          enabled: true

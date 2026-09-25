@@ -1,0 +1,12 @@
+plays:
+  - name: mount
+    hosts: all
+    become: true
+    tasks:
+      - name: tmpfs mount
+        mount:
+          path: /mnt/onigirazu-e2e
+          src: tmpfs
+          fstype: tmpfs
+          opts: size=16m
+          state: mounted

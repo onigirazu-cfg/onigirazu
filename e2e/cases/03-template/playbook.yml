@@ -1,0 +1,12 @@
+plays:
+  - name: template
+    hosts: all
+    become: true
+    vars:
+      port: 8080
+    tasks:
+      - name: Render a template into /etc
+        template:
+          content: "port = {{ port }}\n"
+          dest: /etc/onigirazu-e2e/app.conf
+          mode: "0644"

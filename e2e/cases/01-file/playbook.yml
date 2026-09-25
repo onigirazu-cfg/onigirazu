@@ -1,0 +1,14 @@
+plays:
+  - name: file
+    hosts: all
+    become: true
+    tasks:
+      - name: Create directory
+        file:
+          path: /opt/onigirazu-e2e
+          state: directory
+          mode: "0750"
+      - name: Touch a file
+        file:
+          path: /opt/onigirazu-e2e/touched
+          state: touch

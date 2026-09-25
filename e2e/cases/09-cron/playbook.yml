@@ -1,0 +1,13 @@
+plays:
+  - name: cron
+    hosts: all
+    become: true
+    tasks:
+      - name: Cron job
+        cron:
+          operation: job
+          name: onigirazu_e2e
+          job: /bin/true
+          minute: "17"
+          hour: "3"
+          user: root

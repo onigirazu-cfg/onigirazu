@@ -1,0 +1,100 @@
+name: E2E
+
+# Disposable vSphere VMs on a self-hosted runner. Never runs for pull requests:
+# only by hand, nightly after the golden images are rebuilt, and the janitor.
+on:
+  workflow_dispatch:
+    inputs:
+      cases:
+        description: 'Case directories to run, space separated (empty = all)'
+        required: false
+        type: string
+        default: ''
+      keep_vms:
+        description: 'Keep the VMs for debugging (the janitor still removes them after 3h)'
+        required: false
+        type: boolean
+        default: false
+  schedule:
+    - cron: '0 5 * * *'   # e2e, after the 01:00 image rebuild
+    - cron: '30 * * * *'  # janitor
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 5 * * *'
+    runs-on: [self-hosted, vsphere-e2e]
+    timeout-minutes: 60
+    concurrency:
+      group: e2e-vsphere
+      cancel-in-progress: false
+    env:
+      GOVC_VERSION: v0.56.0
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Install govc
+        run: |
+          dir="$RUNNER_TEMP/govc-$GOVC_VERSION"
+          if [ ! -x "$dir/govc" ]; then
+            mkdir -p "$dir"
+            curl -fsSL "https://github.com/vmware/govmomi/releases/download/$GOVC_VERSION/govc_Linux_x86_64.tar.gz" | tar -xz -C "$dir" govc
+          fi
+          echo "$dir" >> "$GITHUB_PATH"
+
+      - name: Run e2e
+        env:
+          TF_VAR_vsphere_server: ${{ secrets.VSPHERE_SERVER }}
+          TF_VAR_vsphere_user: ${{ secrets.VSPHERE_USER }}
+          TF_VAR_vsphere_password: ${{ secrets.VSPHERE_PASSWORD }}
+          TF_VAR_datacenter: ${{ secrets.E2E_DATACENTER }}
+          TF_VAR_cluster: ${{ secrets.E2E_CLUSTER }}
+          TF_VAR_host: ${{ secrets.E2E_HOST }}
+          TF_VAR_datastore: ${{ secrets.E2E_DATASTORE }}
+          TF_VAR_network: ${{ secrets.E2E_NETWORK }}
+          TF_VAR_folder: ${{ secrets.E2E_FOLDER }}
+          TF_VAR_library: ${{ secrets.E2E_LIBRARY }}
+          RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          E2E_CASES: ${{ inputs.cases }}
+          KEEP_VMS: ${{ inputs.keep_vms && '1' || '' }}
+        run: e2e/run.sh
+
+  janitor:
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '30 * * * *'
+    runs-on: [self-hosted, vsphere-e2e]
+    timeout-minutes: 15
+    env:
+      GOVC_VERSION: v0.56.0
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install govc
+        run: |
+          dir="$RUNNER_TEMP/govc-$GOVC_VERSION"
+          if [ ! -x "$dir/govc" ]; then
+            mkdir -p "$dir"
+            curl -fsSL "https://github.com/vmware/govmomi/releases/download/$GOVC_VERSION/govc_Linux_x86_64.tar.gz" | tar -xz -C "$dir" govc
+          fi
+          echo "$dir" >> "$GITHUB_PATH"
+
+      - name: Remove expired e2e VMs
+        env:
+          GOVC_URL: ${{ secrets.VSPHERE_SERVER }}
+          GOVC_USERNAME: ${{ secrets.VSPHERE_USER }}
+          GOVC_PASSWORD: ${{ secrets.VSPHERE_PASSWORD }}
+          GOVC_INSECURE: '1'
+          E2E_DATACENTER: ${{ secrets.E2E_DATACENTER }}
+          E2E_FOLDER: ${{ secrets.E2E_FOLDER }}
+        run: e2e/janitor.sh
