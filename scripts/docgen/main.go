@@ -175,11 +175,9 @@ func main() {
 		{Name: "types", Path: "pkg/types", Description: "Core types and interfaces"},
 		{Name: "utils", Path: "pkg/utils", Description: "Utility functions"},
 		{Name: "config", Path: "internal/config", Description: "Configuration management"},
-		{Name: "core", Path: "internal/core", Description: "Core engine"},
 		{Name: "engine", Path: "internal/engine", Description: "Execution engine"},
 		{Name: "modules", Path: "internal/modules", Description: "Built-in modules"},
 		{Name: "parser", Path: "internal/parser", Description: "YAML parsing"},
-		{Name: "workflow", Path: "internal/workflow", Description: "Workflow orchestration"},
 	}
 
 	// Generate documentation content for each package
