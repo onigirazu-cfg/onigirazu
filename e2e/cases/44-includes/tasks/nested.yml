@@ -1,0 +1,4 @@
+- name: Nested include
+  copy:
+    content: "nested\n"
+    dest: /root/onigirazu-e2e-include-nested

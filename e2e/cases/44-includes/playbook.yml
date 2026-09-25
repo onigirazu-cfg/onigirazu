@@ -1,0 +1,13 @@
+plays:
+  - name: includes
+    hosts: all
+    become: true
+    tasks:
+      - name: Value known only at run time
+        command:
+          cmd: "echo runtime"
+        register: probe
+        changed_when: false
+      - include_tasks: tasks/files.yml
+      - import_tasks: tasks/skipped.yml
+        when: probe.stdout == "never"

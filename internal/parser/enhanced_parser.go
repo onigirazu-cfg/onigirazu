@@ -77,6 +77,11 @@ func (p *EnhancedParser) ParsePlaybook(ctx context.Context, filePath string) (*t
 	playbook.FilePath = filePath
 	playbook.Name = filepath.Base(filePath)
 
+	// Expand includes first, so validation sees the included tasks
+	if err := p.processIncludes(ctx, &playbook, filepath.Dir(filePath)); err != nil {
+		return nil, fmt.Errorf("failed to process includes in playbook %s: %w", filePath, err)
+	}
+
 	// Validate and process playbook
 	if err := p.validatePlaybook(&playbook); err != nil {
 		return nil, fmt.Errorf("playbook validation failed for %s: %w", filePath, err)
@@ -87,11 +92,6 @@ func (p *EnhancedParser) ParsePlaybook(ctx context.Context, filePath string) (*t
 		if err := p.moduleSyntaxValidator.ValidatePlaybookModules(&playbook); err != nil {
 			return nil, fmt.Errorf("module syntax validation failed: %w", err)
 		}
-	}
-
-	// Process includes and imports
-	if err := p.processIncludes(ctx, &playbook, filepath.Dir(filePath)); err != nil {
-		return nil, fmt.Errorf("failed to process includes in playbook %s: %w", filePath, err)
 	}
 
 	// Load roles for each play (NEW v1.42.0)
@@ -180,8 +180,8 @@ func (p *EnhancedParser) validatePlay(play *types.Play, index int) error {
 		return fmt.Errorf("play '%s' must specify hosts", play.Name)
 	}
 
-	if len(play.Tasks) == 0 && len(play.PreTasks) == 0 && len(play.PostTasks) == 0 {
-		return fmt.Errorf("play '%s' must contain at least one task", play.Name)
+	if len(play.Tasks) == 0 && len(play.PreTasks) == 0 && len(play.PostTasks) == 0 && len(play.Roles) == 0 {
+		return fmt.Errorf("play '%s' must contain at least one task or role", play.Name)
 	}
 
 	// Validate tasks
@@ -210,6 +210,9 @@ func (p *EnhancedParser) validatePlay(play *types.Play, index int) error {
 
 // validateTask validates a single task
 func (p *EnhancedParser) validateTask(task *types.Task, context string) error {
+	if task.Include != "" {
+		return nil // replaced by the included tasks, which are validated then
+	}
 	if task.Module == "" {
 		return fmt.Errorf("task in %s must specify a module", context)
 	}
@@ -365,55 +368,79 @@ func (p *EnhancedParser) processIncludes(ctx context.Context, playbook *types.Pl
 	return nil
 }
 
-// processPlayIncludes processes includes within a play
+// processPlayIncludes expands include/include_tasks/import_tasks in every
+// task list of a play
 func (p *EnhancedParser) processPlayIncludes(ctx context.Context, play *types.Play, baseDir string) error {
-	// Process task includes
-	var expandedTasks []types.Task
-	for _, task := range play.Tasks {
-		if task.Include != "" {
-			// Load included tasks
-			includedTasks, err := p.loadIncludedTasks(ctx, task.Include, baseDir)
-			if err != nil {
-				return fmt.Errorf("failed to load included tasks from %s: %w", task.Include, err)
-			}
-			expandedTasks = append(expandedTasks, includedTasks...)
-		} else {
-			expandedTasks = append(expandedTasks, task)
+	for _, list := range []*[]types.Task{&play.PreTasks, &play.Tasks, &play.PostTasks, &play.Handlers} {
+		expanded, err := p.expandIncludes(ctx, *list, baseDir, 0)
+		if err != nil {
+			return err
 		}
+		*list = expanded
 	}
-	play.Tasks = expandedTasks
-
 	return nil
 }
 
-// loadIncludedTasks loads tasks from an included file
-func (p *EnhancedParser) loadIncludedTasks(ctx context.Context, includePath, baseDir string) ([]types.Task, error) {
-	fullPath := filepath.Join(baseDir, includePath)
-
-	content, err := os.ReadFile(fullPath) // #nosec G304 -- fullPath is constructed from baseDir and include path
-	if err != nil {
-		return nil, fmt.Errorf("failed to read included file %s: %w", fullPath, err)
+// expandIncludes replaces include tasks with the tasks of the included file.
+// Paths are relative to the including file; the include's when and tags apply
+// to every included task, as with Ansible's import_tasks.
+func (p *EnhancedParser) expandIncludes(ctx context.Context, tasks []types.Task, baseDir string, depth int) ([]types.Task, error) {
+	if depth > 16 {
+		return nil, fmt.Errorf("includes nested more than 16 levels (a loop?)")
 	}
+	var out []types.Task
+	for _, task := range tasks {
+		if task.Include == "" {
+			out = append(out, task)
+			continue
+		}
+		path := task.Include
+		if !filepath.IsAbs(path) {
+			path = filepath.Join(baseDir, path)
+		}
+		included, err := p.loadIncludedTasks(ctx, path)
+		if err != nil {
+			return nil, err
+		}
+		included, err = p.expandIncludes(ctx, included, filepath.Dir(path), depth+1)
+		if err != nil {
+			return nil, err
+		}
+		for i := range included {
+			if task.When != "" {
+				if included[i].When != "" {
+					included[i].When = "(" + task.When + ") and (" + included[i].When + ")"
+				} else {
+					included[i].When = task.When
+				}
+			}
+			included[i].Tags = append(append([]string{}, task.Tags...), included[i].Tags...)
+		}
+		out = append(out, included...)
+	}
+	return out, nil
+}
 
-	// Render templates
-	renderedContent, err := p.templateEngine.Render(ctx, string(content), p.variables)
+// loadIncludedTasks reads the tasks of an included file. They are rendered
+// at run time like any other task, with the variables of each host.
+func (p *EnhancedParser) loadIncludedTasks(ctx context.Context, path string) ([]types.Task, error) {
+	content, err := os.ReadFile(path) // #nosec G304 -- include paths come from the playbook
 	if err != nil {
-		return nil, fmt.Errorf("failed to render templates in included file %s: %w", fullPath, err)
+		return nil, fmt.Errorf("failed to read included file %s: %w", path, err)
 	}
 
 	var tasks []types.Task
-	if err := yaml.Unmarshal([]byte(renderedContent), &tasks); err != nil {
-		return nil, fmt.Errorf("failed to parse YAML in included file %s: %w", fullPath, err)
+	if err := yaml.Unmarshal(content, &tasks); err != nil {
+		return nil, fmt.Errorf("failed to parse YAML in included file %s: %w", path, err)
 	}
 
-	// Validate included tasks
-	for i, task := range tasks {
-		if err := p.validateTask(&task, fmt.Sprintf("included[%s].task[%d]", includePath, i)); err != nil {
+	for i := range tasks {
+		if err := p.validateTask(&tasks[i], fmt.Sprintf("included[%s].task[%d]", path, i)); err != nil {
 			return nil, err
 		}
 	}
 
-	p.logger.Debug("Loaded %d tasks from included file: %s", len(tasks), includePath)
+	p.logger.Debug("Loaded %d tasks from included file: %s", len(tasks), path)
 	return tasks, nil
 }
 
@@ -471,6 +498,13 @@ func (p *EnhancedParser) processRoles(ctx context.Context, playbook *types.Playb
 			role, err := p.roleLoader.LoadRole(ctx, roleRef)
 			if err != nil {
 				return fmt.Errorf("failed to load role %s: %w", roleRef.Name, err)
+			}
+			// includes in a role are relative to its tasks/ and handlers/
+			if role.Tasks, err = p.expandIncludes(ctx, role.Tasks, filepath.Join(role.Path, "tasks"), 0); err != nil {
+				return fmt.Errorf("role %s: %w", roleRef.Name, err)
+			}
+			if role.Handlers, err = p.expandIncludes(ctx, role.Handlers, filepath.Join(role.Path, "handlers"), 0); err != nil {
+				return fmt.Errorf("role %s: %w", roleRef.Name, err)
 			}
 			playbook.Plays[i].RoleObjects = append(playbook.Plays[i].RoleObjects, role)
 		}

@@ -218,6 +218,8 @@ func (t *Task) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		"changed_when":  true,
 		"failed_when":   true,
 		"include":       true,
+		"include_tasks": true,
+		"import_tasks":  true,
 		"serial":        true,
 		"retry_delay":   true,
 		"become":        true,
@@ -242,8 +244,11 @@ func (t *Task) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	if ignoreErrors, ok := taskMap["ignore_errors"].(bool); ok {
 		t.IgnoreErrors = ignoreErrors
 	}
-	if include, ok := taskMap["include"].(string); ok {
-		t.Include = include
+	// include, include_tasks and import_tasks are expanded by the parser
+	for _, key := range []string{"include", "include_tasks", "import_tasks"} {
+		if include, ok := taskMap[key].(string); ok {
+			t.Include = include
+		}
 	}
 	if serial, ok := taskMap["serial"].(bool); ok {
 		t.Serial = serial

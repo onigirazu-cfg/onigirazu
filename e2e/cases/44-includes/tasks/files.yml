@@ -1,0 +1,6 @@
+- name: Loop in an included file with a registered value
+  copy:
+    content: "{{ item }} {{ probe.stdout }}\n"
+    dest: "/root/onigirazu-e2e-include-{{ item }}"
+  loop: [a, b]
+- include: nested.yml

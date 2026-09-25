@@ -89,8 +89,8 @@ func (p *Parser) ValidatePlay(play *types.Play, index int) error {
 		return fmt.Errorf("play #%d: hosts not specified", index+1)
 	}
 
-	if len(play.Tasks) == 0 {
-		return fmt.Errorf("play #%d: play must contain at least one task", index+1)
+	if len(play.Tasks) == 0 && len(play.PreTasks) == 0 && len(play.PostTasks) == 0 && len(play.Roles) == 0 {
+		return fmt.Errorf("play #%d: play must contain at least one task or role", index+1)
 	}
 
 	for i, task := range play.Tasks {
