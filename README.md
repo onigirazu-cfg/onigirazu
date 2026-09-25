@@ -751,15 +751,36 @@ Execute tasks multiple times:
 
 ### Conditionals
 
-Skip tasks based on conditions:
+`when`, `until`, `changed_when` and `failed_when` take an expression,
+evaluated per host with that host's facts and registered results:
 
 ```yaml
 - name: "Install Docker on Debian"
   package:
     name: docker.io
     state: present
-  when: "{{ onigirazu_os_family == 'Debian' }}"
+  when: onigirazu_os_family == "Debian"
+
+- name: "Wait for the app"
+  uri:
+    url: http://localhost:8080/health
+  register: health
+  until: health.status_code == 200
+  retries: 10
+  delay: 3
+
+- name: "Probe"
+  command:
+    cmd: systemctl is-active app
+  register: app
+  changed_when: false
+  failed_when: app.rc is defined and app.rc > 3
 ```
+
+Supported: `==`, `!=`, `<`, `>`, `and`, `or`, `not`, `in`, `is defined`,
+`is not defined`, filters `| length`, `| lower`, `| upper`, `| int`,
+`| trim`. A list under `when` means all items must hold; `{{ }}` around
+the expression is optional. A condition that cannot be evaluated fails the task.
 
 ### Variables
 

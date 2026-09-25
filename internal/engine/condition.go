@@ -18,9 +18,10 @@ var (
 	// subject of an "is [not] defined" test: a name with .attr or [key] parts
 	definedTest = regexp.MustCompile(`([A-Za-z_]\w*(?:\.[A-Za-z_]\w*|\[[^\]]+\])*)\s+is\s+(not\s+defined|undefined|defined)\b`)
 	// Jinja filters without arguments that map onto expr builtins
-	bareFilter = regexp.MustCompile(`\|\s*(length|count|lower|upper|int|float|string|trim|bool|first|last)\b(\s*\()?`)
-	jinjaWords = strings.NewReplacer("True", "true", "False", "false", "None", "nil")
-	quoted     = regexp.MustCompile(`"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'`)
+	bareFilter    = regexp.MustCompile(`\|\s*(length|count|lower|upper|int|float|string|trim|bool|first|last)\b(\s*\()?`)
+	jinjaWords    = strings.NewReplacer("True", "true", "False", "false", "None", "nil")
+	wholeTemplate = regexp.MustCompile(`^\{\{\s*((?:[^{}]|\{[^{]|\}[^}])*?)\s*\}\}$`)
+	quoted        = regexp.MustCompile(`"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'`)
 )
 
 // conditionHolds evaluates a when/until condition against the host's variables
@@ -28,6 +29,10 @@ func (e *ExecutionEngine) conditionHolds(ctx context.Context, condition string, 
 	condition = strings.TrimSpace(condition)
 	if condition == "" {
 		return true, nil
+	}
+	// "{{ expr }}" is the same expression in template braces
+	if m := wholeTemplate.FindStringSubmatch(condition); m != nil {
+		return evalCondition(m[1], variables)
 	}
 	if strings.Contains(condition, "{{") {
 		rendered, err := e.templateEngine.Render(ctx, condition, variables)
