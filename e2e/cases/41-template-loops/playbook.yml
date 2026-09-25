@@ -1,0 +1,18 @@
+plays:
+  - name: template loops
+    hosts: all
+    become: true
+    vars:
+      backends:
+        - {name: app1, ip: 10.0.0.1}
+        - {name: app2, ip: 10.0.0.2}
+      settings: {timeout: 30, retries: 3}
+    tasks:
+      - name: File template with loops
+        template:
+          src: files/hosts.j2
+          dest: /etc/onigirazu-e2e-hosts
+      - name: Inline content with a loop
+        copy:
+          content: "{% for h in backends %}{{ h.name }}{% if not loop.last %},{% endif %}{% endfor %}\n"
+          dest: /etc/onigirazu-e2e-backends

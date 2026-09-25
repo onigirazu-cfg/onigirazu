@@ -819,6 +819,17 @@ Use Jinja2-like templates for configuration files:
     dest: /etc/myapp/app.conf
 ```
 
+Templates support `{{ expr }}` with filters, `{% if %}`/`{% elif %}`/`{% else %}`,
+`{% for x in list %}` and `{% for k, v in dict.items() %}` (with `loop.index`,
+`loop.first`, `loop.last`, `loop.length`), and `{%-`/`-%}` whitespace control.
+As in Ansible, the newline after a block tag is dropped:
+
+```jinja
+{% for b in backends %}
+server {{ b.name }} {{ b.ip }}:{{ b.port | default(80) }}
+{% endfor %}
+```
+
 ### Error Handling
 
 Control error behavior:
