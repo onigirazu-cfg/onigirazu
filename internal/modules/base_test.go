@@ -327,11 +327,18 @@ func TestGetIntArg(t *testing.T) {
 			expected:     99,
 		},
 		{
-			name:         "wrong type",
+			name:         "numeric string (templated value)",
 			args:         map[string]interface{}{"key": "42"},
 			key:          "key",
 			defaultValue: 0,
-			expected:     0,
+			expected:     42,
+		},
+		{
+			name:         "non-numeric string",
+			args:         map[string]interface{}{"key": "forty-two"},
+			key:          "key",
+			defaultValue: 7,
+			expected:     7,
 		},
 		{
 			name:         "zero value",

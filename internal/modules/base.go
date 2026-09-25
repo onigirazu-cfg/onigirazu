@@ -3,6 +3,8 @@ package modules
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/onigirazu-cfg/onigirazu/internal/executor"
@@ -108,14 +110,30 @@ func getBoolArg(args map[string]interface{}, key string, defaultValue bool) bool
 
 func getIntArg(args map[string]interface{}, key string, defaultValue int) int {
 	if val, exists := args[key]; exists {
-		if i, ok := val.(int); ok {
+		if i, ok := toInt(val); ok {
 			return i
-		}
-		if f, ok := val.(float64); ok {
-			return int(f)
 		}
 	}
 	return defaultValue
+}
+
+// toInt accepts the number types YAML and JSON produce, and numeric strings
+// (templated values arrive as strings)
+func toInt(val interface{}) (int, bool) {
+	switch v := val.(type) {
+	case int:
+		return v, true
+	case int64:
+		return int(v), true
+	case uint64:
+		return int(v), true
+	case float64:
+		return int(v), true
+	case string:
+		i, err := strconv.Atoi(strings.TrimSpace(v))
+		return i, err == nil
+	}
+	return 0, false
 }
 
 func getMapArg(args map[string]interface{}, key string, defaultValue map[string]interface{}) map[string]interface{} {
