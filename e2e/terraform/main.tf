@@ -39,15 +39,13 @@ data "vsphere_network" "net" {
   datacenter_id = data.vsphere_datacenter.dc.id
 }
 
-data "vsphere_content_library" "lib" {
-  name = var.library
-}
-
-data "vsphere_content_library_item" "image" {
-  for_each   = var.images
-  name       = each.value
-  library_id = data.vsphere_content_library.lib.id
-  type       = "vm-template"
+# Every content library VM template is backed by an inventory template of the
+# same name. Cloning that one uses the SOAP API; the library deploy endpoint
+# answered 403 with the same privileges.
+data "vsphere_virtual_machine" "template" {
+  for_each      = var.images
+  name          = each.value
+  datacenter_id = data.vsphere_datacenter.dc.id
 }
 
 locals {
@@ -65,9 +63,11 @@ resource "vsphere_virtual_machine" "vm" {
   host_system_id   = data.vsphere_host.host.id
   datastore_id     = data.vsphere_datastore.ds.id
 
-  num_cpus = var.cpus
-  memory   = var.memory_mb
-  guest_id = "ubuntu64Guest"
+  num_cpus  = var.cpus
+  memory    = var.memory_mb
+  guest_id  = data.vsphere_virtual_machine.template[each.key].guest_id
+  firmware  = data.vsphere_virtual_machine.template[each.key].firmware
+  scsi_type = data.vsphere_virtual_machine.template[each.key].scsi_type
 
   annotation = join("\n", [
     "TEMPORARY - onigirazu e2e test VM, deleted automatically.",
@@ -88,13 +88,13 @@ resource "vsphere_virtual_machine" "vm" {
 
   disk {
     label            = "disk0"
-    size             = var.disk_gb
+    size             = data.vsphere_virtual_machine.template[each.key].disks[0].size
     thin_provisioned = true
     eagerly_scrub    = false
   }
 
   clone {
-    template_uuid = data.vsphere_content_library_item.image[each.key].id
+    template_uuid = data.vsphere_virtual_machine.template[each.key].id
 
     customize {
       timeout = 20

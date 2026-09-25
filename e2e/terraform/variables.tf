@@ -14,7 +14,10 @@ variable "host" { type = string }
 variable "datastore" { type = string }
 variable "network" { type = string }
 variable "folder" { type = string }
-variable "library" { type = string }
+variable "library" {
+  description = "Content library whose [latest] items name the templates"
+  type        = string
+}
 
 variable "images" {
   description = "Short OS key => content library item name"
@@ -53,10 +56,4 @@ variable "cpus" {
 variable "memory_mb" {
   type    = number
   default = 2048
-}
-
-variable "disk_gb" {
-  description = "Must be at least the template's disk size"
-  type        = number
-  default     = 50
 }
