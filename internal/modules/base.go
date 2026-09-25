@@ -340,3 +340,10 @@ func BuildStateOutput(state map[string]interface{}, changed bool, changeDetails 
 
 	return output
 }
+
+// taskVars returns the task variables (play vars, facts, set_fact, register)
+// the registry passes to every module
+func taskVars(args map[string]interface{}) map[string]interface{} {
+	vars, _ := args["_vars"].(map[string]interface{})
+	return vars
+}

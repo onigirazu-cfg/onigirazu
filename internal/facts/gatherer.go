@@ -3,6 +3,7 @@ package facts
 import (
 	"context"
 	"fmt"
+	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
@@ -11,6 +12,19 @@ import (
 	"github.com/onigirazu-cfg/onigirazu/internal/ssh"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
+
+// commandRunner runs a shell command on the host facts are gathered from
+type commandRunner interface {
+	ExecuteCommand(command string) (string, error)
+}
+
+// localRunner serves hosts with a local connection
+type localRunner struct{}
+
+func (localRunner) ExecuteCommand(command string) (string, error) {
+	out, err := exec.Command("sh", "-c", command).Output()
+	return string(out), err
+}
 
 // Gatherer collects system facts from remote hosts
 type Gatherer struct {
@@ -31,12 +45,15 @@ func (g *Gatherer) GatherFacts(ctx context.Context, host types.Host) (*cache.Sys
 		return facts, nil
 	}
 
-	// Connect to host
-	client, err := ssh.NewClient(host)
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect to host %s: %w", host.Name, err)
+	var client commandRunner = localRunner{}
+	if !ssh.IsLocal(host) {
+		sshClient, err := ssh.NewClient(host)
+		if err != nil {
+			return nil, fmt.Errorf("failed to connect to host %s: %w", host.Name, err)
+		}
+		defer sshClient.Close()
+		client = sshClient
 	}
-	defer client.Close()
 
 	facts := &cache.SystemFacts{}
 
@@ -67,7 +84,7 @@ func (g *Gatherer) GatherFacts(ctx context.Context, host types.Host) (*cache.Sys
 }
 
 // gatherOSInfo collects operating system information
-func (g *Gatherer) gatherOSInfo(client *ssh.Client, facts *cache.SystemFacts) error {
+func (g *Gatherer) gatherOSInfo(client commandRunner, facts *cache.SystemFacts) error {
 	// Get kernel name
 	kernel, err := client.ExecuteCommand("uname -s")
 	if err != nil {
@@ -120,7 +137,7 @@ func (g *Gatherer) gatherOSInfo(client *ssh.Client, facts *cache.SystemFacts) er
 }
 
 // detectLinuxDistribution detects Linux distribution
-func (g *Gatherer) detectLinuxDistribution(client *ssh.Client, facts *cache.SystemFacts) {
+func (g *Gatherer) detectLinuxDistribution(client commandRunner, facts *cache.SystemFacts) {
 	// Try /etc/os-release first (modern systems)
 	osRelease, err := client.ExecuteCommand("cat /etc/os-release 2>/dev/null")
 	if err == nil {
@@ -232,7 +249,7 @@ func (g *Gatherer) parseRedHatRelease(content string) string {
 }
 
 // detectMacOSVersion detects macOS version
-func (g *Gatherer) detectMacOSVersion(client *ssh.Client, facts *cache.SystemFacts) {
+func (g *Gatherer) detectMacOSVersion(client commandRunner, facts *cache.SystemFacts) {
 	version, err := client.ExecuteCommand("sw_vers -productVersion 2>/dev/null")
 	if err == nil {
 		facts.OSVersion = strings.TrimSpace(version)
@@ -240,7 +257,7 @@ func (g *Gatherer) detectMacOSVersion(client *ssh.Client, facts *cache.SystemFac
 }
 
 // gatherHardwareInfo collects hardware information
-func (g *Gatherer) gatherHardwareInfo(client *ssh.Client, facts *cache.SystemFacts) error {
+func (g *Gatherer) gatherHardwareInfo(client commandRunner, facts *cache.SystemFacts) error {
 	// Get CPU cores
 	if facts.Kernel == "Linux" {
 		cpuInfo, err := client.ExecuteCommand("nproc 2>/dev/null || grep -c ^processor /proc/cpuinfo")
@@ -277,7 +294,7 @@ func (g *Gatherer) gatherHardwareInfo(client *ssh.Client, facts *cache.SystemFac
 }
 
 // gatherNetworkInfo collects network information
-func (g *Gatherer) gatherNetworkInfo(client *ssh.Client, facts *cache.SystemFacts) error {
+func (g *Gatherer) gatherNetworkInfo(client commandRunner, facts *cache.SystemFacts) error {
 	// Get default IPv4 address
 	if facts.Kernel == "Linux" {
 		// Try to get the IP of the default route interface
@@ -333,7 +350,7 @@ func (g *Gatherer) isValidIPv4(ip string) bool {
 }
 
 // gatherUserInfo collects user and environment information
-func (g *Gatherer) gatherUserInfo(client *ssh.Client, facts *cache.SystemFacts) error {
+func (g *Gatherer) gatherUserInfo(client commandRunner, facts *cache.SystemFacts) error {
 	// Get current username
 	username, err := client.ExecuteCommand("whoami")
 	if err == nil {

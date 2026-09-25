@@ -106,9 +106,12 @@ func (m *TemplateModule) executeLocal(ctx context.Context, host types.Host, args
 	variables := getMapArg(args, "vars", make(map[string]interface{}))
 	force := getBoolArg(args, "force", false)
 
-	// Merge host variables
+	// Task variables (they include host vars), then the task's own vars
 	allVars := make(map[string]interface{})
 	for k, v := range host.Vars {
+		allVars[k] = v
+	}
+	for k, v := range taskVars(args) {
 		allVars[k] = v
 	}
 	for k, v := range variables {
@@ -259,9 +262,12 @@ func (m *TemplateModule) executeRemote(ctx context.Context, host types.Host, cli
 	variables := getMapArg(args, "vars", make(map[string]interface{}))
 	force := getBoolArg(args, "force", false)
 
-	// Merge host variables
+	// Task variables (they include host vars), then the task's own vars
 	allVars := make(map[string]interface{})
 	for k, v := range host.Vars {
+		allVars[k] = v
+	}
+	for k, v := range taskVars(args) {
 		allVars[k] = v
 	}
 	for k, v := range variables {
