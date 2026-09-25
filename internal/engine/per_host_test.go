@@ -141,3 +141,30 @@ func TestRegisteredValue_Lines(t *testing.T) {
 	assert.Equal(t, []interface{}{"a", "b"}, v["stdout_lines"])
 	assert.Equal(t, []interface{}{}, v["stderr_lines"])
 }
+
+func TestIgnoredFailure_DoesNotFailPlay(t *testing.T) {
+	engine, _, _ := perHostEngine(t, types.TaskResult{Success: false, Failed: true, Error: "exit 1"})
+	task := &types.Task{Name: "may fail", Module: "command", IgnoreErrors: true}
+	host := twoHosts()[0]
+	play := &types.PlayResult{Success: true}
+	require.NoError(t, engine.executeTaskOnHost(context.Background(), task, &host, map[string]interface{}{}, play))
+	assert.True(t, play.Success)
+	require.Len(t, play.Hosts, 1)
+	assert.False(t, play.Hosts[0].Failed)
+}
+
+func TestNotify_OnlyWhenChanged(t *testing.T) {
+	for _, changed := range []bool{false, true} {
+		engine, _, _ := perHostEngine(t, types.TaskResult{Success: true, Changed: changed})
+		task := &types.Task{Name: "conf", Module: "copy", Notify: []string{"restart"}}
+		host := twoHosts()[0]
+		play := &types.PlayResult{Success: true}
+		require.NoError(t, engine.executeTaskOnHost(context.Background(), task, &host, map[string]interface{}{}, play))
+		triggered := engine.collectTriggeredHandlers(play)
+		if changed {
+			assert.Equal(t, []string{"restart"}, triggered)
+		} else {
+			assert.Empty(t, triggered)
+		}
+	}
+}

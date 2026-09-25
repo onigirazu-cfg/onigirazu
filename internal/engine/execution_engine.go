@@ -479,9 +479,12 @@ func (e *ExecutionEngine) executePlay(ctx context.Context, play *types.Play) (*t
 				}
 			}
 
-			// Load role if using RoleReference
+			// The parser loads roles relative to the playbook (RoleObjects);
+			// load here only what it did not
 			var role *types.Role
-			if len(play.Roles) > 0 {
+			if i < len(play.RoleObjects) && play.RoleObjects[i] != nil {
+				role = play.RoleObjects[i]
+			} else {
 				var err error
 				role, err = e.roleLoader.LoadRole(ctx, roleRef)
 				if err != nil {
@@ -492,9 +495,6 @@ func (e *ExecutionEngine) executePlay(ctx context.Context, play *types.Play) (*t
 					result.Success = false
 					continue
 				}
-			} else {
-				// Use pre-loaded RoleObject
-				role = play.RoleObjects[i]
 			}
 
 			// Execute role with dependencies
@@ -861,7 +861,8 @@ func (e *ExecutionEngine) finishTask(task *types.Task, host *types.Host, result 
 	e.updateTaskStats(host.Name, task, result)
 
 	// Add notify handlers if task was successful
-	if result.Success && !result.Skipped && len(task.Notify) > 0 {
+	// only a task that changed something notifies its handlers
+	if result.Success && result.Changed && !result.Skipped && len(task.Notify) > 0 {
 		result.Notify = task.Notify
 	}
 
@@ -890,7 +891,8 @@ func (e *ExecutionEngine) finishTask(task *types.Task, host *types.Host, result 
 	}
 
 	hostResult.Tasks = append(hostResult.Tasks, result)
-	if result.Failed {
+	// an ignored failure is recorded but does not fail the host or the play
+	if result.Failed && !task.IgnoreErrors {
 		hostResult.Failed = true
 		hostResult.Success = false
 		playResult.Success = false

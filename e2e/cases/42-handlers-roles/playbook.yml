@@ -1,0 +1,25 @@
+plays:
+  - name: handlers and roles
+    hosts: all
+    become: true
+    roles:
+      - motd
+    tasks:
+      - name: A change notifies a handler (notify as a string)
+        copy:
+          content: "v1\n"
+          dest: /etc/onigirazu-e2e-handlers
+        notify: count runs
+      - name: No change, no notification
+        file:
+          path: /etc
+          state: directory
+        notify: must not run
+    handlers:
+      - name: count runs
+        shell:
+          cmd: "echo $(( $(cat /root/onigirazu-e2e-handler 2>/dev/null || echo 0) + 1 )) > /root/onigirazu-e2e-handler"
+      - name: must not run
+        copy:
+          content: "ran\n"
+          dest: /root/onigirazu-e2e-must-not-run

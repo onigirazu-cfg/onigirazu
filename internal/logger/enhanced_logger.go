@@ -664,13 +664,17 @@ func (l *EnhancedLogger) PlayEnd(playName, host string, success bool, duration t
 		status = "WITH ERRORS"
 	}
 
+	where := "" // a play spans hosts; the engine logs it once with no host
+	if host != "" {
+		where = fmt.Sprintf(" on host '%s'", host)
+	}
 	l.WithFields(map[string]interface{}{
 		"host":     host,
 		"play":     playName,
 		"type":     "play_end",
 		"success":  success,
 		"duration": duration.String(),
-	}).Info("=== Play '%s' on host '%s' completed %s in %v ===", playName, host, status, duration)
+	}).Info("=== Play '%s'%s completed %s in %v ===", playName, where, status, duration)
 }
 
 // Progress logs progress information
