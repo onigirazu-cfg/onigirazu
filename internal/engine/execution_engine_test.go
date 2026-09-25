@@ -791,7 +791,7 @@ func TestExecuteTask_Register(t *testing.T) {
 
 	// Check that variable was registered
 	engine.mutex.RLock()
-	registeredVar, exists := engine.variables["test_result"]
+	registeredVar, exists := engine.hostVars["host1"]["test_result"]
 	engine.mutex.RUnlock()
 
 	assert.True(t, exists)
@@ -847,7 +847,7 @@ func TestExecuteTask_SetFact(t *testing.T) {
 
 	// Check that fact was set
 	engine.mutex.RLock()
-	factValue, exists := engine.variables["my_fact"]
+	factValue, exists := engine.hostVars["host1"]["my_fact"]
 	engine.mutex.RUnlock()
 
 	assert.True(t, exists)
@@ -1075,8 +1075,8 @@ func TestGetExecutionSummary(t *testing.T) {
 	assert.Contains(t, summary, "cache")
 }
 
-// TestEvaluateCondition tests the evaluateCondition method
-func TestEvaluateCondition(t *testing.T) {
+// TestConditionHolds_Template tests conditions written as templates
+func TestConditionHolds_Template(t *testing.T) {
 	engine, _, _, _, _, mockTemplateEngine := createTestEngine()
 	ctx := context.Background()
 	vars := map[string]interface{}{"test_var": "value"}
@@ -1153,7 +1153,8 @@ func TestEvaluateCondition(t *testing.T) {
 			mockTemplateEngine.On("Render", ctx, tt.condition, vars).
 				Return(tt.templateResult, tt.templateError).Once()
 
-			skip, err := engine.evaluateCondition(ctx, tt.condition, vars)
+			holds, err := engine.conditionHolds(ctx, tt.condition, vars)
+			skip := !holds
 
 			if tt.expectedError {
 				assert.Error(t, err)
@@ -1464,8 +1465,8 @@ func TestExecuteTaskList_ConditionError(t *testing.T) {
 	}
 
 	err := engine.executeTaskList(ctx, tasks, hosts, map[string]interface{}{}, playResult)
-	assert.NoError(t, err) // Should continue despite condition error
+	assert.Error(t, err) // a condition that cannot be evaluated fails the task
 
-	// Verify that the task was still executed despite condition error
-	mockModuleRegistry.AssertCalled(t, "ExecuteTask", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+	// ... and the task itself never runs
+	mockModuleRegistry.AssertNotCalled(t, "ExecuteTask", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 }

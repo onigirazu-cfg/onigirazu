@@ -3,6 +3,8 @@ package types
 import (
 	"context"
 	"encoding/json"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -231,9 +233,7 @@ func (t *Task) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	if module, ok := taskMap["module"].(string); ok {
 		t.Module = module
 	}
-	if when, ok := taskMap["when"].(string); ok {
-		t.When = when
-	}
+	t.When = conditionValue(taskMap["when"])
 	if register, ok := taskMap["register"].(string); ok {
 		t.Register = register
 	}
@@ -295,38 +295,20 @@ func (t *Task) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	}
 
 	// Handle duration fields
-	if timeout, ok := taskMap["timeout"]; ok {
-		if timeoutStr, ok := timeout.(string); ok {
-			if d, err := time.ParseDuration(timeoutStr); err == nil {
-				t.Timeout = d
-			}
-		}
+	if d, ok := durationValue(taskMap["timeout"]); ok {
+		t.Timeout = d
 	}
-	if delay, ok := taskMap["delay"]; ok {
-		if delayStr, ok := delay.(string); ok {
-			if d, err := time.ParseDuration(delayStr); err == nil {
-				t.Delay = d
-			}
-		}
+	if d, ok := durationValue(taskMap["delay"]); ok {
+		t.Delay = d
 	}
-	if retryDelay, ok := taskMap["retry_delay"]; ok {
-		if retryDelayStr, ok := retryDelay.(string); ok {
-			if d, err := time.ParseDuration(retryDelayStr); err == nil {
-				t.RetryDelay = d
-			}
-		}
+	if d, ok := durationValue(taskMap["retry_delay"]); ok {
+		t.RetryDelay = d
 	}
 
 	// Handle string fields
-	if until, ok := taskMap["until"].(string); ok {
-		t.Until = until
-	}
-	if changedWhen, ok := taskMap["changed_when"].(string); ok {
-		t.ChangedWhen = changedWhen
-	}
-	if failedWhen, ok := taskMap["failed_when"].(string); ok {
-		t.FailedWhen = failedWhen
-	}
+	t.Until = conditionValue(taskMap["until"])
+	t.ChangedWhen = conditionValue(taskMap["changed_when"])
+	t.FailedWhen = conditionValue(taskMap["failed_when"])
 
 	// Handle loop
 	if loop, ok := taskMap["loop"]; ok {
@@ -1109,4 +1091,42 @@ type MigrationError struct {
 	To      int
 	Error   string
 	Details map[string]interface{}
+}
+
+// conditionValue reads when/until/changed_when/failed_when: a string, a
+// boolean, or a list whose items must all hold
+func conditionValue(v interface{}) string {
+	switch c := v.(type) {
+	case string:
+		return c
+	case bool:
+		return strconv.FormatBool(c)
+	case []interface{}:
+		parts := make([]string, 0, len(c))
+		for _, item := range c {
+			if cond := conditionValue(item); cond != "" {
+				parts = append(parts, "("+cond+")")
+			}
+		}
+		return strings.Join(parts, " and ")
+	}
+	return ""
+}
+
+// durationValue reads a duration written as "5s" or as a number of seconds
+func durationValue(v interface{}) (time.Duration, bool) {
+	switch d := v.(type) {
+	case string:
+		if parsed, err := time.ParseDuration(d); err == nil {
+			return parsed, true
+		}
+		if secs, err := strconv.ParseFloat(strings.TrimSpace(d), 64); err == nil {
+			return time.Duration(secs * float64(time.Second)), true
+		}
+	case int:
+		return time.Duration(d) * time.Second, true
+	case float64:
+		return time.Duration(d * float64(time.Second)), true
+	}
+	return 0, false
 }
