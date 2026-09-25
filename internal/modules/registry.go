@@ -167,11 +167,10 @@ func (r *Registry) ExecuteTask(ctx context.Context, task *types.Task, host types
 	// (user name, package name, ...) and must not be filled from the task title
 	args["_task_name"] = task.Name
 
-	// Add variables to args
-	for key, value := range variables {
-		if _, exists := args[key]; !exists {
-			args[key] = value
-		}
+	// Variables travel under a reserved key: merged into args, a play var
+	// named "state" or "name" silently became a module argument
+	if variables != nil {
+		args["_vars"] = variables
 	}
 
 	// Add become parameters to args (with special prefix to avoid conflicts)

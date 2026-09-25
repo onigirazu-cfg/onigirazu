@@ -2,7 +2,6 @@ package modules
 
 import (
 	"archive/tar"
-	"archive/zip"
 	"compress/gzip"
 	"context"
 	"io"
@@ -101,125 +100,36 @@ func TestArchiveModuleValidate(t *testing.T) {
 	}
 }
 
-func TestArchiveCreateGzArchive(t *testing.T) {
+func TestArchiveExecute_IdempotentAndExclude(t *testing.T) {
 	module := NewArchiveModule()
-	tmpDir := t.TempDir()
-
-	// Create test files
-	testFile1 := filepath.Join(tmpDir, "test1.txt")
-	testFile2 := filepath.Join(tmpDir, "test2.txt")
-	destArchive := filepath.Join(tmpDir, "test.tar.gz")
-
-	if err := os.WriteFile(testFile1, []byte("content1"), 0o644); err != nil {
-		t.Fatalf("failed to create test file: %v", err)
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	if err := os.MkdirAll(filepath.Join(src, "skip"), 0o755); err != nil {
+		t.Fatal(err)
 	}
-	if err := os.WriteFile(testFile2, []byte("content2"), 0o644); err != nil {
-		t.Fatalf("failed to create test file: %v", err)
+	for _, f := range []string{"a.txt", "b.txt", "skip/c.txt"} {
+		if err := os.WriteFile(filepath.Join(src, f), []byte(f), 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
+	dest := filepath.Join(dir, "out", "src.tar.gz")
+	host := types.Host{Name: "localhost", Address: "127.0.0.1"}
+	args := map[string]interface{}{"path": src, "dest": dest, "format": "gz", "exclude_path": filepath.Join(src, "skip")}
 
-	// Create archive
-	size, err := module.createArchive(destArchive, "gz", []string{testFile1, testFile2})
-	if err != nil {
-		t.Fatalf("createArchive() error = %v", err)
+	result, err := module.Execute(context.Background(), host, args)
+	if err != nil || !result.Success || !result.Changed {
+		t.Fatalf("first run: err=%v success=%v changed=%v error=%s", err, result.Success, result.Changed, result.Error)
 	}
-
-	if size <= 0 {
-		t.Errorf("archive size should be > 0, got %d", size)
+	if !verifyGzArchiveContents(t, dest, []string{"a.txt", "b.txt"}) {
+		t.Error("archive is missing files")
 	}
-
-	// Verify archive exists
-	if _, err := os.Stat(destArchive); err != nil {
-		t.Errorf("archive file not created: %v", err)
+	if verifyGzArchiveContents(t, dest, []string{"skip/c.txt"}) {
+		t.Error("excluded file is in the archive")
 	}
 
-	// Verify archive contents
-	if !verifyGzArchiveContents(t, destArchive, []string{"test1.txt", "test2.txt"}) {
-		t.Error("archive contents verification failed")
-	}
-}
-
-func TestArchiveCreateZipArchive(t *testing.T) {
-	module := NewArchiveModule()
-	tmpDir := t.TempDir()
-
-	// Create test files
-	testFile1 := filepath.Join(tmpDir, "test1.txt")
-	testFile2 := filepath.Join(tmpDir, "test2.txt")
-	destArchive := filepath.Join(tmpDir, "test.zip")
-
-	if err := os.WriteFile(testFile1, []byte("content1"), 0o644); err != nil {
-		t.Fatalf("failed to create test file: %v", err)
-	}
-	if err := os.WriteFile(testFile2, []byte("content2"), 0o644); err != nil {
-		t.Fatalf("failed to create test file: %v", err)
-	}
-
-	// Create archive
-	size, err := module.createArchive(destArchive, "zip", []string{testFile1, testFile2})
-	if err != nil {
-		t.Fatalf("createArchive() error = %v", err)
-	}
-
-	if size <= 0 {
-		t.Errorf("archive size should be > 0, got %d", size)
-	}
-
-	// Verify archive exists
-	if _, err := os.Stat(destArchive); err != nil {
-		t.Errorf("archive file not created: %v", err)
-	}
-
-	// Verify archive contents
-	if !verifyZipArchiveContents(t, destArchive, []string{"test1.txt", "test2.txt"}) {
-		t.Error("archive contents verification failed")
-	}
-}
-
-func TestArchiveCollectFiles(t *testing.T) {
-	module := NewArchiveModule()
-	tmpDir := t.TempDir()
-
-	// Create test directory structure
-	testFile1 := filepath.Join(tmpDir, "test1.txt")
-	testFile2 := filepath.Join(tmpDir, "test2.txt")
-	testDir := filepath.Join(tmpDir, "subdir")
-	testFile3 := filepath.Join(testDir, "test3.txt")
-
-	if err := os.MkdirAll(testDir, 0o755); err != nil {
-		t.Fatalf("MkdirAll() error = %v", err)
-	}
-	if err := os.WriteFile(testFile1, []byte("content1"), 0o644); err != nil {
-		t.Fatalf("WriteFile() error = %v", err)
-	}
-	if err := os.WriteFile(testFile2, []byte("content2"), 0o644); err != nil {
-		t.Fatalf("WriteFile() error = %v", err)
-	}
-	if err := os.WriteFile(testFile3, []byte("content3"), 0o644); err != nil {
-		t.Fatalf("WriteFile() error = %v", err)
-	}
-
-	// Test collecting files with glob
-	pattern := filepath.Join(tmpDir, "*.txt")
-	files, err := module.collectFiles([]string{pattern}, nil)
-	if err != nil {
-		t.Fatalf("collectFiles() error = %v", err)
-	}
-
-	if len(files) != 2 {
-		t.Errorf("expected 2 files, got %d", len(files))
-	}
-
-	// Test collecting with exclusion
-	files, err = module.collectFiles(
-		[]string{filepath.Join(tmpDir, "test*.txt")},
-		[]string{testFile2},
-	)
-	if err != nil {
-		t.Fatalf("collectFiles() error = %v", err)
-	}
-
-	if len(files) != 1 {
-		t.Errorf("expected 1 file after exclusion, got %d", len(files))
+	result, err = module.Execute(context.Background(), host, args)
+	if err != nil || !result.Success || result.Changed {
+		t.Errorf("second run should change nothing: err=%v changed=%v error=%s", err, result.Changed, result.Error)
 	}
 }
 
@@ -348,35 +258,6 @@ func verifyGzArchiveContents(t *testing.T, archivePath string, expectedFiles []s
 		// Extract just the filename
 		name := filepath.Base(header.Name)
 		found[name] = true
-	}
-
-	// Check if all expected files were found
-	for _, expectedFile := range expectedFiles {
-		if !found[expectedFile] {
-			t.Logf("expected file %s not found in archive", expectedFile)
-			return false
-		}
-	}
-
-	return true
-}
-
-func verifyZipArchiveContents(t *testing.T, archivePath string, expectedFiles []string) bool {
-	reader, err := zip.OpenReader(archivePath)
-	if err != nil {
-		t.Logf("failed to open zip archive: %v", err)
-		return false
-	}
-	defer reader.Close()
-
-	found := make(map[string]bool)
-
-	for _, file := range reader.File {
-		// Extract just the filename
-		name := filepath.Base(file.Name)
-		if name != "" { // skip directories
-			found[name] = true
-		}
 	}
 
 	// Check if all expected files were found

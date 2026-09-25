@@ -118,6 +118,22 @@ func (e *CommandExecutor) wrapWithBecome(command string) string {
 	}
 }
 
+// withOutput appends the last lines of a failed command's output to its
+// error: "exit status 1" alone says nothing about what went wrong
+func withOutput(err error, output string) error {
+	if err == nil {
+		return nil
+	}
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	if len(lines) == 0 || lines[0] == "" {
+		return err
+	}
+	if len(lines) > 5 {
+		lines = lines[len(lines)-5:]
+	}
+	return fmt.Errorf("%w: %s", err, strings.Join(lines, " | "))
+}
+
 // commandLine builds a shell command line: command is used as written (it may
 // contain shell syntax), each separate argument is quoted as one word
 func commandLine(command string, args []string) string {
@@ -138,6 +154,11 @@ func shellQuote(s string) string {
 
 // Execute runs a command on the appropriate host (local or remote)
 func (e *CommandExecutor) Execute(command string, args ...string) (string, error) {
+	out, err := e.execute(command, args...)
+	return out, withOutput(err, out)
+}
+
+func (e *CommandExecutor) execute(command string, args ...string) (string, error) {
 	fullCommand := commandLine(command, args)
 
 	// Wrap with become if enabled
@@ -157,6 +178,11 @@ func (e *CommandExecutor) Execute(command string, args ...string) (string, error
 
 // ExecuteWithContext runs a command with context on the appropriate host
 func (e *CommandExecutor) ExecuteWithContext(ctx context.Context, command string, args ...string) (string, error) {
+	out, err := e.executeWithContext(ctx, command, args...)
+	return out, withOutput(err, out)
+}
+
+func (e *CommandExecutor) executeWithContext(ctx context.Context, command string, args ...string) (string, error) {
 	fullCommand := commandLine(command, args)
 
 	// Wrap with become if enabled

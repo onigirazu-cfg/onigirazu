@@ -791,7 +791,7 @@ func TestExecuteTask_Register(t *testing.T) {
 
 	// Check that variable was registered
 	engine.mutex.RLock()
-	registeredVar, exists := engine.variables["test_result"]
+	registeredVar, exists := engine.hostVars["host1"]["test_result"]
 	engine.mutex.RUnlock()
 
 	assert.True(t, exists)
@@ -847,7 +847,7 @@ func TestExecuteTask_SetFact(t *testing.T) {
 
 	// Check that fact was set
 	engine.mutex.RLock()
-	factValue, exists := engine.variables["my_fact"]
+	factValue, exists := engine.hostVars["host1"]["my_fact"]
 	engine.mutex.RUnlock()
 
 	assert.True(t, exists)
@@ -1075,94 +1075,37 @@ func TestGetExecutionSummary(t *testing.T) {
 	assert.Contains(t, summary, "cache")
 }
 
-// TestEvaluateCondition tests the evaluateCondition method
-func TestEvaluateCondition(t *testing.T) {
+// TestConditionHolds_Template tests conditions written as templates
+func TestConditionHolds_Template(t *testing.T) {
 	engine, _, _, _, _, mockTemplateEngine := createTestEngine()
 	ctx := context.Background()
-	vars := map[string]interface{}{"test_var": "value"}
+	vars := map[string]interface{}{"test_var": "value", "enabled": "yes", "count": 0}
 
-	tests := []struct {
-		name           string
-		condition      string
-		templateResult string
-		templateError  error
-		expectedSkip   bool
-		expectedError  bool
-	}{
-		{
-			name:           "condition evaluates to true",
-			condition:      "{{ test_var == 'value' }}",
-			templateResult: "true",
-			expectedSkip:   false,
-			expectedError:  false,
-		},
-		{
-			name:           "condition evaluates to false",
-			condition:      "{{ test_var == 'other' }}",
-			templateResult: "false",
-			expectedSkip:   true,
-			expectedError:  false,
-		},
-		{
-			name:           "condition evaluates to yes",
-			condition:      "{{ enabled }}",
-			templateResult: "yes",
-			expectedSkip:   false,
-			expectedError:  false,
-		},
-		{
-			name:           "condition evaluates to no",
-			condition:      "{{ disabled }}",
-			templateResult: "no",
-			expectedSkip:   true,
-			expectedError:  false,
-		},
-		{
-			name:           "condition evaluates to 1",
-			condition:      "{{ count }}",
-			templateResult: "1",
-			expectedSkip:   false,
-			expectedError:  false,
-		},
-		{
-			name:           "condition evaluates to 0",
-			condition:      "{{ count }}",
-			templateResult: "0",
-			expectedSkip:   true,
-			expectedError:  false,
-		},
-		{
-			name:           "condition evaluates to empty string",
-			condition:      "{{ empty }}",
-			templateResult: "",
-			expectedSkip:   true,
-			expectedError:  false,
-		},
-		{
-			name:           "template rendering error",
-			condition:      "{{ invalid",
-			templateResult: "",
-			templateError:  errors.New("template error"),
-			expectedSkip:   false,
-			expectedError:  true,
-		},
+	// one {{ }} block is evaluated as an expression
+	for cond, want := range map[string]bool{
+		"{{ test_var == 'value' }}": true,
+		"{{ test_var == 'other' }}": false,
+		"{{ enabled }}":             true,
+		"{{ count }}":               false,
+		"{{ missing }}":             false,
+	} {
+		holds, err := engine.conditionHolds(ctx, cond, vars)
+		assert.NoError(t, err, cond)
+		assert.Equal(t, want, holds, cond)
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mockTemplateEngine.On("Render", ctx, tt.condition, vars).
-				Return(tt.templateResult, tt.templateError).Once()
+	// anything else with braces is rendered and read as a boolean
+	mockTemplateEngine.On("Render", ctx, "{{ a }}{{ b }}", vars).Return("no", nil).Once()
+	holds, err := engine.conditionHolds(ctx, "{{ a }}{{ b }}", vars)
+	assert.NoError(t, err)
+	assert.False(t, holds)
 
-			skip, err := engine.evaluateCondition(ctx, tt.condition, vars)
+	mockTemplateEngine.On("Render", ctx, "{{ x }} {{ y", vars).Return("", errors.New("template error")).Once()
+	_, err = engine.conditionHolds(ctx, "{{ x }} {{ y", vars)
+	assert.Error(t, err)
 
-			if tt.expectedError {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-				assert.Equal(t, tt.expectedSkip, skip)
-			}
-		})
-	}
+	_, err = engine.conditionHolds(ctx, "{{ test_var == }}", vars)
+	assert.Error(t, err)
 }
 
 // TestGetLoopItems tests the getLoopItems method
@@ -1464,8 +1407,8 @@ func TestExecuteTaskList_ConditionError(t *testing.T) {
 	}
 
 	err := engine.executeTaskList(ctx, tasks, hosts, map[string]interface{}{}, playResult)
-	assert.NoError(t, err) // Should continue despite condition error
+	assert.Error(t, err) // a condition that cannot be evaluated fails the task
 
-	// Verify that the task was still executed despite condition error
-	mockModuleRegistry.AssertCalled(t, "ExecuteTask", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+	// ... and the task itself never runs
+	mockModuleRegistry.AssertNotCalled(t, "ExecuteTask", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 }

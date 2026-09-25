@@ -1,12 +1,8 @@
 package modules
 
 import (
-	"bufio"
 	"context"
 	"fmt"
-	"os"
-	"os/user"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -85,94 +81,94 @@ func (m *AuthorizedKeyModule) Execute(ctx context.Context, host types.Host, args
 		}
 	}
 
-	// Get user info
-	u, err := user.Lookup(username)
+	// Resolve the account on the target host, not on the control machine
+	passwd, err := runOnHost(ctx, host, args, "getent", "passwd", username)
 	if err != nil {
 		result.Success = false
-		result.Error = fmt.Sprintf("user '%s' not found: %v", username, err)
+		result.Error = fmt.Sprintf("user '%s' not found on %s", username, host.Name)
 		result.Duration = time.Since(startTime)
 		return result, nil
 	}
-
-	// Build authorized_keys path
-	authKeysPath := filepath.Join(u.HomeDir, ".ssh", "authorized_keys")
-
-	// Read existing keys
-	existingKeys := []string{}
-	if data, err := os.ReadFile(authKeysPath); err == nil {
-		scanner := bufio.NewScanner(strings.NewReader(string(data)))
-		for scanner.Scan() {
-			line := strings.TrimSpace(scanner.Text())
-			if line != "" && !strings.HasPrefix(line, "#") {
-				existingKeys = append(existingKeys, line)
-			}
-		}
-	} else if !os.IsNotExist(err) {
+	fields := strings.Split(strings.TrimSpace(passwd), ":")
+	if len(fields) < 6 || fields[5] == "" {
 		result.Success = false
-		result.Error = fmt.Sprintf("failed to read authorized_keys: %v", err)
+		result.Error = fmt.Sprintf("no home directory for user '%s'", username)
+		result.Duration = time.Since(startTime)
+		return result, nil
+	}
+	homeDir := fields[5]
+	primaryGroup, err := runOnHost(ctx, host, args, "id", "-gn", username)
+	if err != nil {
+		result.Success = false
+		result.Error = fmt.Sprintf("failed to read the group of '%s': %v", username, err)
+		result.Duration = time.Since(startTime)
+		return result, nil
+	}
+	owner := username + ":" + strings.TrimSpace(primaryGroup)
+	sshDir := homeDir + "/.ssh"
+	authKeysPath := sshDir + "/authorized_keys"
+
+	data, _, err := readHostFile(ctx, host, args, authKeysPath)
+	if err != nil {
+		result.Success = false
+		result.Error = err.Error()
 		result.Duration = time.Since(startTime)
 		return result, nil
 	}
 
-	// Determine if key exists
-	keyExists := false
-	keyIndex := -1
-	for i, existingKey := range existingKeys {
-		if strings.TrimSpace(existingKey) == key {
-			keyExists = true
-			keyIndex = i
-			break
-		}
+	// Keep every existing line (comments, options) and compare keys by type
+	// and key material, not by their trailing comment
+	var lines []string
+	if len(data) > 0 {
+		lines = strings.Split(strings.TrimRight(string(data), "\n"), "\n")
 	}
-
-	// Handle state
-	newKeys := existingKeys
-	if state == "present" {
-		if !keyExists {
-			newKeys = append(newKeys, key)
-			result.Changed = true
-		}
-		if exclusive {
-			// In exclusive mode, keep only this key
-			if len(newKeys) > 1 || (len(newKeys) == 1 && newKeys[0] != key) {
-				newKeys = []string{key}
-				result.Changed = true
+	wantID := authorizedKeyID(key)
+	kept := make([]string, 0, len(lines)+1)
+	found := false
+	for _, line := range lines {
+		id := authorizedKeyID(line)
+		switch {
+		case id != "" && id == wantID:
+			if state == "present" && !found {
+				kept = append(kept, line)
 			}
-		}
-	} else if state == "absent" {
-		if keyExists {
-			// Remove the key
-			newKeys = append(append([]string{}, existingKeys[:keyIndex]...), existingKeys[keyIndex+1:]...)
-			result.Changed = true
+			found = true
+		case exclusive && state == "present" && id != "":
+			// another key: dropped in exclusive mode
+		default:
+			kept = append(kept, line)
 		}
 	}
+	if state == "present" && !found {
+		kept = append(kept, key)
+	}
+	newKeys := kept
+	content := strings.Join(kept, "\n")
+	if content != "" {
+		content += "\n"
+	}
+	result.Changed = content != string(data)
 
-	// Write back if changed
 	if result.Changed {
-		// Create .ssh directory if needed
-		sshDir := filepath.Dir(authKeysPath)
-		if err := os.MkdirAll(sshDir, 0700); err != nil {
+		if _, err := runShellOnHost(ctx, host, args, fmt.Sprintf("install -d -m 700 -o %s -g %s %s",
+			shellQuote(username), shellQuote(strings.TrimSpace(primaryGroup)), shellQuote(sshDir))); err != nil {
 			result.Success = false
-			result.Error = fmt.Sprintf("failed to create .ssh directory: %v", err)
+			result.Error = fmt.Sprintf("failed to create %s: %v", sshDir, err)
 			result.Duration = time.Since(startTime)
 			return result, nil
 		}
-
-		// Write authorized_keys
-		content := strings.Join(newKeys, "\n")
-		if content != "" {
-			content += "\n"
-		}
-
-		if err := os.WriteFile(authKeysPath, []byte(content), 0600); err != nil {
+		if err := writeHostFile(ctx, host, args, authKeysPath, []byte(content), 0600); err != nil {
 			result.Success = false
-			result.Error = fmt.Sprintf("failed to write authorized_keys: %v", err)
+			result.Error = err.Error()
 			result.Duration = time.Since(startTime)
 			return result, nil
 		}
-
-		// Set proper permissions
-		_ = os.Chown(authKeysPath, os.Getuid(), os.Getgid())
+		if _, err := runOnHost(ctx, host, args, "chown", owner, authKeysPath); err != nil {
+			result.Success = false
+			result.Error = fmt.Sprintf("failed to set the owner of %s: %v", authKeysPath, err)
+			result.Duration = time.Since(startTime)
+			return result, nil
+		}
 	}
 
 	result.Output["user"] = username
@@ -199,4 +195,20 @@ func (m *AuthorizedKeyModule) Validate(args map[string]interface{}) error {
 	}
 
 	return nil
+}
+
+// authorizedKeyID returns "type key" of an authorized_keys line, skipping
+// leading options, or "" for comments and blank lines
+func authorizedKeyID(line string) string {
+	fields := strings.Fields(line)
+	if len(fields) == 0 || strings.HasPrefix(fields[0], "#") {
+		return ""
+	}
+	for i := 0; i+1 < len(fields); i++ {
+		t := fields[i]
+		if strings.HasPrefix(t, "ssh-") || strings.HasPrefix(t, "ecdsa-") || strings.HasPrefix(t, "sk-") {
+			return t + " " + fields[i+1]
+		}
+	}
+	return ""
 }

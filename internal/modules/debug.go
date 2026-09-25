@@ -3,6 +3,7 @@ package modules
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
@@ -48,7 +49,12 @@ func (m *DebugModule) Execute(ctx context.Context, host types.Host, args map[str
 	} else if varVal, exists := args["var"]; exists {
 		// Support for var parameter (print variable)
 		if varStr, ok := varVal.(string); ok {
-			msg = fmt.Sprintf("%s: %v", varStr, varVal)
+			value, found := lookupVar(taskVars(args), varStr)
+			if !found {
+				value = "VARIABLE IS NOT DEFINED!"
+			}
+			msg = fmt.Sprintf("%s: %v", varStr, value)
+			result.Output[varStr] = value
 		} else {
 			msg = fmt.Sprintf("%v", varVal)
 		}
@@ -80,4 +86,19 @@ func (m *DebugModule) Validate(args map[string]interface{}) error {
 	}
 
 	return nil
+}
+
+// lookupVar resolves a dotted path ("result.stdout") in vars
+func lookupVar(vars map[string]interface{}, path string) (interface{}, bool) {
+	var cur interface{} = vars
+	for _, key := range strings.Split(path, ".") {
+		m, ok := cur.(map[string]interface{})
+		if !ok {
+			return nil, false
+		}
+		if cur, ok = m[key]; !ok {
+			return nil, false
+		}
+	}
+	return cur, true
 }

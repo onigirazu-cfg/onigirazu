@@ -40,23 +40,9 @@ func (m *PauseModule) Execute(ctx context.Context, host types.Host, args map[str
 	}
 
 	// Get pause parameters
-	seconds := 0
-	if secsVal, exists := args["seconds"]; exists {
-		if secsInt, ok := secsVal.(float64); ok {
-			seconds = int(secsInt)
-		} else if secsStr, ok := secsVal.(string); ok {
-			_, _ = fmt.Sscanf(secsStr, "%d", &seconds)
-		}
-	}
+	seconds := getIntArg(args, "seconds", 0)
 
-	minutes := 0
-	if minsVal, exists := args["minutes"]; exists {
-		if minsInt, ok := minsVal.(float64); ok {
-			minutes = int(minsInt)
-		} else if minsStr, ok := minsVal.(string); ok {
-			_, _ = fmt.Sscanf(minsStr, "%d", &minutes)
-		}
-	}
+	minutes := getIntArg(args, "minutes", 0)
 
 	// Convert minutes to seconds
 	totalSeconds := seconds + (minutes * 60)

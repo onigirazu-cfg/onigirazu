@@ -2,6 +2,7 @@ package template
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"regexp"
@@ -10,6 +11,8 @@ import (
 	"text/template"
 	"time"
 	"unicode"
+
+	"github.com/onigirazu-cfg/onigirazu/internal/expression"
 
 	"github.com/onigirazu-cfg/onigirazu/internal/bufferpool"
 	"github.com/onigirazu-cfg/onigirazu/internal/cache"
@@ -143,6 +146,11 @@ func (e *Engine) GetSecretManager() *secrets.TemplateSecretManager {
 
 // Render renders a template string with variables
 func (e *Engine) Render(ctx context.Context, templateStr string, variables map[string]interface{}) (string, error) {
+	templateStr, values := evalBlocks(templateStr, variables)
+	if !strings.Contains(templateStr, "{{") && !strings.Contains(templateStr, "{%") {
+		return restoreBlocks(templateStr, values), nil
+	}
+
 	// Convert Jinja2-style syntax to Go template syntax
 	converted, err := e.convertJinja2Syntax(templateStr)
 	if err != nil {
@@ -163,7 +171,70 @@ func (e *Engine) Render(ctx context.Context, templateStr string, variables map[s
 		return "", fmt.Errorf("failed to execute template: %w", err)
 	}
 
-	return buf.String(), nil
+	return restoreBlocks(buf.String(), values), nil
+}
+
+var ifBlock = regexp.MustCompile(`\{%-?\s*(if|elif)\s+(.+?)\s*-?%\}`)
+
+var exprBlock = regexp.MustCompile(`\{\{((?:[^{}]|\{[^{]|\}[^}])*?)\}\}`)
+
+// evalBlocks evaluates {{ }} blocks as Jinja expressions (comparisons,
+// filters, nested attributes) and swaps them for placeholders, so their
+// output is never parsed as a template. Blocks the evaluator cannot handle,
+// such as Go template syntax ({{ .var }}, {{ add .a 1 }}) or undefined
+// names, stay for the Go template path; so does everything in templates with
+// {% for %}, whose loop variables only that path knows.
+func evalBlocks(text string, variables map[string]interface{}) (string, []string) {
+	if (!strings.Contains(text, "{{") && !strings.Contains(text, "{%")) ||
+		strings.Contains(text, "{% for") || strings.Contains(text, "{%for") {
+		return text, nil
+	}
+	// {% if %} / {% elif %} conditions become literals the Go path accepts
+	text = ifBlock.ReplaceAllStringFunc(text, func(block string) string {
+		m := ifBlock.FindStringSubmatch(block)
+		holds, err := expression.Condition(m[2], variables)
+		if err != nil {
+			return block
+		}
+		return fmt.Sprintf("{%% %s %t %%}", m[1], holds)
+	})
+
+	var values []string
+	out := exprBlock.ReplaceAllStringFunc(text, func(block string) string {
+		inner := strings.TrimSpace(block[2 : len(block)-2])
+		if inner == "" || strings.HasPrefix(inner, ".") {
+			return block
+		}
+		value, err := expression.Eval(inner, variables)
+		if err != nil || value == nil {
+			return block
+		}
+		values = append(values, formatValue(value))
+		return fmt.Sprintf("\x00%d\x00", len(values)-1)
+	})
+	return out, values
+}
+
+func restoreBlocks(text string, values []string) string {
+	for i, v := range values {
+		text = strings.Replace(text, fmt.Sprintf("\x00%d\x00", i), v, 1)
+	}
+	return text
+}
+
+// formatValue prints scalars as Go does and lists and maps as JSON
+func formatValue(value interface{}) string {
+	switch v := value.(type) {
+	case string:
+		return v
+	case []interface{}, map[string]interface{}:
+		if b, err := json.Marshal(v); err == nil {
+			return string(b)
+		}
+	case float64:
+		return strconv.FormatFloat(v, 'f', -1, 64)
+	}
+	return fmt.Sprint(value)
 }
 
 // RenderFile renders a template file with variables

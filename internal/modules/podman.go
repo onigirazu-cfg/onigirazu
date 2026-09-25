@@ -39,10 +39,22 @@ func NewPodmanModule() *PodmanModule {
 	}
 }
 
+// Execute runs on a per-call copy: the registry shares one module instance
+// between all hosts, and the executor used to be cached for the first one
 func (m *PodmanModule) Execute(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
+	call := *m
+	call.executor = nil
+	result, err := call.execute(ctx, host, args)
+	if call.executor != nil {
+		_ = call.executor.Close()
+	}
+	return result, err
+}
+
+func (m *PodmanModule) execute(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
 	startTime := time.Now()
 	result := types.TaskResult{
-		TaskName:  "podman",
+		TaskName:  taskName(args),
 		Host:      host.Name,
 		Module:    m.GetName(),
 		Success:   true,
