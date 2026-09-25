@@ -377,7 +377,7 @@ func (l *EnhancedLogger) writeEntryJSON(entry LogEntry) {
 }
 
 // TaskStart logs task start with context
-func (l *EnhancedLogger) TaskStart(host, taskName string) {
+func (l *EnhancedLogger) TaskStart(taskName, host string) {
 	l.WithFields(map[string]interface{}{
 		"host": host,
 		"task": taskName,
@@ -694,7 +694,7 @@ func (l *EnhancedLogger) Retry(taskName, hostName string, attempt, maxAttempts i
 		"task":         taskName,
 		"attempt":      attempt,
 		"max_attempts": maxAttempts,
-		"error":        err.Error(),
+		"error":        fmt.Sprint(err),
 		"delay":        delay.String(),
 		"type":         "retry",
 	}).Warn("Task '%s' on host '%s' failed (attempt %d/%d), retrying in %v: %v",
