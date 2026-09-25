@@ -798,6 +798,9 @@ tasks:
       state: directory
 ```
 
+An argument that is exactly `{{ var }}` keeps a list or map value as it is, so
+`name: "{{ packages }}"` passes the whole list to `apt`. Other values render as text.
+
 ### Templates
 
 Use Jinja2-like templates for configuration files:

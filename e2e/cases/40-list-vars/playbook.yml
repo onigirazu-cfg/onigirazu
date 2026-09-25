@@ -1,0 +1,11 @@
+plays:
+  - name: list variables as arguments
+    hosts: all
+    become: true
+    vars:
+      pkgs: [cowsay, sl]
+    tasks:
+      - name: Packages from a list variable
+        apt:
+          name: "{{ pkgs }}"
+          state: present
