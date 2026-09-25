@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -59,19 +60,59 @@ func (m *FileModule) Execute(ctx context.Context, host types.Host, args map[stri
 
 	switch state {
 	case "present":
-		return m.ensureFilePresent(exec, path, result, startTime, args)
+		result, err = m.ensureFilePresent(exec, path, result, startTime, args)
 	case "absent":
 		return m.ensureFileAbsent(exec, path, result, startTime)
 	case "directory":
-		return m.ensureDirectory(exec, path, result, startTime)
+		result, err = m.ensureDirectory(exec, path, result, startTime)
 	case "touch":
-		return m.touchFile(exec, path, result, startTime)
+		result, err = m.touchFile(exec, path, result, startTime)
 	default:
 		result.Success = false
 		result.Error = fmt.Sprintf("unsupported state: %s", state)
 		result.Duration = time.Since(startTime)
 		return result, nil
 	}
+	if err != nil || !result.Success {
+		return result, err
+	}
+	return m.applyAttributes(ctx, host, args, path, result, startTime)
+}
+
+// applyAttributes enforces mode, owner and group on path when they are given
+func (m *FileModule) applyAttributes(ctx context.Context, host types.Host, args map[string]interface{}, path string, result types.TaskResult, startTime time.Time) (types.TaskResult, error) {
+	fail := func(msg string) (types.TaskResult, error) {
+		result.Success = false
+		result.Error = msg
+		result.Duration = time.Since(startTime)
+		return result, nil
+	}
+
+	if mode := getStringArg(args, "mode", ""); mode != "" {
+		want, err := strconv.ParseUint(mode, 8, 32)
+		if err != nil {
+			return fail(fmt.Sprintf("invalid mode %q", mode))
+		}
+		out, err := runOnHost(ctx, host, args, "stat", "-c", "%a", path)
+		if err != nil {
+			return fail(fmt.Sprintf("failed to read mode of %s: %v", path, err))
+		}
+		have, _ := strconv.ParseUint(strings.TrimSpace(out), 8, 32)
+		if have != want {
+			if _, err := runOnHost(ctx, host, args, "chmod", fmt.Sprintf("%04o", want), path); err != nil {
+				return fail(fmt.Sprintf("failed to set mode of %s: %v", path, err))
+			}
+			result.Changed = true
+		}
+	}
+
+	changed, err := ensureOwnership(ctx, host, args, path, getStringArg(args, "owner", ""), getStringArg(args, "group", ""))
+	if err != nil {
+		return fail(err.Error())
+	}
+	result.Changed = result.Changed || changed
+	result.Duration = time.Since(startTime)
+	return result, nil
 }
 
 func (m *FileModule) Validate(args map[string]interface{}) error {
