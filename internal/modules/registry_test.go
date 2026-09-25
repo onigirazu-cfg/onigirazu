@@ -467,3 +467,25 @@ func TestUserModule_ValidateRequiresName(t *testing.T) {
 		t.Error("expected an error when name is missing")
 	}
 }
+
+// TestRegistry_ExecuteTask_SuccessFalseIsFailure checks that a module result
+// with Success=false and no error is reported as failed
+func TestRegistry_ExecuteTask_SuccessFalseIsFailure(t *testing.T) {
+	registry := &Registry{modules: make(map[string]types.Module)}
+	mockModule := NewMockModule("test_module")
+	mockModule.executeFunc = func(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
+		return types.TaskResult{Success: false, Error: "apt-get failed"}, nil
+	}
+	registry.RegisterModule(mockModule)
+
+	result, err := registry.ExecuteTask(context.Background(), &types.Task{Name: "t", Module: "test_module"}, types.Host{Name: "h"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.Failed {
+		t.Error("expected the result to be marked failed")
+	}
+	if result.Error != "apt-get failed" {
+		t.Errorf("module error should be kept, got %q", result.Error)
+	}
+}

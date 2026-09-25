@@ -183,7 +183,8 @@ func (m *AptModule) Execute(ctx context.Context, host types.Host, args map[strin
 			result.Duration = time.Since(startTime)
 			return result, nil
 		}
-		result.Changed = true
+		// Refreshing package lists changes no configuration of the host
+		result.Output["cache_updated"] = true
 	}
 
 	// Handle package operations

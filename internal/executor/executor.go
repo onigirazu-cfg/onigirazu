@@ -43,6 +43,9 @@ func NewCommandExecutor(host types.Host) (*CommandExecutor, error) {
 		}
 		executor.sshClient = client
 	}
+	if host.Become {
+		executor.SetBecome(true, host.BecomeUser, host.BecomeMethod)
+	}
 
 	return executor, nil
 }
@@ -65,6 +68,9 @@ func NewCommandExecutorWithoutPool(host types.Host) (*CommandExecutor, error) {
 		}
 		executor.sshClient = client
 	}
+	if host.Become {
+		executor.SetBecome(true, host.BecomeUser, host.BecomeMethod)
+	}
 
 	return executor, nil
 }
@@ -83,43 +89,56 @@ func (e *CommandExecutor) SetBecome(become bool, becomeUser, becomeMethod string
 	}
 }
 
-// wrapWithBecome wraps a command with privilege escalation if enabled
+// wrapWithBecome runs the whole command line through a root (or become user)
+// shell, so redirections, pipes and && chains are escalated too - not only the
+// first word, which is all "sudo cmd > file" would cover.
 func (e *CommandExecutor) wrapWithBecome(command string) string {
 	if !e.become {
 		return command
 	}
 
+	shell := "sh -c " + shellQuote(command)
 	switch e.becomeMethod {
-	case "sudo":
-		if e.becomeUser == "root" {
-			return fmt.Sprintf("sudo -n %s", command)
-		}
-		return fmt.Sprintf("sudo -n -u %s %s", e.becomeUser, command)
 	case "su":
+		// su -c already hands the whole line to the target user's shell
 		if e.becomeUser == "root" {
-			return fmt.Sprintf("su -c '%s'", strings.ReplaceAll(command, "'", "'\\''"))
+			return "su -c " + shellQuote(command)
 		}
-		return fmt.Sprintf("su %s -c '%s'", e.becomeUser, strings.ReplaceAll(command, "'", "'\\''"))
+		return fmt.Sprintf("su %s -c %s", e.becomeUser, shellQuote(command))
 	case "doas":
 		if e.becomeUser == "root" {
-			return fmt.Sprintf("doas %s", command)
+			return "doas " + shell
 		}
-		return fmt.Sprintf("doas -u %s %s", e.becomeUser, command)
-	default:
-		// Default to sudo
+		return fmt.Sprintf("doas -u %s %s", shellQuote(e.becomeUser), shell)
+	default: // sudo
 		if e.becomeUser == "root" {
-			return fmt.Sprintf("sudo -n %s", command)
+			return "sudo -n " + shell
 		}
-		return fmt.Sprintf("sudo -n -u %s %s", e.becomeUser, command)
+		return fmt.Sprintf("sudo -n -u %s %s", shellQuote(e.becomeUser), shell)
 	}
+}
+
+// commandLine builds a shell command line: command is used as written (it may
+// contain shell syntax), each separate argument is quoted as one word
+func commandLine(command string, args []string) string {
+	if len(args) == 0 {
+		return command
+	}
+	quoted := make([]string, len(args))
+	for i, a := range args {
+		quoted[i] = shellQuote(a)
+	}
+	return command + " " + strings.Join(quoted, " ")
+}
+
+// shellQuote quotes s as one POSIX shell word
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 // Execute runs a command on the appropriate host (local or remote)
 func (e *CommandExecutor) Execute(command string, args ...string) (string, error) {
-	fullCommand := command
-	if len(args) > 0 {
-		fullCommand = command + " " + strings.Join(args, " ")
-	}
+	fullCommand := commandLine(command, args)
 
 	// Wrap with become if enabled
 	fullCommand = e.wrapWithBecome(fullCommand)
@@ -127,6 +146,9 @@ func (e *CommandExecutor) Execute(command string, args ...string) (string, error
 	if e.sshClient != nil {
 		// Execute on remote host via SSH
 		return e.sshClient.ExecuteCommand(fullCommand)
+	} else if e.become {
+		// A single string with spaces goes through sh -c
+		return e.executeLocal(fullCommand)
 	} else {
 		// Execute locally
 		return e.executeLocal(command, args...)
@@ -135,10 +157,7 @@ func (e *CommandExecutor) Execute(command string, args ...string) (string, error
 
 // ExecuteWithContext runs a command with context on the appropriate host
 func (e *CommandExecutor) ExecuteWithContext(ctx context.Context, command string, args ...string) (string, error) {
-	fullCommand := command
-	if len(args) > 0 {
-		fullCommand = command + " " + strings.Join(args, " ")
-	}
+	fullCommand := commandLine(command, args)
 
 	// Wrap with become if enabled
 	fullCommand = e.wrapWithBecome(fullCommand)
@@ -146,6 +165,11 @@ func (e *CommandExecutor) ExecuteWithContext(ctx context.Context, command string
 	if e.sshClient != nil {
 		// Execute on remote host via SSH with context support
 		return e.executeSSHWithContext(ctx, fullCommand)
+	} else if e.become {
+		// #nosec G204 -- privilege escalation wraps the module's own command
+		cmd := exec.CommandContext(ctx, "sh", "-c", fullCommand)
+		output, err := cmd.CombinedOutput()
+		return string(output), err
 	} else {
 		// Execute locally with context
 		cmd := exec.CommandContext(ctx, command, args...)
@@ -216,16 +240,16 @@ func (e *CommandExecutor) executeSSHWithContext(ctx context.Context, command str
 
 // executeLocal executes a command locally
 func (e *CommandExecutor) executeLocal(command string, args ...string) (string, error) {
-	// If args are provided or command contains shell operators, execute through shell
-	if len(args) > 0 || strings.ContainsAny(command, "|&;<>()$`\\\"' \t\n*?[]{}") {
-		// Build full command
-		fullCmd := command
-		if len(args) > 0 {
-			fullCmd = command + " " + strings.Join(args, " ")
-		}
-		// Execute through shell
+	// Separate arguments are passed as argv, exactly as the remote path quotes them
+	if len(args) > 0 {
+		// #nosec G204 -- modules run the commands they manage
+		output, err := exec.Command(command, args...).CombinedOutput()
+		return string(output), err
+	}
+	// A single command line may use shell syntax (pipes, redirects, ...)
+	if strings.ContainsAny(command, "|&;<>()$`\\\"' \t\n*?[]{}") {
 		// #nosec G204 - This is intentional: we need shell execution for complex commands with pipes, redirects, etc.
-		cmd := exec.Command("sh", "-c", fullCmd)
+		cmd := exec.Command("sh", "-c", command)
 		output, err := cmd.CombinedOutput()
 		return string(output), err
 	}

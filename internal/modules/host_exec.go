@@ -3,9 +3,14 @@ package modules
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/onigirazu-cfg/onigirazu/internal/executor"
+	sshpkg "github.com/onigirazu-cfg/onigirazu/internal/ssh"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
@@ -84,4 +89,59 @@ func ensureOwnership(ctx context.Context, host types.Host, args map[string]inter
 		return false, fmt.Errorf("failed to set ownership of %s to %s:%s: %w", path, wantOwner, wantGroup, err)
 	}
 	return true, nil
+}
+
+// remoteFile describes a file on the target host as root (or the become user)
+// sees it, so root-only files can be compared without downloading them.
+type remoteFile struct {
+	Exists bool
+	Mode   os.FileMode
+	Owner  string
+	Group  string
+	SHA256 string
+}
+
+// statRemoteFile reads mode, owner and content hash of path on the host.
+func statRemoteFile(ctx context.Context, host types.Host, args map[string]interface{}, path string) (remoteFile, error) {
+	q := shellQuote(path)
+	out, err := runShellOnHost(ctx, host, args, fmt.Sprintf(
+		"if [ -e %s ]; then stat -c '%%a %%U %%G' %s && sha256sum %s | cut -d' ' -f1; else echo absent; fi", q, q, q))
+	if err != nil {
+		return remoteFile{}, fmt.Errorf("failed to stat %s: %w", path, err)
+	}
+	lines := strings.Fields(strings.TrimSpace(out))
+	if len(lines) == 1 && lines[0] == "absent" {
+		return remoteFile{}, nil
+	}
+	if len(lines) != 4 {
+		return remoteFile{}, fmt.Errorf("unexpected stat output for %s: %q", path, out)
+	}
+	mode, err := strconv.ParseUint(lines[0], 8, 32)
+	if err != nil {
+		return remoteFile{}, fmt.Errorf("unexpected mode for %s: %q", path, lines[0])
+	}
+	return remoteFile{Exists: true, Mode: os.FileMode(mode), Owner: lines[1], Group: lines[2], SHA256: lines[3]}, nil
+}
+
+// installRemoteFile writes data to path on the host: it uploads to a private
+// temporary file over SFTP and moves it into place with install(1), so with
+// become it can write where the SSH user cannot. Parent directories are
+// created; the owner of an existing file is kept.
+func installRemoteFile(ctx context.Context, host types.Host, args map[string]interface{}, client *sshpkg.Client,
+	path string, data []byte, mode os.FileMode, existing remoteFile) error {
+	tmp := fmt.Sprintf("/tmp/.onigirazu-%d-%s", time.Now().UnixNano(), filepath.Base(path))
+	if err := client.WriteFile(tmp, data, 0600); err != nil {
+		return fmt.Errorf("failed to upload %s: %w", path, err)
+	}
+	owner := ""
+	if existing.Exists {
+		owner = fmt.Sprintf("-o %s -g %s ", shellQuote(existing.Owner), shellQuote(existing.Group))
+	}
+	qt := shellQuote(tmp)
+	_, err := runShellOnHost(ctx, host, args, fmt.Sprintf("install -D %s-m %04o %s %s; rc=$?; rm -f %s; exit $rc",
+		owner, mode.Perm(), qt, shellQuote(path), qt))
+	if err != nil {
+		return fmt.Errorf("failed to write %s: %w", path, err)
+	}
+	return nil
 }

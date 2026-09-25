@@ -16,6 +16,12 @@ type Host struct {
 	KeyFile               string                 `yaml:"key_file,omitempty"`
 	InsecureIgnoreHostKey bool                   `yaml:"insecure_ignore_host_key,omitempty"`
 	Vars                  map[string]interface{} `yaml:"vars,omitempty"`
+
+	// Privilege escalation of the task being run on this host; set per task by
+	// the module registry, never read from inventory
+	Become       bool   `yaml:"-" json:"-"`
+	BecomeUser   string `yaml:"-" json:"-"`
+	BecomeMethod string `yaml:"-" json:"-"`
 }
 
 // UnmarshalYAML implements custom YAML unmarshaling for Host

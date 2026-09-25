@@ -181,9 +181,22 @@ func (r *Registry) ExecuteTask(ctx context.Context, task *types.Task, host types
 		args["_become_method"] = task.BecomeMethod
 	}
 
+	// Every executor a module creates for this host picks the settings up
+	host.Become = task.Become
+	host.BecomeUser = task.BecomeUser
+	host.BecomeMethod = task.BecomeMethod
+
 	result, err := module.Execute(ctx, host, args)
 	if result.TaskName == "" {
 		result.TaskName = task.Name
+	}
+	// Modules report some failures only through Success=false; the engine
+	// looks at Failed, so without this a failed apt-get counted as success
+	if err == nil && !result.Success && !result.Skipped && !result.Failed {
+		result.Failed = true
+		if result.Error == "" {
+			result.Error = fmt.Sprintf("module %s reported failure", task.Module)
+		}
 	}
 	return result, err
 }

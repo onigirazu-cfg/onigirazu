@@ -113,8 +113,15 @@ func (m *CommandModuleFixed) Validate(args map[string]interface{}) error {
 }
 
 func (m *CommandModuleFixed) executeCommand(exec *executor.CommandExecutor, ctx context.Context, command string, result types.TaskResult, startTime time.Time) (types.TaskResult, error) {
-	// Split command into parts for execution
-	parts := strings.Fields(command)
+	// Split like a shell would (quotes, backslashes), without running one
+	parts, err := splitCommandLine(command)
+	if err != nil {
+		result.Success = false
+		result.Failed = true
+		result.Error = err.Error()
+		result.Duration = time.Since(startTime)
+		return result, err
+	}
 	if len(parts) == 0 {
 		result.Success = false
 		result.Failed = true
@@ -327,4 +334,69 @@ func (m *ShellModuleFixed) Execute(ctx context.Context, host types.Host, args ma
 func (m *ShellModuleFixed) IsIdempotent() bool {
 	// Shell commands are generally not idempotent
 	return false
+}
+
+// splitCommandLine splits a command line into words the way a POSIX shell
+// does for quoting: single quotes are literal, double quotes allow backslash
+// escapes of " \ $ `, and a backslash outside quotes escapes the next char.
+// Operators such as > or | stay ordinary words (use shell: true for those).
+func splitCommandLine(line string) ([]string, error) {
+	var words []string
+	var cur strings.Builder
+	inWord := false
+	const (
+		none = iota
+		single
+		double
+	)
+	quote := none
+	runes := []rune(line)
+	for i := 0; i < len(runes); i++ {
+		c := runes[i]
+		switch quote {
+		case single:
+			if c == '\'' {
+				quote = none
+			} else {
+				cur.WriteRune(c)
+			}
+		case double:
+			switch {
+			case c == '"':
+				quote = none
+			case c == '\\' && i+1 < len(runes) && strings.ContainsRune("\"\\$`", runes[i+1]):
+				i++
+				cur.WriteRune(runes[i])
+			default:
+				cur.WriteRune(c)
+			}
+		default:
+			switch {
+			case c == ' ' || c == '\t' || c == '\n':
+				if inWord {
+					words = append(words, cur.String())
+					cur.Reset()
+					inWord = false
+				}
+			case c == '\'':
+				quote, inWord = single, true
+			case c == '"':
+				quote, inWord = double, true
+			case c == '\\' && i+1 < len(runes):
+				i++
+				cur.WriteRune(runes[i])
+				inWord = true
+			default:
+				cur.WriteRune(c)
+				inWord = true
+			}
+		}
+	}
+	if quote != none {
+		return nil, fmt.Errorf("unterminated quote in command: %s", line)
+	}
+	if inWord {
+		words = append(words, cur.String())
+	}
+	return words, nil
 }
