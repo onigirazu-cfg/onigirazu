@@ -1,0 +1,8 @@
+# managed by onigirazu
+{% for h in backends %}
+{{ h.ip }} {{ h.name }}{% if loop.first %} primary{% endif %}
+
+{% endfor %}
+{% for k, v in settings.items() %}
+{{ k }}={{ v }}
+{% endfor %}

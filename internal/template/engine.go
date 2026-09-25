@@ -146,9 +146,19 @@ func (e *Engine) GetSecretManager() *secrets.TemplateSecretManager {
 
 // Render renders a template string with variables
 func (e *Engine) Render(ctx context.Context, templateStr string, variables map[string]interface{}) (string, error) {
+	// Jinja whitespace control: {%- / {{- strip before, -%} / -}} after
+	templateStr = trimBefore.ReplaceAllString(templateStr, "$1")
+	templateStr = trimAfter.ReplaceAllString(templateStr, "$1")
+
+	templateStr, loops, err := e.expandLoops(ctx, templateStr, variables)
+	if err != nil {
+		return "", err
+	}
+	// as Ansible's template module (trim_blocks): no newline after a block tag
+	templateStr = blockTagNewline.ReplaceAllString(templateStr, "$1")
 	templateStr, values := evalBlocks(templateStr, variables)
 	if !strings.Contains(templateStr, "{{") && !strings.Contains(templateStr, "{%") {
-		return restoreBlocks(templateStr, values), nil
+		return restoreLoops(restoreBlocks(templateStr, values), loops), nil
 	}
 
 	// Convert Jinja2-style syntax to Go template syntax
@@ -177,10 +187,17 @@ func (e *Engine) Render(ctx context.Context, templateStr string, variables map[s
 	if strings.Contains(out, noValue) && !strings.Contains(templateStr, noValue) {
 		return "", fmt.Errorf("undefined variable in %q", templateStr)
 	}
-	return restoreBlocks(out, values), nil
+	return restoreLoops(restoreBlocks(out, values), loops), nil
 }
 
 const noValue = "<no value>"
+
+var (
+	trimBefore = regexp.MustCompile(`\s*(\{[%{])-`)
+	trimAfter  = regexp.MustCompile(`-([%}]\})\s*`)
+)
+
+var blockTagNewline = regexp.MustCompile(`(\{%[^%]*%\})\n`)
 
 var ifBlock = regexp.MustCompile(`\{%-?\s*(if|elif)\s+(.+?)\s*-?%\}`)
 
@@ -190,11 +207,9 @@ var exprBlock = regexp.MustCompile(`\{\{((?:[^{}]|\{[^{]|\}[^}])*?)\}\}`)
 // filters, nested attributes) and swaps them for placeholders, so their
 // output is never parsed as a template. Blocks the evaluator cannot handle,
 // such as Go template syntax ({{ .var }}, {{ add .a 1 }}) or undefined
-// names, stay for the Go template path; so does everything in templates with
-// {% for %}, whose loop variables only that path knows.
+// names, stay for the Go template path. For loops are expanded before this.
 func evalBlocks(text string, variables map[string]interface{}) (string, []string) {
-	if (!strings.Contains(text, "{{") && !strings.Contains(text, "{%")) ||
-		strings.Contains(text, "{% for") || strings.Contains(text, "{%for") {
+	if !strings.Contains(text, "{{") && !strings.Contains(text, "{%") {
 		return text, nil
 	}
 	// {% if %} / {% elif %} conditions become literals the Go path accepts
