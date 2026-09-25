@@ -1,0 +1,15 @@
+plays:
+  - name: mongodb
+    hosts: all
+    become: true
+    tasks:
+      - name: Database
+        mongodb:
+          name: onigirazu_e2e
+      - name: User
+        mongodb:
+          operation: user
+          name: onigirazu_e2e
+          database: onigirazu_e2e
+          password: "e2e-Passw0rd"
+          roles: [readWrite]
