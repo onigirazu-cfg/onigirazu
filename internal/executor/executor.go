@@ -43,6 +43,9 @@ func NewCommandExecutor(host types.Host) (*CommandExecutor, error) {
 		}
 		executor.sshClient = client
 	}
+	if host.Become {
+		executor.SetBecome(true, host.BecomeUser, host.BecomeMethod)
+	}
 
 	return executor, nil
 }
@@ -64,6 +67,9 @@ func NewCommandExecutorWithoutPool(host types.Host) (*CommandExecutor, error) {
 			return nil, err
 		}
 		executor.sshClient = client
+	}
+	if host.Become {
+		executor.SetBecome(true, host.BecomeUser, host.BecomeMethod)
 	}
 
 	return executor, nil
@@ -127,6 +133,9 @@ func (e *CommandExecutor) Execute(command string, args ...string) (string, error
 	if e.sshClient != nil {
 		// Execute on remote host via SSH
 		return e.sshClient.ExecuteCommand(fullCommand)
+	} else if e.become {
+		// A single string with spaces goes through sh -c
+		return e.executeLocal(fullCommand)
 	} else {
 		// Execute locally
 		return e.executeLocal(command, args...)
@@ -146,6 +155,11 @@ func (e *CommandExecutor) ExecuteWithContext(ctx context.Context, command string
 	if e.sshClient != nil {
 		// Execute on remote host via SSH with context support
 		return e.executeSSHWithContext(ctx, fullCommand)
+	} else if e.become {
+		// #nosec G204 -- privilege escalation wraps the module's own command
+		cmd := exec.CommandContext(ctx, "sh", "-c", fullCommand)
+		output, err := cmd.CombinedOutput()
+		return string(output), err
 	} else {
 		// Execute locally with context
 		cmd := exec.CommandContext(ctx, command, args...)

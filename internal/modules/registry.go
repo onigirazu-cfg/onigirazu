@@ -181,6 +181,11 @@ func (r *Registry) ExecuteTask(ctx context.Context, task *types.Task, host types
 		args["_become_method"] = task.BecomeMethod
 	}
 
+	// Every executor a module creates for this host picks the settings up
+	host.Become = task.Become
+	host.BecomeUser = task.BecomeUser
+	host.BecomeMethod = task.BecomeMethod
+
 	result, err := module.Execute(ctx, host, args)
 	if result.TaskName == "" {
 		result.TaskName = task.Name
