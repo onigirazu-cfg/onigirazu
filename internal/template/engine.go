@@ -281,6 +281,17 @@ func (e *Engine) RenderTaskArgs(ctx context.Context, args map[string]interface{}
 func (e *Engine) renderValue(ctx context.Context, value interface{}, variables map[string]interface{}) (interface{}, error) {
 	switch v := value.(type) {
 	case string:
+		// "{{ list_or_map }}" keeps its type, so a variable can feed a list
+		// argument (packages, groups, ports); scalars stay strings because
+		// modules read them as such
+		if inner, whole := expression.Unwrap(v); whole {
+			if native, err := expression.Eval(inner, variables); err == nil {
+				switch native.(type) {
+				case []interface{}, map[string]interface{}:
+					return native, nil
+				}
+			}
+		}
 		return e.Render(ctx, v, variables)
 	case map[string]interface{}:
 		result := make(map[string]interface{})
