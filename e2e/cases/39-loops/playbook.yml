@@ -1,0 +1,34 @@
+plays:
+  - name: loops
+    hosts: all
+    become: true
+    gather_facts: true
+    tasks:
+      - name: Plain list
+        file:
+          path: "/root/onigirazu-e2e-loop/{{ item }}"
+          state: directory
+        loop: [a, b]
+      - name: Items from a command
+        command:
+          cmd: "printf 'x\\ny\\n'"
+        register: names
+        changed_when: false
+      - name: Registered lines, custom variable, loop metadata
+        copy:
+          content: "{{ loop.index }}/{{ loop.length }} {{ name }} {{ onigirazu_distribution }}\n"
+          dest: "/root/onigirazu-e2e-loop/{{ name }}.txt"
+        loop:
+          items: "{{ names.stdout_lines }}"
+          var: name
+        register: written
+      - name: Registered loop results
+        copy:
+          content: "{{ written.results | length }}\n"
+          dest: /root/onigirazu-e2e-loop/results
+      - name: when per item
+        file:
+          path: "/root/onigirazu-e2e-loop/when-{{ item }}"
+          state: directory
+        loop: [keep, skip]
+        when: item != "skip"
