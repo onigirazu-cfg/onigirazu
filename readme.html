@@ -822,14 +822,34 @@ onigirazu run all -m ping -i inventory.yml -o table
 </code></pre>
 
 <h3>Conditionals</h3>
-<p>Skip tasks based on conditions:</p>
+<p><code>when</code>, <code>until</code>, <code>changed_when</code> and <code>failed_when</code> take an expression,
+evaluated per host with that host's facts and registered results:</p>
 <pre class="codehilite"><code class="language-yaml">- name: &quot;Install Docker on Debian&quot;
   package:
     name: docker.io
     state: present
-  when: &quot;{{ onigirazu_os_family == 'Debian' }}&quot;
+  when: onigirazu_os_family == &quot;Debian&quot;
+
+- name: &quot;Wait for the app&quot;
+  uri:
+    url: http://localhost:8080/health
+  register: health
+  until: health.status == 200
+  retries: 10
+  delay: 3
+
+- name: &quot;Probe&quot;
+  command:
+    cmd: systemctl is-active app
+  register: app
+  changed_when: false
+  failed_when: app.rc is defined and app.rc &gt; 3
 </code></pre>
 
+<p>Supported: <code>==</code>, <code>!=</code>, <code>&lt;</code>, <code>&gt;</code>, <code>and</code>, <code>or</code>, <code>not</code>, <code>in</code>, <code>is defined</code>,
+<code>is not defined</code>, filters <code>| length</code>, <code>| lower</code>, <code>| upper</code>, <code>| int</code>,
+<code>| trim</code>. A list under <code>when</code> means all items must hold; <code>{{ }}</code> around
+the expression is optional. A condition that cannot be evaluated fails the task.</p>
 <h3>Variables</h3>
 <p>Use variables for dynamic configurations:</p>
 <pre class="codehilite"><code class="language-yaml">vars:
