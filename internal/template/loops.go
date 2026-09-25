@@ -111,7 +111,7 @@ func (e *Engine) renderLoop(ctx context.Context, name, valueName, source, body s
 
 	var b strings.Builder
 	for i, en := range entries {
-		vars := make(map[string]interface{}, len(variables)+3)
+		vars := make(map[string]interface{})
 		for k, v := range variables {
 			vars[k] = v
 		}
