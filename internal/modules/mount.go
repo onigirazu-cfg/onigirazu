@@ -41,7 +41,7 @@ func (m *MountModule) GetDescription() string {
 func (m *MountModule) Execute(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
 	startTime := time.Now()
 	result := types.TaskResult{
-		TaskName:  getStringArg(args, "name", "mount"),
+		TaskName:  taskName(args),
 		Host:      host.Name,
 		Module:    m.GetName(),
 		Success:   true,
@@ -84,211 +84,178 @@ func (m *MountModule) Execute(ctx context.Context, host types.Host, args map[str
 	return execResult, nil
 }
 
-// handlePresent ensures mount is in fstab and mounted
+// Mount states follow Ansible: present = fstab entry only; mounted = fstab
+// entry, mount point and mounted; unmounted = not mounted, fstab untouched;
+// absent = not mounted and no fstab entry.
+
 func (m *MountModule) handlePresent(ctx context.Context, exec *executor.CommandExecutor, host types.Host, args map[string]interface{}, result types.TaskResult, path string) (types.TaskResult, error) {
-	source, ok := args["src"].(string)
-	if !ok || source == "" {
-		return m.failResult(result, "parameter 'src' (mount source) is required for state=present")
+	changed, err := m.ensureFstab(ctx, host, args, path)
+	if err != nil {
+		return m.failResult(result, err.Error())
 	}
-
-	fstype := getStringArg(args, "fstype", "defaults")
-	opts := getStringArg(args, "opts", "defaults")
-	backup := getBoolArg(args, "backup", true)
-
+	result.Changed = changed
 	result.Output["path"] = path
-	result.Output["src"] = source
-	result.Output["fstype"] = fstype
-	result.Output["opts"] = opts
-
-	// Check if already mounted
-	isMounted, err := m.isMounted(exec, path)
-	if err != nil {
-		return m.failResult(result, fmt.Sprintf("failed to check mount status: %v", err))
-	}
-
-	// Check fstab
-	inFstab, _, err := m.findInFstab(exec, path)
-	if err != nil {
-		return m.failResult(result, fmt.Sprintf("failed to read fstab: %v", err))
-	}
-
-	// Add to fstab if not present
-	if !inFstab {
-		fstabEntry := fmt.Sprintf("%s %s %s %s 0 0", source, path, fstype, opts)
-		cmd := fmt.Sprintf("echo '%s' >> /etc/fstab", strings.ReplaceAll(fstabEntry, "'", "'\\''"))
-		if backup {
-			// Backup fstab first
-			_, _ = exec.Execute("cp", "/etc/fstab", "/etc/fstab.bak")
-		}
-		_, err := exec.Execute("sh", "-c", cmd)
-		if err != nil {
-			return m.failResult(result, fmt.Sprintf("failed to add mount to fstab: %v", err))
-		}
-		result.Changed = true
-		result.Output["added_to_fstab"] = true
-	}
-
-	// Mount if not mounted
-	if !isMounted {
-		// Ensure mount point exists
-		_, _ = exec.Execute("mkdir", "-p", path)
-
-		// Mount the filesystem
-		_, err := exec.Execute("mount", path)
-		if err != nil {
-			// Try full mount command with source
-			_, err = exec.Execute("mount", "-t", fstype, "-o", opts, source, path)
-			if err != nil {
-				return m.failResult(result, fmt.Sprintf("failed to mount filesystem: %v", err))
-			}
-		}
-		result.Changed = true
-		result.Output["mounted"] = true
-	}
-
-	if result.Changed {
-		result.Output["msg"] = fmt.Sprintf("Mount point %s configured and mounted", path)
-	} else {
-		result.Output["msg"] = fmt.Sprintf("Mount point %s already configured and mounted", path)
-	}
-
+	result.Output["msg"] = fmt.Sprintf("fstab entry for %s is present", path)
 	result.Duration = time.Since(result.Timestamp)
 	return result, nil
 }
 
-// handleAbsent ensures mount is absent from fstab and unmounted
-func (m *MountModule) handleAbsent(ctx context.Context, exec *executor.CommandExecutor, host types.Host, args map[string]interface{}, result types.TaskResult, path string) (types.TaskResult, error) {
-	backup := getBoolArg(args, "backup", true)
-
-	result.Output["path"] = path
-
-	// Check fstab
-	inFstab, line, err := m.findInFstab(exec, path)
-	if err != nil {
-		return m.failResult(result, fmt.Sprintf("failed to read fstab: %v", err))
-	}
-
-	// Remove from fstab
-	if inFstab {
-		if backup {
-			_, _ = exec.Execute("cp", "/etc/fstab", "/etc/fstab.bak")
-		}
-		// Remove the line from fstab
-		sedCmd := fmt.Sprintf("sed -i '%d d' /etc/fstab", line)
-		_, err := exec.Execute("sh", "-c", sedCmd)
-		if err != nil {
-			return m.failResult(result, fmt.Sprintf("failed to remove from fstab: %v", err))
-		}
-		result.Changed = true
-		result.Output["removed_from_fstab"] = true
-	}
-
-	// Unmount if mounted
-	isMounted, err := m.isMounted(exec, path)
-	if err == nil && isMounted {
-		_, err := exec.Execute("umount", path)
-		if err != nil {
-			// Try force unmount
-			_, err = exec.Execute("umount", "-f", path)
-			if err != nil {
-				return m.failResult(result, fmt.Sprintf("failed to unmount filesystem: %v", err))
-			}
-		}
-		result.Changed = true
-		result.Output["unmounted"] = true
-	}
-
-	if result.Changed {
-		result.Output["msg"] = fmt.Sprintf("Mount point %s removed and unmounted", path)
-	} else {
-		result.Output["msg"] = fmt.Sprintf("Mount point %s already absent", path)
-	}
-
-	result.Duration = time.Since(result.Timestamp)
-	return result, nil
-}
-
-// handleMounted ensures filesystem is mounted
 func (m *MountModule) handleMounted(ctx context.Context, exec *executor.CommandExecutor, host types.Host, args map[string]interface{}, result types.TaskResult, path string) (types.TaskResult, error) {
-	result.Output["path"] = path
-
-	isMounted, err := m.isMounted(exec, path)
+	changed, err := m.ensureFstab(ctx, host, args, path)
 	if err != nil {
-		return m.failResult(result, fmt.Sprintf("failed to check mount status: %v", err))
+		return m.failResult(result, err.Error())
+	}
+	if _, err := runOnHost(ctx, host, args, "mkdir", "-p", path); err != nil {
+		return m.failResult(result, fmt.Sprintf("failed to create mount point %s: %v", path, err))
 	}
 
-	if !isMounted {
-		// Try to mount
-		_, err := exec.Execute("mount", path)
-		if err != nil {
-			// If simple mount fails, might need to mount all from fstab
-			_, err = exec.Execute("mount", "-a")
-			if err != nil {
-				return m.failResult(result, fmt.Sprintf("failed to mount filesystem: %v", err))
-			}
+	mounted := m.isMounted(ctx, host, args, path)
+	switch {
+	case !mounted:
+		if _, err := runOnHost(ctx, host, args, "mount", path); err != nil {
+			return m.failResult(result, fmt.Sprintf("failed to mount %s: %v", path, err))
 		}
-		result.Changed = true
+		changed = true
+	case changed:
+		// New options for a mounted filesystem take effect on remount
+		if _, err := runOnHost(ctx, host, args, "mount", "-o", "remount", path); err != nil {
+			return m.failResult(result, fmt.Sprintf("failed to remount %s: %v", path, err))
+		}
+	}
+	if !m.isMounted(ctx, host, args, path) {
+		return m.failResult(result, fmt.Sprintf("%s is not mounted after mount", path))
 	}
 
+	result.Changed = changed
+	result.Output["path"] = path
 	result.Output["msg"] = fmt.Sprintf("Mount point %s is mounted", path)
 	result.Duration = time.Since(result.Timestamp)
 	return result, nil
 }
 
-// handleUnmounted ensures filesystem is unmounted
 func (m *MountModule) handleUnmounted(ctx context.Context, exec *executor.CommandExecutor, host types.Host, args map[string]interface{}, result types.TaskResult, path string) (types.TaskResult, error) {
-	result.Output["path"] = path
-
-	isMounted, err := m.isMounted(exec, path)
+	changed, err := m.unmount(ctx, host, args, path)
 	if err != nil {
-		return m.failResult(result, fmt.Sprintf("failed to check mount status: %v", err))
+		return m.failResult(result, err.Error())
 	}
-
-	if isMounted {
-		_, err := exec.Execute("umount", path)
-		if err != nil {
-			return m.failResult(result, fmt.Sprintf("failed to unmount filesystem: %v", err))
-		}
-		result.Changed = true
-	}
-
+	result.Changed = changed
+	result.Output["path"] = path
 	result.Output["msg"] = fmt.Sprintf("Mount point %s is unmounted", path)
 	result.Duration = time.Since(result.Timestamp)
 	return result, nil
 }
 
-// isMounted checks if a path is currently mounted
-func (m *MountModule) isMounted(exec *executor.CommandExecutor, path string) (bool, error) {
-	output, err := exec.Execute("grep", "-E", fmt.Sprintf("^[^#].+ %s ", path), "/proc/mounts")
+func (m *MountModule) handleAbsent(ctx context.Context, exec *executor.CommandExecutor, host types.Host, args map[string]interface{}, result types.TaskResult, path string) (types.TaskResult, error) {
+	unmounted, err := m.unmount(ctx, host, args, path)
 	if err != nil {
-		return false, nil
+		return m.failResult(result, err.Error())
 	}
-	return strings.TrimSpace(output) != "", nil
+	lines, err := m.readFstab(ctx, host, args)
+	if err != nil {
+		return m.failResult(result, err.Error())
+	}
+	kept := make([]string, 0, len(lines))
+	for _, line := range lines {
+		if fstabMountPoint(line) != path {
+			kept = append(kept, line)
+		}
+	}
+	removed := len(kept) != len(lines)
+	if removed {
+		if err := m.writeFstab(ctx, host, args, kept); err != nil {
+			return m.failResult(result, err.Error())
+		}
+	}
+	result.Changed = unmounted || removed
+	result.Output["path"] = path
+	result.Output["msg"] = fmt.Sprintf("Mount point %s is absent", path)
+	result.Duration = time.Since(result.Timestamp)
+	return result, nil
 }
 
-// findInFstab finds a mount point in fstab and returns its line number (1-based)
-func (m *MountModule) findInFstab(exec *executor.CommandExecutor, path string) (bool, int, error) {
-	output, err := exec.Execute("cat", "/etc/fstab")
-	if err != nil {
-		return false, 0, fmt.Errorf("failed to read /etc/fstab: %v", err)
+// unmount unmounts path if it is mounted and reports whether it did
+func (m *MountModule) unmount(ctx context.Context, host types.Host, args map[string]interface{}, path string) (bool, error) {
+	if !m.isMounted(ctx, host, args, path) {
+		return false, nil
 	}
+	if _, err := runOnHost(ctx, host, args, "umount", path); err != nil {
+		return false, fmt.Errorf("failed to unmount %s: %v", path, err)
+	}
+	if m.isMounted(ctx, host, args, path) {
+		return false, fmt.Errorf("%s is still mounted after umount", path)
+	}
+	return true, nil
+}
 
-	lines := strings.Split(output, "\n")
-	for i, line := range lines {
-		// Skip comments and empty lines
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+// isMounted reports whether a filesystem is mounted exactly at path
+func (m *MountModule) isMounted(ctx context.Context, host types.Host, args map[string]interface{}, path string) bool {
+	_, err := runOnHost(ctx, host, args, "findmnt", "-rn", "--mountpoint", path)
+	return err == nil
+}
+
+// ensureFstab makes /etc/fstab carry exactly the task's entry for path
+func (m *MountModule) ensureFstab(ctx context.Context, host types.Host, args map[string]interface{}, path string) (bool, error) {
+	source := getStringArg(args, "src", "")
+	if source == "" {
+		return false, fmt.Errorf("parameter 'src' (mount source) is required")
+	}
+	fstype := getStringArg(args, "fstype", "auto")
+	opts := getStringArg(args, "opts", "defaults")
+	want := strings.Join([]string{source, path, fstype, opts, getStringArg(args, "dump", "0"), getStringArg(args, "passno", "0")}, " ")
+
+	lines, err := m.readFstab(ctx, host, args)
+	if err != nil {
+		return false, err
+	}
+	found := false
+	out := make([]string, 0, len(lines)+1)
+	for _, line := range lines {
+		if fstabMountPoint(line) != path {
+			out = append(out, line)
 			continue
 		}
-
-		// Parse fstab line: device mountpoint fstype options dump pass
-		fields := strings.Fields(trimmed)
-		if len(fields) >= 2 && fields[1] == path {
-			return true, i + 1, nil
+		if found {
+			continue // drop duplicates for the same mount point
 		}
+		found = true
+		out = append(out, want)
 	}
+	if !found {
+		out = append(out, want)
+	}
+	if strings.Join(out, "\n") == strings.Join(lines, "\n") {
+		return false, nil
+	}
+	return true, m.writeFstab(ctx, host, args, out)
+}
 
-	return false, 0, nil
+func (m *MountModule) readFstab(ctx context.Context, host types.Host, args map[string]interface{}) ([]string, error) {
+	out, err := runOnHost(ctx, host, args, "cat", "/etc/fstab")
+	if err != nil {
+		return nil, fmt.Errorf("failed to read /etc/fstab: %v", err)
+	}
+	return strings.Split(strings.TrimRight(out, "\n"), "\n"), nil
+}
+
+func (m *MountModule) writeFstab(ctx context.Context, host types.Host, args map[string]interface{}, lines []string) error {
+	script := "printf '%s' " + shellQuote(strings.Join(lines, "\n")+"\n") + " > /etc/fstab"
+	if getBoolArg(args, "backup", true) {
+		script = "cp -p /etc/fstab /etc/fstab.bak && " + script
+	}
+	if _, err := runShellOnHost(ctx, host, args, script); err != nil {
+		return fmt.Errorf("failed to write /etc/fstab: %v", err)
+	}
+	return nil
+}
+
+// fstabMountPoint returns the mount point field of an fstab line, or "" for
+// comments and blank lines
+func fstabMountPoint(line string) string {
+	fields := strings.Fields(line)
+	if len(fields) < 2 || strings.HasPrefix(fields[0], "#") {
+		return ""
+	}
+	return fields[1]
 }
 
 // Validate validates argument correctness
