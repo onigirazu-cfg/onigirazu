@@ -1,0 +1,4 @@
+- name: Must be skipped through the include's when
+  copy:
+    content: "no\n"
+    dest: /root/onigirazu-e2e-include-skipped
