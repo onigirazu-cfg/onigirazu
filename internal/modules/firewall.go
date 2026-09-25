@@ -28,6 +28,9 @@ type FirewallManager interface {
 	DenyFrom(source string) error
 	DeleteRule(rule string) error
 	ListRules() ([]string, error)
+	// Snapshot returns the configured rules; comparing it before and after
+	// an operation tells whether anything changed
+	Snapshot() (string, error)
 	Reload() error
 	SetExecutor(executor *executor.CommandExecutor)
 	GetType() string
@@ -82,11 +85,11 @@ func (m *FirewallModule) Execute(ctx context.Context, host types.Host, args map[
 	case "disable":
 		return m.handleDisable(ctx, manager, host, args, result)
 	case "rule":
-		return m.handleRule(ctx, manager, host, args, result)
+		return m.detectChange(manager, func() (types.TaskResult, error) { return m.handleRule(ctx, manager, host, args, result) })
 	case "service":
-		return m.handleService(ctx, manager, host, args, result)
+		return m.detectChange(manager, func() (types.TaskResult, error) { return m.handleService(ctx, manager, host, args, result) })
 	case "source":
-		return m.handleSource(ctx, manager, host, args, result)
+		return m.detectChange(manager, func() (types.TaskResult, error) { return m.handleSource(ctx, manager, host, args, result) })
 	case "list":
 		return m.handleList(ctx, manager, host, args, result)
 	case "reload":
@@ -94,6 +97,20 @@ func (m *FirewallModule) Execute(ctx context.Context, host types.Host, args map[
 	default:
 		return m.failResult(result, fmt.Sprintf("unknown operation: %s", operation))
 	}
+}
+
+// detectChange runs a rule operation and reports changed only when the
+// configured rules differ afterwards (adding an existing rule is a no-op)
+func (m *FirewallModule) detectChange(manager FirewallManager, op func() (types.TaskResult, error)) (types.TaskResult, error) {
+	before, beforeErr := manager.Snapshot()
+	result, err := op()
+	if err != nil || !result.Success || beforeErr != nil {
+		return result, err
+	}
+	if after, afterErr := manager.Snapshot(); afterErr == nil {
+		result.Changed = after != before
+	}
+	return result, nil
 }
 
 // detectFirewall detects which firewall system is available
@@ -368,6 +385,11 @@ func (u *UFWManager) ListRules() ([]string, error) {
 	return strings.Split(output, "\n"), nil
 }
 
+func (u *UFWManager) Snapshot() (string, error) {
+	// Unlike "ufw status", this lists rules while ufw is inactive too
+	return u.executor.Execute("ufw", "show", "added")
+}
+
 func (u *UFWManager) Reload() error {
 	_, err := u.executor.Execute("ufw", "reload")
 	return err
@@ -509,6 +531,10 @@ func (f *FirewalldManager) ListRules() ([]string, error) {
 	return rules, nil
 }
 
+func (f *FirewalldManager) Snapshot() (string, error) {
+	return f.executor.Execute("firewall-cmd", "--permanent", "--list-all")
+}
+
 func (f *FirewalldManager) Reload() error {
 	_, err := f.executor.Execute("firewall-cmd", "--reload")
 	return err
@@ -548,19 +574,11 @@ func (i *IptablesManager) IsEnabled() (bool, error) {
 }
 
 func (i *IptablesManager) AllowPort(port, protocol string) error {
-	_, err := i.executor.Execute("iptables", "-A", "INPUT", "-p", protocol, "--dport", port, "-j", "ACCEPT")
-	if err != nil {
-		return err
-	}
-	return i.saveRules()
+	return i.appendOnce("-p", protocol, "--dport", port, "-j", "ACCEPT")
 }
 
 func (i *IptablesManager) DenyPort(port, protocol string) error {
-	_, err := i.executor.Execute("iptables", "-A", "INPUT", "-p", protocol, "--dport", port, "-j", "DROP")
-	if err != nil {
-		return err
-	}
-	return i.saveRules()
+	return i.appendOnce("-p", protocol, "--dport", port, "-j", "DROP")
 }
 
 func (i *IptablesManager) AllowService(service string) error {
@@ -572,19 +590,11 @@ func (i *IptablesManager) DenyService(service string) error {
 }
 
 func (i *IptablesManager) AllowFrom(source string) error {
-	_, err := i.executor.Execute("iptables", "-A", "INPUT", "-s", source, "-j", "ACCEPT")
-	if err != nil {
-		return err
-	}
-	return i.saveRules()
+	return i.appendOnce("-s", source, "-j", "ACCEPT")
 }
 
 func (i *IptablesManager) DenyFrom(source string) error {
-	_, err := i.executor.Execute("iptables", "-A", "INPUT", "-s", source, "-j", "DROP")
-	if err != nil {
-		return err
-	}
-	return i.saveRules()
+	return i.appendOnce("-s", source, "-j", "DROP")
 }
 
 func (i *IptablesManager) DeleteRule(rule string) error {
@@ -598,6 +608,22 @@ func (i *IptablesManager) ListRules() ([]string, error) {
 		return nil, err
 	}
 	return strings.Split(output, "\n"), nil
+}
+
+func (i *IptablesManager) Snapshot() (string, error) {
+	return i.executor.Execute("iptables", "-S", "INPUT")
+}
+
+// appendOnce appends a rule to INPUT unless an identical one exists; plain
+// -A added a duplicate on every run
+func (i *IptablesManager) appendOnce(rule ...string) error {
+	if _, err := i.executor.Execute("iptables", append([]string{"-C", "INPUT"}, rule...)...); err == nil {
+		return nil
+	}
+	if _, err := i.executor.Execute("iptables", append([]string{"-A", "INPUT"}, rule...)...); err != nil {
+		return err
+	}
+	return i.saveRules()
 }
 
 func (i *IptablesManager) Reload() error {

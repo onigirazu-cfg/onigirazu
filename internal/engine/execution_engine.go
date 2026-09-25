@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/onigirazu-cfg/onigirazu/internal/expression"
+
 	"github.com/onigirazu-cfg/onigirazu/internal/facts"
 	"github.com/onigirazu-cfg/onigirazu/internal/interfaces"
 	"github.com/onigirazu-cfg/onigirazu/internal/metrics"
@@ -49,7 +51,9 @@ type ExecutionEngine struct {
 	// Execution context
 	variables map[string]interface{}
 	facts     map[string]map[string]interface{} // host -> facts
-	mutex     sync.RWMutex
+	// host -> variables set at run time by register and set_fact
+	hostVars map[string]map[string]interface{}
+	mutex    sync.RWMutex
 
 	// Statistics
 	stats *ExecutionStats
@@ -144,6 +148,7 @@ func NewExecutionEngine(
 		tagFilter:         defaultFilter,
 		variables:         make(map[string]interface{}),
 		facts:             make(map[string]map[string]interface{}),
+		hostVars:          make(map[string]map[string]interface{}),
 		stats: &ExecutionStats{
 			HostStats: make(map[string]*HostStats),
 		},
@@ -465,10 +470,10 @@ func (e *ExecutionEngine) executePlay(ctx context.Context, play *types.Play) (*t
 
 			// Check conditional execution
 			if roleRef.When != "" {
-				skip, err := e.evaluateCondition(ctx, roleRef.When, playVars)
+				holds, err := e.conditionHolds(ctx, roleRef.When, playVars)
 				if err != nil {
-					e.logger.Warn("Failed to evaluate condition for role '%s': %v", roleRef.Name, err)
-				} else if skip {
+					return result, fmt.Errorf("role '%s': %w", roleRef.Name, err)
+				} else if !holds {
 					e.logger.Debug("Skipping role '%s' due to condition", roleRef.Name)
 					continue
 				}
@@ -577,17 +582,7 @@ func (e *ExecutionEngine) executeTaskList(ctx context.Context, tasks []types.Tas
 			continue
 		}
 
-		// Check if task should be skipped based on conditions
-		if task.When != "" {
-			skip, err := e.evaluateCondition(ctx, task.When, variables)
-			if err != nil {
-				e.logger.Warn("Failed to evaluate condition for task '%s': %v", task.Name, err)
-			} else if skip {
-				e.logger.Debug("Skipping task '%s' due to condition", task.Name)
-				e.updateTaskStats("", &task, types.TaskResult{Skipped: true})
-				continue
-			}
-		}
+		// when is evaluated per host in executeTaskOnHost
 
 		// Execute task on all hosts
 		if err := e.executeTask(ctx, &task, hosts, variables, playResult); err != nil {
@@ -690,29 +685,28 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 	// Notify observers of task start
 	e.notifyTaskStart(task.Name, host.Name)
 
-	// Merge variables in order of precedence (later overrides earlier):
-	// 1. Play variables
-	// 2. Global variables (from set_fact and register)
-	// 3. Host vars (highest precedence)
-	e.mutex.RLock()
-	globalVars := make(map[string]interface{})
-	for k, v := range e.variables {
-		globalVars[k] = v
-	}
-	e.mutex.RUnlock()
-
-	taskVars := e.mergeVariables(variables, globalVars, host.Vars)
-
-	// Add host facts - both as onigirazu_facts and unpacked at top level
-	if hostFacts, exists := e.facts[host.Name]; exists {
-		// Add facts as onigirazu_facts for compatibility
-		taskVars = e.mergeVariables(taskVars, map[string]interface{}{"onigirazu_facts": hostFacts})
-		// Also unpack facts to top level so they can be accessed directly in templates
-		taskVars = e.mergeVariables(taskVars, hostFacts)
-	}
+	taskVars := e.hostVariables(host, variables)
 
 	// Debug: log available variables
 	e.logger.Debug("Task '%s' variables: %v", task.Name, taskVars)
+
+	if task.When != "" {
+		holds, err := e.conditionHolds(ctx, task.When, taskVars)
+		if err != nil {
+			return e.finishTask(task, host, types.TaskResult{
+				TaskName: task.Name, Host: host.Name, Module: task.Module,
+				Failed: true, Error: err.Error(), Timestamp: time.Now(),
+			}, playResult)
+		}
+		if !holds {
+			e.logger.Debug("Skipping task '%s' on %s: condition is false", task.Name, host.Name)
+			return e.finishTask(task, host, types.TaskResult{
+				TaskName: task.Name, Host: host.Name, Module: task.Module,
+				Success: true, Skipped: true, Timestamp: time.Now(),
+				Output: map[string]interface{}{"skip_reason": "condition is false"},
+			}, playResult)
+		}
+	}
 
 	// Render task arguments with templates
 	renderedArgs, err := e.templateEngine.RenderTaskArgs(ctx, task.Args, taskVars)
@@ -744,11 +738,12 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 		Facts:     e.facts[host.Name],
 	}
 
-	// Execute with retry logic
+	// Execute with retry logic: retries count extra attempts; with until the
+	// task repeats until the condition holds (3 attempts unless retries is set)
 	var result types.TaskResult
 	maxAttempts := task.Retries + 1
-	if maxAttempts <= 0 {
-		maxAttempts = 1
+	if task.Until != "" && task.Retries <= 0 {
+		maxAttempts = 3
 	}
 
 	// Record task execution start
@@ -793,12 +788,31 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 			BecomeMethod: become.Method,
 		}, *host, taskVars)
 
-		if err == nil && !result.Failed {
+		if task.Until != "" && err == nil {
+			untilVars := taskVars
+			if task.Register != "" {
+				untilVars = e.mergeVariables(taskVars, map[string]interface{}{task.Register: registeredValue(result)})
+			}
+			holds, condErr := e.conditionHolds(ctx, task.Until, untilVars)
+			if condErr != nil {
+				err = condErr
+				break
+			}
+			if holds {
+				result.Failed = false
+				break
+			}
+			result.Failed = true
+			result.Error = fmt.Sprintf("until condition not met after %d attempt(s)", attempt)
+		} else if err == nil && !result.Failed {
 			break // Success
 		}
 
 		if attempt < maxAttempts {
 			delay := task.RetryDelay
+			if delay <= 0 {
+				delay = task.Delay
+			}
 			if delay <= 0 {
 				delay = 1 * time.Second
 			}
@@ -819,9 +833,18 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 		result.Failed = true
 		result.Error = err.Error()
 	}
+	if task.ChangedWhen != "" || task.FailedWhen != "" {
+		e.applyResultConditions(ctx, task, taskVars, &result)
+	}
 
-	// Record task execution metrics
 	e.metricsManager.AddExecutionTime(time.Since(taskStartTime))
+	return e.finishTask(task, host, result, playResult)
+}
+
+// finishTask records a task result for a host: metrics, stats, play result,
+// register and set_fact. It returns an error when the task failed.
+func (e *ExecutionEngine) finishTask(task *types.Task, host *types.Host, result types.TaskResult,
+	playResult *types.PlayResult) error {
 	if result.Failed {
 		e.metricsManager.IncrementTasksFailed()
 		e.metricsManager.IncrementErrorByType("task_execution")
@@ -886,51 +909,17 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 	// Update progress
 	e.progressTracker.UpdateTask(host.Name, task.Name, !result.Failed)
 
-	// Handle register: store task result in variables
-	if task.Register != "" && !result.Failed {
-		e.mutex.Lock()
-		// Store the result in a format compatible with Ansible
-		registeredVar := map[string]interface{}{
-			"changed": result.Changed,
-			"failed":  result.Failed,
-			"skipped": result.Skipped,
-		}
-
-		// Add stdout/stderr if available (for command/shell modules)
-		if stdout, ok := result.Output["stdout"]; ok {
-			registeredVar["stdout"] = stdout
-		}
-		if stderr, ok := result.Output["stderr"]; ok {
-			registeredVar["stderr"] = stderr
-		}
-		if rc, ok := result.Output["rc"]; ok {
-			registeredVar["rc"] = rc
-		}
-
-		// Add all output fields
-		for key, value := range result.Output {
-			if key != "stdout" && key != "stderr" && key != "rc" {
-				registeredVar[key] = value
-			}
-		}
-
-		// Store in global variables
-		e.variables[task.Register] = registeredVar
-		e.mutex.Unlock()
-
-		e.logger.Debug("Registered variable '%s' with result from task '%s': %+v", task.Register, task.Name, registeredVar)
+	// register and set_fact belong to this host. A failed or skipped task
+	// is registered too, so later tasks can test r.failed / r.skipped.
+	if task.Register != "" {
+		e.setHostVar(host.Name, task.Register, registeredValue(result))
 	}
-
-	// Handle set_fact: merge facts into global variables
 	if task.Module == "set_fact" && !result.Failed {
-		e.mutex.Lock()
-		if onigirazuFacts, ok := result.Output["onigirazu_facts"].(map[string]interface{}); ok {
-			for key, value := range onigirazuFacts {
-				e.variables[key] = value
-				e.logger.Debug("Set fact '%s' = %v", key, value)
+		if facts, ok := result.Output["onigirazu_facts"].(map[string]interface{}); ok {
+			for key, value := range facts {
+				e.setHostVar(host.Name, key, value)
 			}
 		}
-		e.mutex.Unlock()
 	}
 
 	// Notify observers of task completion
@@ -944,53 +933,104 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 	return nil
 }
 
-// executeTaskWithLoop executes a task with loop
+// executeTaskWithLoop runs a looped task: every host evaluates its own items
+// and runs them in order; hosts run in parallel unless the task is serial
 func (e *ExecutionEngine) executeTaskWithLoop(ctx context.Context, task *types.Task, hosts []types.Host,
 	variables map[string]interface{}, playResult *types.PlayResult) error {
-	// Check for context cancellation before processing loop
-	select {
-	case <-ctx.Done():
-		return fmt.Errorf("task execution canceled: %w", ctx.Err())
-	default:
+	if task.Serial || len(hosts) == 1 {
+		for i := range hosts {
+			if err := e.runLoopOnHost(ctx, task, &hosts[i], variables, playResult); err != nil {
+				return err
+			}
+		}
+		return nil
 	}
 
-	// Get loop items
-	items, err := e.getLoopItems(ctx, task.Loop, variables)
+	var wg sync.WaitGroup
+	var mutex sync.Mutex
+	var firstError error
+	for i := range hosts {
+		host := &hosts[i]
+		wg.Add(1)
+		e.executionPool.Submit(func() {
+			defer wg.Done()
+			if err := e.runLoopOnHost(ctx, task, host, variables, playResult); err != nil {
+				mutex.Lock()
+				if firstError == nil {
+					firstError = err
+				}
+				mutex.Unlock()
+			}
+		})
+	}
+	wg.Wait()
+	return firstError
+}
+
+// runLoopOnHost runs every item of a looped task on one host. A registered
+// loop keeps each item's result under "results", as Ansible does.
+func (e *ExecutionEngine) runLoopOnHost(ctx context.Context, task *types.Task, host *types.Host,
+	variables map[string]interface{}, playResult *types.PlayResult) error {
+	items, err := e.getLoopItems(ctx, task.Loop, e.hostVariables(host, variables))
 	if err != nil {
-		return fmt.Errorf("failed to get loop items: %w", err)
+		return e.finishTask(task, host, types.TaskResult{
+			TaskName: task.Name, Host: host.Name, Module: task.Module,
+			Failed: true, Error: fmt.Sprintf("loop: %v", err), Timestamp: time.Now(),
+		}, playResult)
+	}
+	e.logger.Debug("Executing task '%s' on %s with loop (%d items)", task.Name, host.Name, len(items))
+
+	itemVar, indexVar := task.Loop.Variable, task.Loop.Index
+	if itemVar == "" {
+		itemVar = "item"
+	}
+	if indexVar == "" {
+		indexVar = "item_index"
 	}
 
-	e.logger.Debug("Executing task '%s' with loop (%d items)", task.Name, len(items))
-
-	// Execute task for each item
+	results := make([]interface{}, 0, len(items))
+	changed, failed := false, false
+	register := func() {
+		if task.Register != "" {
+			e.setHostVar(host.Name, task.Register, map[string]interface{}{
+				"results": results, "changed": changed, "failed": failed,
+				"skipped": len(items) == 0,
+			})
+		}
+	}
 	for i, item := range items {
-		// Check for context cancellation (graceful shutdown)
 		select {
 		case <-ctx.Done():
-			e.logger.Debug("Loop execution canceled: %v", ctx.Err())
 			return fmt.Errorf("task execution canceled: %w", ctx.Err())
 		default:
 		}
 
-		// Create task copy with loop variables
 		taskCopy := *task
 		taskCopy.Name = fmt.Sprintf("%s (item %d)", task.Name, i+1)
-		taskCopy.Loop = nil // Clear loop to prevent infinite recursion
-
-		// Add loop variables
+		taskCopy.Loop = nil
 		loopVars := e.mergeVariables(variables, map[string]interface{}{
-			"item":       item,
-			"item_index": i,
+			itemVar:  item,
+			indexVar: i,
+			"loop": map[string]interface{}{
+				"index": i + 1, "index0": i, "length": len(items),
+				"first": i == 0, "last": i == len(items)-1,
+			},
 		})
-
-		// Execute task
-		if err := e.executeTask(ctx, &taskCopy, hosts, loopVars, playResult); err != nil {
-			if !task.IgnoreErrors {
-				return err
+		err := e.executeTaskOnHost(ctx, &taskCopy, host, loopVars, playResult)
+		if task.Register != "" {
+			if r, ok := e.getHostVar(host.Name, task.Register).(map[string]interface{}); ok {
+				r[itemVar] = item
+				results = append(results, r)
+				changed = changed || r["changed"] == true
+				failed = failed || r["failed"] == true
 			}
 		}
+		if err != nil {
+			register()
+			return err
+		}
 	}
-
+	register()
 	return nil
 }
 
@@ -1101,26 +1141,6 @@ func (e *ExecutionEngine) gatherFacts(ctx context.Context, hosts []types.Host) e
 	return nil
 }
 
-// evaluateCondition evaluates a conditional expression
-func (e *ExecutionEngine) evaluateCondition(ctx context.Context, condition string, variables map[string]interface{}) (bool, error) {
-	// Render the condition as a template
-	result, err := e.templateEngine.Render(ctx, condition, variables)
-	if err != nil {
-		return false, err
-	}
-
-	// Simple boolean evaluation
-	switch strings.ToLower(strings.TrimSpace(result)) {
-	case "true", "yes", "1":
-		return false, nil // Don't skip
-	case "false", "no", "0", "":
-		return true, nil // Skip
-	default:
-		// Try to evaluate as a boolean expression
-		return result == "", nil
-	}
-}
-
 // getLoopItems gets items for loop execution
 // Supports formats:
 //   - "1-10" -> [1, 2, 3, ..., 10]
@@ -1129,7 +1149,26 @@ func (e *ExecutionEngine) evaluateCondition(ctx context.Context, condition strin
 //   - "0-3" -> [0, 1, 2, 3]
 func (e *ExecutionEngine) getLoopItems(ctx context.Context, loop *types.Loop, variables map[string]interface{}) ([]interface{}, error) {
 	if loop.Items != nil {
-		return loop.Items, nil
+		items := make([]interface{}, len(loop.Items))
+		for i, item := range loop.Items {
+			if str, ok := item.(string); ok && strings.Contains(str, "{{") {
+				rendered, err := e.templateEngine.Render(ctx, str, variables)
+				if err != nil {
+					return nil, fmt.Errorf("item %d: %w", i+1, err)
+				}
+				item = rendered
+			}
+			items[i] = item
+		}
+		return items, nil
+	}
+
+	if loop.Expr != "" {
+		value, err := expression.Eval(loop.Expr, variables)
+		if err != nil {
+			return nil, fmt.Errorf("%q: %w", loop.Expr, err)
+		}
+		return expression.Items(value)
 	}
 
 	if loop.Range != "" {
@@ -1485,19 +1524,7 @@ func (e *ExecutionEngine) executeTaskListWithRetry(ctx context.Context, tasks []
 			continue
 		}
 
-		// Check if task should be skipped based on conditions
-		if task.When != "" {
-			skip, err := e.evaluateCondition(ctx, task.When, variables)
-			if err != nil {
-				e.logger.Warn("Failed to evaluate condition for task '%s': %v", task.Name, err)
-				continue
-			}
-			if skip {
-				e.logger.Debug("Skipping task '%s' due to condition", task.Name)
-				e.metricsManager.IncrementTasksSkipped()
-				continue
-			}
-		}
+		// when is evaluated per host in executeTaskOnHost
 
 		// Execute task with retry logic
 		if err := e.executeTaskWithRetryLogic(ctx, &task, hosts, variables, playResult); err != nil {
@@ -1511,59 +1538,11 @@ func (e *ExecutionEngine) executeTaskListWithRetry(ctx context.Context, tasks []
 	return nil
 }
 
-// executeTaskWithRetryLogic executes a single task with retry logic
+// executeTaskWithRetryLogic runs a task once on all hosts; retries and until
+// are handled per host in executeTaskOnHost
 func (e *ExecutionEngine) executeTaskWithRetryLogic(ctx context.Context, task *types.Task, hosts []types.Host,
 	variables map[string]interface{}, playResult *types.PlayResult) error {
-	maxRetries := task.Retries
-	if maxRetries <= 0 {
-		maxRetries = 1 // At least one attempt
-	}
-
-	retryDelay := task.RetryDelay
-	if retryDelay <= 0 {
-		retryDelay = time.Second // Default 1 second delay
-	}
-
-	var lastErr error
-	for attempt := 0; attempt < maxRetries; attempt++ {
-		if attempt > 0 {
-			e.logger.Debug("Retrying task '%s' (attempt %d/%d)", task.Name, attempt+1, maxRetries)
-
-			// Wait before retry
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-time.After(retryDelay):
-			}
-		}
-
-		// Execute the task
-		if task.Loop != nil {
-			lastErr = e.executeTaskWithLoop(ctx, task, hosts, variables, playResult)
-		} else {
-			lastErr = e.executeTask(ctx, task, hosts, variables, playResult)
-		}
-
-		// Check if task succeeded
-		if lastErr == nil {
-			return nil
-		}
-
-		// Check until condition if specified
-		if task.Until != "" {
-			success, err := e.evaluateCondition(ctx, task.Until, variables)
-			if err != nil {
-				e.logger.Warn("Failed to evaluate until condition: %v", err)
-			} else if success {
-				e.logger.Debug("Task '%s' succeeded based on until condition", task.Name)
-				return nil
-			}
-		}
-
-		e.logger.Debug("Task '%s' failed on attempt %d: %v", task.Name, attempt+1, lastErr)
-	}
-
-	return fmt.Errorf("task failed after %d attempts: %w", maxRetries, lastErr)
+	return e.executeTask(ctx, task, hosts, variables, playResult)
 }
 
 // collectTriggeredHandlers collects all handler names that were triggered by tasks
@@ -1661,4 +1640,103 @@ func (e *ExecutionEngine) GetExecutionSummary() map[string]interface{} {
 			"hit_rate": metrics.Cache.HitRate,
 		},
 	}
+}
+
+// setHostVar stores a run-time variable of one host
+func (e *ExecutionEngine) setHostVar(host, key string, value interface{}) {
+	e.mutex.Lock()
+	defer e.mutex.Unlock()
+	if e.hostVars[host] == nil {
+		e.hostVars[host] = make(map[string]interface{})
+	}
+	e.hostVars[host][key] = value
+}
+
+// registeredValue is what register stores: the module output plus the
+// changed/failed/skipped flags
+func registeredValue(result types.TaskResult) map[string]interface{} {
+	value := make(map[string]interface{}, len(result.Output)+4)
+	for key, v := range result.Output {
+		value[key] = v
+	}
+	// the Ansible *_lines companions of stdout and stderr
+	for _, key := range []string{"stdout", "stderr"} {
+		if text, ok := value[key].(string); ok {
+			if _, set := value[key+"_lines"]; !set {
+				value[key+"_lines"] = splitLines(text)
+			}
+		}
+	}
+	value["changed"] = result.Changed
+	value["failed"] = result.Failed
+	value["skipped"] = result.Skipped
+	if result.Error != "" {
+		value["msg"] = result.Error
+	}
+	return value
+}
+
+// applyResultConditions overrides the changed and failed status of a result
+// with changed_when and failed_when; both see the result under its register name
+func (e *ExecutionEngine) applyResultConditions(ctx context.Context, task *types.Task,
+	taskVars map[string]interface{}, result *types.TaskResult) {
+	vars := taskVars
+	if task.Register != "" {
+		vars = e.mergeVariables(taskVars, map[string]interface{}{task.Register: registeredValue(*result)})
+	}
+	if task.ChangedWhen != "" {
+		holds, err := e.conditionHolds(ctx, task.ChangedWhen, vars)
+		if err != nil {
+			result.Failed, result.Success, result.Error = true, false, "changed_when: "+err.Error()
+			return
+		}
+		result.Changed = holds
+	}
+	if task.FailedWhen != "" {
+		holds, err := e.conditionHolds(ctx, task.FailedWhen, vars)
+		switch {
+		case err != nil:
+			result.Failed, result.Success, result.Error = true, false, "failed_when: "+err.Error()
+		case holds:
+			result.Failed, result.Success = true, false
+			if result.Error == "" {
+				result.Error = "failed_when condition is true"
+			}
+		default:
+			result.Failed, result.Success, result.Error = false, true, ""
+		}
+	}
+}
+
+// getHostVar returns a run-time variable of one host
+func (e *ExecutionEngine) getHostVar(host, key string) interface{} {
+	e.mutex.RLock()
+	defer e.mutex.RUnlock()
+	return e.hostVars[host][key]
+}
+
+// hostVariables layers one host's variables over the given ones: global
+// variables, inventory host vars, gathered facts (also as onigirazu_facts),
+// then what register and set_fact stored for the host
+func (e *ExecutionEngine) hostVariables(host *types.Host, variables map[string]interface{}) map[string]interface{} {
+	e.mutex.RLock()
+	defer e.mutex.RUnlock()
+	vars := e.mergeVariables(variables, e.variables, host.Vars)
+	if hostFacts, exists := e.facts[host.Name]; exists {
+		vars = e.mergeVariables(vars, map[string]interface{}{"onigirazu_facts": hostFacts}, hostFacts)
+	}
+	return e.mergeVariables(vars, e.hostVars[host.Name])
+}
+
+func splitLines(text string) []interface{} {
+	text = strings.TrimRight(text, "\n")
+	if text == "" {
+		return []interface{}{}
+	}
+	lines := strings.Split(text, "\n")
+	items := make([]interface{}, len(lines))
+	for i, line := range lines {
+		items[i] = strings.TrimSuffix(line, "\r")
+	}
+	return items
 }

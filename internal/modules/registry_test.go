@@ -385,9 +385,12 @@ func TestRegistry_ExecuteTask_ArgumentMerging(t *testing.T) {
 		t.Errorf("Expected task_arg 'task_value', got '%v'", receivedArgs["task_arg"])
 	}
 
-	// Check that variables were passed
-	if receivedArgs["var_arg"] != "var_value" {
-		t.Errorf("Expected var_arg 'var_value', got '%v'", receivedArgs["var_arg"])
+	// Variables arrive under _vars and never as module arguments
+	if taskVars(receivedArgs)["var_arg"] != "var_value" {
+		t.Errorf("Expected _vars.var_arg 'var_value', got '%v'", taskVars(receivedArgs)["var_arg"])
+	}
+	if _, leaked := receivedArgs["var_arg"]; leaked {
+		t.Error("variable leaked into module arguments")
 	}
 
 	// Test that task args take precedence over variables

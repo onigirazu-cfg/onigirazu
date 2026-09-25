@@ -2,6 +2,7 @@ package modules
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -29,250 +30,169 @@ func (m *MongoDBModule) Execute(ctx context.Context, host types.Host, args map[s
 	startTime := time.Now()
 	result := types.TaskResult{
 		TaskName: "mongodb", Host: host.Name, Module: m.GetName(),
-		Success: true, Changed: false, Output: make(map[string]interface{}), Timestamp: startTime,
+		Success: true, Output: make(map[string]interface{}), Timestamp: startTime,
+	}
+	fail := func(err error) (types.TaskResult, error) {
+		result.Success = false
+		result.Error = err.Error()
+		result.Duration = time.Since(startTime)
+		return result, err
 	}
 
 	operation, _ := args["operation"].(string)
 	if operation == "" {
 		operation = "database"
 	}
-
-	loginHost, _ := args["login_host"].(string)
-	if loginHost == "" {
-		loginHost = "localhost"
+	state, _ := args["state"].(string)
+	if state == "" {
+		state = "present"
+	}
+	if state != "present" && state != "absent" {
+		return fail(fmt.Errorf("unsupported state %q", state))
+	}
+	name, _ := args["name"].(string)
+	database, _ := args["database"].(string)
+	switch {
+	case operation != "database" && operation != "user":
+		return fail(fmt.Errorf("unsupported operation %q", operation))
+	case name == "" && operation == "database":
+		return fail(fmt.Errorf("database name is required"))
+	case name == "":
+		return fail(fmt.Errorf("user name is required"))
+	case operation == "user" && database == "":
+		return fail(fmt.Errorf("database is required for user operation"))
 	}
 
-	loginPort, _ := args["login_port"].(string)
-	if loginPort == "" {
-		loginPort = "27017"
+	exec, err := m.CreateExecutor(host)
+	if err != nil {
+		return fail(fmt.Errorf("failed to create executor: %w", err))
 	}
+	defer exec.Close()
 
-	loginUser, _ := args["login_user"].(string)
-	loginPassword, _ := args["login_password"].(string)
-	loginDatabase, _ := args["login_database"].(string)
-	if loginDatabase == "" {
-		loginDatabase = "admin"
+	shell := newMongoShell(args)
+	if operation == "database" {
+		err = m.handleDatabase(exec, shell, name, state, &result)
+	} else {
+		err = m.handleUser(exec, shell, name, database, state, args, &result)
 	}
-
-	// Use WithExecutor to get fresh executor for this host
-	err := m.WithExecutor(host, func(exec *executor.CommandExecutor) error {
-		switch operation {
-		case "database":
-			dbName, ok := args["name"].(string)
-			if !ok || dbName == "" {
-				result.Success = false
-				result.Error = "database name is required"
-				return fmt.Errorf("database name is required")
-			}
-
-			state, _ := args["state"].(string)
-			if state == "" {
-				state = "present"
-			}
-
-			if err := m.handleDatabase(ctx, exec, dbName, state, loginUser, loginPassword, loginHost, loginPort, loginDatabase, &result); err != nil {
-				result.Success = false
-				result.Error = err.Error()
-				return err
-			}
-
-		case "user":
-			userName, ok := args["name"].(string)
-			if !ok || userName == "" {
-				result.Success = false
-				result.Error = "user name is required"
-				return fmt.Errorf("user name is required")
-			}
-
-			database, ok := args["database"].(string)
-			if !ok || database == "" {
-				result.Success = false
-				result.Error = "database is required for user operation"
-				return fmt.Errorf("database is required for user operation")
-			}
-
-			state, _ := args["state"].(string)
-			if state == "" {
-				state = "present"
-			}
-
-			if err := m.handleUser(ctx, exec, userName, database, state, args, loginUser, loginPassword, loginHost, loginPort, loginDatabase, &result); err != nil {
-				result.Success = false
-				result.Error = err.Error()
-				return err
-			}
-		}
-
-		return nil
-	})
-
-	if err != nil || !result.Success {
-		result.Duration = time.Since(startTime)
-		if err != nil {
-			return result, err
-		}
-		if result.Error != "" {
-			return result, fmt.Errorf("%s", result.Error)
-		}
-		return result, fmt.Errorf("operation failed")
+	if err != nil {
+		return fail(err)
 	}
 
 	result.Duration = time.Since(startTime)
 	return result, nil
 }
 
-func (m *MongoDBModule) buildMongoCmd(loginUser, loginPassword, loginHost, loginPort, loginDatabase string) string {
-	cmdParts := []string{"mongo"}
-
-	if loginHost != "" && loginPort != "" {
-		cmdParts = append(cmdParts, fmt.Sprintf("--host %s --port %s", loginHost, loginPort))
-	}
-
-	if loginUser != "" && loginPassword != "" {
-		cmdParts = append(cmdParts, fmt.Sprintf("--username %s --password '%s' --authenticationDatabase %s", loginUser, loginPassword, loginDatabase))
-	}
-
-	return strings.Join(cmdParts, " ")
+// mongoShell builds mongosh command lines (the legacy mongo shell when
+// mongosh is missing). Values reach the scripts as JSON literals.
+type mongoShell struct {
+	host, port, user, password, authDB string
 }
 
-func (m *MongoDBModule) handleDatabase(ctx context.Context, exec *executor.CommandExecutor, dbName, state, loginUser, loginPassword, loginHost, loginPort, loginDatabase string, result *types.TaskResult) error {
-	exists, err := m.databaseExists(ctx, exec, dbName, loginUser, loginPassword, loginHost, loginPort, loginDatabase)
+func newMongoShell(args map[string]interface{}) mongoShell {
+	s := mongoShell{}
+	s.host, _ = args["login_host"].(string)
+	if p, ok := toInt(args["login_port"]); ok && p > 0 {
+		s.port = fmt.Sprint(p)
+	}
+	s.user, _ = args["login_user"].(string)
+	s.password, _ = args["login_password"].(string)
+	s.authDB, _ = args["login_database"].(string)
+	if s.authDB == "" {
+		s.authDB = "admin"
+	}
+	return s
+}
+
+func (s mongoShell) command(db, script string) string {
+	opts := " --quiet"
+	if s.host != "" {
+		opts += " --host " + shellQuote(s.host)
+	}
+	if s.port != "" {
+		opts += " --port " + s.port
+	}
+	if s.user != "" {
+		opts += " --username " + shellQuote(s.user) + " --password " + shellQuote(s.password) +
+			" --authenticationDatabase " + shellQuote(s.authDB)
+	}
+	if db == "" {
+		db = "admin"
+	}
+	opts += " " + shellQuote(db) + " --eval " + shellQuote(script)
+	return "if command -v mongosh >/dev/null 2>&1; then mongosh" + opts + "; else mongo" + opts + "; fi"
+}
+
+// eval runs script and returns its last output line
+func (s mongoShell) eval(exec *executor.CommandExecutor, db, script string) (string, error) {
+	out, err := exec.Execute(s.command(db, script))
 	if err != nil {
-		return fmt.Errorf("failed to check database: %v", err)
+		return "", err
 	}
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	return strings.TrimSpace(lines[len(lines)-1]), nil
+}
 
-	switch state {
-	case "present":
-		if !exists {
-			if err := m.createDatabase(ctx, exec, dbName, loginUser, loginPassword, loginHost, loginPort, loginDatabase); err != nil {
-				return fmt.Errorf("failed to create database: %v", err)
-			}
-			result.Changed = true
-			result.Output["action"] = "created"
-		}
-
-	case "absent":
-		if exists {
-			if err := m.dropDatabase(ctx, exec, dbName, loginUser, loginPassword, loginHost, loginPort, loginDatabase); err != nil {
-				return fmt.Errorf("failed to drop database: %v", err)
-			}
-			result.Changed = true
-			result.Output["action"] = "dropped"
-		}
+func jsLiteral(v interface{}) string {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return "null"
 	}
+	return string(b)
+}
 
+func (m *MongoDBModule) handleDatabase(exec *executor.CommandExecutor, shell mongoShell, dbName, state string, result *types.TaskResult) error {
+	out, err := shell.eval(exec, "admin",
+		"db.adminCommand({listDatabases: 1, nameOnly: true}).databases.some(d => d.name === "+jsLiteral(dbName)+")")
+	if err != nil {
+		return fmt.Errorf("failed to check database: %w", err)
+	}
+	exists := out == "true"
+
+	switch {
+	case state == "present" && !exists:
+		// a database exists once it holds a collection
+		if _, err := shell.eval(exec, dbName, "db.createCollection('_init')"); err != nil {
+			return fmt.Errorf("failed to create database: %w", err)
+		}
+		result.Changed = true
+		result.Output["action"] = "created"
+	case state == "absent" && exists:
+		if _, err := shell.eval(exec, dbName, "db.dropDatabase()"); err != nil {
+			return fmt.Errorf("failed to drop database: %w", err)
+		}
+		result.Changed = true
+		result.Output["action"] = "dropped"
+	}
 	return nil
 }
 
-func (m *MongoDBModule) handleUser(ctx context.Context, exec *executor.CommandExecutor, userName, database, state string, args map[string]interface{}, loginUser, loginPassword, loginHost, loginPort, loginDatabase string, result *types.TaskResult) error {
-	exists, err := m.userExists(ctx, exec, userName, database, loginUser, loginPassword, loginHost, loginPort, loginDatabase)
+func (m *MongoDBModule) handleUser(exec *executor.CommandExecutor, shell mongoShell, userName, database, state string, args map[string]interface{}, result *types.TaskResult) error {
+	out, err := shell.eval(exec, database, "db.getUser("+jsLiteral(userName)+") !== null")
 	if err != nil {
-		return fmt.Errorf("failed to check user: %v", err)
+		return fmt.Errorf("failed to check user: %w", err)
 	}
+	exists := out == "true"
 
-	switch state {
-	case "present":
-		if !exists {
-			password, _ := args["password"].(string)
-			roles, _ := args["roles"].([]interface{})
-			if err := m.createUser(ctx, exec, userName, password, database, roles, loginUser, loginPassword, loginHost, loginPort, loginDatabase); err != nil {
-				return fmt.Errorf("failed to create user: %v", err)
-			}
-			result.Changed = true
-			result.Output["action"] = "created"
+	switch {
+	case state == "present" && !exists:
+		password, _ := args["password"].(string)
+		roles, _ := args["roles"].([]interface{})
+		if roles == nil {
+			roles = []interface{}{}
 		}
-
-	case "absent":
-		if exists {
-			if err := m.dropUser(ctx, exec, userName, database, loginUser, loginPassword, loginHost, loginPort, loginDatabase); err != nil {
-				return fmt.Errorf("failed to drop user: %v", err)
-			}
-			result.Changed = true
-			result.Output["action"] = "dropped"
+		user := map[string]interface{}{"user": userName, "pwd": password, "roles": roles}
+		if _, err := shell.eval(exec, database, "db.createUser("+jsLiteral(user)+")"); err != nil {
+			return fmt.Errorf("failed to create user: %w", err)
 		}
-	}
-
-	return nil
-}
-
-func (m *MongoDBModule) databaseExists(ctx context.Context, exec *executor.CommandExecutor, dbName, loginUser, loginPassword, loginHost, loginPort, loginDatabase string) (bool, error) {
-	baseCmd := m.buildMongoCmd(loginUser, loginPassword, loginHost, loginPort, loginDatabase)
-	cmd := fmt.Sprintf("%s --quiet --eval \"db.adminCommand('listDatabases').databases.map(d => d.name).includes('%s')\"", baseCmd, dbName)
-
-	stdout, err := exec.Execute(cmd)
-	if err != nil {
-		return false, nil
-	}
-
-	return strings.TrimSpace(stdout) == "true", nil
-}
-
-func (m *MongoDBModule) createDatabase(ctx context.Context, exec *executor.CommandExecutor, dbName, loginUser, loginPassword, loginHost, loginPort, loginDatabase string) error {
-	baseCmd := m.buildMongoCmd(loginUser, loginPassword, loginHost, loginPort, loginDatabase)
-	cmd := fmt.Sprintf("%s %s --eval \"db.createCollection('_init')\"", baseCmd, dbName)
-
-	_, err := exec.Execute(cmd)
-	if err != nil {
-		return fmt.Errorf("failed to create database: %s", err.Error())
-	}
-
-	return nil
-}
-
-func (m *MongoDBModule) dropDatabase(ctx context.Context, exec *executor.CommandExecutor, dbName, loginUser, loginPassword, loginHost, loginPort, loginDatabase string) error {
-	baseCmd := m.buildMongoCmd(loginUser, loginPassword, loginHost, loginPort, loginDatabase)
-	cmd := fmt.Sprintf("%s %s --eval \"db.dropDatabase()\"", baseCmd, dbName)
-
-	_, err := exec.Execute(cmd)
-	if err != nil {
-		return fmt.Errorf("failed to drop database: %s", err.Error())
-	}
-
-	return nil
-}
-
-func (m *MongoDBModule) userExists(ctx context.Context, exec *executor.CommandExecutor, userName, database, loginUser, loginPassword, loginHost, loginPort, loginDatabase string) (bool, error) {
-	baseCmd := m.buildMongoCmd(loginUser, loginPassword, loginHost, loginPort, loginDatabase)
-	cmd := fmt.Sprintf("%s %s --quiet --eval \"db.getUser('%s') != null\"", baseCmd, database, userName)
-
-	stdout, err := exec.Execute(cmd)
-	if err != nil {
-		return false, nil
-	}
-
-	return strings.TrimSpace(stdout) == "true", nil
-}
-
-func (m *MongoDBModule) createUser(ctx context.Context, exec *executor.CommandExecutor, userName, password, database string, roles []interface{}, loginUser, loginPassword, loginHost, loginPort, loginDatabase string) error {
-	baseCmd := m.buildMongoCmd(loginUser, loginPassword, loginHost, loginPort, loginDatabase)
-
-	rolesStr := "[]"
-	if len(roles) > 0 {
-		rolesList := make([]string, len(roles))
-		for i, role := range roles {
-			rolesList[i] = fmt.Sprintf("'%v'", role)
+		result.Changed = true
+		result.Output["action"] = "created"
+	case state == "absent" && exists:
+		if _, err := shell.eval(exec, database, "db.dropUser("+jsLiteral(userName)+")"); err != nil {
+			return fmt.Errorf("failed to drop user: %w", err)
 		}
-		rolesStr = fmt.Sprintf("[%s]", strings.Join(rolesList, ","))
+		result.Changed = true
+		result.Output["action"] = "dropped"
 	}
-
-	cmd := fmt.Sprintf("%s %s --eval \"db.createUser({user: '%s', pwd: '%s', roles: %s})\"", baseCmd, database, userName, password, rolesStr)
-
-	_, err := exec.Execute(cmd)
-	if err != nil {
-		return fmt.Errorf("failed to create user: %s", err.Error())
-	}
-
-	return nil
-}
-
-func (m *MongoDBModule) dropUser(ctx context.Context, exec *executor.CommandExecutor, userName, database, loginUser, loginPassword, loginHost, loginPort, loginDatabase string) error {
-	baseCmd := m.buildMongoCmd(loginUser, loginPassword, loginHost, loginPort, loginDatabase)
-	cmd := fmt.Sprintf("%s %s --eval \"db.dropUser('%s')\"", baseCmd, database, userName)
-
-	_, err := exec.Execute(cmd)
-	if err != nil {
-		return fmt.Errorf("failed to drop user: %s", err.Error())
-	}
-
 	return nil
 }

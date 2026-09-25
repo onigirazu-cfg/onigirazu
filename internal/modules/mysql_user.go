@@ -29,162 +29,132 @@ func (m *MySQLUserModule) Execute(ctx context.Context, host types.Host, args map
 		Host:      host.Name,
 		Module:    m.GetName(),
 		Success:   true,
-		Changed:   false,
 		Output:    make(map[string]interface{}),
 		Timestamp: startTime,
 	}
-
-	// Use CreateExecutor to get fresh executor for this host
-	exec, err := m.CreateExecutor(host)
-	if err != nil {
+	fail := func(err error) (types.TaskResult, error) {
 		result.Success = false
-		result.Error = fmt.Sprintf("failed to create executor: %v", err)
+		result.Error = err.Error()
+		result.Duration = time.Since(startTime)
 		return result, err
 	}
-	defer exec.Close()
 
-	userName, ok := args["name"].(string)
-	if !ok || userName == "" {
-		result.Success = false
-		result.Error = "user name is required"
-		return result, fmt.Errorf("user name is required")
+	userName, _ := args["name"].(string)
+	if userName == "" {
+		return fail(fmt.Errorf("user name is required"))
 	}
-
 	state, _ := args["state"].(string)
 	if state == "" {
 		state = "present"
 	}
-
 	userHost, _ := args["host"].(string)
 	if userHost == "" {
 		userHost = "localhost"
 	}
-
-	loginUser, _ := args["login_user"].(string)
-	if loginUser == "" {
-		loginUser = "root"
-	}
-
-	loginPassword, _ := args["login_password"].(string)
-	loginHost, _ := args["login_host"].(string)
-	if loginHost == "" {
-		loginHost = "localhost"
-	}
-
-	loginPort, _ := args["login_port"].(string)
-	if loginPort == "" {
-		loginPort = "3306"
-	}
-
-	exists, err := m.userExists(ctx, exec, userName, userHost, loginUser, loginPassword, loginHost, loginPort)
+	priv, _ := args["priv"].(string)
+	grants, err := parseMySQLPriv(priv)
 	if err != nil {
-		result.Success = false
-		result.Error = fmt.Sprintf("failed to check user: %v", err)
-		return result, err
+		return fail(err)
 	}
+
+	exec, err := m.CreateExecutor(host)
+	if err != nil {
+		return fail(fmt.Errorf("failed to create executor: %w", err))
+	}
+	defer exec.Close()
+
+	conn := dbConnFromArgs(args)
+	account := mysqlString(userName) + "@" + mysqlString(userHost)
+	out, err := exec.Execute(conn.mysql(fmt.Sprintf("SELECT COUNT(*) FROM mysql.user WHERE User = %s AND Host = %s",
+		mysqlString(userName), mysqlString(userHost))))
+	if err != nil {
+		return fail(fmt.Errorf("failed to check user: %w", err))
+	}
+	exists := strings.TrimSpace(out) != "0"
 
 	switch state {
 	case "present":
 		if !exists {
-			password, _ := args["password"].(string)
-			if err := m.createUser(ctx, exec, userName, userHost, password, loginUser, loginPassword, loginHost, loginPort); err != nil {
-				result.Success = false
-				result.Error = fmt.Sprintf("failed to create user: %v", err)
-				return result, err
+			sql := "CREATE USER " + account
+			if password, _ := args["password"].(string); password != "" {
+				sql += " IDENTIFIED BY " + mysqlString(password)
+			}
+			if _, err := exec.Execute(conn.mysql(sql)); err != nil {
+				return fail(fmt.Errorf("failed to create user: %w", err))
 			}
 			result.Changed = true
 			result.Output["action"] = "created"
 		}
-
-		if priv, ok := args["priv"].(string); ok && priv != "" {
-			if err := m.grantPrivileges(ctx, exec, userName, userHost, priv, loginUser, loginPassword, loginHost, loginPort); err != nil {
-				result.Success = false
-				result.Error = fmt.Sprintf("failed to grant privileges: %v", err)
-				return result, err
+		if len(grants) > 0 {
+			before := m.showGrants(exec, conn, account)
+			for _, g := range grants {
+				if _, err := exec.Execute(conn.mysql(fmt.Sprintf("GRANT %s ON %s TO %s", g.privs, g.object, account))); err != nil {
+					return fail(fmt.Errorf("failed to grant privileges: %w", err))
+				}
 			}
-			result.Changed = true
-			result.Output["privileges"] = "granted"
+			if m.showGrants(exec, conn, account) != before {
+				result.Changed = true
+				result.Output["privileges"] = "granted"
+			}
 		}
 
 	case "absent":
 		if exists {
-			if err := m.dropUser(ctx, exec, userName, userHost, loginUser, loginPassword, loginHost, loginPort); err != nil {
-				result.Success = false
-				result.Error = fmt.Sprintf("failed to drop user: %v", err)
-				return result, err
+			if _, err := exec.Execute(conn.mysql("DROP USER " + account)); err != nil {
+				return fail(fmt.Errorf("failed to drop user: %w", err))
 			}
 			result.Changed = true
 			result.Output["action"] = "dropped"
 		}
+
+	default:
+		return fail(fmt.Errorf("unsupported state %q", state))
 	}
 
 	result.Duration = time.Since(startTime)
 	return result, nil
 }
 
-func (m *MySQLUserModule) buildMySQLCmd(loginUser, loginPassword, loginHost, loginPort string) string {
-	cmdParts := []string{"mysql"}
-	if loginUser != "" {
-		cmdParts = append(cmdParts, fmt.Sprintf("-u%s", loginUser))
+func (m *MySQLUserModule) showGrants(exec *executor.CommandExecutor, conn dbConn, account string) string {
+	out, err := exec.Execute(conn.mysql("SHOW GRANTS FOR " + account))
+	if err != nil {
+		return "error: " + err.Error()
 	}
-	if loginPassword != "" {
-		cmdParts = append(cmdParts, fmt.Sprintf("-p'%s'", loginPassword))
-	}
-	if loginHost != "" {
-		cmdParts = append(cmdParts, fmt.Sprintf("-h%s", loginHost))
-	}
-	if loginPort != "" {
-		cmdParts = append(cmdParts, fmt.Sprintf("-P%s", loginPort))
-	}
-	return strings.Join(cmdParts, " ")
+	return out
 }
 
-func (m *MySQLUserModule) userExists(ctx context.Context, exec *executor.CommandExecutor, userName, userHost, loginUser, loginPassword, loginHost, loginPort string) (bool, error) {
-	baseCmd := m.buildMySQLCmd(loginUser, loginPassword, loginHost, loginPort)
-	cmd := fmt.Sprintf("%s -e \"SELECT User FROM mysql.user WHERE User='%s' AND Host='%s'\" 2>/dev/null", baseCmd, userName, userHost)
+type mysqlGrant struct{ object, privs string }
 
-	stdout, err := exec.Execute(cmd)
-	if err != nil {
-		return false, nil
+// parseMySQLPriv parses "db.*:ALL/db2.table:SELECT,INSERT" (the Ansible
+// format) into GRANT objects with quoted identifiers
+func parseMySQLPriv(priv string) ([]mysqlGrant, error) {
+	var grants []mysqlGrant
+	for _, part := range strings.Split(priv, "/") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		obj, privs, ok := strings.Cut(part, ":")
+		db, table, dot := strings.Cut(obj, ".")
+		if !ok || !dot || db == "" || table == "" || strings.TrimSpace(privs) == "" {
+			return nil, fmt.Errorf("invalid priv %q, expected db.table:PRIV[,PRIV]", part)
+		}
+		for _, p := range strings.Split(privs, ",") {
+			for _, r := range strings.TrimSpace(p) {
+				if !(r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z' || r == ' ' || r == '_') {
+					return nil, fmt.Errorf("invalid privilege %q", p)
+				}
+			}
+		}
+		quote := func(s string) string {
+			if s == "*" {
+				return s
+			}
+			return mysqlIdent(s)
+		}
+		grants = append(grants, mysqlGrant{object: quote(db) + "." + quote(table), privs: privs})
 	}
-
-	return strings.Contains(stdout, userName), nil
-}
-
-func (m *MySQLUserModule) createUser(ctx context.Context, exec *executor.CommandExecutor, userName, userHost, password, loginUser, loginPassword, loginHost, loginPort string) error {
-	baseCmd := m.buildMySQLCmd(loginUser, loginPassword, loginHost, loginPort)
-	cmd := fmt.Sprintf("%s -e \"CREATE USER '%s'@'%s' IDENTIFIED BY '%s'\"", baseCmd, userName, userHost, password)
-
-	_, err := exec.Execute(cmd)
-	if err != nil {
-		return fmt.Errorf("failed to create user: %s", err.Error())
-	}
-
-	return nil
-}
-
-func (m *MySQLUserModule) dropUser(ctx context.Context, exec *executor.CommandExecutor, userName, userHost, loginUser, loginPassword, loginHost, loginPort string) error {
-	baseCmd := m.buildMySQLCmd(loginUser, loginPassword, loginHost, loginPort)
-	cmd := fmt.Sprintf("%s -e \"DROP USER '%s'@'%s'\"", baseCmd, userName, userHost)
-
-	_, err := exec.Execute(cmd)
-	if err != nil {
-		return fmt.Errorf("failed to drop user: %s", err.Error())
-	}
-
-	return nil
-}
-
-func (m *MySQLUserModule) grantPrivileges(ctx context.Context, exec *executor.CommandExecutor, userName, userHost, priv, loginUser, loginPassword, loginHost, loginPort string) error {
-	baseCmd := m.buildMySQLCmd(loginUser, loginPassword, loginHost, loginPort)
-	cmd := fmt.Sprintf("%s -e \"GRANT %s TO '%s'@'%s'; FLUSH PRIVILEGES\"", baseCmd, priv, userName, userHost)
-
-	_, err := exec.Execute(cmd)
-	if err != nil {
-		return fmt.Errorf("failed to grant privileges: %s", err.Error())
-	}
-
-	return nil
+	return grants, nil
 }
 
 // Validate validates mysql_user module arguments

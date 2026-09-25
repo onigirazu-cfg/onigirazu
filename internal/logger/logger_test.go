@@ -353,14 +353,11 @@ func TestEnhancedLoggerTaskStart(t *testing.T) {
 	logger := NewEnhanced("info", FormatText, &buf)
 	defer logger.Close()
 
-	logger.TaskStart("host1", "install package")
+	logger.TaskStart("install package", "host1")
 
 	output := buf.String()
-	if !strings.Contains(output, "host1") {
-		t.Error("Expected host in output")
-	}
-	if !strings.Contains(output, "install package") {
-		t.Error("Expected task name in output")
+	if !strings.Contains(output, "Starting task 'install package' on host 'host1'") {
+		t.Errorf("Expected task and host in their places, got %q", output)
 	}
 }
 

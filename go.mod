@@ -12,7 +12,6 @@ require (
 	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/pkg/sftp v1.13.11
 	github.com/prometheus/client_golang v1.24.1
-	github.com/robfig/cron/v3 v3.0.1
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/crypto v0.57.0
 	golang.org/x/term v0.46.0
@@ -71,4 +70,7 @@ require (
 	google.golang.org/protobuf v1.36.12 // indirect
 )
 
-require github.com/stretchr/testify v1.12.1
+require (
+	github.com/expr-lang/expr v1.17.8
+	github.com/stretchr/testify v1.12.1
+)

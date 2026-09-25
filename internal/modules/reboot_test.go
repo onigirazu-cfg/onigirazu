@@ -2,6 +2,7 @@ package modules
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
@@ -93,34 +94,12 @@ func TestRebootModuleExecute(t *testing.T) {
 	module := NewRebootModule()
 	ctx := context.Background()
 
-	testHost := types.Host{
-		Name: "test-host",
+	// Never reboot the control machine
+	result, _ := module.Execute(ctx, types.Host{Name: "localhost", Address: "127.0.0.1"}, map[string]interface{}{})
+	if result.Module != "reboot" {
+		t.Errorf("Expected module 'reboot', got '%s'", result.Module)
 	}
-
-	tests := []struct {
-		name    string
-		args    map[string]interface{}
-		wantErr bool
-	}{
-		{
-			name: "test boot mode",
-			args: map[string]interface{}{
-				"name":      "reboot",
-				"test_boot": true,
-			},
-			wantErr: true, // Will fail without real host
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result, err := module.Execute(ctx, testHost, tt.args)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Execute() error = %v, wantErr %v", err, tt.wantErr)
-			}
-			if result.Module != "reboot" {
-				t.Errorf("Expected module 'reboot', got '%s'", result.Module)
-			}
-		})
+	if result.Success || !strings.Contains(result.Error, "control machine") {
+		t.Errorf("expected a refusal for the local host, got success=%v error=%q", result.Success, result.Error)
 	}
 }

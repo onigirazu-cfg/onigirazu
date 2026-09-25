@@ -56,10 +56,21 @@ const (
 )
 
 // Execute manages configuration files
+// Execute runs on a per-call copy: the registry shares one module instance
+// between all hosts, so the executor must not live on the shared struct
 func (m *ConfigModule) Execute(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
+	call := *m
+	result, err := call.execute(ctx, host, args)
+	if call.executor != nil {
+		_ = call.executor.Close()
+	}
+	return result, err
+}
+
+func (m *ConfigModule) execute(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
 	startTime := time.Now()
 	result := types.TaskResult{
-		TaskName:  "config",
+		TaskName:  taskName(args),
 		Host:      host.Name,
 		Module:    m.name,
 		Success:   true,
@@ -107,18 +118,6 @@ func (m *ConfigModule) Execute(ctx context.Context, host types.Host, args map[st
 
 // executeSet sets configuration values
 func (m *ConfigModule) executeSet(ctx context.Context, result types.TaskResult, path string, format ConfigFormat, args map[string]interface{}) (types.TaskResult, error) {
-	// Create backup if requested
-	if getBoolArg(args, "backup", false) {
-		backupPath, err := m.createBackup(path)
-		if err != nil {
-			return m.failResult(result, fmt.Sprintf("failed to create backup: %v", err))
-		}
-		if backupPath != "" {
-			result.Output["backup_path"] = backupPath
-		}
-		result.Output["backup_created"] = true
-	}
-
 	// Load existing config or create new
 	config := make(map[string]interface{})
 	if m.checkFileExists(path) {
@@ -138,7 +137,8 @@ func (m *ConfigModule) executeSet(ctx context.Context, result types.TaskResult, 
 	} else if key, keyOk := args["key"].(string); keyOk {
 		// Use key+value pair
 		if value, valueOk := args["value"]; valueOk {
-			values = map[string]interface{}{key: value}
+			// Dots address nested keys, as in the delete action
+			values = nestedValue(strings.Split(key, "."), value)
 		} else {
 			return m.failResult(result, "value parameter is required when using key parameter")
 		}
@@ -149,14 +149,20 @@ func (m *ConfigModule) executeSet(ctx context.Context, result types.TaskResult, 
 	originalConfig := m.deepCopy(config)
 	m.mergeConfig(config, values)
 
-	// Check if config changed
-	if !reflect.DeepEqual(originalConfig, config) {
-		result.Changed = true
-	}
-
-	// Save config
-	if err := m.saveConfig(path, format, config); err != nil {
-		return m.failResult(result, fmt.Sprintf("failed to save config: %v", err))
+	// Write (and back up) only when something changed
+	result.Changed = !sameConfig(originalConfig, config)
+	if result.Changed {
+		if getBoolArg(args, "backup", false) && m.checkFileExists(path) {
+			backupPath, err := m.createBackup(path)
+			if err != nil {
+				return m.failResult(result, fmt.Sprintf("failed to create backup: %v", err))
+			}
+			result.Output["backup_path"] = backupPath
+			result.Output["backup_created"] = true
+		}
+		if err := m.saveConfig(path, format, config); err != nil {
+			return m.failResult(result, fmt.Sprintf("failed to save config: %v", err))
+		}
 	}
 
 	// Validate if schema provided
@@ -618,4 +624,23 @@ func (m *ConfigModule) failResult(result types.TaskResult, message string) (type
 	result.Error = message
 	result.Duration = time.Since(result.Timestamp)
 	return result, fmt.Errorf("%s", message)
+}
+
+// nestedValue turns ["a","b"], v into {"a": {"b": v}}
+func nestedValue(keys []string, value interface{}) map[string]interface{} {
+	if len(keys) == 1 {
+		return map[string]interface{}{keys[0]: value}
+	}
+	return map[string]interface{}{keys[0]: nestedValue(keys[1:], value)}
+}
+
+// sameConfig compares two configs by their JSON form, so 8080 (YAML int) and
+// 8080.0 (read back from JSON) count as equal
+func sameConfig(a, b map[string]interface{}) bool {
+	ja, errA := json.Marshal(a)
+	jb, errB := json.Marshal(b)
+	if errA != nil || errB != nil {
+		return reflect.DeepEqual(a, b)
+	}
+	return string(ja) == string(jb)
 }

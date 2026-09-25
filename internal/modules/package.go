@@ -489,7 +489,15 @@ func (m *UnifiedPackageModule) isPackageInstalled(ctx context.Context, host type
 }
 
 // Execute manages system packages with all features
+// Execute runs on a per-call copy: the registry shares one module instance
+// between all hosts, so the detected package manager must not be stored on it
 func (m *UnifiedPackageModule) Execute(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
+	call := *m
+	call.packageManager = nil
+	return call.execute(ctx, host, args)
+}
+
+func (m *UnifiedPackageModule) execute(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
 	startTime := time.Now()
 
 	// Extract task name from special _task_name parameter (added by registry)
