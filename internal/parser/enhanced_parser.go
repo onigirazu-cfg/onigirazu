@@ -237,11 +237,16 @@ func (p *EnhancedParser) validateTask(task *types.Task, context string) error {
 
 // validateLoop validates loop syntax
 func (p *EnhancedParser) validateLoop(loop *types.Loop, context string) error {
-	if loop.Items == nil && loop.Range == "" {
+	sources := 0
+	for _, set := range []bool{loop.Items != nil, loop.Expr != "", loop.Range != ""} {
+		if set {
+			sources++
+		}
+	}
+	if sources == 0 {
 		return fmt.Errorf("loop in %s must specify either 'items' or 'range'", context)
 	}
-
-	if loop.Items != nil && loop.Range != "" {
+	if sources > 1 {
 		return fmt.Errorf("loop in %s cannot specify both 'items' and 'range'", context)
 	}
 

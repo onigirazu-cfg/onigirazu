@@ -328,14 +328,22 @@ func (t *Task) UnmarshalYAML(unmarshal func(interface{}) error) error {
 			}
 		}
 
+		switch l := loop.(type) {
+		case []interface{}: // loop: [a, b]
+			t.Loop = &Loop{Items: l}
+		case string: // loop: "{{ list_var }}"
+			t.Loop = &Loop{Expr: l}
+		}
+
 		if loopMap != nil {
 			t.Loop = &Loop{}
 
-			// Extract items field
-			if items, ok := loopMap["items"]; ok {
-				if itemSlice, ok := items.([]interface{}); ok {
-					t.Loop.Items = itemSlice
-				}
+			// Extract items field: a list, or an expression that yields one
+			switch items := loopMap["items"].(type) {
+			case []interface{}:
+				t.Loop.Items = items
+			case string:
+				t.Loop.Expr = items
 			}
 
 			// Extract variable field (YAML tag says "var" but we accept both)
@@ -906,6 +914,9 @@ type Loop struct {
 	Variable string        `yaml:"var,omitempty" json:"var,omitempty"`
 	Index    string        `yaml:"index,omitempty" json:"index,omitempty"`
 	Range    string        `yaml:"range,omitempty" json:"range,omitempty"`
+	// Expr is an expression that yields the items, evaluated per host:
+	// loop: "{{ result.stdout_lines }}"
+	Expr string `yaml:"expr,omitempty" json:"expr,omitempty"`
 }
 
 // Group represents a host group

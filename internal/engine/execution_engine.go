@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/onigirazu-cfg/onigirazu/internal/expression"
+
 	"github.com/onigirazu-cfg/onigirazu/internal/facts"
 	"github.com/onigirazu-cfg/onigirazu/internal/interfaces"
 	"github.com/onigirazu-cfg/onigirazu/internal/metrics"
@@ -683,31 +685,7 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 	// Notify observers of task start
 	e.notifyTaskStart(task.Name, host.Name)
 
-	// Merge variables in order of precedence (later overrides earlier):
-	// 1. Play variables
-	// 2. Global variables (from set_fact and register)
-	// 3. Host vars (highest precedence)
-	e.mutex.RLock()
-	globalVars := make(map[string]interface{})
-	for k, v := range e.variables {
-		globalVars[k] = v
-	}
-	e.mutex.RUnlock()
-
-	taskVars := e.mergeVariables(variables, globalVars, host.Vars)
-
-	// Add host facts - both as onigirazu_facts and unpacked at top level
-	if hostFacts, exists := e.facts[host.Name]; exists {
-		// Add facts as onigirazu_facts for compatibility
-		taskVars = e.mergeVariables(taskVars, map[string]interface{}{"onigirazu_facts": hostFacts})
-		// Also unpack facts to top level so they can be accessed directly in templates
-		taskVars = e.mergeVariables(taskVars, hostFacts)
-	}
-
-	// Variables this host set earlier with register and set_fact
-	e.mutex.RLock()
-	taskVars = e.mergeVariables(taskVars, e.hostVars[host.Name])
-	e.mutex.RUnlock()
+	taskVars := e.hostVariables(host, variables)
 
 	// Debug: log available variables
 	e.logger.Debug("Task '%s' variables: %v", task.Name, taskVars)
@@ -955,53 +933,104 @@ func (e *ExecutionEngine) finishTask(task *types.Task, host *types.Host, result 
 	return nil
 }
 
-// executeTaskWithLoop executes a task with loop
+// executeTaskWithLoop runs a looped task: every host evaluates its own items
+// and runs them in order; hosts run in parallel unless the task is serial
 func (e *ExecutionEngine) executeTaskWithLoop(ctx context.Context, task *types.Task, hosts []types.Host,
 	variables map[string]interface{}, playResult *types.PlayResult) error {
-	// Check for context cancellation before processing loop
-	select {
-	case <-ctx.Done():
-		return fmt.Errorf("task execution canceled: %w", ctx.Err())
-	default:
+	if task.Serial || len(hosts) == 1 {
+		for i := range hosts {
+			if err := e.runLoopOnHost(ctx, task, &hosts[i], variables, playResult); err != nil {
+				return err
+			}
+		}
+		return nil
 	}
 
-	// Get loop items
-	items, err := e.getLoopItems(ctx, task.Loop, variables)
+	var wg sync.WaitGroup
+	var mutex sync.Mutex
+	var firstError error
+	for i := range hosts {
+		host := &hosts[i]
+		wg.Add(1)
+		e.executionPool.Submit(func() {
+			defer wg.Done()
+			if err := e.runLoopOnHost(ctx, task, host, variables, playResult); err != nil {
+				mutex.Lock()
+				if firstError == nil {
+					firstError = err
+				}
+				mutex.Unlock()
+			}
+		})
+	}
+	wg.Wait()
+	return firstError
+}
+
+// runLoopOnHost runs every item of a looped task on one host. A registered
+// loop keeps each item's result under "results", as Ansible does.
+func (e *ExecutionEngine) runLoopOnHost(ctx context.Context, task *types.Task, host *types.Host,
+	variables map[string]interface{}, playResult *types.PlayResult) error {
+	items, err := e.getLoopItems(ctx, task.Loop, e.hostVariables(host, variables))
 	if err != nil {
-		return fmt.Errorf("failed to get loop items: %w", err)
+		return e.finishTask(task, host, types.TaskResult{
+			TaskName: task.Name, Host: host.Name, Module: task.Module,
+			Failed: true, Error: fmt.Sprintf("loop: %v", err), Timestamp: time.Now(),
+		}, playResult)
+	}
+	e.logger.Debug("Executing task '%s' on %s with loop (%d items)", task.Name, host.Name, len(items))
+
+	itemVar, indexVar := task.Loop.Variable, task.Loop.Index
+	if itemVar == "" {
+		itemVar = "item"
+	}
+	if indexVar == "" {
+		indexVar = "item_index"
 	}
 
-	e.logger.Debug("Executing task '%s' with loop (%d items)", task.Name, len(items))
-
-	// Execute task for each item
+	results := make([]interface{}, 0, len(items))
+	changed, failed := false, false
+	register := func() {
+		if task.Register != "" {
+			e.setHostVar(host.Name, task.Register, map[string]interface{}{
+				"results": results, "changed": changed, "failed": failed,
+				"skipped": len(items) == 0,
+			})
+		}
+	}
 	for i, item := range items {
-		// Check for context cancellation (graceful shutdown)
 		select {
 		case <-ctx.Done():
-			e.logger.Debug("Loop execution canceled: %v", ctx.Err())
 			return fmt.Errorf("task execution canceled: %w", ctx.Err())
 		default:
 		}
 
-		// Create task copy with loop variables
 		taskCopy := *task
 		taskCopy.Name = fmt.Sprintf("%s (item %d)", task.Name, i+1)
-		taskCopy.Loop = nil // Clear loop to prevent infinite recursion
-
-		// Add loop variables
+		taskCopy.Loop = nil
 		loopVars := e.mergeVariables(variables, map[string]interface{}{
-			"item":       item,
-			"item_index": i,
+			itemVar:  item,
+			indexVar: i,
+			"loop": map[string]interface{}{
+				"index": i + 1, "index0": i, "length": len(items),
+				"first": i == 0, "last": i == len(items)-1,
+			},
 		})
-
-		// Execute task
-		if err := e.executeTask(ctx, &taskCopy, hosts, loopVars, playResult); err != nil {
-			if !task.IgnoreErrors {
-				return err
+		err := e.executeTaskOnHost(ctx, &taskCopy, host, loopVars, playResult)
+		if task.Register != "" {
+			if r, ok := e.getHostVar(host.Name, task.Register).(map[string]interface{}); ok {
+				r[itemVar] = item
+				results = append(results, r)
+				changed = changed || r["changed"] == true
+				failed = failed || r["failed"] == true
 			}
 		}
+		if err != nil {
+			register()
+			return err
+		}
 	}
-
+	register()
 	return nil
 }
 
@@ -1120,7 +1149,26 @@ func (e *ExecutionEngine) gatherFacts(ctx context.Context, hosts []types.Host) e
 //   - "0-3" -> [0, 1, 2, 3]
 func (e *ExecutionEngine) getLoopItems(ctx context.Context, loop *types.Loop, variables map[string]interface{}) ([]interface{}, error) {
 	if loop.Items != nil {
-		return loop.Items, nil
+		items := make([]interface{}, len(loop.Items))
+		for i, item := range loop.Items {
+			if str, ok := item.(string); ok && strings.Contains(str, "{{") {
+				rendered, err := e.templateEngine.Render(ctx, str, variables)
+				if err != nil {
+					return nil, fmt.Errorf("item %d: %w", i+1, err)
+				}
+				item = rendered
+			}
+			items[i] = item
+		}
+		return items, nil
+	}
+
+	if loop.Expr != "" {
+		value, err := expression.Eval(loop.Expr, variables)
+		if err != nil {
+			return nil, fmt.Errorf("%q: %w", loop.Expr, err)
+		}
+		return expression.Items(value)
 	}
 
 	if loop.Range != "" {
@@ -1611,6 +1659,14 @@ func registeredValue(result types.TaskResult) map[string]interface{} {
 	for key, v := range result.Output {
 		value[key] = v
 	}
+	// the Ansible *_lines companions of stdout and stderr
+	for _, key := range []string{"stdout", "stderr"} {
+		if text, ok := value[key].(string); ok {
+			if _, set := value[key+"_lines"]; !set {
+				value[key+"_lines"] = splitLines(text)
+			}
+		}
+	}
 	value["changed"] = result.Changed
 	value["failed"] = result.Failed
 	value["skipped"] = result.Skipped
@@ -1650,4 +1706,37 @@ func (e *ExecutionEngine) applyResultConditions(ctx context.Context, task *types
 			result.Failed, result.Success, result.Error = false, true, ""
 		}
 	}
+}
+
+// getHostVar returns a run-time variable of one host
+func (e *ExecutionEngine) getHostVar(host, key string) interface{} {
+	e.mutex.RLock()
+	defer e.mutex.RUnlock()
+	return e.hostVars[host][key]
+}
+
+// hostVariables layers one host's variables over the given ones: global
+// variables, inventory host vars, gathered facts (also as onigirazu_facts),
+// then what register and set_fact stored for the host
+func (e *ExecutionEngine) hostVariables(host *types.Host, variables map[string]interface{}) map[string]interface{} {
+	e.mutex.RLock()
+	defer e.mutex.RUnlock()
+	vars := e.mergeVariables(variables, e.variables, host.Vars)
+	if hostFacts, exists := e.facts[host.Name]; exists {
+		vars = e.mergeVariables(vars, map[string]interface{}{"onigirazu_facts": hostFacts}, hostFacts)
+	}
+	return e.mergeVariables(vars, e.hostVars[host.Name])
+}
+
+func splitLines(text string) []interface{} {
+	text = strings.TrimRight(text, "\n")
+	if text == "" {
+		return []interface{}{}
+	}
+	lines := strings.Split(text, "\n")
+	items := make([]interface{}, len(lines))
+	for i, line := range lines {
+		items[i] = strings.TrimSuffix(line, "\r")
+	}
+	return items
 }

@@ -100,16 +100,32 @@ func (m *RebootModule) Execute(ctx context.Context, host types.Host, args map[st
 	pool := sshpkg.GetGlobalPool()
 	timeout := time.Duration(getIntArg(args, "reboot_timeout", 600)) * time.Second
 	deadline := time.Now().Add(timeout)
+	var lastErr error
+	var downSince time.Time
 	for {
 		if !sleep(5 * time.Second) {
 			return fail("canceled while waiting for the host")
 		}
 		_ = pool.CloseConnection(host) // connections from before the reboot are dead
-		if after, err := bootID(); err == nil && after != "" && after != before {
+		after, err := bootID()
+		if err == nil && after != "" && after != before {
 			break
 		}
+		if err != nil || after == "" {
+			lastErr = err
+			if downSince.IsZero() {
+				downSince = time.Now()
+			}
+		} else {
+			downSince, lastErr = time.Time{}, nil // still the old boot
+		}
 		if time.Now().After(deadline) {
-			return fail(fmt.Sprintf("host did not come back within %s", timeout))
+			// say which way it failed: no reboot at all, or no way back
+			if downSince.IsZero() {
+				return fail(fmt.Sprintf("host did not reboot within %s: it still answers with the old boot id", timeout))
+			}
+			return fail(fmt.Sprintf("host did not come back within %s: unreachable for %s: %v",
+				timeout, time.Since(downSince).Round(time.Second), lastErr))
 		}
 	}
 	if delay := getIntArg(args, "post_reboot_delay", 0); delay > 0 && !sleep(time.Duration(delay)*time.Second) {

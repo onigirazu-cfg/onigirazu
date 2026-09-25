@@ -1,4 +1,4 @@
-package engine
+package expression
 
 import (
 	"testing"
@@ -48,20 +48,20 @@ func TestEvalCondition(t *testing.T) {
 		`missing == "x"`:                     false,
 	}
 	for cond, want := range cases {
-		got, err := evalCondition(cond, vars)
+		got, err := Condition(cond, vars)
 		require.NoError(t, err, cond)
 		assert.Equal(t, want, got, cond)
 	}
 
-	_, err := evalCondition(`fam ==`, vars)
+	_, err := Condition(`fam ==`, vars)
 	assert.Error(t, err)
 }
 
 func TestTruthy(t *testing.T) {
 	for _, v := range []interface{}{nil, false, "", "false", "False", "no", "0", 0, 0.0, []interface{}{}, "<no value>"} {
-		assert.False(t, truthy(v), "%#v", v)
+		assert.False(t, Truthy(v), "%#v", v)
 	}
 	for _, v := range []interface{}{true, "true", "yes", "x", 1, 2.5, []interface{}{1}} {
-		assert.True(t, truthy(v), "%#v", v)
+		assert.True(t, Truthy(v), "%#v", v)
 	}
 }

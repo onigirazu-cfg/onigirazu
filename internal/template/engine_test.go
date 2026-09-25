@@ -618,7 +618,8 @@ func TestTemplateCaching(t *testing.T) {
 		"name": "World",
 	}
 
-	template := "Hello {{ name }}!"
+	// Go template syntax: plain expressions are evaluated without the cache
+	template := "Hello {{ .name }}!"
 
 	// First render - should cache
 	_, err := engine.Render(ctx, template, variables)
@@ -885,8 +886,8 @@ func TestCacheExpiration(t *testing.T) {
 		"name": "World",
 	}
 
-	// Render to populate cache
-	_, err := engine.Render(ctx, "Hello {{ name }}!", variables)
+	// Render to populate cache (Go template syntax goes through it)
+	_, err := engine.Render(ctx, "Hello {{ .name }}!", variables)
 	if err != nil {
 		t.Errorf("Render() error = %v", err)
 	}
