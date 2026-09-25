@@ -1,0 +1,49 @@
+plays:
+  - name: conditions and run-time variables
+    hosts: all
+    become: true
+    gather_facts: true
+    tasks:
+      - name: Per-host fact
+        set_fact:
+          release: "{{ onigirazu_distribution_version }}"
+      - name: Probe that changes nothing
+        command:
+          cmd: "cat /etc/os-release"
+        register: osr
+        changed_when: false
+      - name: Per-host set_fact and register
+        copy:
+          content: "{{ release }}\n"
+          dest: /root/onigirazu-e2e-cond-release
+        when: osr.stdout is defined and not osr.failed
+      - name: List of conditions on facts and a registered value
+        copy:
+          content: "yes\n"
+          dest: /root/onigirazu-e2e-cond-true
+        when:
+          - onigirazu_os_family in ['Debian', 'RedHat']
+          - osr.changed == False
+      - name: False condition
+        copy:
+          content: "no\n"
+          dest: /root/onigirazu-e2e-cond-false
+        when: onigirazu_os_family == "Windows"
+      - name: failed_when clears a failure
+        command:
+          cmd: "false"
+        register: ignored
+        changed_when: false
+        failed_when: false
+      - name: Registered after failed_when
+        copy:
+          content: "{{ ignored.failed }}\n"
+          dest: /root/onigirazu-e2e-cond-failed
+      - name: Retry until the counter reaches three
+        shell:
+          cmd: "n=$(cat /root/onigirazu-e2e-cond-until 2>/dev/null || echo 0); n=$((n+1)); echo $n > /root/onigirazu-e2e-cond-until; echo $n"
+        register: cnt
+        until: cnt.stdout | trim | int >= 3
+        retries: 5
+        delay: 1
+        changed_when: false
