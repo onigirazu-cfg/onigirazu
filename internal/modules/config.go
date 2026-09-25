@@ -56,10 +56,21 @@ const (
 )
 
 // Execute manages configuration files
+// Execute runs on a per-call copy: the registry shares one module instance
+// between all hosts, so the executor must not live on the shared struct
 func (m *ConfigModule) Execute(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
+	call := *m
+	result, err := call.execute(ctx, host, args)
+	if call.executor != nil {
+		_ = call.executor.Close()
+	}
+	return result, err
+}
+
+func (m *ConfigModule) execute(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
 	startTime := time.Now()
 	result := types.TaskResult{
-		TaskName:  "config",
+		TaskName:  taskName(args),
 		Host:      host.Name,
 		Module:    m.name,
 		Success:   true,
