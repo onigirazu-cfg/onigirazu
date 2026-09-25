@@ -257,6 +257,14 @@ func TestCommandExecutor_WrapWithBecome(t *testing.T) {
 		expected     string
 	}{
 		{
+			name:         "sudo covers redirection",
+			become:       true,
+			becomeUser:   "root",
+			becomeMethod: "sudo",
+			command:      "printf x > /etc/f",
+			expected:     "sudo -n sh -c 'printf x > /etc/f'",
+		},
+		{
 			name:     "no become",
 			become:   false,
 			command:  "ls -la",
@@ -268,7 +276,7 @@ func TestCommandExecutor_WrapWithBecome(t *testing.T) {
 			becomeUser:   "root",
 			becomeMethod: "sudo",
 			command:      "systemctl restart nginx",
-			expected:     "sudo -n systemctl restart nginx",
+			expected:     "sudo -n sh -c 'systemctl restart nginx'",
 		},
 		{
 			name:         "sudo as specific user",
@@ -276,7 +284,7 @@ func TestCommandExecutor_WrapWithBecome(t *testing.T) {
 			becomeUser:   "www-data",
 			becomeMethod: "sudo",
 			command:      "whoami",
-			expected:     "sudo -n -u www-data whoami",
+			expected:     "sudo -n -u 'www-data' sh -c 'whoami'",
 		},
 		{
 			name:         "su as root",
@@ -308,7 +316,7 @@ func TestCommandExecutor_WrapWithBecome(t *testing.T) {
 			becomeUser:   "root",
 			becomeMethod: "doas",
 			command:      "pkg_add vim",
-			expected:     "doas pkg_add vim",
+			expected:     "doas sh -c 'pkg_add vim'",
 		},
 		{
 			name:         "doas as specific user",
@@ -316,7 +324,7 @@ func TestCommandExecutor_WrapWithBecome(t *testing.T) {
 			becomeUser:   "operator",
 			becomeMethod: "doas",
 			command:      "reboot",
-			expected:     "doas -u operator reboot",
+			expected:     "doas -u 'operator' sh -c 'reboot'",
 		},
 		{
 			name:         "unknown method defaults to sudo",
@@ -324,7 +332,7 @@ func TestCommandExecutor_WrapWithBecome(t *testing.T) {
 			becomeUser:   "root",
 			becomeMethod: "unknown",
 			command:      "ls",
-			expected:     "sudo -n ls",
+			expected:     "sudo -n sh -c 'ls'",
 		},
 		{
 			name:         "unknown method with user defaults to sudo",
@@ -332,7 +340,7 @@ func TestCommandExecutor_WrapWithBecome(t *testing.T) {
 			becomeUser:   "admin",
 			becomeMethod: "unknown",
 			command:      "ls",
-			expected:     "sudo -n -u admin ls",
+			expected:     "sudo -n -u 'admin' sh -c 'ls'",
 		},
 	}
 

@@ -89,35 +89,38 @@ func (e *CommandExecutor) SetBecome(become bool, becomeUser, becomeMethod string
 	}
 }
 
-// wrapWithBecome wraps a command with privilege escalation if enabled
+// wrapWithBecome runs the whole command line through a root (or become user)
+// shell, so redirections, pipes and && chains are escalated too - not only the
+// first word, which is all "sudo cmd > file" would cover.
 func (e *CommandExecutor) wrapWithBecome(command string) string {
 	if !e.become {
 		return command
 	}
 
+	shell := "sh -c " + shellQuote(command)
 	switch e.becomeMethod {
-	case "sudo":
-		if e.becomeUser == "root" {
-			return fmt.Sprintf("sudo -n %s", command)
-		}
-		return fmt.Sprintf("sudo -n -u %s %s", e.becomeUser, command)
 	case "su":
+		// su -c already hands the whole line to the target user's shell
 		if e.becomeUser == "root" {
-			return fmt.Sprintf("su -c '%s'", strings.ReplaceAll(command, "'", "'\\''"))
+			return "su -c " + shellQuote(command)
 		}
-		return fmt.Sprintf("su %s -c '%s'", e.becomeUser, strings.ReplaceAll(command, "'", "'\\''"))
+		return fmt.Sprintf("su %s -c %s", e.becomeUser, shellQuote(command))
 	case "doas":
 		if e.becomeUser == "root" {
-			return fmt.Sprintf("doas %s", command)
+			return "doas " + shell
 		}
-		return fmt.Sprintf("doas -u %s %s", e.becomeUser, command)
-	default:
-		// Default to sudo
+		return fmt.Sprintf("doas -u %s %s", shellQuote(e.becomeUser), shell)
+	default: // sudo
 		if e.becomeUser == "root" {
-			return fmt.Sprintf("sudo -n %s", command)
+			return "sudo -n " + shell
 		}
-		return fmt.Sprintf("sudo -n -u %s %s", e.becomeUser, command)
+		return fmt.Sprintf("sudo -n -u %s %s", shellQuote(e.becomeUser), shell)
 	}
+}
+
+// shellQuote quotes s as one POSIX shell word
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 // Execute runs a command on the appropriate host (local or remote)
