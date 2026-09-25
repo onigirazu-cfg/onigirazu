@@ -3,6 +3,7 @@ package types
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -188,6 +189,13 @@ type Task struct {
 	BecomeMethod string                 `yaml:"become_method,omitempty"`
 	RunOnce      bool                   `yaml:"run_once,omitempty"`
 	DelegateTo   string                 `yaml:"delegate_to,omitempty"`
+	// block / rescue / always (a task with a block has no module)
+	Block  []Task `yaml:"block,omitempty"`
+	Rescue []Task `yaml:"rescue,omitempty"`
+	Always []Task `yaml:"always,omitempty"`
+	// set by the engine on tasks inside a block with a rescue section: their
+	// failure is handled by the rescue and does not fail the play by itself
+	Rescuable bool `yaml:"-"`
 }
 
 // UnmarshalYAML implements custom YAML unmarshaling for Task
@@ -227,6 +235,24 @@ func (t *Task) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		"become_method": true,
 		"run_once":      true,
 		"delegate_to":   true,
+		"block":         true,
+		"rescue":        true,
+		"always":        true,
+	}
+
+	// block / rescue / always: nested task lists
+	for key, target := range map[string]*[]Task{"block": &t.Block, "rescue": &t.Rescue, "always": &t.Always} {
+		raw, ok := taskMap[key]
+		if !ok {
+			continue
+		}
+		data, err := yaml.Marshal(raw)
+		if err != nil {
+			return fmt.Errorf("%s: %w", key, err)
+		}
+		if err := yaml.Unmarshal(data, target); err != nil {
+			return fmt.Errorf("%s: %w", key, err)
+		}
 	}
 
 	// Extract basic fields
@@ -537,6 +563,12 @@ func (t *Task) MarshalYAML() (interface{}, error) {
 	}
 	if t.RetryDelay > 0 {
 		result["retry_delay"] = t.RetryDelay.String()
+	}
+
+	for key, list := range map[string][]Task{"block": t.Block, "rescue": t.Rescue, "always": t.Always} {
+		if len(list) > 0 {
+			result[key] = list
+		}
 	}
 
 	return result, nil

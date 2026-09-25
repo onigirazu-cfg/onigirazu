@@ -52,12 +52,25 @@ func (m *ModuleSyntaxValidator) ValidateTaskModule(task *types.Task, playIndex, 
 
 // ValidatePlayTasks validates all tasks in a play
 func (m *ModuleSyntaxValidator) ValidatePlayTasks(play *types.Play, playIndex int) error {
-	for i, task := range play.Tasks {
-		if err := m.ValidateTaskModule(&task, playIndex, i); err != nil {
+	return m.validateTaskList(play.Tasks, playIndex)
+}
+
+// validateTaskList validates tasks, descending into block/rescue/always
+func (m *ModuleSyntaxValidator) validateTaskList(tasks []types.Task, playIndex int) error {
+	for i := range tasks {
+		task := &tasks[i]
+		if len(task.Block) > 0 {
+			for _, list := range [][]types.Task{task.Block, task.Rescue, task.Always} {
+				if err := m.validateTaskList(list, playIndex); err != nil {
+					return err
+				}
+			}
+			continue
+		}
+		if err := m.ValidateTaskModule(task, playIndex, i); err != nil {
 			return err
 		}
 	}
-
 	return nil
 }
 

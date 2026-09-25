@@ -25,6 +25,8 @@ Runs every case in `cases/` on disposable vSphere VMs cloned from the current
   (for results that land on the control machine, e.g. fetch);
 - `EXPECT_FAIL` — optional; the apply must fail (no verify, no second apply);
 - `NOT_IDEMPOTENT` — optional; skips the second apply that must change nothing.
+- `EXPECTED_FAILED_TASKS` — optional; names of tasks that fail on purpose (handled by
+  `rescue` or `ignore_errors`), one per line.
 
 With `keep_vms` the run key and inventory stay on the runner in
 `~/.cache/onigirazu-e2e/<run>`.

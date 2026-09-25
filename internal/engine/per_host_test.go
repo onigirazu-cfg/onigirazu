@@ -202,3 +202,51 @@ func TestDelegateTo_RunsOnDelegateWithOwnVariables(t *testing.T) {
 	assert.Equal(t, "h1", sawHostname, "with the variables of the original host")
 	assert.Equal(t, "h1", play.Hosts[0].Host, "and the result belongs to the original host")
 }
+
+func blockEngine(t *testing.T) (*ExecutionEngine, *[]string) {
+	t.Helper()
+	engine, mockConfig, _, _, mockRegistry, mockTemplate := createTestEngine()
+	mockConfig.On("GetDryRun").Return(false)
+	mockTemplate.On("RenderTaskArgs", mock.Anything, mock.Anything, mock.Anything).Return(nil, nil)
+	var mu sync.Mutex
+	ran := []string{}
+	record := func(args mock.Arguments) {
+		mu.Lock()
+		defer mu.Unlock()
+		ran = append(ran, args.Get(1).(*types.Task).Name)
+	}
+	isFail := func(task *types.Task) bool { return task.Name == "fail" }
+	mockRegistry.On("ExecuteTask", mock.Anything, mock.MatchedBy(isFail), mock.Anything, mock.Anything).
+		Run(record).Return(types.TaskResult{Success: false, Failed: true, Error: "boom"}, nil)
+	mockRegistry.On("ExecuteTask", mock.Anything, mock.MatchedBy(func(task *types.Task) bool { return !isFail(task) }), mock.Anything, mock.Anything).
+		Run(record).Return(types.TaskResult{Success: true}, nil)
+	return engine, &ran
+}
+
+func TestBlock_RescueHandlesFailure(t *testing.T) {
+	engine, ran := blockEngine(t)
+	block := types.Task{
+		Name:   "b",
+		Block:  []types.Task{{Name: "fail", Module: "command"}, {Name: "skipped", Module: "command"}},
+		Rescue: []types.Task{{Name: "rescue", Module: "command"}},
+		Always: []types.Task{{Name: "always", Module: "command"}},
+	}
+	play := &types.PlayResult{Success: true}
+	require.NoError(t, engine.executeTaskList(context.Background(), []types.Task{block}, twoHosts()[:1], map[string]interface{}{}, play))
+	assert.Equal(t, []string{"fail", "rescue", "always"}, *ran)
+	assert.True(t, play.Success, "a rescued failure does not fail the play")
+}
+
+func TestBlock_WithoutRescueFailsAfterAlways(t *testing.T) {
+	engine, ran := blockEngine(t)
+	block := types.Task{
+		Name:   "b",
+		Block:  []types.Task{{Name: "fail", Module: "command"}},
+		Always: []types.Task{{Name: "always", Module: "command"}},
+	}
+	play := &types.PlayResult{Success: true}
+	err := engine.executeTaskList(context.Background(), []types.Task{block}, twoHosts()[:1], map[string]interface{}{}, play)
+	assert.Error(t, err)
+	assert.Equal(t, []string{"fail", "always"}, *ran)
+	assert.False(t, play.Success)
+}

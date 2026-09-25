@@ -575,6 +575,14 @@ func (e *ExecutionEngine) executeTaskList(ctx context.Context, tasks []types.Tas
 
 		e.logger.Debug("Executing task %d/%d: %s (tags: %v)", i+1, len(tasks), task.Name, task.Tags)
 
+		// a block filters its own tasks by tag, so it is not filtered here
+		if len(task.Block) > 0 {
+			if err := e.executeBlock(ctx, &task, hosts, variables, playResult); err != nil {
+				return fmt.Errorf("block '%s' failed: %w", task.Name, err)
+			}
+			continue
+		}
+
 		// Check if task should be skipped based on tags
 		if e.tagFilter != nil && !e.tagFilter.ShouldRun(task.Tags) {
 			e.logger.Debug("Skipping task '%s' due to tag filter (%s), task tags: %v", task.Name, e.tagFilter.String(), task.Tags)
@@ -916,8 +924,9 @@ func (e *ExecutionEngine) finishTask(task *types.Task, host *types.Host, result 
 	}
 
 	hostResult.Tasks = append(hostResult.Tasks, result)
-	// an ignored failure is recorded but does not fail the host or the play
-	if result.Failed && !task.IgnoreErrors {
+	// an ignored failure is recorded but does not fail the host or the play;
+	// nor does one inside a block with a rescue section, which handles it
+	if result.Failed && !task.IgnoreErrors && !task.Rescuable {
 		hostResult.Failed = true
 		hostResult.Success = false
 		playResult.Success = false
@@ -1544,6 +1553,14 @@ func (e *ExecutionEngine) executeTaskListWithRetry(ctx context.Context, tasks []
 
 		e.logger.Debug("Executing task %d/%d: %s (tags: %v)", i+1, len(tasks), task.Name, task.Tags)
 
+		// a block filters its own tasks by tag, so it is not filtered here
+		if len(task.Block) > 0 {
+			if err := e.executeBlock(ctx, &task, hosts, variables, playResult); err != nil {
+				return fmt.Errorf("block '%s' failed: %w", task.Name, err)
+			}
+			continue
+		}
+
 		// Check if task should be skipped based on tags
 		if e.tagFilter != nil && !e.tagFilter.ShouldRun(task.Tags) {
 			e.logger.Debug("Skipping task '%s' due to tag filter (%s), task tags: %v", task.Name, e.tagFilter.String(), task.Tags)
@@ -1798,4 +1815,81 @@ func (e *ExecutionEngine) delegateHost(name string) types.Host {
 		}
 	}
 	return types.Host{Name: name, Address: name, Port: 22, Vars: map[string]interface{}{}}
+}
+
+// executeBlock runs block / rescue / always for every host, hosts in
+// parallel: the block's tasks in order; after the first failure the rest of
+// the block is skipped, rescue runs, and a successful rescue clears the
+// failure; always runs in any case. The block's when, tags, become and
+// ignore_errors apply to all its tasks.
+func (e *ExecutionEngine) executeBlock(ctx context.Context, block *types.Task, hosts []types.Host,
+	variables map[string]interface{}, playResult *types.PlayResult) error {
+	body := inheritBlock(block, block.Block, len(block.Rescue) > 0)
+	rescue := inheritBlock(block, block.Rescue, false)
+	always := inheritBlock(block, block.Always, false)
+
+	runOnHost := func(host types.Host) error {
+		one := []types.Host{host}
+		err := e.executeTaskList(ctx, body, one, variables, playResult)
+		if err != nil && len(rescue) > 0 {
+			e.logger.Debug("Block '%s' failed on %s, running rescue: %v", block.Name, host.Name, err)
+			err = e.executeTaskList(ctx, rescue, one, variables, playResult)
+		}
+		if len(always) > 0 {
+			if alwaysErr := e.executeTaskList(ctx, always, one, variables, playResult); alwaysErr != nil && err == nil {
+				err = alwaysErr
+			}
+		}
+		return err
+	}
+
+	if len(hosts) == 1 {
+		return runOnHost(hosts[0])
+	}
+	var wg sync.WaitGroup
+	var mutex sync.Mutex
+	var firstError error
+	for i := range hosts {
+		host := hosts[i]
+		wg.Add(1)
+		e.executionPool.Submit(func() {
+			defer wg.Done()
+			if err := runOnHost(host); err != nil {
+				mutex.Lock()
+				if firstError == nil {
+					firstError = err
+				}
+				mutex.Unlock()
+			}
+		})
+	}
+	wg.Wait()
+	return firstError
+}
+
+// inheritBlock returns copies of a block's tasks carrying the block's when,
+// tags, become and ignore_errors
+func inheritBlock(block *types.Task, tasks []types.Task, rescuable bool) []types.Task {
+	out := make([]types.Task, len(tasks))
+	for i, t := range tasks {
+		if block.When != "" {
+			if t.When != "" {
+				t.When = "(" + block.When + ") and (" + t.When + ")"
+			} else {
+				t.When = block.When
+			}
+		}
+		t.Tags = append(append([]string{}, block.Tags...), t.Tags...)
+		if block.Become && !t.Become {
+			t.Become, t.BecomeUser, t.BecomeMethod = true, block.BecomeUser, block.BecomeMethod
+		}
+		if block.IgnoreErrors {
+			t.IgnoreErrors = true
+		}
+		if rescuable || block.Rescuable { // nested blocks inherit the outer rescue
+			t.Rescuable = true
+		}
+		out[i] = t
+	}
+	return out
 }

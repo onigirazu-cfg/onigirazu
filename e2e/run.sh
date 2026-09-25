@@ -175,6 +175,12 @@ apply_errors() {
     cut -c1-400 | head -"${1:-4}"
 }
 
+# Drops task names listed in the case's EXPECTED_FAILED_TASKS (failures a
+# rescue or ignore_errors handles)
+expected_failures_out() {
+  if [ -f "$1/EXPECTED_FAILED_TASKS" ]; then grep -vxF -f "$1/EXPECTED_FAILED_TASKS" || true; else cat; fi
+}
+
 record() { printf '%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4" >> "$RESULTS"; echo "  [$3] $1 / $2 ${4:+- $4}"; }
 
 for c in $cases; do
@@ -206,7 +212,7 @@ for c in $cases; do
 
   passed=""
   for h in $(jq -r 'keys[]' <<<"$hosts_json"); do
-    failed="$(jq -r --arg h "$h" 'select(.host == $h and .success != true) | .task' "$WORK/events.jsonl")"
+    failed="$(jq -r --arg h "$h" 'select(.host == $h and .success != true) | .task' "$WORK/events.jsonl" | expected_failures_out "$dir")"
     ran="$(jq -r --arg h "$h" 'select(.host == $h) | .task' "$WORK/events.jsonl" | wc -l | tr -d ' ')"
     if [ "$ran" = 0 ]; then
       record "$c" "$h" FAIL "no task ran: $(records | jq -r 'select(.level == "ERROR") | .message' | head -1 | cut -c1-200)"
@@ -234,7 +240,7 @@ for c in $cases; do
     ran="$(jq -r --arg h "$h" 'select(.host == $h) | .task' "$WORK/events.jsonl" | wc -l | tr -d ' ')"
     [ "$ran" != 0 ] || { record "$c" "$h" FAIL "second apply: no task ran"; continue; }
     changed="$(jq -r --arg h "$h" 'select(.host == $h and .changed == true) | .task' "$WORK/events.jsonl")"
-    failed="$(jq -r --arg h "$h" 'select(.host == $h and .success != true) | .task' "$WORK/events.jsonl")"
+    failed="$(jq -r --arg h "$h" 'select(.host == $h and .success != true) | .task' "$WORK/events.jsonl" | expected_failures_out "$dir")"
     if [ -n "$failed" ]; then record "$c" "$h" FAIL "second apply failed: $(echo "$failed" | paste -sd, -)"
     elif [ -n "$changed" ]; then record "$c" "$h" FAIL "not idempotent: $(echo "$changed" | paste -sd, -)"
     else record "$c" "$h" PASS "idempotent"; fi
