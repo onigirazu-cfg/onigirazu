@@ -1,0 +1,9 @@
+plays:
+  - name: yum
+    hosts: all
+    become: true
+    tasks:
+      - name: Install a package
+        yum:
+          name: tree
+          state: present
