@@ -161,7 +161,7 @@ func (m *FileModule) ensureFilePresent(exec *executor.CommandExecutor, path stri
 	// Check if file exists and get current content
 	fileExists := false
 	currentContent := ""
-	checkCmd := fmt.Sprintf(`test -e '%s' && cat '%s' || echo __NOTEXISTS__`, path, path)
+	checkCmd := fmt.Sprintf(`test -e %s && cat %s || echo __NOTEXISTS__`, shellQuote(path), shellQuote(path))
 	output, err := exec.Execute(checkCmd)
 	if err == nil {
 		if strings.Contains(output, "__NOTEXISTS__") {
@@ -177,7 +177,7 @@ func (m *FileModule) ensureFilePresent(exec *executor.CommandExecutor, path stri
 	if needsUpdate {
 		// Create directory if needed
 		dir := filepath.Dir(path)
-		mkdirCmd := fmt.Sprintf(`mkdir -p '%s'`, dir)
+		mkdirCmd := fmt.Sprintf(`mkdir -p %s`, shellQuote(dir))
 		_, err := exec.Execute(mkdirCmd)
 		if err != nil {
 			result.Success = false
@@ -186,9 +186,7 @@ func (m *FileModule) ensureFilePresent(exec *executor.CommandExecutor, path stri
 			return result, nil
 		}
 
-		// Write file with content - escape content for shell
-		escapedContent := strings.ReplaceAll(content, "'", "'\\''")
-		writeCmd := fmt.Sprintf(`printf '%%s' '%s' > '%s'`, escapedContent, path)
+		writeCmd := fmt.Sprintf(`printf '%%s' %s > %s`, shellQuote(content), shellQuote(path))
 		_, err = exec.Execute(writeCmd)
 		if err != nil {
 			result.Success = false
@@ -222,7 +220,7 @@ func (m *FileModule) ensureFilePresent(exec *executor.CommandExecutor, path stri
 
 func (m *FileModule) ensureFileAbsent(exec *executor.CommandExecutor, path string, result types.TaskResult, startTime time.Time) (types.TaskResult, error) {
 	// Check if file exists
-	checkCmd := fmt.Sprintf(`test -e '%s' && echo exists || echo notexists`, path)
+	checkCmd := fmt.Sprintf(`test -e %s && echo exists || echo notexists`, shellQuote(path))
 	output, err := exec.Execute(checkCmd)
 
 	if err == nil && strings.TrimSpace(output) == "notexists" {
@@ -236,7 +234,7 @@ func (m *FileModule) ensureFileAbsent(exec *executor.CommandExecutor, path strin
 	}
 
 	// Remove file
-	removeCmd := fmt.Sprintf(`rm -rf '%s'`, path)
+	removeCmd := fmt.Sprintf(`rm -rf %s`, shellQuote(path))
 	_, err = exec.Execute(removeCmd)
 	if err != nil {
 		result.Success = false
@@ -256,7 +254,7 @@ func (m *FileModule) ensureFileAbsent(exec *executor.CommandExecutor, path strin
 
 func (m *FileModule) ensureDirectory(exec *executor.CommandExecutor, path string, result types.TaskResult, startTime time.Time) (types.TaskResult, error) {
 	// Check if directory exists
-	checkCmd := fmt.Sprintf(`test -d '%s' && echo exists || echo notexists`, path)
+	checkCmd := fmt.Sprintf(`test -d %s && echo exists || echo notexists`, shellQuote(path))
 	output, err := exec.Execute(checkCmd)
 
 	if err == nil && strings.TrimSpace(output) == "exists" {
@@ -270,7 +268,7 @@ func (m *FileModule) ensureDirectory(exec *executor.CommandExecutor, path string
 	}
 
 	// Create directory
-	createCmd := fmt.Sprintf(`mkdir -p '%s'`, path)
+	createCmd := fmt.Sprintf(`mkdir -p %s`, shellQuote(path))
 	_, err = exec.Execute(createCmd)
 	if err != nil {
 		result.Success = false
@@ -291,13 +289,13 @@ func (m *FileModule) ensureDirectory(exec *executor.CommandExecutor, path string
 func (m *FileModule) touchFile(exec *executor.CommandExecutor, path string, result types.TaskResult, startTime time.Time) (types.TaskResult, error) {
 	// Check if file exists
 	// Note: executor.Execute will automatically use shell if needed
-	checkCmd := fmt.Sprintf(`test -e '%s' && echo exists || echo notexists`, path)
+	checkCmd := fmt.Sprintf(`test -e %s && echo exists || echo notexists`, shellQuote(path))
 	output, err := exec.Execute(checkCmd)
 	fileExists := (err == nil && strings.TrimSpace(output) == "exists")
 
 	if !fileExists {
 		// Create the file
-		touchCmd := fmt.Sprintf(`touch '%s'`, path)
+		touchCmd := fmt.Sprintf(`touch %s`, shellQuote(path))
 		_, err := exec.Execute(touchCmd)
 		if err != nil {
 			result.Success = false
@@ -313,7 +311,7 @@ func (m *FileModule) touchFile(exec *executor.CommandExecutor, path string, resu
 		}
 	} else {
 		// Update the modification time
-		touchCmd := fmt.Sprintf(`touch '%s'`, path)
+		touchCmd := fmt.Sprintf(`touch %s`, shellQuote(path))
 		_, err := exec.Execute(touchCmd)
 		if err != nil {
 			result.Success = false

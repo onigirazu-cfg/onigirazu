@@ -1,0 +1,143 @@
+package engine
+
+import (
+	"context"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/onigirazu-cfg/onigirazu/pkg/types"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+)
+
+// perHostEngine returns an engine whose module calls are recorded per host
+func perHostEngine(t *testing.T, result types.TaskResult) (*ExecutionEngine, *MockModuleRegistry, *[]map[string]interface{}) {
+	t.Helper()
+	engine, mockConfig, _, _, mockRegistry, mockTemplate := createTestEngine()
+	mockConfig.On("GetDryRun").Return(false)
+	mockTemplate.On("RenderTaskArgs", mock.Anything, mock.Anything, mock.Anything).Return(nil, nil)
+
+	var mu sync.Mutex
+	calls := []map[string]interface{}{}
+	mockRegistry.On("ExecuteTask", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) {
+			mu.Lock()
+			defer mu.Unlock()
+			host := args.Get(2).(types.Host)
+			vars := args.Get(3).(map[string]interface{})
+			calls = append(calls, map[string]interface{}{"host": host.Name, "item": vars["item"], "loop": vars["loop"]})
+		}).
+		Return(result, nil)
+	return engine, mockRegistry, &calls
+}
+
+func twoHosts() []types.Host {
+	return []types.Host{{Name: "h1", Address: "10.0.0.1"}, {Name: "h2", Address: "10.0.0.2"}}
+}
+
+func TestLoop_ItemsPerHost(t *testing.T) {
+	engine, _, calls := perHostEngine(t, types.TaskResult{Success: true, Changed: true, Output: map[string]interface{}{}})
+	engine.setHostVar("h1", "names", []interface{}{"a", "b"})
+	engine.setHostVar("h2", "names", []interface{}{"c"})
+
+	task := &types.Task{
+		Name: "loop", Module: "debug", Register: "out",
+		Loop: &types.Loop{Expr: "{{ names }}"},
+	}
+	err := engine.executeTask(context.Background(), task, twoHosts(), map[string]interface{}{}, &types.PlayResult{})
+	require.NoError(t, err)
+
+	items := map[string][]interface{}{}
+	for _, c := range *calls {
+		items[c["host"].(string)] = append(items[c["host"].(string)], c["item"])
+	}
+	assert.Equal(t, []interface{}{"a", "b"}, items["h1"])
+	assert.Equal(t, []interface{}{"c"}, items["h2"])
+
+	out, ok := engine.getHostVar("h1", "out").(map[string]interface{})
+	require.True(t, ok)
+	assert.Len(t, out["results"], 2)
+	assert.Equal(t, true, out["changed"])
+	last := (*calls)[len(*calls)-1]["loop"].(map[string]interface{})
+	assert.Equal(t, true, last["last"])
+}
+
+func TestLoop_ExpressionMustBeList(t *testing.T) {
+	engine, registry, _ := perHostEngine(t, types.TaskResult{Success: true})
+	engine.setHostVar("h1", "name", "not a list")
+	task := &types.Task{Name: "loop", Module: "debug", Loop: &types.Loop{Expr: "name"}}
+	err := engine.executeTask(context.Background(), task, twoHosts()[:1], map[string]interface{}{}, &types.PlayResult{})
+	assert.Error(t, err)
+	registry.AssertNotCalled(t, "ExecuteTask", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+}
+
+func TestWhen_EvaluatedPerHost(t *testing.T) {
+	engine, _, calls := perHostEngine(t, types.TaskResult{Success: true})
+	engine.facts["h1"] = map[string]interface{}{"onigirazu_os_family": "Debian"}
+	engine.facts["h2"] = map[string]interface{}{"onigirazu_os_family": "RedHat"}
+
+	task := &types.Task{Name: "only redhat", Module: "debug", When: `onigirazu_os_family == "RedHat"`}
+	playResult := &types.PlayResult{}
+	err := engine.executeTask(context.Background(), task, twoHosts(), map[string]interface{}{}, playResult)
+	require.NoError(t, err)
+
+	require.Len(t, *calls, 1)
+	assert.Equal(t, "h2", (*calls)[0]["host"])
+	for _, h := range playResult.Hosts {
+		if h.Host == "h1" {
+			require.Len(t, h.Tasks, 1)
+			assert.True(t, h.Tasks[0].Skipped)
+		}
+	}
+}
+
+func TestFailedWhenAndChangedWhen(t *testing.T) {
+	engine, _, _ := perHostEngine(t, types.TaskResult{
+		Success: false, Failed: true, Changed: true, Error: "exit 1",
+		Output: map[string]interface{}{"rc": 1},
+	})
+	task := &types.Task{
+		Name: "probe", Module: "command", Register: "r",
+		FailedWhen: "r.rc > 1", ChangedWhen: "false",
+	}
+	host := twoHosts()[0]
+	err := engine.executeTaskOnHost(context.Background(), task, &host, map[string]interface{}{}, &types.PlayResult{})
+	require.NoError(t, err)
+
+	r := engine.getHostVar("h1", "r").(map[string]interface{})
+	assert.Equal(t, false, r["failed"])
+	assert.Equal(t, false, r["changed"])
+
+	task.FailedWhen = "r.rc == 1"
+	err = engine.executeTaskOnHost(context.Background(), task, &host, map[string]interface{}{}, &types.PlayResult{})
+	assert.Error(t, err)
+}
+
+func TestUntil_RetriesUntilConditionHolds(t *testing.T) {
+	engine, mockConfig, mockLogger, _, mockRegistry, mockTemplate := createTestEngine()
+	mockConfig.On("GetDryRun").Return(false)
+	mockLogger.On("Retry", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
+	mockTemplate.On("RenderTaskArgs", mock.Anything, mock.Anything, mock.Anything).Return(nil, nil)
+	for n := 1; n <= 3; n++ {
+		mockRegistry.On("ExecuteTask", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+			Return(types.TaskResult{Success: true, Output: map[string]interface{}{"n": n}}, nil).Once()
+	}
+
+	task := &types.Task{
+		Name: "wait", Module: "command", Register: "r",
+		Until: "r.n >= 3", Retries: 5, RetryDelay: time.Millisecond,
+	}
+	host := twoHosts()[0]
+	err := engine.executeTaskOnHost(context.Background(), task, &host, map[string]interface{}{}, &types.PlayResult{})
+	require.NoError(t, err)
+	mockRegistry.AssertNumberOfCalls(t, "ExecuteTask", 3)
+	assert.Equal(t, 3, engine.getHostVar("h1", "r").(map[string]interface{})["n"])
+}
+
+func TestRegisteredValue_Lines(t *testing.T) {
+	v := registeredValue(types.TaskResult{Output: map[string]interface{}{"stdout": "a\nb\n", "stderr": ""}})
+	assert.Equal(t, []interface{}{"a", "b"}, v["stdout_lines"])
+	assert.Equal(t, []interface{}{}, v["stderr_lines"])
+}

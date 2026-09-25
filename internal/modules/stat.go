@@ -96,8 +96,8 @@ func (m *StatModule) getRemoteFileStat(exec *executor.CommandExecutor, path stri
 	// Use stat command with JSON-like output format
 	// Format: exists|type|size|mode|mtime
 	// Build command with proper escaping - escape pipes in echo to avoid shell interpretation
-	cmd := fmt.Sprintf(`if [ -e '%s' ]; then if [ -d '%s' ]; then TYPE=directory; elif [ -L '%s' ]; then TYPE=link; elif [ -f '%s' ]; then TYPE=file; else TYPE=other; fi; SIZE=$(stat -c %%s '%s' 2>/dev/null || stat -f %%z '%s' 2>/dev/null); MODE=$(stat -c %%a '%s' 2>/dev/null || stat -f %%A '%s' 2>/dev/null); MTIME=$(stat -c %%Y '%s' 2>/dev/null || stat -f %%m '%s' 2>/dev/null); echo "exists=true|type=$TYPE|size=$SIZE|mode=$MODE|mtime=$MTIME"; else echo "exists=false"; fi`,
-		path, path, path, path, path, path, path, path, path, path)
+	cmd := fmt.Sprintf(`if [ -e %[1]s ]; then if [ -d %[1]s ]; then TYPE=directory; elif [ -L %[1]s ]; then TYPE=link; elif [ -f %[1]s ]; then TYPE=file; else TYPE=other; fi; SIZE=$(stat -c %%s %[1]s 2>/dev/null || stat -f %%z %[1]s 2>/dev/null); MODE=$(stat -c %%a %[1]s 2>/dev/null || stat -f %%A %[1]s 2>/dev/null); MTIME=$(stat -c %%Y %[1]s 2>/dev/null || stat -f %%m %[1]s 2>/dev/null); echo "exists=true|type=$TYPE|size=$SIZE|mode=$MODE|mtime=$MTIME"; else echo "exists=false"; fi`,
+		shellQuote(path))
 
 	output, err := exec.Execute(cmd)
 	if err != nil {

@@ -115,7 +115,7 @@ func (m *SysctlModule) handlePresent(ctx context.Context, exec *executor.Command
 	// Persist to sysctl configuration file if requested
 	if getBoolArg(args, "persist", true) {
 		// Read current file content
-		catCmd := fmt.Sprintf("cat '%s' 2>/dev/null || echo ''", sysctlFile)
+		catCmd := fmt.Sprintf("cat %s 2>/dev/null || echo ''", shellQuote(sysctlFile))
 		fileContent, err := exec.Execute("sh", "-c", catCmd)
 		if err != nil {
 			return m.failResult(result, fmt.Sprintf("failed to read sysctl file: %v", err))
@@ -147,7 +147,7 @@ func (m *SysctlModule) handlePresent(ctx context.Context, exec *executor.Command
 
 		// Write updated content back
 		newContent := strings.Join(newLines, "\n")
-		writeCmd := fmt.Sprintf("echo '%s' | tee '%s' > /dev/null", strings.ReplaceAll(newContent, "'", "'\\''"), sysctlFile)
+		writeCmd := fmt.Sprintf("printf '%%s\\n' %s | tee %s > /dev/null", shellQuote(newContent), shellQuote(sysctlFile))
 		_, err = exec.Execute("sh", "-c", writeCmd)
 		if err != nil {
 			return m.failResult(result, fmt.Sprintf("failed to persist sysctl parameter: %v", err))
@@ -187,7 +187,7 @@ func (m *SysctlModule) handleAbsent(ctx context.Context, exec *executor.CommandE
 	// Remove from sysctl file if requested
 	if getBoolArg(args, "persist", true) {
 		// Read current file content
-		catCmd := fmt.Sprintf("cat '%s' 2>/dev/null || echo ''", sysctlFile)
+		catCmd := fmt.Sprintf("cat %s 2>/dev/null || echo ''", shellQuote(sysctlFile))
 		fileContent, err := exec.Execute("sh", "-c", catCmd)
 		if err == nil && fileContent != "" {
 			// Remove the parameter line
@@ -204,7 +204,7 @@ func (m *SysctlModule) handleAbsent(ctx context.Context, exec *executor.CommandE
 
 			newContent := strings.Join(newLines, "\n")
 			if newContent != "" {
-				writeCmd := fmt.Sprintf("echo '%s' | tee '%s' > /dev/null", strings.ReplaceAll(newContent, "'", "'\\''"), sysctlFile)
+				writeCmd := fmt.Sprintf("printf '%%s\\n' %s | tee %s > /dev/null", shellQuote(newContent), shellQuote(sysctlFile))
 				_, _ = exec.Execute("sh", "-c", writeCmd)
 			} else {
 				// Remove empty file

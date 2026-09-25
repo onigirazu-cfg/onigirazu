@@ -1655,7 +1655,7 @@ func (e *ExecutionEngine) setHostVar(host, key string, value interface{}) {
 // registeredValue is what register stores: the module output plus the
 // changed/failed/skipped flags
 func registeredValue(result types.TaskResult) map[string]interface{} {
-	value := make(map[string]interface{}, len(result.Output)+4)
+	value := make(map[string]interface{})
 	for key, v := range result.Output {
 		value[key] = v
 	}
