@@ -1,6 +1,6 @@
 # MongoDB is not packaged for Ubuntu: run the server in Docker and put a
 # mongosh wrapper on PATH. mongo:8 refuses kernels >= 6.19 (SERVER-121912).
-need docker.io
+command -v docker >/dev/null || need docker.io  # the image may ship Docker CE
 docker rm -f onigirazu-e2e-mongo >/dev/null 2>&1
 docker run -d --name onigirazu-e2e-mongo mongo:7 >/dev/null
 printf '#!/bin/sh\nexec docker exec -i onigirazu-e2e-mongo mongosh "$@"\n' > /usr/local/bin/mongosh
