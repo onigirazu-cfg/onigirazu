@@ -65,8 +65,10 @@ func Eval(expression string, variables map[string]interface{}) (interface{}, err
 var programs sync.Map // string -> *vm.Program
 
 func compile(expression string) (*vm.Program, error) {
-	if p, ok := programs.Load(expression); ok {
-		return p.(*vm.Program), nil
+	if cached, ok := programs.Load(expression); ok {
+		if program, ok := cached.(*vm.Program); ok {
+			return program, nil
+		}
 	}
 	program, err := expr.Compile(translate(expression),
 		expr.Env(map[string]interface{}{}),
