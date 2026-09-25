@@ -10,7 +10,8 @@ Runs every case in `cases/` on disposable vSphere VMs cloned from the current
 - VMs are named `tmp-e2e-onigirazu-<run>-<os>`, live in a dedicated folder and
   carry a "TEMPORARY" note with the run link and expiry time.
 - `janitor.sh` runs hourly and deletes e2e VMs older than 3 hours from that
-  folder, covering cancelled runs.
+  folder, covering cancelled runs. `purge_vms` removes all of them at once;
+  VMs of runs still in progress are kept.
 - Access: each run generates an SSH key and passes it as
   `guestinfo.e2e_authorized_key`; the image creates user `e2e` on first boot.
 
