@@ -863,6 +863,8 @@ tasks:
       state: directory
 </code></pre>
 
+<p>An argument that is exactly <code>{{ var }}</code> keeps a list or map value as it is, so
+<code>name: "{{ packages }}"</code> passes the whole list to <code>apt</code>. Other values render as text.</p>
 <h3>Templates</h3>
 <p>Use Jinja2-like templates for configuration files:</p>
 <pre class="codehilite"><code class="language-yaml">- name: &quot;Generate configuration&quot;
