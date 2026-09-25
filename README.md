@@ -132,6 +132,12 @@ groups:
         user: "ubuntu"
 ```
 
+Variables can also live next to the inventory, as in Ansible:
+`group_vars/<group>.yml` (or a `group_vars/<group>/` directory of files, merged in
+name order; `all` applies to every host) and `host_vars/<host>.yml`. A host gets,
+lowest first: `all`, parent groups, child groups, its own inventory variables,
+then `host_vars`.
+
 Or use inline inventory directly (no file needed):
 
 ```bash

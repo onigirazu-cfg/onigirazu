@@ -27,6 +27,10 @@ type MultiSourceLoader struct {
 	groupMap     map[string]*types.Group
 	hostOrder    []string // Track insertion order for last-occurrence-wins
 	loadingMutex sync.Mutex
+
+	// variables from group_vars/ and host_vars/ next to the sources
+	groupVarsFiles map[string]map[string]interface{}
+	hostVarsFiles  map[string]map[string]interface{}
 }
 
 // NewMultiSourceLoader creates a new multi-source inventory loader
@@ -64,6 +68,8 @@ func (msl *MultiSourceLoader) LoadFromMultipleSources(
 	msl.hostMap = make(map[string]*types.Host)
 	msl.groupMap = make(map[string]*types.Group)
 	msl.hostOrder = make([]string, 0)
+	msl.groupVarsFiles = make(map[string]map[string]interface{})
+	msl.hostVarsFiles = make(map[string]map[string]interface{})
 
 	if len(inventoryPaths) == 0 {
 		return nil, fmt.Errorf("no inventory sources provided")
@@ -81,6 +87,8 @@ func (msl *MultiSourceLoader) LoadFromMultipleSources(
 			return nil, fmt.Errorf("failed to load inventory from %s: %w", path, err)
 		}
 	}
+
+	msl.applyVarsFiles()
 
 	// Build final inventory with merged data
 	inventory := &types.Inventory{
@@ -111,6 +119,16 @@ func (msl *MultiSourceLoader) loadSingleSource(ctx context.Context, path string)
 		return fmt.Errorf("cannot access inventory source: %w", err)
 	}
 
+	// group_vars/ and host_vars/ live next to an inventory file, or inside an
+	// inventory directory
+	varsDir := filepath.Dir(absPath)
+	if info.IsDir() {
+		varsDir = absPath
+	}
+	if err := msl.loadVarsDirs(varsDir); err != nil {
+		return fmt.Errorf("failed to load group_vars/host_vars: %w", err)
+	}
+
 	// Handle different source types
 	if info.IsDir() {
 		return msl.loadFromDirectory(ctx, absPath)
@@ -138,9 +156,8 @@ func (msl *MultiSourceLoader) loadFromDirectory(ctx context.Context, dirPath str
 			return walkErr
 		}
 
-		// Skip subdirectories (group_vars, host_vars will be handled later if needed)
+		// group_vars/ and host_vars/ hold variables, not inventories
 		if d.IsDir() {
-			// Skip hidden directories and group_vars/host_vars for now (future enhancement)
 			if strings.HasPrefix(d.Name(), ".") {
 				return filepath.SkipDir
 			}

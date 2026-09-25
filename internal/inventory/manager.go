@@ -26,6 +26,11 @@ type Manager struct {
 	groupFilters []GroupFilter
 	lastUpdated  time.Time
 	lenient      bool // NEW: Lenient mode for parsing
+
+	// Each group's own variables and parents, taken before inheritance
+	// merges hosts into parent groups; host variables are resolved from these
+	groupVars    map[string]map[string]interface{}
+	groupParents map[string][]string
 }
 
 // HostFilter defines a function type for filtering hosts
@@ -318,6 +323,19 @@ func (m *Manager) ValidateConnectivity(ctx context.Context, hosts []types.Host, 
 
 // processInventory processes and validates inventory
 func (m *Manager) processInventory(inventory *types.Inventory) error {
+	m.groupVars = make(map[string]map[string]interface{}, len(inventory.Groups))
+	m.groupParents = make(map[string][]string)
+	for name, group := range inventory.Groups {
+		own := make(map[string]interface{}, len(group.Vars))
+		for k, v := range group.Vars {
+			own[k] = v
+		}
+		m.groupVars[name] = own
+		for _, child := range group.Children {
+			m.groupParents[child] = append(m.groupParents[child], name)
+		}
+	}
+
 	// Resolve group inheritance
 	if err := m.resolveGroupInheritance(inventory); err != nil {
 		return fmt.Errorf("failed to resolve group inheritance: %w", err)
@@ -380,16 +398,6 @@ func (m *Manager) resolveGroupInheritance(inventory *types.Inventory) error {
 					}
 					if _, exists := group.Hosts[hostName]; !exists {
 						group.Hosts[hostName] = host
-					}
-				}
-
-				// Inherit variables (child variables take precedence)
-				if group.Vars == nil {
-					group.Vars = make(map[string]interface{})
-				}
-				for key, value := range childGroup.Vars {
-					if _, exists := group.Vars[key]; !exists {
-						group.Vars[key] = value
 					}
 				}
 			}
@@ -553,7 +561,7 @@ func (m *Manager) getAllHosts() []types.Host {
 	for _, group := range m.inventory.Groups {
 		for _, host := range group.Hosts {
 			if !seen[host.Name] {
-				hosts = append(hosts, *host)
+				hosts = append(hosts, m.hostView(host))
 				seen[host.Name] = true
 			}
 		}
@@ -576,61 +584,104 @@ func (m *Manager) getLocalhostHost() types.Host {
 // getGroupHosts returns all hosts from a specific group
 func (m *Manager) getGroupHosts(group *types.Group, groupName string) []types.Host {
 	hosts := make([]types.Host, 0, len(group.Hosts))
-
 	for _, host := range group.Hosts {
-		// Merge group variables with host variables
-		hostCopy := *host
-		if hostCopy.Vars == nil {
-			hostCopy.Vars = make(map[string]interface{})
-		}
+		hosts = append(hosts, m.hostView(host))
+	}
+	return hosts
+}
 
-		// Add group variables (host variables take precedence)
-		for key, value := range group.Vars {
-			if _, exists := hostCopy.Vars[key]; !exists {
-				hostCopy.Vars[key] = value
+// hostView returns a copy of a host with the variables of every group it
+// belongs to: "all" first, then parent groups before their children (by
+// depth, then name), and the host's own variables over all of them. The same
+// host gets the same variables whichever pattern selected it.
+func (m *Manager) hostView(host *types.Host) types.Host {
+	groups := make([]string, 0)
+	for name, group := range m.inventory.Groups {
+		if _, ok := group.Hosts[host.Name]; ok && name != "all" {
+			groups = append(groups, name)
+		}
+	}
+	depth := make(map[string]int)
+	var depthOf func(string, int) int
+	depthOf = func(g string, guard int) int {
+		if d, ok := depth[g]; ok {
+			return d
+		}
+		d := 0
+		if guard < 64 { // cycles are reported elsewhere; do not loop here
+			for _, parent := range m.groupParents[g] {
+				if pd := depthOf(parent, guard+1) + 1; pd > d {
+					d = pd
+				}
 			}
 		}
+		depth[g] = d
+		return d
+	}
+	sort.Slice(groups, func(i, j int) bool {
+		di, dj := depthOf(groups[i], 0), depthOf(groups[j], 0)
+		if di != dj {
+			return di < dj
+		}
+		return groups[i] < groups[j]
+	})
 
-		// Apply special group variables to host fields
-		// Group vars are applied if the host field is at its default value
-		if address, ok := group.Vars["address"].(string); ok {
-			if host.Address == "" || host.Address == host.Name {
-				hostCopy.Address = address
-			}
+	merged := make(map[string]interface{})
+	for _, g := range append([]string{"all"}, groups...) {
+		for k, v := range m.groupVars[g] {
+			merged[k] = v
 		}
-		if user, ok := group.Vars["user"].(string); ok {
-			if host.User == "" {
-				hostCopy.User = user
-			}
-		}
-		if port, ok := group.Vars["port"].(int); ok {
-			if origPort, hasOrig := host.Vars["_original_port"].(int); hasOrig && origPort == 0 {
-				hostCopy.Port = port
-			}
-		}
-		if password, ok := group.Vars["password"].(string); ok {
-			if host.Password == "" {
-				hostCopy.Password = password
-			}
-		}
-		if keyFile, ok := group.Vars["key_file"].(string); ok {
-			if host.KeyFile == "" {
-				hostCopy.KeyFile = keyFile
-			}
-		}
-		if insecure, ok := group.Vars["insecure_ignore_host_key"].(bool); ok {
-			if !host.InsecureIgnoreHostKey {
-				hostCopy.InsecureIgnoreHostKey = insecure
-			}
-		}
-
-		// Add group name
-		hostCopy.Vars["group_names"] = []string{groupName}
-
-		hosts = append(hosts, hostCopy)
 	}
 
-	return hosts
+	// A host listed in several groups is a separate object in each; its own
+	// variables are the union of all of them, over every group variable
+	for _, g := range groups {
+		if entry := m.inventory.Groups[g].Hosts[host.Name]; entry != nil {
+			for k, v := range entry.Vars {
+				merged[k] = v
+			}
+		}
+	}
+
+	hostCopy := *host
+	hostCopy.Vars = make(map[string]interface{}, len(host.Vars)+len(merged)+1)
+	for k, v := range merged {
+		hostCopy.Vars[k] = v
+	}
+	for k, v := range host.Vars {
+		hostCopy.Vars[k] = v
+	}
+	applyGroupConnectionVars(&hostCopy, host, merged)
+
+	names := append([]string(nil), groups...)
+	sort.Strings(names)
+	hostCopy.Vars["group_names"] = names
+	return hostCopy
+}
+
+// applyGroupConnectionVars fills connection fields the host leaves at their
+// defaults from group variables
+func applyGroupConnectionVars(hostCopy, host *types.Host, vars map[string]interface{}) {
+	if address, ok := vars["address"].(string); ok && (host.Address == "" || host.Address == host.Name) {
+		hostCopy.Address = address
+	}
+	if user, ok := vars["user"].(string); ok && host.User == "" {
+		hostCopy.User = user
+	}
+	if port, ok := vars["port"].(int); ok {
+		if origPort, hasOrig := host.Vars["_original_port"].(int); hasOrig && origPort == 0 {
+			hostCopy.Port = port
+		}
+	}
+	if password, ok := vars["password"].(string); ok && host.Password == "" {
+		hostCopy.Password = password
+	}
+	if keyFile, ok := vars["key_file"].(string); ok && host.KeyFile == "" {
+		hostCopy.KeyFile = keyFile
+	}
+	if insecure, ok := vars["insecure_ignore_host_key"].(bool); ok && !host.InsecureIgnoreHostKey {
+		hostCopy.InsecureIgnoreHostKey = insecure
+	}
 }
 
 // getHostsByPattern returns hosts matching a pattern
@@ -641,7 +692,7 @@ func (m *Manager) getHostsByPattern(pattern string) []types.Host {
 	for _, group := range m.inventory.Groups {
 		for _, host := range group.Hosts {
 			if !seen[host.Name] && m.matchPattern(host.Name, pattern) {
-				hosts = append(hosts, *host)
+				hosts = append(hosts, m.hostView(host))
 				seen[host.Name] = true
 			}
 		}
