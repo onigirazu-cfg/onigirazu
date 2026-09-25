@@ -65,3 +65,20 @@ func TestTruthy(t *testing.T) {
 		assert.True(t, Truthy(v), "%#v", v)
 	}
 }
+
+func TestItems(t *testing.T) {
+	items, err := Items([]string{"a", "b"})
+	require.NoError(t, err)
+	assert.Equal(t, []interface{}{"a", "b"}, items)
+
+	items, err = Items(nil)
+	require.NoError(t, err)
+	assert.Empty(t, items)
+
+	_, err = Items("text")
+	assert.Error(t, err)
+
+	value, err := Eval(`missing | default("x")`, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "x", value)
+}

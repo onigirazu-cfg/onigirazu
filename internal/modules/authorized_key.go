@@ -85,14 +85,14 @@ func (m *AuthorizedKeyModule) Execute(ctx context.Context, host types.Host, args
 	passwd, err := runOnHost(ctx, host, args, "getent", "passwd", username)
 	if err != nil {
 		result.Success = false
-		result.Error = fmt.Sprintf("user '%s' not found on %s", username, host.Name)
+		result.Error = fmt.Sprintf("user %q not found on %s", username, host.Name)
 		result.Duration = time.Since(startTime)
 		return result, nil
 	}
 	fields := strings.Split(strings.TrimSpace(passwd), ":")
 	if len(fields) < 6 || fields[5] == "" {
 		result.Success = false
-		result.Error = fmt.Sprintf("no home directory for user '%s'", username)
+		result.Error = fmt.Sprintf("no home directory for user %q", username)
 		result.Duration = time.Since(startTime)
 		return result, nil
 	}
@@ -100,7 +100,7 @@ func (m *AuthorizedKeyModule) Execute(ctx context.Context, host types.Host, args
 	primaryGroup, err := runOnHost(ctx, host, args, "id", "-gn", username)
 	if err != nil {
 		result.Success = false
-		result.Error = fmt.Sprintf("failed to read the group of '%s': %v", username, err)
+		result.Error = fmt.Sprintf("failed to read the group of %q: %v", username, err)
 		result.Duration = time.Since(startTime)
 		return result, nil
 	}
