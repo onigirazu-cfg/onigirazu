@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"gopkg.in/yaml.v3"
 )
 
 // Host represents a target host
@@ -278,13 +280,14 @@ func (t *Task) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	}
 
 	// Handle notify
-	if notify, ok := taskMap["notify"]; ok {
-		if notifySlice, ok := notify.([]interface{}); ok {
-			t.Notify = make([]string, len(notifySlice))
-			for i, n := range notifySlice {
-				if nStr, ok := n.(string); ok {
-					t.Notify[i] = nStr
-				}
+	// notify: a handler name or a list of them
+	switch notify := taskMap["notify"].(type) {
+	case string:
+		t.Notify = []string{notify}
+	case []interface{}:
+		for _, n := range notify {
+			if nStr, ok := n.(string); ok {
+				t.Notify = append(t.Notify, nStr)
 			}
 		}
 	}
@@ -972,6 +975,40 @@ type RoleReference struct {
 	Path string                 `yaml:"path"`
 	Tags []string               `yaml:"tags"`
 	When string                 `yaml:"when,omitempty"` // Conditional execution
+}
+
+// UnmarshalYAML accepts the Ansible forms of a role reference: a bare name
+// ("- common"), "role:" as an alias of "name:", and role variables given
+// directly next to the name
+func (r *RoleReference) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind == yaml.ScalarNode {
+		r.Name = value.Value
+		return nil
+	}
+	var raw map[string]interface{}
+	if err := value.Decode(&raw); err != nil {
+		return err
+	}
+	type plain RoleReference
+	var p plain
+	if err := value.Decode(&p); err != nil {
+		return err
+	}
+	*r = RoleReference(p)
+	if r.Name == "" {
+		r.Name, _ = raw["role"].(string)
+	}
+	for k, v := range raw {
+		switch k {
+		case "name", "role", "vars", "path", "tags", "when":
+			continue
+		}
+		if r.Vars == nil {
+			r.Vars = make(map[string]interface{})
+		}
+		r.Vars[k] = v
+	}
+	return nil
 }
 
 // ConditionalRequirement specifies when a parameter is required

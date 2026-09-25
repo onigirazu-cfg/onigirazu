@@ -1,0 +1,5 @@
+- name: Role writes a file and notifies its handler
+  copy:
+    content: "{{ motd_text }}\n"
+    dest: /etc/onigirazu-e2e-motd
+  notify: role handler

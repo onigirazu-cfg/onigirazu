@@ -479,9 +479,12 @@ func (e *ExecutionEngine) executePlay(ctx context.Context, play *types.Play) (*t
 				}
 			}
 
-			// Load role if using RoleReference
+			// The parser loads roles relative to the playbook (RoleObjects);
+			// load here only what it did not
 			var role *types.Role
-			if len(play.Roles) > 0 {
+			if i < len(play.RoleObjects) && play.RoleObjects[i] != nil {
+				role = play.RoleObjects[i]
+			} else {
 				var err error
 				role, err = e.roleLoader.LoadRole(ctx, roleRef)
 				if err != nil {
@@ -492,9 +495,6 @@ func (e *ExecutionEngine) executePlay(ctx context.Context, play *types.Play) (*t
 					result.Success = false
 					continue
 				}
-			} else {
-				// Use pre-loaded RoleObject
-				role = play.RoleObjects[i]
 			}
 
 			// Execute role with dependencies
@@ -596,6 +596,20 @@ func (e *ExecutionEngine) executeTaskList(ctx context.Context, tasks []types.Tas
 // executeTask executes a single task on multiple hosts
 func (e *ExecutionEngine) executeTask(ctx context.Context, task *types.Task, hosts []types.Host,
 	variables map[string]interface{}, playResult *types.PlayResult) error {
+	// run_once: the first host runs it, the others get its registered result
+	if task.RunOnce && len(hosts) > 1 {
+		if err := e.executeTask(ctx, runOnceTask(task), hosts[:1], variables, playResult); err != nil {
+			return err
+		}
+		if task.Register != "" {
+			value := e.getHostVar(hosts[0].Name, task.Register)
+			for _, h := range hosts[1:] {
+				e.setHostVar(h.Name, task.Register, value)
+			}
+		}
+		return nil
+	}
+
 	// Handle loops
 	if task.Loop != nil {
 		return e.executeTaskWithLoop(ctx, task, hosts, variables, playResult)
@@ -755,6 +769,17 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 	become := effectiveBecome(task, e.playBecome)
 	e.mutex.RUnlock()
 
+	// delegate_to: the module runs on another host with this host's variables;
+	// the result stays recorded for this host
+	target := *host
+	if task.DelegateTo != "" {
+		delegate, err := e.templateEngine.Render(ctx, task.DelegateTo, taskVars)
+		if err != nil {
+			return fmt.Errorf("delegate_to: %w", err)
+		}
+		target = e.delegateHost(strings.TrimSpace(delegate))
+	}
+
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		// Check if we're in dry-run mode
 		if e.config.GetDryRun() {
@@ -786,7 +811,7 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 			Become:       become.Become,
 			BecomeUser:   become.User,
 			BecomeMethod: become.Method,
-		}, *host, taskVars)
+		}, target, taskVars)
 
 		if task.Until != "" && err == nil {
 			untilVars := taskVars
@@ -861,7 +886,8 @@ func (e *ExecutionEngine) finishTask(task *types.Task, host *types.Host, result 
 	e.updateTaskStats(host.Name, task, result)
 
 	// Add notify handlers if task was successful
-	if result.Success && !result.Skipped && len(task.Notify) > 0 {
+	// only a task that changed something notifies its handlers
+	if result.Success && result.Changed && !result.Skipped && len(task.Notify) > 0 {
 		result.Notify = task.Notify
 	}
 
@@ -890,7 +916,8 @@ func (e *ExecutionEngine) finishTask(task *types.Task, host *types.Host, result 
 	}
 
 	hostResult.Tasks = append(hostResult.Tasks, result)
-	if result.Failed {
+	// an ignored failure is recorded but does not fail the host or the play
+	if result.Failed && !task.IgnoreErrors {
 		hostResult.Failed = true
 		hostResult.Success = false
 		playResult.Success = false
@@ -1722,6 +1749,14 @@ func (e *ExecutionEngine) hostVariables(host *types.Host, variables map[string]i
 	e.mutex.RLock()
 	defer e.mutex.RUnlock()
 	vars := e.mergeVariables(variables, e.variables, host.Vars)
+	// always defined, facts or not
+	vars["inventory_hostname"] = host.Name
+	if _, ok := vars["onigirazu_hostname"]; !ok {
+		vars["onigirazu_hostname"] = host.Name
+	}
+	if _, ok := vars["onigirazu_host"]; !ok {
+		vars["onigirazu_host"] = host.Address
+	}
 	if hostFacts, exists := e.facts[host.Name]; exists {
 		vars = e.mergeVariables(vars, map[string]interface{}{"onigirazu_facts": hostFacts}, hostFacts)
 	}
@@ -1739,4 +1774,28 @@ func splitLines(text string) []interface{} {
 		items[i] = strings.TrimSuffix(line, "\r")
 	}
 	return items
+}
+
+// runOnceTask is a copy of task without run_once, to run on one host
+func runOnceTask(task *types.Task) *types.Task {
+	t := *task
+	t.RunOnce = false
+	return &t
+}
+
+// delegateHost resolves a delegate_to name: localhost, an inventory host,
+// or else an address to reach with the default connection settings
+func (e *ExecutionEngine) delegateHost(name string) types.Host {
+	switch name {
+	case "localhost", "127.0.0.1", "::1":
+		return types.Host{Name: name, Address: "127.0.0.1", Vars: map[string]interface{}{"onigirazu_connection": "local"}}
+	}
+	if hosts, err := e.inventoryMgr.GetHosts(name); err == nil {
+		for _, h := range hosts {
+			if h.Name == name {
+				return h
+			}
+		}
+	}
+	return types.Host{Name: name, Address: name, Port: 22, Vars: map[string]interface{}{}}
 }
