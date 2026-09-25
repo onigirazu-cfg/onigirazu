@@ -1,3 +1,3 @@
 set -e
-dpkg -s cowsay >/dev/null
-dpkg -s sl >/dev/null
+dpkg -s toilet >/dev/null
+dpkg -s fortune-mod >/dev/null
