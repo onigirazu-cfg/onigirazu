@@ -3,9 +3,10 @@ package modules
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
-	"github.com/onigirazu-cfg/onigirazu/internal/executor"
+	sshpkg "github.com/onigirazu-cfg/onigirazu/internal/ssh"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
@@ -30,89 +31,94 @@ func (m *RebootModule) GetDescription() string {
 func (m *RebootModule) Execute(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
 	startTime := time.Now()
 	result := types.TaskResult{
-		TaskName:  getStringArg(args, "name", "reboot"),
+		TaskName:  taskName(args),
 		Host:      host.Name,
 		Module:    m.GetName(),
 		Success:   true,
-		Changed:   false,
 		Output:    make(map[string]interface{}),
 		Timestamp: startTime,
 	}
-
-	// Get parameters
-	delaySeconds := getIntArg(args, "pre_reboot_delay", 0)
-	msgText := getStringArg(args, "msg", "System will reboot in a few seconds")
-	testBoot := getBoolArg(args, "test_boot", false)
-	rebootCommand := getStringArg(args, "reboot_command", "")
-
-	result.Output["host"] = host.Name
-
-	var execResult types.TaskResult = result
-
-	execErr := m.WithExecutor(host, func(exec *executor.CommandExecutor) error {
-		var err error
-
-		// Notify users about reboot if delay is set
-		if delaySeconds > 0 {
-			notifyCmd := fmt.Sprintf("wall '%s' || echo 'Warning message could not be broadcast'", msgText)
-			_, _ = exec.Execute("sh", "-c", notifyCmd)
-			result.Output["msg"] = msgText
-			result.Output["pre_reboot_delay"] = delaySeconds
-
-			// Wait before reboot
-			time.Sleep(time.Duration(delaySeconds) * time.Second)
+	fail := func(msg string) (types.TaskResult, error) {
+		result.Success = false
+		result.Error = msg
+		result.Duration = time.Since(startTime)
+		return result, nil
+	}
+	sleep := func(d time.Duration) bool {
+		select {
+		case <-ctx.Done():
+			return false
+		case <-time.After(d):
+			return true
 		}
-
-		execResult, err = m.performReboot(exec, host, args, result, rebootCommand, testBoot)
-		return err
-	})
-
-	if execErr != nil {
-		return result, execErr
 	}
 
-	return execResult, nil
-}
+	if sshpkg.IsLocal(host) {
+		return fail("refusing to reboot the control machine (host is local)")
+	}
 
-// performReboot performs the actual reboot
-func (m *RebootModule) performReboot(exec *executor.CommandExecutor, host types.Host, args map[string]interface{}, result types.TaskResult, rebootCommand string, testBoot bool) (types.TaskResult, error) {
-	// Test boot if requested (check if system can boot without actually rebooting)
-	if testBoot {
-		// This would be implementation-specific - for now, just check systemctl status
-		output, err := exec.Execute("systemctl", "status")
-		if err != nil {
-			return m.failResult(result, fmt.Sprintf("test boot check failed: %v", err))
+	if getBoolArg(args, "test_boot", false) {
+		output, err := runOnHost(ctx, host, args, "systemctl", "is-system-running")
+		result.Output["test_boot_output"] = strings.TrimSpace(output)
+		if err != nil && !strings.Contains(output, "degraded") {
+			return fail(fmt.Sprintf("test boot check failed: %v", err))
 		}
-		result.Output["test_boot_output"] = output
 		result.Output["msg"] = "System passed boot test - reboot canceled (test_boot=true)"
-		result.Duration = time.Since(result.Timestamp)
+		result.Duration = time.Since(startTime)
 		return result, nil
 	}
 
-	// Use custom reboot command if provided
-	if rebootCommand != "" {
-		_, err := exec.Execute("sh", "-c", rebootCommand)
-		if err != nil {
-			return m.failResult(result, fmt.Sprintf("reboot command failed: %v", err))
+	bootID := func() (string, error) {
+		out, err := runOnHost(ctx, host, args, "cat", "/proc/sys/kernel/random/boot_id")
+		return strings.TrimSpace(out), err
+	}
+	before, err := bootID()
+	if err != nil || before == "" {
+		return fail(fmt.Sprintf("failed to read boot id: %v", err))
+	}
+
+	if delay := getIntArg(args, "pre_reboot_delay", 0); delay > 0 {
+		msg := getStringArg(args, "msg", "System will reboot in a few seconds")
+		_, _ = runShellOnHost(ctx, host, args, "wall "+shellQuote(msg)+" 2>/dev/null || true")
+		if !sleep(time.Duration(delay) * time.Second) {
+			return fail("canceled")
 		}
-		result.Changed = true
-		result.Output["msg"] = fmt.Sprintf("System reboot initiated with custom command: %s", rebootCommand)
-		result.Duration = time.Since(result.Timestamp)
-		return result, nil
 	}
 
-	// Use standard reboot command
-	// We use 'shutdown -r' instead of 'reboot' because it's more graceful
-	// The '+1' means reboot in 1 minute, giving time for playbook to finish
-	_, err := exec.Execute("shutdown", "-r", "+1", "Rebooting via Onigirazu")
-	if err != nil {
-		return m.failResult(result, fmt.Sprintf("reboot failed: %v", err))
+	// Start the reboot a moment later, so this SSH command can return first
+	command := getStringArg(args, "reboot_command", "")
+	if command == "" {
+		command = "systemd-run --on-active=2 /bin/systemctl reboot >/dev/null 2>&1 || " +
+			"(nohup sh -c 'sleep 2; reboot' >/dev/null 2>&1 </dev/null &)"
 	}
-
+	if _, err := runShellOnHost(ctx, host, args, command); err != nil {
+		return fail(fmt.Sprintf("reboot command failed: %v", err))
+	}
 	result.Changed = true
-	result.Output["msg"] = "System reboot scheduled to start in 1 minute"
-	result.Output["reboot_initiated"] = true
-	result.Duration = time.Since(result.Timestamp)
+
+	// Wait until the host answers with a new boot id
+	pool := sshpkg.GetGlobalPool()
+	timeout := time.Duration(getIntArg(args, "reboot_timeout", 600)) * time.Second
+	deadline := time.Now().Add(timeout)
+	for {
+		if !sleep(5 * time.Second) {
+			return fail("canceled while waiting for the host")
+		}
+		_ = pool.CloseConnection(host) // connections from before the reboot are dead
+		if after, err := bootID(); err == nil && after != "" && after != before {
+			break
+		}
+		if time.Now().After(deadline) {
+			return fail(fmt.Sprintf("host did not come back within %s", timeout))
+		}
+	}
+	if delay := getIntArg(args, "post_reboot_delay", 0); delay > 0 && !sleep(time.Duration(delay)*time.Second) {
+		return fail("canceled")
+	}
+
+	result.Output["msg"] = "System rebooted"
+	result.Output["elapsed"] = time.Since(startTime).Seconds()
+	result.Duration = time.Since(startTime)
 	return result, nil
 }
 

@@ -53,11 +53,8 @@ func runShellOnHost(ctx context.Context, host types.Host, args map[string]interf
 	}
 
 	// One command string keeps quoting identical for local and SSH execution
-	out, err := exec.Execute("sh -c " + shellQuote(script))
-	if err != nil {
-		return out, fmt.Errorf("%w: %s", err, strings.TrimSpace(out))
-	}
-	return out, nil
+	// The executor already adds the output to the error
+	return exec.Execute("sh -c " + shellQuote(script))
 }
 
 // ensureOwnership sets owner and/or group of path on host when they differ from the
