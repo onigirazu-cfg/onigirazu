@@ -51,6 +51,7 @@ command -v terraform >/dev/null || die "terraform not found"
 
 # --- resolve the current [latest] item of each image family ------------------
 export GOVC_URL="$TF_VAR_vsphere_server" GOVC_USERNAME="$TF_VAR_vsphere_user" GOVC_PASSWORD="$TF_VAR_vsphere_password" GOVC_INSECURE=1
+export GOVC_DATACENTER="$TF_VAR_datacenter"
 items="$(govc library.info -json "/$TF_VAR_library/*")"
 images_json="{"
 for pair in $E2E_IMAGES; do
@@ -73,8 +74,10 @@ diagnose_permissions() {
   tpl="$(govc find "/$TF_VAR_datacenter/vm" -type m -name "$first" | head -1)"
   [ -n "$tpl" ] || { echo "template VM $first not found"; return; }
   echo "template: $tpl"
-  govc vm.info -json "$tpl" | jq -r '(.virtualMachines // .VirtualMachines)[0] |
-    "template networks: \([.network[]?.value] | join(" ")), datastores: \([.datastore[]?.value] | join(" "))"' || true
+  local ref
+  for ref in $(govc vm.info -json "$tpl" | jq -r '(.virtualMachines // .VirtualMachines)[0] | (.network[]?, .datastore[]?) | "\(.type):\(.value)"'); do
+    echo "template uses $ref: $(govc ls -L "$ref" 2>/dev/null)"
+  done
   name="tmp-e2e-onigirazu-$RUN_ID-diag"
   govc vm.clone -vm "$tpl" -on=false -folder "/$TF_VAR_datacenter/vm/$TF_VAR_folder" \
     -pool "/$TF_VAR_datacenter/host/$TF_VAR_cluster/Resources" -host "$TF_VAR_host" \
