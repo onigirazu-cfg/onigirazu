@@ -765,7 +765,7 @@ evaluated per host with that host's facts and registered results:
   uri:
     url: http://localhost:8080/health
   register: health
-  until: health.status_code == 200
+  until: health.status == 200
   retries: 10
   delay: 3
 
