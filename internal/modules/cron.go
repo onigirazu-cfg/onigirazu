@@ -194,8 +194,8 @@ func (m *CronModule) handleFile(ctx context.Context, exec *executor.CommandExecu
 		}
 	} else if state == "absent" {
 		// Remove crontab
-		if _, err := exec.Execute("crontab", "-r", "-u", user); err != nil {
-			if !strings.Contains(err.Error(), "no crontab") {
+		if out, err := exec.Execute("crontab", "-r", "-u", user); err != nil {
+			if !strings.Contains(out, "no crontab") {
 				return m.failResult(result, fmt.Sprintf("failed to remove crontab: %v", err))
 			}
 		} else {
@@ -323,28 +323,26 @@ func (m *CronModule) handleList(ctx context.Context, exec *executor.CommandExecu
 
 // Helper methods
 func (m *CronModule) getCrontab(exec *executor.CommandExecutor, user string) (string, error) {
-	output, err := exec.Execute("crontab", "-l", "-u", user)
+	output, err := exec.Execute("crontab -l -u " + shellQuote(user))
 	if err != nil {
-		return "", err
+		// crontab exits 1 and prints "no crontab for <user>" when there is none
+		if strings.Contains(output, "no crontab") {
+			return "", nil
+		}
+		return "", fmt.Errorf("%w: %s", err, strings.TrimSpace(output))
 	}
 	return output, nil
 }
 
 func (m *CronModule) setCrontab(exec *executor.CommandExecutor, user string, content string) error {
-	// Write content to temp file
-	tmpFile := fmt.Sprintf("/tmp/crontab.%s.tmp", user)
-	if _, err := exec.Execute("sh", "-c", fmt.Sprintf("cat > %s << 'EOF'\n%s\nEOF", tmpFile, content)); err != nil {
-		return fmt.Errorf("failed to write temp file: %v", err)
+	if !strings.HasSuffix(content, "\n") {
+		content += "\n"
 	}
-
-	// Install crontab
-	if _, err := exec.Execute("crontab", "-u", user, tmpFile); err != nil {
-		return fmt.Errorf("failed to install crontab: %v", err)
+	// One shell command so quoting survives SSH and sudo; no temp file
+	script := fmt.Sprintf("printf '%%s' %s | crontab -u %s -", shellQuote(content), shellQuote(user))
+	if output, err := exec.Execute("sh -c " + shellQuote(script)); err != nil {
+		return fmt.Errorf("failed to install crontab: %w: %s", err, strings.TrimSpace(output))
 	}
-
-	// Clean up temp file (ignore errors as it's just cleanup)
-	_, _ = exec.Execute("rm", "-f", tmpFile)
-
 	return nil
 }
 
