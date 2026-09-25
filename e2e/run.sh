@@ -137,7 +137,10 @@ apply() {  # case_dir label -> writes task_end events to $WORK/events.jsonl
   state="$WORK/state-$(basename "$1")"
   (cd "$WORK" && "$BIN" apply "$dir/playbook.yml" -i "$INVENTORY" --state "$state" \
     --log-format json --no-color >"$WORK/apply.log" 2>&1) || true
-  grep '"type":"task_end"' "$WORK/apply.log" | jq -c '.fields' > "$WORK/events.jsonl" || true
+  # The progress bar shares stdout with the JSON log and can precede an event
+  # on the same line, so cut every line at the start of its JSON object
+  grep -o '{"timestamp".*' "$WORK/apply.log" |
+    jq -c -R 'fromjson? | select(.fields.type == "task_end") | .fields' > "$WORK/events.jsonl" || true
 }
 
 record() { printf '%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4" >> "$RESULTS"; echo "  [$3] $1 / $2 ${4:+- $4}"; }
@@ -149,11 +152,12 @@ for c in $cases; do
   log "Case $c"
 
   apply "$dir"
+  passed=""
   for h in $(jq -r 'keys[]' <<<"$hosts_json"); do
     failed="$(jq -r --arg h "$h" 'select(.host == $h and .success != true) | .task' "$WORK/events.jsonl")"
     ran="$(jq -r --arg h "$h" 'select(.host == $h) | .task' "$WORK/events.jsonl" | wc -l | tr -d ' ')"
     if [ "$ran" = 0 ]; then
-      record "$c" "$h" FAIL "no task ran: $(grep -m1 -iE 'error|failed' "$WORK/apply.log" | jq -r '.message // .' 2>/dev/null | cut -c1-200)"
+      record "$c" "$h" FAIL "no task ran: $(grep -o '{"timestamp".*' "$WORK/apply.log" | jq -r -R 'fromjson? | select(.level == "ERROR") | .message' | head -1 | cut -c1-200)"
       continue
     fi
     [ -z "$failed" ] || { record "$c" "$h" FAIL "apply failed: $(echo "$failed" | paste -sd, -)"; continue; }
@@ -161,11 +165,15 @@ for c in $cases; do
       record "$c" "$h" FAIL "verify: $(echo "$out" | tail -1)"; continue
     fi
     record "$c" "$h" PASS "apply+verify"
+    passed="$passed $h"
   done
 
   [ -f "$dir/NOT_IDEMPOTENT" ] && continue
+  [ -n "$passed" ] || continue
   apply "$dir"
-  for h in $(jq -r 'keys[]' <<<"$hosts_json"); do
+  for h in $passed; do
+    ran="$(jq -r --arg h "$h" 'select(.host == $h) | .task' "$WORK/events.jsonl" | wc -l | tr -d ' ')"
+    [ "$ran" != 0 ] || { record "$c" "$h" FAIL "second apply: no task ran"; continue; }
     changed="$(jq -r --arg h "$h" 'select(.host == $h and .changed == true) | .task' "$WORK/events.jsonl")"
     failed="$(jq -r --arg h "$h" 'select(.host == $h and .success != true) | .task' "$WORK/events.jsonl")"
     if [ -n "$failed" ]; then record "$c" "$h" FAIL "second apply failed: $(echo "$failed" | paste -sd, -)"
