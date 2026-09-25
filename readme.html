@@ -879,6 +879,15 @@ tasks:
     dest: /etc/myapp/app.conf
 </code></pre>
 
+<p>Templates support <code>{{ expr }}</code> with filters, <code>{% if %}</code>/<code>{% elif %}</code>/<code>{% else %}</code>,
+<code>{% for x in list %}</code> and <code>{% for k, v in dict.items() %}</code> (with <code>loop.index</code>,
+<code>loop.first</code>, <code>loop.last</code>, <code>loop.length</code>), and <code>{%-</code>/<code>-%}</code> whitespace control.
+As in Ansible, the newline after a block tag is dropped:</p>
+<pre class="codehilite"><code class="language-jinja">{% for b in backends %}
+server {{ b.name }} {{ b.ip }}:{{ b.port | default(80) }}
+{% endfor %}
+</code></pre>
+
 <h3>Error Handling</h3>
 <p>Control error behavior:</p>
 <pre class="codehilite"><code class="language-yaml">- name: &quot;Task that might fail&quot;
