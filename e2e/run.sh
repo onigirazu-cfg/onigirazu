@@ -9,7 +9,8 @@
 #   TF_VAR_datacenter TF_VAR_cluster TF_VAR_host TF_VAR_datastore
 #   TF_VAR_network TF_VAR_folder TF_VAR_library
 # Optional: E2E_IMAGES (default "u2404=ubuntu-24.04 u2604=ubuntu-26.04"),
-#   E2E_CASES (case directory names, default all), RUN_ID, RUN_URL, KEEP_VMS=1
+#   E2E_CASES (case directory names, default all), RUN_ID, RUN_URL, KEEP_VMS=1,
+#   E2E_SHARD=i/n (run every n-th case starting with the i-th, on own VMs)
 # TF_VAR_* come from the environment and are checked below
 # shellcheck disable=SC2154
 set -euo pipefail
@@ -25,6 +26,15 @@ RESULTS="$WORK/results.tsv"
 TFVARS="$WORK/run.tfvars.json"
 
 RUN_ID="${RUN_ID:-local-$(date -u +%m%d%H%M)}"
+
+# Cases of this run; a shard takes every n-th of them on its own VMs
+cases="${E2E_CASES:-$(cd "$HERE/cases" && ls)}"
+if [ -n "${E2E_SHARD:-}" ]; then
+  shard="${E2E_SHARD%/*}" shards="${E2E_SHARD#*/}"
+  # shellcheck disable=SC2086 # one case per word
+  cases="$(printf '%s\n' $cases | sort | awk -v i="$shard" -v n="$shards" '(NR - 1) % n == i - 1')"
+  RUN_ID="$RUN_ID-s$shard"
+fi
 RUN_URL="${RUN_URL:-local run}"
 E2E_IMAGES="${E2E_IMAGES:-u2404=ubuntu-24.04 u2604=ubuntu-26.04}"
 
@@ -48,6 +58,9 @@ cleanup() {
   exit "$rc"
 }
 trap cleanup EXIT
+
+[ -n "${cases//[[:space:]]/}" ] || { echo "no cases for shard ${E2E_SHARD:-}"; exit 0; }
+echo "cases: ${cases//$'\n'/ }"
 
 for v in vsphere_server vsphere_user vsphere_password datacenter cluster host datastore network folder library; do
   n="TF_VAR_$v"
@@ -164,7 +177,6 @@ apply_errors() {
 
 record() { printf '%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4" >> "$RESULTS"; echo "  [$3] $1 / $2 ${4:+- $4}"; }
 
-cases="${E2E_CASES:-$(cd "$HERE/cases" && ls)}"
 for c in $cases; do
   [ -f "$HERE/cases/$c/playbook.yml" ] || continue
   # Work on a copy: cases may write next to their playbook (fetch)

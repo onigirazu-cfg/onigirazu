@@ -4,7 +4,9 @@ Runs every case in `cases/` on disposable vSphere VMs cloned from the current
 `[latest]` Ubuntu golden images, then deletes the VMs.
 
 - Workflow `E2E`: by hand (optionally a subset of cases, or keep the VMs) and
-  nightly at 05:00 UTC; only on the self-hosted runner labelled `vsphere-e2e`.
+  nightly at 05:00 UTC; only on self-hosted runners labelled `vsphere-e2e`.
+- Cases are split over four shards (`E2E_SHARD=i/4`, every fourth case), each
+  on its own VMs; runs of different branches do not wait for each other.
 - VMs are named `tmp-e2e-onigirazu-<run>-<os>`, live in a dedicated folder and
   carry a "TEMPORARY" note with the run link and expiry time.
 - `janitor.sh` runs hourly and deletes e2e VMs older than 3 hours from that
