@@ -118,6 +118,19 @@ func (e *CommandExecutor) wrapWithBecome(command string) string {
 	}
 }
 
+// commandLine builds a shell command line: command is used as written (it may
+// contain shell syntax), each separate argument is quoted as one word
+func commandLine(command string, args []string) string {
+	if len(args) == 0 {
+		return command
+	}
+	quoted := make([]string, len(args))
+	for i, a := range args {
+		quoted[i] = shellQuote(a)
+	}
+	return command + " " + strings.Join(quoted, " ")
+}
+
 // shellQuote quotes s as one POSIX shell word
 func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
@@ -125,10 +138,7 @@ func shellQuote(s string) string {
 
 // Execute runs a command on the appropriate host (local or remote)
 func (e *CommandExecutor) Execute(command string, args ...string) (string, error) {
-	fullCommand := command
-	if len(args) > 0 {
-		fullCommand = command + " " + strings.Join(args, " ")
-	}
+	fullCommand := commandLine(command, args)
 
 	// Wrap with become if enabled
 	fullCommand = e.wrapWithBecome(fullCommand)
@@ -147,10 +157,7 @@ func (e *CommandExecutor) Execute(command string, args ...string) (string, error
 
 // ExecuteWithContext runs a command with context on the appropriate host
 func (e *CommandExecutor) ExecuteWithContext(ctx context.Context, command string, args ...string) (string, error) {
-	fullCommand := command
-	if len(args) > 0 {
-		fullCommand = command + " " + strings.Join(args, " ")
-	}
+	fullCommand := commandLine(command, args)
 
 	// Wrap with become if enabled
 	fullCommand = e.wrapWithBecome(fullCommand)
@@ -233,16 +240,16 @@ func (e *CommandExecutor) executeSSHWithContext(ctx context.Context, command str
 
 // executeLocal executes a command locally
 func (e *CommandExecutor) executeLocal(command string, args ...string) (string, error) {
-	// If args are provided or command contains shell operators, execute through shell
-	if len(args) > 0 || strings.ContainsAny(command, "|&;<>()$`\\\"' \t\n*?[]{}") {
-		// Build full command
-		fullCmd := command
-		if len(args) > 0 {
-			fullCmd = command + " " + strings.Join(args, " ")
-		}
-		// Execute through shell
+	// Separate arguments are passed as argv, exactly as the remote path quotes them
+	if len(args) > 0 {
+		// #nosec G204 -- modules run the commands they manage
+		output, err := exec.Command(command, args...).CombinedOutput()
+		return string(output), err
+	}
+	// A single command line may use shell syntax (pipes, redirects, ...)
+	if strings.ContainsAny(command, "|&;<>()$`\\\"' \t\n*?[]{}") {
 		// #nosec G204 - This is intentional: we need shell execution for complex commands with pipes, redirects, etc.
-		cmd := exec.Command("sh", "-c", fullCmd)
+		cmd := exec.Command("sh", "-c", command)
 		output, err := cmd.CombinedOutput()
 		return string(output), err
 	}
