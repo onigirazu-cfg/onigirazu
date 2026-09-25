@@ -1,0 +1,12 @@
+plays:
+  - name: config
+    hosts: all
+    become: true
+    tasks:
+      - name: Set a key in a JSON file
+        config:
+          path: /etc/onigirazu-e2e.json
+          format: json
+          action: set
+          key: server.port
+          value: 8080

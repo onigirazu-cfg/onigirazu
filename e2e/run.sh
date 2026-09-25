@@ -119,7 +119,8 @@ INVENTORY="$WORK/inventory.yml"
 
 SSH_OPTS=(-i "$KEY" -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 -o LogLevel=ERROR)
 host_ip() { jq -r --arg h "$1" '.[$h]' <<<"$hosts_json"; }
-on_host() { local ip; ip="$(host_ip "$1")"; shift; ssh "${SSH_OPTS[@]}" "e2e@$ip" "$@"; }
+# Every remote call is bounded: one stuck case must not hold the whole run
+on_host() { local ip; ip="$(host_ip "$1")"; shift; timeout 600 ssh "${SSH_OPTS[@]}" "e2e@$ip" "$@"; }
 
 log "Waiting for SSH"
 for h in $(jq -r 'keys[]' <<<"$hosts_json"); do
@@ -144,7 +145,7 @@ apply() {  # case_dir -> writes task_end events to $WORK/events.jsonl
   local dir="$1" state
   state="$WORK/state-$(basename "$1")"
   # Run from the case's own directory so relative paths (src, script) work
-  (cd "$dir" && "$BIN" apply playbook.yml -i "$INVENTORY" --state "$state" \
+  (cd "$dir" && timeout 1200 "$BIN" apply playbook.yml -i "$INVENTORY" --state "$state" \
     --log-format json --no-color >"$WORK/apply.log" 2>&1) || true
   records | jq -c 'select(.fields.type == "task_end") | .fields' > "$WORK/events.jsonl" || true
 }

@@ -1,0 +1,17 @@
+plays:
+  - name: postgresql
+    hosts: all
+    become: true
+    become_user: postgres
+    tasks:
+      - name: Database
+        postgresql_db:
+          name: onigirazu_e2e
+          state: present
+      - name: User
+        postgresql_user:
+          name: onigirazu_e2e
+          password: "e2e-Passw0rd"
+          db: onigirazu_e2e
+          priv: ALL
+          state: present

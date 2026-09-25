@@ -1,0 +1,16 @@
+plays:
+  - name: docker
+    hosts: all
+    become: true
+    tasks:
+      - name: Image
+        docker_image:
+          name: alpine
+          tag: "3.20"
+          state: present
+      - name: Container
+        docker_container:
+          name: onigirazu-e2e
+          image: alpine:3.20
+          command: sleep 3600
+          state: present

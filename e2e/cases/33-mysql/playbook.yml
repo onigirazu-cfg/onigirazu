@@ -1,0 +1,15 @@
+plays:
+  - name: mysql
+    hosts: all
+    become: true
+    tasks:
+      - name: Database
+        mysql_db:
+          name: onigirazu_e2e
+          state: present
+      - name: User
+        mysql_user:
+          name: onigirazu_e2e
+          password: "e2e-Passw0rd"
+          priv: "onigirazu_e2e.*:ALL"
+          state: present

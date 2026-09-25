@@ -1,0 +1,24 @@
+plays:
+  - name: systemd
+    hosts: all
+    become: true
+    tasks:
+      - name: Unit file
+        systemd:
+          operation: unit
+          name: onigirazu-e2e.service
+          content: |
+            [Unit]
+            Description=onigirazu e2e
+            [Service]
+            Type=oneshot
+            ExecStart=/bin/true
+            RemainAfterExit=yes
+            [Install]
+            WantedBy=multi-user.target
+      - name: Started and enabled
+        systemd:
+          operation: service
+          name: onigirazu-e2e.service
+          state: started
+          enabled: true
