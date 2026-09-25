@@ -1,0 +1,20 @@
+plays:
+  - name: delegate_to, pre_tasks, post_tasks
+    hosts: all
+    become: true
+    pre_tasks:
+      - name: Pre
+        copy:
+          content: "pre {{ inventory_hostname }}\n"
+          dest: /root/onigirazu-e2e-pre
+    tasks:
+      - name: Every host writes on u2404
+        copy:
+          content: "from {{ inventory_hostname }}\n"
+          dest: "/root/onigirazu-e2e-delegated-{{ inventory_hostname }}"
+        delegate_to: u2404
+    post_tasks:
+      - name: Post
+        copy:
+          content: "post\n"
+          dest: /root/onigirazu-e2e-post

@@ -168,3 +168,37 @@ func TestNotify_OnlyWhenChanged(t *testing.T) {
 		}
 	}
 }
+
+func TestRunOnce_FirstHostOnlyAndRegisterShared(t *testing.T) {
+	engine, _, calls := perHostEngine(t, types.TaskResult{Success: true, Output: map[string]interface{}{"stdout": "v"}})
+	task := &types.Task{Name: "once", Module: "command", RunOnce: true, Register: "r"}
+	require.NoError(t, engine.executeTask(context.Background(), task, twoHosts(), map[string]interface{}{}, &types.PlayResult{}))
+	require.Len(t, *calls, 1)
+	assert.Equal(t, "h1", (*calls)[0]["host"])
+	assert.Equal(t, "v", engine.getHostVar("h2", "r").(map[string]interface{})["stdout"])
+}
+
+func TestDelegateTo_RunsOnDelegateWithOwnVariables(t *testing.T) {
+	engine, mockConfig, _, mockInventory, mockRegistry, mockTemplate := createTestEngine()
+	mockConfig.On("GetDryRun").Return(false)
+	mockTemplate.On("RenderTaskArgs", mock.Anything, mock.Anything, mock.Anything).Return(nil, nil)
+	mockTemplate.On("Render", mock.Anything, "{{ target }}", mock.Anything).Return("h2", nil)
+	mockInventory.hosts = twoHosts()
+	mockInventory.On("GetHosts", mock.Anything).Return(nil, nil)
+	var ranOn string
+	var sawHostname interface{}
+	mockRegistry.On("ExecuteTask", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) {
+			ranOn = args.Get(2).(types.Host).Name
+			sawHostname = args.Get(3).(map[string]interface{})["inventory_hostname"]
+		}).
+		Return(types.TaskResult{Success: true}, nil)
+
+	task := &types.Task{Name: "d", Module: "command", DelegateTo: "{{ target }}"}
+	host := twoHosts()[0]
+	play := &types.PlayResult{}
+	require.NoError(t, engine.executeTaskOnHost(context.Background(), task, &host, map[string]interface{}{"target": "h2"}, play))
+	assert.Equal(t, "h2", ranOn, "the module runs on the delegate")
+	assert.Equal(t, "h1", sawHostname, "with the variables of the original host")
+	assert.Equal(t, "h1", play.Hosts[0].Host, "and the result belongs to the original host")
+}
