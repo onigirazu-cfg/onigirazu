@@ -64,6 +64,24 @@ for pair in $E2E_IMAGES; do
 done
 images_json="${images_json%,}}"
 
+# The REST deploy call answers a bare 403; the SOAP clone of the same template
+# names the missing privilege and the object it was checked on.
+diagnose_permissions() {
+  log "Permission diagnosis (SOAP clone of the template)"
+  local first tpl name
+  first="$(jq -r 'to_entries[0].value' <<<"$images_json")"
+  tpl="$(govc find "/$TF_VAR_datacenter/vm" -type m -name "$first" | head -1)"
+  [ -n "$tpl" ] || { echo "template VM $first not found"; return; }
+  echo "template: $tpl"
+  govc vm.info -json "$tpl" | jq -r '(.virtualMachines // .VirtualMachines)[0] |
+    "template networks: \([.network[]?.value] | join(" ")), datastores: \([.datastore[]?.value] | join(" "))"' || true
+  name="tmp-e2e-onigirazu-$RUN_ID-diag"
+  govc vm.clone -vm "$tpl" -on=false -folder "/$TF_VAR_datacenter/vm/$TF_VAR_folder" \
+    -pool "/$TF_VAR_datacenter/host/$TF_VAR_cluster/Resources" -host "$TF_VAR_host" \
+    -ds "$TF_VAR_datastore" "$name" 2>&1 | tail -5 || true
+  govc vm.destroy "/$TF_VAR_datacenter/vm/$TF_VAR_folder/$name" >/dev/null 2>&1 || true
+}
+
 # --- build onigirazu and a one-time key ---------------------------------------
 log "Building onigirazu"
 (cd "$ROOT" && go build -o "$BIN" ./cmd/onigirazu)
@@ -76,7 +94,10 @@ terraform -chdir="$TF_DIR" init -input=false >/dev/null
 jq -n --arg run_id "$RUN_ID" --arg run_url "$RUN_URL" --argjson images "$images_json" \
   --arg public_key "$(cat "$KEY.pub")" \
   '{run_id: $run_id, run_url: $run_url, images: $images, public_key: $public_key}' > "$TFVARS"
-terraform -chdir="$TF_DIR" apply -auto-approve -input=false -var-file="$TFVARS" >/dev/null
+if ! terraform -chdir="$TF_DIR" apply -auto-approve -input=false -var-file="$TFVARS" >/dev/null; then
+  diagnose_permissions
+  die "terraform apply failed"
+fi
 hosts_json="$(terraform -chdir="$TF_DIR" output -json hosts)"
 # Actions logs of a public repository are public: keep internal addresses out
 if [ -n "${GITHUB_ACTIONS:-}" ]; then
