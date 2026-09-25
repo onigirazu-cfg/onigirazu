@@ -34,7 +34,7 @@ func (m *SetFactModule) Execute(ctx context.Context, host types.Host, args map[s
 		Module:    m.name,
 		Timestamp: startTime,
 		Success:   true,
-		Changed:   true, // Setting facts is always considered a change
+		Changed:   false, // facts live in the run, the host is not changed
 		Output:    make(map[string]interface{}),
 	}
 

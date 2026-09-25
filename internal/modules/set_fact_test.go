@@ -34,8 +34,8 @@ func TestSetFactModule_Execute_SingleFact(t *testing.T) {
 		t.Errorf("Expected success, got failure: %s", result.Error)
 	}
 
-	if !result.Changed {
-		t.Errorf("Expected changed=true, got false")
+	if result.Changed {
+		t.Errorf("Expected changed=false, set_fact does not change the host")
 	}
 
 	if val, ok := result.Output["my_fact"].(string); !ok || val != "my_value" {
@@ -78,8 +78,8 @@ func TestSetFactModule_Execute_MultipleFacts(t *testing.T) {
 		t.Errorf("Expected success, got failure: %s", result.Error)
 	}
 
-	if !result.Changed {
-		t.Errorf("Expected changed=true, got false")
+	if result.Changed {
+		t.Errorf("Expected changed=false, set_fact does not change the host")
 	}
 
 	// Check individual facts
