@@ -851,7 +851,8 @@ evaluated per host with that host's facts and registered results:</p>
 <code>| trim</code>. A list under <code>when</code> means all items must hold; <code>{{ }}</code> around
 the expression is optional. A condition that cannot be evaluated fails the task.</p>
 <h3>Variables</h3>
-<p>Use variables for dynamic configurations:</p>
+<p>Use variables for dynamic configurations. An undefined variable fails the task;
+use <code>{{ var | default("x") }}</code> or <code>when: var is defined</code> for optional ones:</p>
 <pre class="codehilite"><code class="language-yaml">vars:
   app_name: &quot;myapp&quot;
   app_version: &quot;1.0.0&quot;
