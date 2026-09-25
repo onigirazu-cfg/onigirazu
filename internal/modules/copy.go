@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/onigirazu-cfg/onigirazu/internal/executor"
 	sshpkg "github.com/onigirazu-cfg/onigirazu/internal/ssh"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
@@ -85,7 +84,7 @@ func (m *CopyModule) Execute(ctx context.Context, host types.Host, args map[stri
 			result.Output["source_mode"] = "remote"
 			sourceChecksum := "" // Will be calculated after reading from remote
 
-			return m.applyOwnership(ctx, host, args, dest, owner, group)(m.executeRemote(host, dest, nil, backup, force, remoteSrc, mode, owner, group, src, sourceChecksum, result))
+			return m.applyOwnership(ctx, host, args, dest, owner, group)(m.executeRemote(ctx, host, args, dest, nil, backup, force, remoteSrc, mode, src, sourceChecksum, result))
 		}
 
 		// Read from source file (local - either control machine or local host)
@@ -113,7 +112,7 @@ func (m *CopyModule) Execute(ctx context.Context, host types.Host, args map[stri
 	if isLocal {
 		return m.applyOwnership(ctx, host, args, dest, owner, group)(m.executeLocal(dest, sourceData, backup, force, mode, owner, group, sourceChecksum, result))
 	} else {
-		return m.applyOwnership(ctx, host, args, dest, owner, group)(m.executeRemote(host, dest, sourceData, backup, force, remoteSrc, mode, owner, group, "", sourceChecksum, result))
+		return m.applyOwnership(ctx, host, args, dest, owner, group)(m.executeRemote(ctx, host, args, dest, sourceData, backup, force, remoteSrc, mode, "", sourceChecksum, result))
 	}
 }
 
@@ -210,121 +209,82 @@ func (m *CopyModule) executeLocal(dest string, sourceData []byte, backup, force 
 }
 
 // executeRemote handles file copying on remote host via SFTP
-func (m *CopyModule) executeRemote(host types.Host, dest string, sourceData []byte, backup, force, remoteSrc bool, mode, owner, group, srcPath, sourceChecksum string, result types.TaskResult) (types.TaskResult, error) {
-	// Get SSH client from connection pool
+func (m *CopyModule) executeRemote(ctx context.Context, host types.Host, args map[string]interface{}, dest string, sourceData []byte, backup, force, remoteSrc bool, mode, srcPath, sourceChecksum string, result types.TaskResult) (types.TaskResult, error) {
+	fail := func(msg string, err error) (types.TaskResult, error) {
+		result.Failed = true
+		result.Error = msg
+		return result, err
+	}
+
 	pool := sshpkg.GetGlobalPool()
 	sshClient, err := pool.GetConnection(host)
 	if err != nil {
-		result.Failed = true
-		result.Error = fmt.Sprintf("failed to get SSH connection: %v", err)
-		return result, err
+		return fail(fmt.Sprintf("failed to get SSH connection: %v", err), err)
 	}
 	defer pool.ReleaseConnection(host)
 
 	// If remote_src is true, read source file from remote host
 	if remoteSrc && sourceData == nil && srcPath != "" {
-		var err error
 		sourceData, err = sshClient.ReadFile(srcPath)
 		if err != nil {
-			result.Failed = true
-			result.Error = fmt.Sprintf("failed to read remote source file %s: %v", srcPath, err)
-			return result, err
+			return fail(fmt.Sprintf("failed to read remote source file %s: %v", srcPath, err), err)
 		}
 		sourceChecksum = fmt.Sprintf("%x", sha256.Sum256(sourceData))
 		result.Output["checksum"] = sourceChecksum
 	}
 
-	// Check if destination exists on remote host
-	destExists := true
-	_, err = sshClient.StatFile(dest)
-	if err != nil {
-		if os.IsNotExist(err) {
-			destExists = false
-		} else {
-			result.Failed = true
-			result.Error = fmt.Sprintf("failed to stat remote destination %s: %v", dest, err)
-			return result, err
-		}
-	}
-
-	var destChecksum string
-	if destExists {
-		destData, err := sshClient.ReadFile(dest)
-		if err != nil {
-			result.Failed = true
-			result.Error = fmt.Sprintf("failed to read remote destination file %s: %v", dest, err)
-			return result, err
-		}
-		destChecksum = fmt.Sprintf("%x", sha256.Sum256(destData))
-		result.Output["dest_checksum"] = destChecksum
-	}
-
-	// Check if file needs to be copied
-	needsCopy := !destExists || sourceChecksum != destChecksum || force
-
-	if !needsCopy {
-		result.Success = true
-		result.Output["msg"] = "file already exists with correct content"
-		return result, nil
-	}
-
-	// Create backup if requested and file exists
-	if backup && destExists {
-		backupPath := dest + ".backup." + time.Now().Format("20060102-150405")
-		// Use command to create backup on remote host
-		exec, err := executor.NewCommandExecutor(host)
-		if err != nil {
-			result.Failed = true
-			result.Error = fmt.Sprintf("failed to create executor for backup: %v", err)
-			return result, err
-		}
-		defer exec.Close()
-
-		_, err = exec.Execute("cp", dest, backupPath)
-		if err != nil {
-			result.Failed = true
-			result.Error = fmt.Sprintf("failed to create backup: %v", err)
-			return result, err
-		}
-		result.Output["backup_file"] = backupPath
-	}
-
-	// Determine file mode
 	fileMode := os.FileMode(0644)
 	if mode != "" {
 		modeInt, err := strconv.ParseUint(mode, 8, 32)
 		if err != nil {
-			result.Output["mode_warning"] = fmt.Sprintf("invalid mode %s, using default 0644", mode)
-		} else {
-			fileMode = os.FileMode(modeInt)
+			return fail(fmt.Sprintf("invalid mode %s", mode), err)
 		}
+		fileMode = os.FileMode(modeInt)
 	}
 
-	// Write file to remote host using SFTP
-	if err := sshClient.WriteFile(dest, sourceData, fileMode); err != nil {
-		result.Failed = true
-		result.Error = fmt.Sprintf("failed to write remote file %s: %v", dest, err)
-		return result, err
+	// Stat and hash on the host, so root-only files work with become
+	current, err := statRemoteFile(ctx, host, args, dest)
+	if err != nil {
+		return fail(err.Error(), err)
+	}
+	if current.Exists {
+		result.Output["dest_checksum"] = current.SHA256
+	}
+
+	if current.Exists && current.SHA256 == sourceChecksum && !force {
+		result.Success = true
+		result.Output["msg"] = "file already exists with correct content"
+		if mode != "" && current.Mode.Perm() != fileMode.Perm() {
+			if _, err := runOnHost(ctx, host, args, "chmod", fmt.Sprintf("%04o", fileMode.Perm()), dest); err != nil {
+				return fail(fmt.Sprintf("failed to set mode on %s: %v", dest, err), err)
+			}
+			result.Changed = true
+			result.Output["msg"] = "mode updated"
+		}
+		return result, nil
+	}
+
+	if backup && current.Exists {
+		backupPath := dest + ".backup." + time.Now().Format("20060102-150405")
+		if _, err := runOnHost(ctx, host, args, "cp", "-p", dest, backupPath); err != nil {
+			return fail(fmt.Sprintf("failed to create backup: %v", err), err)
+		}
+		result.Output["backup_file"] = backupPath
+	}
+
+	if err := installRemoteFile(ctx, host, args, sshClient, dest, sourceData, fileMode, current); err != nil {
+		return fail(err.Error(), err)
 	}
 
 	result.Changed = true
 	result.Success = true
 	result.Output["dest"] = dest
 	result.Output["size"] = len(sourceData)
-
-	// Get final file info
-	if finalInfo, err := sshClient.StatFile(dest); err == nil {
-		result.Output["mode_actual"] = finalInfo.Mode().String()
-		result.Output["size_actual"] = finalInfo.Size()
-		result.Output["modified"] = finalInfo.ModTime()
-	}
-
-	if destExists {
+	if current.Exists {
 		result.Output["msg"] = "file updated"
 	} else {
 		result.Output["msg"] = "file created"
 	}
-
 	return result, nil
 }
 

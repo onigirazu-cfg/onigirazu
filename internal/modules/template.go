@@ -313,39 +313,40 @@ func (m *TemplateModule) executeRemote(ctx context.Context, host types.Host, cli
 		return result, fmt.Errorf("%s", result.Error)
 	}
 
-	needsUpdate := true
-	remoteFileInfo, statErr := client.StatFile(dest)
-	if statErr == nil {
-		remoteContent, err := client.ReadFile(dest)
-		if err != nil {
-			result.Error = fmt.Sprintf("failed to read remote file: %v", err)
-			result.Duration = time.Since(startTime)
-			return result, fmt.Errorf("%s", result.Error)
-		}
-		needsUpdate = fmt.Sprintf("%x", sha256.Sum256(remoteContent)) != newChecksum || force
+	// Stat and hash on the host, so root-only files work with become
+	current, err := statRemoteFile(ctx, host, args, dest)
+	if err != nil {
+		result.Error = err.Error()
+		result.Duration = time.Since(startTime)
+		return result, fmt.Errorf("%s", result.Error)
+	}
+	needsUpdate := !current.Exists || current.SHA256 != newChecksum || force
 
-		if backup && needsUpdate {
+	changed := false
+	if needsUpdate {
+		if backup && current.Exists {
 			backupPath := dest + ".backup." + time.Now().Format("20060102-150405")
-			if err := client.WriteFile(backupPath, remoteContent, remoteFileInfo.Mode()); err != nil {
+			if _, err := runOnHost(ctx, host, args, "cp", "-p", dest, backupPath); err != nil {
 				result.Error = fmt.Sprintf("failed to create backup on remote host: %v", err)
 				result.Duration = time.Since(startTime)
 				return result, fmt.Errorf("%s", result.Error)
 			}
 			result.Output["backup_file"] = backupPath
 		}
-	}
-
-	changed := false
-	if needsUpdate {
-		if err := client.WriteFile(dest, []byte(renderedContent), fileMode); err != nil {
-			result.Error = fmt.Sprintf("failed to write template to remote destination: %v", err)
+		// install(1) keeps the owner of an existing file and applies the mode
+		writeMode := fileMode
+		if _, modeSet := args["mode"]; !modeSet && current.Exists {
+			writeMode = current.Mode
+		}
+		if err := installRemoteFile(ctx, host, args, client, dest, []byte(renderedContent), writeMode, current); err != nil {
+			result.Error = err.Error()
 			result.Duration = time.Since(startTime)
 			return result, fmt.Errorf("%s", result.Error)
 		}
 		changed = true
-	} else if _, modeSet := args["mode"]; modeSet && remoteFileInfo.Mode().Perm() != fileMode.Perm() {
-		if err := client.Chmod(dest, fileMode); err != nil {
-			result.Error = err.Error()
+	} else if _, modeSet := args["mode"]; modeSet && current.Mode.Perm() != fileMode.Perm() {
+		if _, err := runOnHost(ctx, host, args, "chmod", fmt.Sprintf("%04o", fileMode.Perm()), dest); err != nil {
+			result.Error = fmt.Sprintf("failed to set mode: %v", err)
 			result.Duration = time.Since(startTime)
 			return result, fmt.Errorf("%s", result.Error)
 		}
