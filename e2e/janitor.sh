@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Deletes e2e VMs left behind by cancelled or crashed runs.
 # Only touches VMs directly inside the e2e folder whose name starts with the
-# e2e prefix and that were created more than TTL_HOURS ago.
+# e2e prefix and that were created more than TTL_HOURS ago. With GH_TOKEN and
+# GITHUB_REPOSITORY set, VMs of workflow runs still in progress are kept.
 #
 # Environment: GOVC_URL GOVC_USERNAME GOVC_PASSWORD GOVC_INSECURE,
 #   E2E_DATACENTER, E2E_FOLDER; optional TTL_HOURS (default 3), DRY_RUN=1
@@ -22,6 +23,14 @@ while IFS=$'\t' read -r name created; do
   ts="$(date -u -d "$created" +%s 2>/dev/null || date -u -j -f '%Y-%m-%dT%H:%M:%S' "${created%%.*}" +%s)"
   if [ "$ts" -gt "$cutoff" ]; then
     echo "keep   $name (created $created)"
+    continue
+  fi
+  # tmp-e2e-onigirazu-<run id>-<attempt>-...
+  run_id="${name#"$PREFIX"}" run_id="${run_id%%-*}"
+  if [ -n "${GH_TOKEN:-}" ] && [ -n "${GITHUB_REPOSITORY:-}" ] && [[ "$run_id" =~ ^[0-9]+$ ]] &&
+    [ "$(curl -fsS -H "Authorization: Bearer $GH_TOKEN" \
+      "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/runs/$run_id" | jq -r .status)" != completed ]; then
+    echo "keep   $name (run $run_id still in progress)"
     continue
   fi
   echo "delete $name (created $created)"

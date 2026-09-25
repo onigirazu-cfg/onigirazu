@@ -1,0 +1,9 @@
+plays:
+  - name: script
+    hosts: all
+    become: true
+    tasks:
+      - name: Run a local script on the host
+        script:
+          script: files/write-args.sh
+          args: "one 'two words'"

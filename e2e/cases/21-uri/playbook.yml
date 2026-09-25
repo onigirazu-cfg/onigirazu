@@ -1,0 +1,14 @@
+plays:
+  - name: uri
+    hosts: all
+    become: true
+    tasks:
+      - name: Request a server that only the host can reach
+        uri:
+          url: http://127.0.0.1:18765/hello.txt
+          status_code: 200
+        register: resp
+      - name: Save status and body
+        copy:
+          content: "{{ resp.status }} {{ resp.text }}"
+          dest: /root/onigirazu-e2e-uri

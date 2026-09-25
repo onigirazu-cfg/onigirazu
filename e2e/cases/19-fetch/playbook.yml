@@ -1,0 +1,9 @@
+plays:
+  - name: fetch
+    hosts: all
+    become: true
+    tasks:
+      - name: Fetch a root-only file
+        fetch:
+          src: /etc/shadow
+          dest: fetched/

@@ -1,0 +1,8 @@
+plays:
+  - name: reboot
+    hosts: all
+    become: true
+    tasks:
+      - name: Reboot and wait for the host
+        reboot:
+          msg: onigirazu e2e reboot

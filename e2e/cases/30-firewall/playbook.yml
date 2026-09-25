@@ -1,0 +1,11 @@
+plays:
+  - name: firewall
+    hosts: all
+    become: true
+    tasks:
+      - name: Allow a port (ufw stays in its current state)
+        firewall:
+          operation: rule
+          port: "18080"
+          protocol: tcp
+          action: allow

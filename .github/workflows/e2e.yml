@@ -15,20 +15,32 @@ on:
         required: false
         type: boolean
         default: false
+      purge_vms:
+        description: 'Only remove all e2e VMs now (VMs of runs in progress are kept); no tests'
+        required: false
+        type: boolean
+        default: false
   schedule:
     - cron: '0 5 * * *'   # e2e, after the 01:00 image rebuild
     - cron: '30 * * * *'  # janitor
 
 permissions:
   contents: read
+  actions: read   # janitor: keep VMs of runs in progress
 
 jobs:
   e2e:
-    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 5 * * *'
+    if: (github.event_name == 'workflow_dispatch' && !inputs.purge_vms) || github.event.schedule == '0 5 * * *'
+    name: e2e (shard ${{ matrix.shard }}/4)
     runs-on: [self-hosted, vsphere-e2e]
     timeout-minutes: 60
+    # Cases are split over four shards, each on its own pair of VMs
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     concurrency:
-      group: e2e-vsphere
+      group: e2e-${{ github.ref }}-${{ matrix.shard }}
       cancel-in-progress: false
     env:
       GOVC_VERSION: v0.56.0
@@ -40,7 +52,7 @@ jobs:
           go-version-file: go.mod
           cache: false
 
-      - uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@v4
         with:
           terraform_wrapper: false
 
@@ -69,6 +81,7 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           E2E_CASES: ${{ inputs.cases }}
           KEEP_VMS: ${{ inputs.keep_vms && '1' || '' }}
+          E2E_SHARD: ${{ matrix.shard }}/4
         run: e2e/run.sh
 
   janitor:
@@ -97,4 +110,6 @@ jobs:
           GOVC_INSECURE: '1'
           E2E_DATACENTER: ${{ secrets.E2E_DATACENTER }}
           E2E_FOLDER: ${{ secrets.E2E_FOLDER }}
+          TTL_HOURS: ${{ inputs.purge_vms && '0' || '3' }}
+          GH_TOKEN: ${{ github.token }}
         run: e2e/janitor.sh

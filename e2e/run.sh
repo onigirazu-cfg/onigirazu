@@ -9,7 +9,8 @@
 #   TF_VAR_datacenter TF_VAR_cluster TF_VAR_host TF_VAR_datastore
 #   TF_VAR_network TF_VAR_folder TF_VAR_library
 # Optional: E2E_IMAGES (default "u2404=ubuntu-24.04 u2604=ubuntu-26.04"),
-#   E2E_CASES (case directory names, default all), RUN_ID, RUN_URL, KEEP_VMS=1
+#   E2E_CASES (case directory names, default all), RUN_ID, RUN_URL, KEEP_VMS=1,
+#   E2E_SHARD=i/n (run every n-th case starting with the i-th, on own VMs)
 # TF_VAR_* come from the environment and are checked below
 # shellcheck disable=SC2154
 set -euo pipefail
@@ -20,10 +21,20 @@ TF_DIR="$HERE/terraform"
 WORK="$(mktemp -d)"
 BIN="$WORK/onigirazu"
 KEY="$WORK/id_e2e"
+INVENTORY="$WORK/inventory.yml"
 RESULTS="$WORK/results.tsv"
 TFVARS="$WORK/run.tfvars.json"
 
 RUN_ID="${RUN_ID:-local-$(date -u +%m%d%H%M)}"
+
+# Cases of this run; a shard takes every n-th of them on its own VMs
+cases="${E2E_CASES:-$(cd "$HERE/cases" && ls)}"
+if [ -n "${E2E_SHARD:-}" ]; then
+  shard="${E2E_SHARD%/*}" shards="${E2E_SHARD#*/}"
+  # shellcheck disable=SC2086 # one case per word
+  cases="$(printf '%s\n' $cases | sort | awk -v i="$shard" -v n="$shards" '(NR - 1) % n == i - 1')"
+  RUN_ID="$RUN_ID-s$shard"
+fi
 RUN_URL="${RUN_URL:-local run}"
 E2E_IMAGES="${E2E_IMAGES:-u2404=ubuntu-24.04 u2604=ubuntu-26.04}"
 
@@ -37,10 +48,19 @@ cleanup() {
     terraform -chdir="$TF_DIR" destroy -auto-approve -input=false -var-file="$TFVARS" >/dev/null ||
       echo "destroy failed; the janitor will remove the VMs"
   fi
+  if [ -n "${KEEP_VMS:-}" ] && [ -f "$KEY" ]; then
+    # Kept VMs are only reachable with this run's key; it stays on the runner
+    local keep="$HOME/.cache/onigirazu-e2e/$RUN_ID"
+    mkdir -p "$keep" && cp "$KEY" "$INVENTORY" "$keep/" 2>/dev/null && chmod 700 "$keep"
+    echo "kept VMs: key and inventory in $keep on the runner"
+  fi
   rm -rf "$WORK"
   exit "$rc"
 }
 trap cleanup EXIT
+
+[ -n "${cases//[[:space:]]/}" ] || { echo "no cases for shard ${E2E_SHARD:-}"; exit 0; }
+echo "cases: ${cases//$'\n'/ }"
 
 for v in vsphere_server vsphere_user vsphere_password datacenter cluster host datastore network folder library; do
   n="TF_VAR_$v"
@@ -108,7 +128,6 @@ if [ -n "${GITHUB_ACTIONS:-}" ]; then
 fi
 echo "$hosts_json" | jq -r 'to_entries[] | "\(.key)\t\(.value)"'
 
-INVENTORY="$WORK/inventory.yml"
 {
   echo "groups:"
   echo "  e2e:"
@@ -119,7 +138,8 @@ INVENTORY="$WORK/inventory.yml"
 
 SSH_OPTS=(-i "$KEY" -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 -o LogLevel=ERROR)
 host_ip() { jq -r --arg h "$1" '.[$h]' <<<"$hosts_json"; }
-on_host() { local ip; ip="$(host_ip "$1")"; shift; ssh "${SSH_OPTS[@]}" "e2e@$ip" "$@"; }
+# Every remote call is bounded: one stuck case must not hold the whole run
+on_host() { local ip; ip="$(host_ip "$1")"; shift; timeout 600 ssh "${SSH_OPTS[@]}" "e2e@$ip" "$@"; }
 
 log "Waiting for SSH"
 for h in $(jq -r 'keys[]' <<<"$hosts_json"); do
@@ -140,10 +160,11 @@ records() {
   jq -c -R 'split("{\"timestamp\"")[1:][] | ("{\"timestamp\"" + .) | sub("}[^}]*$"; "}") | fromjson?' "$WORK/apply.log"
 }
 
-apply() {  # case_dir label -> writes task_end events to $WORK/events.jsonl
+apply() {  # case_dir -> writes task_end events to $WORK/events.jsonl
   local dir="$1" state
   state="$WORK/state-$(basename "$1")"
-  (cd "$WORK" && "$BIN" apply "$dir/playbook.yml" -i "$INVENTORY" --state "$state" \
+  # Run from the case's own directory so relative paths (src, script) work
+  (cd "$dir" && timeout 1200 "$BIN" apply playbook.yml -i "$INVENTORY" --state "$state" \
     --log-format json --no-color >"$WORK/apply.log" 2>&1) || true
   records | jq -c 'select(.fields.type == "task_end") | .fields' > "$WORK/events.jsonl" || true
 }
@@ -156,19 +177,33 @@ apply_errors() {
 
 record() { printf '%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4" >> "$RESULTS"; echo "  [$3] $1 / $2 ${4:+- $4}"; }
 
-cases="${E2E_CASES:-$(cd "$HERE/cases" && ls)}"
 for c in $cases; do
-  dir="$HERE/cases/$c"
-  [ -f "$dir/playbook.yml" ] || continue
+  [ -f "$HERE/cases/$c/playbook.yml" ] || continue
+  # Work on a copy: cases may write next to their playbook (fetch)
+  dir="$WORK/cases/$c"
+  mkdir -p "$WORK/cases" && cp -R "$HERE/cases/$c" "$dir"
   log "Case $c"
 
   if [ -f "$dir/setup.sh" ]; then
     for h in $(jq -r 'keys[]' <<<"$hosts_json"); do
-      on_host "$h" 'sudo -n bash -s' < "$dir/setup.sh" >/dev/null 2>&1 || echo "  setup failed on $h"
+      out="$(cat "$HERE/setup-lib.sh" "$dir/setup.sh" | on_host "$h" 'sudo -n bash -s' 2>&1)" ||
+        echo "  setup failed on $h: $(echo "$out" | tail -3 | paste -sd' ' -)"
     done
   fi
 
   apply "$dir"
+
+  if [ -f "$dir/EXPECT_FAIL" ]; then
+    for h in $(jq -r 'keys[]' <<<"$hosts_json"); do
+      if jq -e --arg h "$h" 'select(.host == $h and .success != true)' "$WORK/events.jsonl" >/dev/null; then
+        record "$c" "$h" PASS "failed as expected"
+      else
+        record "$c" "$h" FAIL "expected the apply to fail"
+      fi
+    done
+    continue
+  fi
+
   passed=""
   for h in $(jq -r 'keys[]' <<<"$hosts_json"); do
     failed="$(jq -r --arg h "$h" 'select(.host == $h and .success != true) | .task' "$WORK/events.jsonl")"
@@ -184,6 +219,9 @@ for c in $cases; do
     fi
     if [ -f "$dir/verify.sh" ] && ! out="$(on_host "$h" 'sudo -n bash -s' < "$dir/verify.sh" 2>&1)"; then
       record "$c" "$h" FAIL "verify: $(echo "$out" | tail -1)"; continue
+    fi
+    if [ -f "$dir/verify-local.sh" ] && ! out="$(cd "$dir" && HOST="$h" bash verify-local.sh 2>&1)"; then
+      record "$c" "$h" FAIL "verify-local: $(echo "$out" | tail -1)"; continue
     fi
     record "$c" "$h" PASS "apply+verify"
     passed="$passed $h"

@@ -1,0 +1,13 @@
+plays:
+  - name: wait_for
+    hosts: all
+    tasks:
+      - name: SSH port is open
+        wait_for:
+          host: 127.0.0.1
+          port: 22
+          timeout: 10
+      - name: A file exists
+        wait_for:
+          path: /etc/hostname
+          timeout: 10

@@ -1,0 +1,7 @@
+plays:
+  - name: pause
+    hosts: all
+    tasks:
+      - name: Short pause
+        pause:
+          seconds: 1

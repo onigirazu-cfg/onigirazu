@@ -1,0 +1,8 @@
+plays:
+  - name: shell
+    hosts: all
+    become: true
+    tasks:
+      - name: Shell with expansion and redirect
+        shell:
+          cmd: "echo $((6 * 7)) > /root/onigirazu-e2e-shell"

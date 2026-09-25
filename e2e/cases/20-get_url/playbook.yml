@@ -1,0 +1,10 @@
+plays:
+  - name: get_url
+    hosts: all
+    become: true
+    tasks:
+      - name: Download
+        get_url:
+          url: https://raw.githubusercontent.com/onigirazu-cfg/onigirazu/main/LICENSE
+          dest: /root/onigirazu-e2e-LICENSE
+          mode: "0600"

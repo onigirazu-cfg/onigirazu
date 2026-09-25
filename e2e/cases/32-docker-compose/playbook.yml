@@ -1,0 +1,18 @@
+plays:
+  - name: docker compose
+    hosts: all
+    become: true
+    tasks:
+      - name: Compose file
+        copy:
+          dest: /opt/onigirazu-e2e-compose/compose.yml
+          content: |
+            services:
+              sleeper:
+                image: alpine:3.20
+                command: sleep 3600
+      - name: Project up
+        docker_compose:
+          project_dir: /opt/onigirazu-e2e-compose
+          project_name: onigirazu-e2e
+          state: present

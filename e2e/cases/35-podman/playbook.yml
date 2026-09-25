@@ -1,0 +1,11 @@
+plays:
+  - name: podman
+    hosts: all
+    become: true
+    tasks:
+      - name: Container
+        podman:
+          name: onigirazu-e2e-podman
+          image: docker.io/library/alpine:3.20
+          command: sleep 3600
+          state: present

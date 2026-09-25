@@ -1,0 +1,10 @@
+plays:
+  - name: package
+    hosts: all
+    become: true
+    tasks:
+      - name: Generic package module
+        package:
+          name: cowsay
+          state: present
+          update_cache: true

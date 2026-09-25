@@ -1,0 +1,10 @@
+plays:
+  - name: git
+    hosts: all
+    become: true
+    tasks:
+      - name: Clone at a tag
+        git:
+          repo: https://github.com/onigirazu-cfg/onigirazu.git
+          dest: /opt/onigirazu-e2e-src
+          version: v1.63.1
