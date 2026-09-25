@@ -21,6 +21,7 @@ WORK="$(mktemp -d)"
 BIN="$WORK/onigirazu"
 KEY="$WORK/id_e2e"
 RESULTS="$WORK/results.tsv"
+TFVARS="$WORK/run.tfvars.json"
 
 RUN_ID="${RUN_ID:-local-$(date -u +%m%d%H%M)}"
 RUN_URL="${RUN_URL:-local run}"
@@ -33,7 +34,8 @@ cleanup() {
   local rc=$?
   if [ -z "${KEEP_VMS:-}" ] && [ -f "$TF_DIR/terraform.tfstate" ]; then
     log "Destroying VMs"
-    terraform -chdir="$TF_DIR" destroy -auto-approve -input=false >/dev/null || echo "destroy failed; the janitor will remove the VMs"
+    terraform -chdir="$TF_DIR" destroy -auto-approve -input=false -var-file="$TFVARS" >/dev/null ||
+      echo "destroy failed; the janitor will remove the VMs"
   fi
   rm -rf "$WORK"
   exit "$rc"
@@ -70,9 +72,11 @@ ssh-keygen -q -t ed25519 -N '' -C "onigirazu-e2e-$RUN_ID" -f "$KEY"
 # --- create the VMs ------------------------------------------------------------
 log "Creating VMs (run $RUN_ID)"
 terraform -chdir="$TF_DIR" init -input=false >/dev/null
-terraform -chdir="$TF_DIR" apply -auto-approve -input=false \
-  -var "run_id=$RUN_ID" -var "run_url=$RUN_URL" \
-  -var "images=$images_json" -var "public_key=$(cat "$KEY.pub")" >/dev/null
+# One vars file for apply and destroy
+jq -n --arg run_id "$RUN_ID" --arg run_url "$RUN_URL" --argjson images "$images_json" \
+  --arg public_key "$(cat "$KEY.pub")" \
+  '{run_id: $run_id, run_url: $run_url, images: $images, public_key: $public_key}' > "$TFVARS"
+terraform -chdir="$TF_DIR" apply -auto-approve -input=false -var-file="$TFVARS" >/dev/null
 hosts_json="$(terraform -chdir="$TF_DIR" output -json hosts)"
 # Actions logs of a public repository are public: keep internal addresses out
 if [ -n "${GITHUB_ACTIONS:-}" ]; then
