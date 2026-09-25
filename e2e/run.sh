@@ -133,21 +133,24 @@ done
 # setup.sh (run on the host with sudo before the first apply) and
 # NOT_IDEMPOTENT marker. Steps: apply, verify, apply again (nothing changed),
 # verify again.
+# JSON log records of the last apply. The progress bar shares stdout and can
+# sit between two records on one line, so split at every record start and cut
+# what follows the closing brace.
+records() {
+  jq -c -R 'split("{\"timestamp\"")[1:][] | ("{\"timestamp\"" + .) | sub("}[^}]*$"; "}") | fromjson?' "$WORK/apply.log"
+}
+
 apply() {  # case_dir label -> writes task_end events to $WORK/events.jsonl
   local dir="$1" state
   state="$WORK/state-$(basename "$1")"
   (cd "$WORK" && "$BIN" apply "$dir/playbook.yml" -i "$INVENTORY" --state "$state" \
     --log-format json --no-color >"$WORK/apply.log" 2>&1) || true
-  # The progress bar shares stdout with the JSON log and can precede an event
-  # on the same line, so cut every line at the start of its JSON object
-  grep -o '{"timestamp".*' "$WORK/apply.log" |
-    jq -c -R 'fromjson? | select(.fields.type == "task_end") | .fields' > "$WORK/events.jsonl" || true
+  records | jq -c 'select(.fields.type == "task_end") | .fields' > "$WORK/events.jsonl" || true
 }
 
 # First error lines of the last apply, for the job log
 apply_errors() {
-  grep -o '{"timestamp".*' "$WORK/apply.log" |
-    jq -r -R 'fromjson? | select(.level == "ERROR" or .level == "WARN") | "      \(.level): \(.message)"' |
+  records | jq -r 'select(.level == "ERROR" or .level == "WARN") | "      \(.level): \(.message)"' |
     cut -c1-400 | head -"${1:-4}"
 }
 
@@ -171,7 +174,7 @@ for c in $cases; do
     failed="$(jq -r --arg h "$h" 'select(.host == $h and .success != true) | .task' "$WORK/events.jsonl")"
     ran="$(jq -r --arg h "$h" 'select(.host == $h) | .task' "$WORK/events.jsonl" | wc -l | tr -d ' ')"
     if [ "$ran" = 0 ]; then
-      record "$c" "$h" FAIL "no task ran: $(grep -o '{"timestamp".*' "$WORK/apply.log" | jq -r -R 'fromjson? | select(.level == "ERROR") | .message' | head -1 | cut -c1-200)"
+      record "$c" "$h" FAIL "no task ran: $(records | jq -r 'select(.level == "ERROR") | .message' | head -1 | cut -c1-200)"
       continue
     fi
     if [ -n "$failed" ]; then
