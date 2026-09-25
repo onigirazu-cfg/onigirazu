@@ -547,6 +547,7 @@ type Play struct {
 	Name              string                 `yaml:"name"`
 	Hosts             string                 `yaml:"hosts"`
 	Vars              map[string]interface{} `yaml:"vars,omitempty"`
+	VarsFiles         []string               `yaml:"vars_files,omitempty"`
 	Tasks             []Task                 `yaml:"tasks"`
 	PreTasks          []Task                 `yaml:"pre_tasks,omitempty"`
 	PostTasks         []Task                 `yaml:"post_tasks,omitempty"`
@@ -980,6 +981,26 @@ type RoleReference struct {
 	Path string                 `yaml:"path"`
 	Tags []string               `yaml:"tags"`
 	When string                 `yaml:"when,omitempty"` // Conditional execution
+}
+
+// UnmarshalYAML accepts hosts as a pattern string or as a list of patterns
+// (joined with ",", which the inventory reads as a union)
+func (p *Play) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind == yaml.MappingNode {
+		for i := 0; i+1 < len(value.Content); i += 2 {
+			key, val := value.Content[i], value.Content[i+1]
+			if key.Value != "hosts" || val.Kind != yaml.SequenceNode {
+				continue
+			}
+			parts := make([]string, 0, len(val.Content))
+			for _, item := range val.Content {
+				parts = append(parts, item.Value)
+			}
+			value.Content[i+1] = &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: strings.Join(parts, ",")}
+		}
+	}
+	type plain Play
+	return value.Decode((*plain)(p))
 }
 
 // UnmarshalYAML accepts the Ansible forms of a role reference: a bare name

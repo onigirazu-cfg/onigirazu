@@ -32,3 +32,11 @@ func TestRoleReference_AnsibleForms(t *testing.T) {
 	assert.Equal(t, "db", roles[2].Name)
 	assert.Equal(t, "pg", roles[2].Vars["engine"])
 }
+
+func TestPlay_HostsStringOrList(t *testing.T) {
+	var s, l Play
+	require.NoError(t, yaml.Unmarshal([]byte("name: a\nhosts: web\ntasks: []\n"), &s))
+	require.NoError(t, yaml.Unmarshal([]byte("name: b\nhosts: [web, db]\ntasks: []\n"), &l))
+	assert.Equal(t, "web", s.Hosts)
+	assert.Equal(t, "web,db", l.Hosts)
+}

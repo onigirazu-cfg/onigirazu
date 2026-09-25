@@ -78,3 +78,33 @@ func TestGroupAndHostVarsFiles(t *testing.T) {
 	assert.Equal(t, "all", other["level"])
 	assert.Nil(t, other["from_web"], "variables of a sibling group do not leak")
 }
+
+func TestHostPatterns_UnionAndExclusion(t *testing.T) {
+	dir := t.TempDir()
+	writeFiles(t, dir, map[string]string{"hosts.yml": `groups:
+  web:
+    hosts: {w1: {}, w2: {}}
+  db:
+    hosts: {d1: {}, w2: {}}
+`})
+	p := parser.NewEnhancedParser(nil, &mockLogger{})
+	inv, err := NewMultiSourceLoader(p, &mockLogger{}, newMockCache(), 0).
+		LoadFromMultipleSources(context.Background(), []string{filepath.Join(dir, "hosts.yml")})
+	require.NoError(t, err)
+	m := NewManager(p, &mockLogger{}, newMockCache())
+	require.NoError(t, m.SetInventory(inv))
+
+	names := func(pattern string) []string {
+		hosts, err := m.GetHosts(pattern)
+		require.NoError(t, err)
+		var out []string
+		for _, h := range hosts {
+			out = append(out, h.Name)
+		}
+		return out
+	}
+	assert.ElementsMatch(t, []string{"w1", "w2", "d1"}, names("web,db"))
+	assert.ElementsMatch(t, []string{"w1", "w2", "d1"}, names("web:db"))
+	assert.ElementsMatch(t, []string{"w1"}, names("web:!db"))
+	assert.ElementsMatch(t, []string{"d1", "w1"}, names("all:!w2"))
+}

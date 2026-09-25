@@ -132,29 +132,59 @@ func (m *Manager) GetHosts(pattern string) ([]types.Host, error) {
 		return nil, fmt.Errorf("no inventory loaded")
 	}
 
-	hosts := make([]types.Host, 0)
-
-	// Handle special patterns
-	switch pattern {
-	case "all":
-		hosts = m.getAllHosts()
-	case "localhost":
-		hosts = append(hosts, m.getLocalhostHost())
-	default:
-		// Check if pattern is a group name
-		if group, exists := m.inventory.Groups[pattern]; exists {
-			hosts = m.getGroupHosts(group, pattern)
-		} else {
-			// Pattern matching for host names
-			hosts = m.getHostsByPattern(pattern)
-		}
-	}
+	hosts := m.hostsForPattern(pattern)
 
 	// Apply filters
 	filteredHosts := m.applyHostFilters(hosts)
 
 	m.logger.Debug("Found %d hosts matching pattern '%s'", len(filteredHosts), pattern)
 	return filteredHosts, nil
+}
+
+// hostsForPattern resolves a host pattern: "all", "localhost", a group, a
+// host name or wildcard, or several of them joined with "," or ":" (union);
+// a part starting with "!" removes its hosts, as in Ansible
+func (m *Manager) hostsForPattern(pattern string) []types.Host {
+	parts := strings.FieldsFunc(pattern, func(r rune) bool { return r == ',' || r == ':' })
+	if len(parts) > 1 {
+		var hosts []types.Host
+		seen := make(map[string]bool)
+		excluded := make(map[string]bool)
+		for _, part := range parts {
+			part = strings.TrimSpace(part)
+			if strings.HasPrefix(part, "!") {
+				for _, h := range m.hostsForPattern(strings.TrimPrefix(part, "!")) {
+					excluded[h.Name] = true
+				}
+				continue
+			}
+			for _, h := range m.hostsForPattern(part) {
+				if !seen[h.Name] {
+					seen[h.Name] = true
+					hosts = append(hosts, h)
+				}
+			}
+		}
+		kept := hosts[:0]
+		for _, h := range hosts {
+			if !excluded[h.Name] {
+				kept = append(kept, h)
+			}
+		}
+		return kept
+	}
+
+	pattern = strings.TrimSpace(pattern)
+	switch pattern {
+	case "all":
+		return m.getAllHosts()
+	case "localhost":
+		return []types.Host{m.getLocalhostHost()}
+	}
+	if group, exists := m.inventory.Groups[pattern]; exists {
+		return m.getGroupHosts(group, pattern)
+	}
+	return m.getHostsByPattern(pattern)
 }
 
 // GetGroups returns all groups matching the given pattern
