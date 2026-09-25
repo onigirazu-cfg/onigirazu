@@ -2,8 +2,10 @@ plays:
   - name: yum
     hosts: all
     become: true
+    gather_facts: true
     tasks:
       - name: Install a package
         yum:
           name: tree
           state: present
+        when: onigirazu_os_family == "RedHat"

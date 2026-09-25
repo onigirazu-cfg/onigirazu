@@ -1,7 +1,8 @@
 plays:
-  - name: set_fact, register, stat, debug
+  - name: gathered facts, set_fact, register, stat, debug
     hosts: all
     become: true
+    gather_facts: true
     tasks:
       - name: Stat a file
         stat:
@@ -17,3 +18,7 @@ plays:
         copy:
           content: "{{ st.stat.exists }} {{ st.stat.isreg }} {{ color }}\n"
           dest: /root/onigirazu-e2e-facts
+      - name: Write gathered facts
+        copy:
+          content: "{{ onigirazu_distribution }} {{ onigirazu_distribution_version }} {{ onigirazu_os_family }}\n"
+          dest: /root/onigirazu-e2e-gathered
