@@ -14,7 +14,7 @@ permissions:
   packages: write
   id-token: write
   security-events: write
-  actions: read
+  actions: write
 
 env:
   GO_VERSION: '1.26.6'
@@ -253,13 +253,9 @@ jobs:
         echo "tag=$TAG" >> $GITHUB_OUTPUT
         echo "Tag: $TAG"
 
+    # workflow_run does not fire for runs started with GITHUB_TOKEN, so the
+    # gate starts the Release workflow itself (tests already ran here)
     - name: Trigger release workflow
-      run: |
-        echo "✅ All quality checks passed!"
-        echo "🚀 Release workflow will be triggered automatically by the tag push."
-        echo ""
-        echo "Tag: ${{ steps.tag-info.outputs.tag }}"
-        echo "Commit: ${{ github.sha }}"
-        echo ""
-        echo "Monitor the release at:"
-        echo "https://github.com/${{ github.repository }}/actions/workflows/release.yml"
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: gh workflow run release.yml -f tag=${{ steps.tag-info.outputs.tag }} -f skip_checks=true
