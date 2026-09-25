@@ -3,7 +3,6 @@ package modules
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -110,31 +109,17 @@ func (m *BlockinfileModule) Execute(ctx context.Context, host types.Host, args m
 		}
 	}
 
-	// Read file content
-	fileContent := ""
-	fileExists := true
-	if data, err := os.ReadFile(filePath); err == nil {
-		fileContent = string(data)
-	} else if os.IsNotExist(err) {
-		fileExists = false
-	} else {
+	// Read the file on the target host
+	data, fileExists, err := readHostFile(ctx, host, args, filePath)
+	if err != nil {
 		result.Success = false
-		result.Error = fmt.Sprintf("failed to read file: %v", err)
+		result.Error = err.Error()
 		result.Duration = time.Since(startTime)
 		return result, nil
 	}
-
-	// Create backup if requested
-	if backup && fileExists {
-		backupPath := filePath + ".bak"
-		if err := os.WriteFile(backupPath, []byte(fileContent), 0644); err != nil {
-			result.Success = false
-			result.Error = fmt.Sprintf("failed to create backup: %v", err)
-			result.Duration = time.Since(startTime)
-			return result, nil
-		}
-		result.Output["backup"] = backupPath
-	}
+	fileContent := string(data)
+	// A YAML "|" block ends with a newline; the markers add their own
+	block = strings.TrimRight(block, "\n")
 
 	// Create marker patterns
 	markerBegin := strings.ReplaceAll(marker, "{mark}", "BEGIN")
@@ -155,7 +140,7 @@ func (m *BlockinfileModule) Execute(ctx context.Context, host types.Host, args m
 
 			if beginIdx != nil && endIdx != nil && beginIdx[0] < endIdx[0] {
 				// Replace content between markers
-				newBlockContent := fmt.Sprintf("%s\n%s\n%s\n", markerBegin, block, markerEnd)
+				newBlockContent := fmt.Sprintf("%s\n%s\n%s", markerBegin, block, markerEnd)
 				newContent = fileContent[:beginIdx[0]] + newBlockContent + fileContent[endIdx[1]:]
 
 				if newContent != fileContent {
@@ -205,20 +190,23 @@ func (m *BlockinfileModule) Execute(ctx context.Context, host types.Host, args m
 		}
 	}
 
-	// Write file if changed
-	if result.Changed {
-		// Ensure parent directory exists
-		dir := filepath.Dir(filePath)
-		if err := os.MkdirAll(dir, 0755); err != nil {
-			result.Success = false
-			result.Error = fmt.Sprintf("failed to create directory: %v", err)
-			result.Duration = time.Since(startTime)
-			return result, nil
-		}
+	result.Changed = newContent != fileContent
 
-		if err := os.WriteFile(filePath, []byte(newContent), 0644); err != nil {
+	// Write on the target host only if something changed
+	if result.Changed {
+		if backup && fileExists {
+			backupPath := filePath + ".bak"
+			if err := writeHostFile(ctx, host, args, backupPath, data, 0); err != nil {
+				result.Success = false
+				result.Error = fmt.Sprintf("failed to create backup: %v", err)
+				result.Duration = time.Since(startTime)
+				return result, nil
+			}
+			result.Output["backup"] = backupPath
+		}
+		if err := writeHostFile(ctx, host, args, filePath, []byte(newContent), 0); err != nil {
 			result.Success = false
-			result.Error = fmt.Sprintf("failed to write file: %v", err)
+			result.Error = err.Error()
 			result.Duration = time.Since(startTime)
 			return result, nil
 		}

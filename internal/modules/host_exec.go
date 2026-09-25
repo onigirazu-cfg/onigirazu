@@ -2,6 +2,7 @@ package modules
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -144,4 +145,61 @@ func installRemoteFile(ctx context.Context, host types.Host, args map[string]int
 		return fmt.Errorf("failed to write %s: %w", path, err)
 	}
 	return nil
+}
+
+// readHostFile returns the content of path on the host (with become), and
+// whether it exists. Content travels base64-encoded, so any bytes survive.
+func readHostFile(ctx context.Context, host types.Host, args map[string]interface{}, path string) ([]byte, bool, error) {
+	q := shellQuote(path)
+	out, err := runShellOnHost(ctx, host, args, fmt.Sprintf(
+		"if [ -e %s ]; then printf 'present:'; base64 < %s | tr -d '\\n'; else printf absent; fi", q, q))
+	if err != nil {
+		return nil, false, fmt.Errorf("failed to read %s: %w", path, err)
+	}
+	out = strings.TrimSpace(out)
+	if out == "absent" {
+		return nil, false, nil
+	}
+	encoded, ok := strings.CutPrefix(out, "present:")
+	if !ok {
+		return nil, false, fmt.Errorf("unexpected output reading %s", path)
+	}
+	data, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		return nil, false, fmt.Errorf("failed to decode %s: %w", path, err)
+	}
+	return data, true, nil
+}
+
+// writeHostFile writes data to path on the host (with become) through a
+// temporary file and install(1). mode 0 keeps the mode of an existing file
+// (0644 for a new one); the owner of an existing file is kept.
+func writeHostFile(ctx context.Context, host types.Host, args map[string]interface{}, path string, data []byte, mode os.FileMode) error {
+	q := shellQuote(path)
+	script := fmt.Sprintf(`set -e
+p=%s
+m=%s
+if [ -e "$p" ]; then
+  [ -n "$m" ] || m=$(stat -c %%a "$p" 2>/dev/null || stat -f %%Lp "$p")
+  o=$(stat -c %%U "$p" 2>/dev/null || stat -f %%Su "$p")
+  g=$(stat -c %%G "$p" 2>/dev/null || stat -f %%Sg "$p")
+fi
+[ -n "$m" ] || m=0644
+mkdir -p "$(dirname "$p")"
+t=$(mktemp)
+trap 'rm -f "$t"' EXIT
+printf '%%s' %s | base64 -d > "$t"
+if [ -n "$o" ]; then install -m "$m" -o "$o" -g "$g" "$t" "$p"; else install -m "$m" "$t" "$p"; fi`,
+		q, shellQuote(modeString(mode)), shellQuote(base64.StdEncoding.EncodeToString(data)))
+	if _, err := runShellOnHost(ctx, host, args, script); err != nil {
+		return fmt.Errorf("failed to write %s: %w", path, err)
+	}
+	return nil
+}
+
+func modeString(mode os.FileMode) string {
+	if mode == 0 {
+		return ""
+	}
+	return fmt.Sprintf("%04o", mode.Perm())
 }

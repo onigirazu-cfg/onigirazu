@@ -276,55 +276,6 @@ func TestFetchModule_ValidateParameter(t *testing.T) {
 	}
 }
 
-// TestCalculateMD5 tests the calculateMD5 helper function
-func TestCalculateMD5(t *testing.T) {
-	// Create a temporary file with known content
-	tmpFile, err := os.CreateTemp("", "fetch-test-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp file: %v", err)
-	}
-	defer os.Remove(tmpFile.Name())
-
-	content := []byte("test content for checksum")
-	if _, err := tmpFile.Write(content); err != nil {
-		t.Fatalf("Failed to write to temp file: %v", err)
-	}
-	tmpFile.Close()
-
-	// Calculate checksum
-	checksum, err := calculateMD5(tmpFile.Name())
-	if err != nil {
-		t.Errorf("calculateMD5() error = %v", err)
-	}
-
-	if checksum == "" {
-		t.Error("calculateMD5() returned empty checksum")
-	}
-
-	// Verify checksum is hex string (SHA256 should be 64 characters)
-	if len(checksum) != 64 {
-		t.Errorf("calculateMD5() checksum length = %d, want 64 (SHA256)", len(checksum))
-	}
-
-	// Calculate again to verify consistency
-	checksum2, err := calculateMD5(tmpFile.Name())
-	if err != nil {
-		t.Errorf("calculateMD5() second call error = %v", err)
-	}
-
-	if checksum != checksum2 {
-		t.Errorf("calculateMD5() inconsistent results: %v != %v", checksum, checksum2)
-	}
-}
-
-// TestCalculateMD5_NonExistentFile tests calculateMD5 with non-existent file
-func TestCalculateMD5_NonExistentFile(t *testing.T) {
-	_, err := calculateMD5("/nonexistent/file/path.txt")
-	if err == nil {
-		t.Error("calculateMD5() expected error for non-existent file")
-	}
-}
-
 // TestFetchModule_ResultStructure tests the result structure
 func TestFetchModule_ResultStructure(t *testing.T) {
 	module := NewFetchModule()
@@ -426,6 +377,8 @@ func TestFetchModule_NewFetchModule(t *testing.T) {
 }
 
 // BenchmarkFetchModule_Validate benchmarks the Validate method
+
+// BenchmarkFetchModule_Validate benchmarks the Validate method
 func BenchmarkFetchModule_Validate(b *testing.B) {
 	module := NewFetchModule()
 	args := map[string]interface{}{
@@ -439,31 +392,6 @@ func BenchmarkFetchModule_Validate(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_ = module.Validate(args)
-	}
-}
-
-// BenchmarkCalculateMD5 benchmarks the calculateMD5 function
-func BenchmarkCalculateMD5(b *testing.B) {
-	// Create a temporary file
-	tmpFile, err := os.CreateTemp("", "fetch-bench-*")
-	if err != nil {
-		b.Fatalf("Failed to create temp file: %v", err)
-	}
-	defer os.Remove(tmpFile.Name())
-
-	// Write 1MB of data
-	data := make([]byte, 1024*1024)
-	for i := range data {
-		data[i] = byte(i % 256)
-	}
-	if _, err := tmpFile.Write(data); err != nil {
-		b.Fatalf("Failed to write to temp file: %v", err)
-	}
-	tmpFile.Close()
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, _ = calculateMD5(tmpFile.Name())
 	}
 }
 
@@ -484,5 +412,31 @@ func BenchmarkFetchModule_Execute(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_, _ = module.Execute(ctx, host, args)
+	}
+}
+
+func TestFetchModule_LocalRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src.bin")
+	payload := []byte{0, 1, 2, 255, '\n', 'x'}
+	if err := os.WriteFile(src, payload, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	dest := filepath.Join(dir, "out") + "/"
+	host := types.Host{Name: "localhost", Address: "127.0.0.1"}
+	args := map[string]interface{}{"src": src, "dest": dest, "flat": true}
+
+	result, err := NewFetchModule().Execute(context.Background(), host, args)
+	if err != nil || !result.Success || !result.Changed {
+		t.Fatalf("first fetch: err=%v success=%v changed=%v error=%s", err, result.Success, result.Changed, result.Error)
+	}
+	got, err := os.ReadFile(filepath.Join(dir, "out", "src.bin"))
+	if err != nil || string(got) != string(payload) {
+		t.Fatalf("fetched content differs: %v %q", err, got)
+	}
+
+	result, err = NewFetchModule().Execute(context.Background(), host, args)
+	if err != nil || !result.Success || result.Changed {
+		t.Errorf("second fetch should change nothing: err=%v changed=%v error=%s", err, result.Changed, result.Error)
 	}
 }

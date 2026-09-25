@@ -3,15 +3,12 @@ package modules
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
-	"github.com/onigirazu-cfg/onigirazu/internal/executor"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
@@ -78,153 +75,67 @@ func (m *FetchModule) Execute(ctx context.Context, host types.Host, args map[str
 	failOnMissing := getBoolArg(args, "fail_on_missing", true)
 	validate := getBoolArg(args, "validate", true)
 
-	// Initialize executor
-	exec, err := executor.NewCommandExecutor(host)
+	// Read on the host (base64, with become): root-only and binary files work
+	data, exists, err := readHostFile(ctx, host, args, src)
 	if err != nil {
 		result.Failed = true
-		result.Error = fmt.Sprintf("Failed to create executor: %v", err)
+		result.Error = err.Error()
 		return result, err
 	}
-	defer exec.Close()
-
-	// Check if source file exists on remote host
-	checkCmd := fmt.Sprintf("test -f %s && echo 'exists' || echo 'not_exists'", src)
-	checkOutput, err := exec.ExecuteWithContext(ctx, "sh", "-c", checkCmd)
-
-	if err != nil {
-		result.Failed = true
-		result.Error = fmt.Sprintf("Failed to check source file: %v", err)
-		return result, err
-	}
-
-	exists := strings.TrimSpace(checkOutput) == "exists"
-
 	if !exists {
 		if failOnMissing {
 			result.Failed = true
 			result.Error = fmt.Sprintf("Source file does not exist: %s", src)
 			return result, fmt.Errorf("source file does not exist: %s", src)
-		} else {
-			result.Output["msg"] = fmt.Sprintf("Source file does not exist (skipped): %s", src)
-			return result, nil
 		}
+		result.Success = true
+		result.Output["msg"] = fmt.Sprintf("Source file does not exist (skipped): %s", src)
+		return result, nil
 	}
+	srcChecksum := fmt.Sprintf("%x", sha256.Sum256(data))
 
-	// Get source file checksum if validation is enabled
-	var srcChecksum string
-	if validate {
-		checksumCmd := fmt.Sprintf("md5sum %s 2>/dev/null || md5 -q %s 2>/dev/null", src, src)
-		checksumOutput, err := exec.ExecuteWithContext(ctx, "sh", "-c", checksumCmd)
-
-		if err != nil {
-			// If checksum fails, just skip validation
-			validate = false
-		} else {
-			// Extract checksum (md5sum outputs "checksum filename", md5 outputs just checksum)
-			parts := strings.Fields(checksumOutput)
-			if len(parts) > 0 {
-				srcChecksum = parts[0]
-			}
-		}
-	}
-
-	// Determine destination path
+	// Destination on the control machine
 	var destPath string
 	if flat {
-		// Flat mode: save directly to dest with original filename
 		destPath = filepath.Join(dest, filepath.Base(src))
-	} else {
-		// Hierarchical mode: create directory structure based on hostname and path
-		// Format: dest/hostname/path/to/file
-		hostDir := host.Name
-		if hostDir == "" {
-			hostDir = host.Address
+		if !strings.HasSuffix(dest, "/") {
+			destPath = dest
 		}
-		destPath = filepath.Join(dest, hostDir, src)
+	} else {
+		destPath = filepath.Join(dest, host.Name, src)
 	}
-
-	// Create destination directory
-	destDir := filepath.Dir(destPath)
-	if err := os.MkdirAll(destDir, 0750); err != nil {
+	if err := os.MkdirAll(filepath.Dir(destPath), 0750); err != nil {
 		result.Failed = true
 		result.Error = fmt.Sprintf("Failed to create destination directory: %v", err)
 		return result, err
 	}
 
-	// Check if destination file already exists and has same checksum
-	if validate && srcChecksum != "" {
-		if destInfo, err := os.Stat(destPath); err == nil && !destInfo.IsDir() {
-			destChecksum, err := calculateMD5(destPath)
-			if err == nil && destChecksum == srcChecksum {
-				result.Output["msg"] = "File already exists with same checksum"
-				result.Output["src"] = src
-				result.Output["dest"] = destPath
-				result.Output["checksum"] = srcChecksum
-				result.Success = true
-				return result, nil
-			}
-		}
+	result.Success = true
+	result.Output["src"] = src
+	result.Output["dest"] = destPath
+	result.Output["checksum"] = srcChecksum
+
+	if current, err := os.ReadFile(destPath); err == nil && fmt.Sprintf("%x", sha256.Sum256(current)) == srcChecksum { // #nosec G304 -- destination chosen by the playbook
+		result.Output["msg"] = "File already exists with same checksum"
+		return result, nil
 	}
-
-	// Fetch the file using cat command
-	catCmd := fmt.Sprintf("cat %s", src)
-	catOutput, err := exec.ExecuteWithContext(ctx, "sh", "-c", catCmd)
-
-	if err != nil {
+	if err := os.WriteFile(destPath, data, 0600); err != nil {
 		result.Failed = true
-		result.Error = fmt.Sprintf("Failed to read source file: %v", err)
-		return result, err
-	}
-
-	// Write the file to destination
-	if err := os.WriteFile(destPath, []byte(catOutput), 0600); err != nil {
-		result.Failed = true
+		result.Success = false
 		result.Error = fmt.Sprintf("Failed to write destination file: %v", err)
 		return result, err
 	}
-
-	// Validate checksum if enabled
-	if validate && srcChecksum != "" {
-		destChecksum, err := calculateMD5(destPath)
-		if err != nil {
-			// Just log warning, don't fail
-		} else if destChecksum != srcChecksum {
-			result.Failed = true
-			result.Error = "Checksum mismatch after fetch"
-			result.Output["src_checksum"] = srcChecksum
-			result.Output["dest_checksum"] = destChecksum
-			// Clean up the file
+	if validate {
+		written, err := os.ReadFile(destPath) // #nosec G304 -- just written
+		if err != nil || fmt.Sprintf("%x", sha256.Sum256(written)) != srcChecksum {
 			_ = os.Remove(destPath)
+			result.Failed = true
+			result.Success = false
+			result.Error = "Checksum mismatch after fetch"
 			return result, fmt.Errorf("checksum mismatch after fetch")
 		}
 	}
-
 	result.Changed = true
-	result.Success = true
 	result.Output["msg"] = "File fetched successfully"
-	result.Output["src"] = src
-	result.Output["dest"] = destPath
-	if srcChecksum != "" {
-		result.Output["checksum"] = srcChecksum
-	}
-
 	return result, nil
-}
-
-// calculateMD5 calculates SHA256 checksum of a file (renamed from MD5 for security)
-// Note: Function name kept for backward compatibility, but now uses SHA256
-func calculateMD5(filePath string) (string, error) {
-	file, err := os.Open(filePath) // #nosec G304 -- filePath is from remote host, validated by executor
-	if err != nil {
-		return "", err
-	}
-	defer file.Close()
-
-	// Use SHA256 instead of MD5 for better security
-	hash := sha256.New()
-	if _, err := io.Copy(hash, file); err != nil {
-		return "", err
-	}
-
-	return hex.EncodeToString(hash.Sum(nil)), nil
 }

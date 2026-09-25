@@ -1,13 +1,8 @@
 package modules
 
 import (
-	"bufio"
 	"context"
 	"fmt"
-	"net"
-	"os"
-	"path/filepath"
-	"regexp"
 	"time"
 
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
@@ -42,181 +37,72 @@ func (m *WaitForModule) Execute(ctx context.Context, host types.Host, args map[s
 		Output:    make(map[string]interface{}),
 	}
 
-	// Get parameters
-	timeout := 300 // default 5 minutes
-	if timeoutVal, exists := args["timeout"]; exists {
-		if timeoutInt, ok := timeoutVal.(float64); ok {
-			timeout = int(timeoutInt)
-		}
+	timeout := getIntArg(args, "timeout", 300)
+	delay := getIntArg(args, "delay", 0)
+	port := getIntArg(args, "port", 0)
+	path := getStringArg(args, "path", "")
+	searchRegex := getStringArg(args, "search_regex", "")
+	target := getStringArg(args, "host", "127.0.0.1")
+	state := getStringArg(args, "state", "started")
+	// started/present and stopped/absent are the same states
+	wantPresent := state == "started" || state == "present"
+	if !wantPresent && state != "stopped" && state != "absent" {
+		result.Success = false
+		result.Error = fmt.Sprintf("unsupported state: %s", state)
+		return result, nil
 	}
 
-	delay := 0
-	if delayVal, exists := args["delay"]; exists {
-		if delayInt, ok := delayVal.(float64); ok {
-			delay = int(delayInt)
-		}
+	// The check runs on the target host, as the task describes that host
+	var check string
+	switch {
+	case port > 0:
+		check = fmt.Sprintf("timeout 2 bash -c %s", shellQuote(fmt.Sprintf("</dev/tcp/%s/%d", target, port)))
+	case path != "" && searchRegex != "":
+		check = fmt.Sprintf("grep -Eq %s %s", shellQuote(searchRegex), shellQuote(path))
+	case path != "":
+		check = "test -e " + shellQuote(path)
+	default:
+		result.Success = false
+		result.Error = "wait_for needs port or path"
+		return result, nil
 	}
 
-	state := "started"
-	if stateVal, exists := args["state"]; exists {
-		if stateStr, ok := stateVal.(string); ok {
-			state = stateStr
-		}
-	}
-
-	port := 0
-	if portVal, exists := args["port"]; exists {
-		if portInt, ok := portVal.(float64); ok {
-			port = int(portInt)
-		}
-	}
-
-	path := ""
-	if pathVal, exists := args["path"]; exists {
-		if pathStr, ok := pathVal.(string); ok {
-			path = pathStr
-		}
-	}
-
-	searchRegex := ""
-	if searchVal, exists := args["search_regex"]; exists {
-		if searchStr, ok := searchVal.(string); ok {
-			searchRegex = searchStr
-		}
-	}
-
-	hostVal := "localhost"
-	if hostVal2, exists := args["host"]; exists {
-		if hostStr, ok := hostVal2.(string); ok {
-			hostVal = hostStr
-		}
-	}
-
-	// Initial delay
-	if delay > 0 {
-		time.Sleep(time.Duration(delay) * time.Second)
-	}
-
-	// Start waiting
-	elapsed := 0.0
-	timeoutDuration := time.Duration(timeout) * time.Second
-	checkInterval := 100 * time.Millisecond
-
-	for {
+	sleep := func(d time.Duration) bool {
 		select {
 		case <-ctx.Done():
-			result.Success = false
-			result.Error = "context canceled"
-			result.Duration = time.Since(startTime)
-			return result, nil
-		default:
+			return false
+		case <-time.After(d):
+			return true
 		}
+	}
+	if delay > 0 && !sleep(time.Duration(delay)*time.Second) {
+		result.Success = false
+		result.Error = "canceled"
+		return result, nil
+	}
 
-		// Check condition based on parameters
-		conditionMet := false
-
-		if port > 0 {
-			conditionMet, _ = m.checkPort(hostVal, port, state)
-		} else if path != "" && searchRegex == "" {
-			conditionMet, _ = m.checkPath(path, state)
-		} else if path != "" && searchRegex != "" {
-			conditionMet, _ = m.checkPathRegex(path, searchRegex)
-		}
-
-		if conditionMet {
-			result.Output["elapsed"] = elapsed
+	deadline := time.Now().Add(time.Duration(timeout) * time.Second)
+	for {
+		_, err := runShellOnHost(ctx, host, args, check)
+		if (err == nil) == wantPresent {
+			result.Output["elapsed"] = time.Since(startTime).Seconds()
 			result.Output["msg"] = "Condition met"
 			result.Duration = time.Since(startTime)
 			return result, nil
 		}
-
-		// Check timeout
-		if time.Since(startTime) > timeoutDuration {
+		if time.Now().After(deadline) {
 			result.Success = false
 			result.Error = fmt.Sprintf("timeout: condition not met after %d seconds", timeout)
 			result.Output["elapsed"] = time.Since(startTime).Seconds()
 			result.Duration = time.Since(startTime)
 			return result, nil
 		}
-
-		time.Sleep(checkInterval)
-		elapsed = time.Since(startTime).Seconds()
-	}
-}
-
-func (m *WaitForModule) checkPort(host string, port int, state string) (bool, error) {
-	addr := net.JoinHostPort(host, fmt.Sprintf("%d", port))
-	conn, err := net.Dial("tcp", addr)
-
-	if state == "started" {
-		if err == nil {
-			_ = conn.Close()
-			return true, nil
-		}
-		return false, err
-	} else if state == "stopped" {
-		if err != nil {
-			return true, nil
-		}
-		if conn != nil {
-			_ = conn.Close()
-		}
-		return false, nil
-	}
-
-	return false, nil
-}
-
-func (m *WaitForModule) checkPath(path string, state string) (bool, error) {
-	// Make path absolute
-	if !filepath.IsAbs(path) {
-		var err error
-		path, err = filepath.Abs(path)
-		if err != nil {
-			return false, err
+		if !sleep(time.Second) {
+			result.Success = false
+			result.Error = "canceled"
+			return result, nil
 		}
 	}
-
-	_, err := os.Stat(path)
-
-	if state == "present" {
-		return err == nil, nil
-	} else if state == "absent" {
-		return os.IsNotExist(err), nil
-	}
-
-	return false, nil
-}
-
-func (m *WaitForModule) checkPathRegex(path string, searchRegex string) (bool, error) {
-	// Make path absolute
-	if !filepath.IsAbs(path) {
-		var err error
-		path, err = filepath.Abs(path)
-		if err != nil {
-			return false, err
-		}
-	}
-
-	file, err := os.Open(path)
-	if err != nil {
-		return false, err
-	}
-	defer file.Close()
-
-	regex, err := regexp.Compile(searchRegex)
-	if err != nil {
-		return false, fmt.Errorf("invalid regex: %v", err)
-	}
-
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		if regex.MatchString(scanner.Text()) {
-			return true, nil
-		}
-	}
-
-	return false, scanner.Err()
 }
 
 func (m *WaitForModule) Validate(args map[string]interface{}) error {

@@ -47,8 +47,10 @@ func (m *FindModule) Execute(ctx context.Context, host types.Host, args map[stri
 		return result, err
 	}
 
-	path := getStringArg(args, "path", ".")
-	pattern := getStringArg(args, "pattern", "*")
+	// Ansible spells them paths/patterns
+	path := getStringArg(args, "path", getStringArg(args, "paths", "."))
+	pattern := getStringArg(args, "pattern", getStringArg(args, "patterns", "*"))
+	recurse := getBoolArg(args, "recurse", false)
 	fileType := getStringArg(args, "type", "")
 	limit := getIntArg(args, "limit", 0)
 
@@ -63,7 +65,7 @@ func (m *FindModule) Execute(ctx context.Context, host types.Host, args map[stri
 	defer exec.Close()
 
 	// Find files matching pattern
-	files, err := m.findFiles(exec, path, pattern, fileType, limit)
+	files, err := m.findFiles(exec, path, pattern, fileType, limit, recurse)
 	if err != nil {
 		result.Failed = true
 		result.Error = fmt.Sprintf("find failed: %v", err)
@@ -75,18 +77,23 @@ func (m *FindModule) Execute(ctx context.Context, host types.Host, args map[stri
 	result.Changed = false // find never changes anything
 	result.Output["files"] = files
 	result.Output["file_count"] = len(files)
+	result.Output["matched"] = len(files)
 	result.Duration = time.Since(startTime)
 
 	return result, nil
 }
 
 // findFiles searches for files matching the pattern
-func (m *FindModule) findFiles(exec *executor.CommandExecutor, path, pattern, fileType string, limit int) ([]map[string]interface{}, error) {
+func (m *FindModule) findFiles(exec *executor.CommandExecutor, path, pattern, fileType string, limit int, recurse bool) ([]map[string]interface{}, error) {
 	var files []map[string]interface{}
 
-	// Build find command
-	cmd := fmt.Sprintf("find '%s' -type %s -name '%s' -print0 2>/dev/null | tr '\\0' '\\n' | head -n %d",
-		path, m.getTypeFlag(fileType), escapeSingleQuotes(pattern), m.getLimitValue(limit))
+	// Like Ansible, only the given directory unless recurse is set
+	depth := "-mindepth 1 -maxdepth 1 "
+	if recurse {
+		depth = ""
+	}
+	cmd := fmt.Sprintf("find '%s' %s-type %s -name '%s' -print0 2>/dev/null | tr '\\0' '\\n' | head -n %d",
+		escapeSingleQuotes(path), depth, m.getTypeFlag(fileType), escapeSingleQuotes(pattern), m.getLimitValue(limit))
 
 	// Execute find command
 	output, err := exec.Execute(cmd)
@@ -229,7 +236,7 @@ func (m *FindModule) Validate(args map[string]interface{}) error {
 	}
 
 	// limit is optional, must be non-negative
-	if limit, ok := args["limit"].(float64); ok && limit < 0 {
+	if limit, ok := toInt(args["limit"]); ok && limit < 0 {
 		return fmt.Errorf("'limit' must be non-negative")
 	}
 
