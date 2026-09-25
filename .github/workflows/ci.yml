@@ -125,18 +125,10 @@ jobs:
   integration-tests:
     runs-on: ubuntu-latest
     needs: build
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v6
-
-    - name: Set up Go
-      uses: actions/setup-go@v6
-      with:
-        go-version: ${{ env.GO_VERSION }}
-        cache: true
-        cache-dependency-path: go.sum
 
     - name: Download build artifacts
       uses: actions/download-artifact@v8
@@ -144,32 +136,49 @@ jobs:
         name: binaries-linux-amd64
         path: dist/
 
-    - name: Make binary executable
-      run: chmod +x dist/onigirazu-linux-amd64
-
-    - name: Run integration tests
+    - name: Smoke test against localhost
       run: |
-        # Create test inventory and playbook
-        mkdir -p test-integration
-        cat > test-integration/inventory.yml << 'EOF'
-        all:
-          hosts:
-            localhost:
-              ansible_connection: local
+        chmod +x dist/onigirazu-linux-amd64
+        bin=$PWD/dist/onigirazu-linux-amd64
+        work=$(mktemp -d) && cd "$work"
+        cat > inventory.yml << 'EOF'
+        groups:
+          local:
+            hosts:
+              localhost:
+                onigirazu_connection: local
         EOF
-
-        cat > test-integration/playbook.yml << 'EOF'
-        - name: Test playbook
-          hosts: localhost
-          tasks:
-            - name: Test command module
-              command:
-                cmd: echo "Hello from integration test"
+        cat > playbook.yml << 'EOF'
+        plays:
+          - name: smoke
+            hosts: all
+            vars:
+              who: smoke
+            tasks:
+              - name: Directory
+                file:
+                  path: /tmp/onigirazu-smoke
+                  state: directory
+                  mode: "0750"
+              - name: Template
+                template:
+                  content: "hello {{ who }}\n"
+                  dest: /tmp/onigirazu-smoke/hello.txt
+              - name: Line
+                lineinfile:
+                  path: /tmp/onigirazu-smoke/hello.txt
+                  line: "second"
+              - name: Command
+                command:
+                  command: "grep -q second /tmp/onigirazu-smoke/hello.txt"
         EOF
-
-        # Run the binary
-        ./dist/onigirazu-linux-amd64 --version
-        ./dist/onigirazu-linux-amd64 -playbook test-integration/playbook.yml -inventory test-integration/inventory.yml -check || true
+        "$bin" version
+        "$bin" apply playbook.yml -i inventory.yml
+        test "$(stat -c %a /tmp/onigirazu-smoke)" = 750
+        test "$(head -1 /tmp/onigirazu-smoke/hello.txt)" = "hello smoke"
+        grep -qx second /tmp/onigirazu-smoke/hello.txt
+        # Second run must succeed too
+        "$bin" apply playbook.yml -i inventory.yml
 
   docker-build:
     runs-on: ubuntu-latest

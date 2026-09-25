@@ -130,23 +130,11 @@ tasks:
       msg: "Role: {{ user_role | default('guest') }}"
 ```
 
-### 3. Core Engine Integration
+### 3. Engine Integration
 
-Callback plugins are integrated with the core engine to hook into execution events:
-
-```go
-import (
-    "github.com/onigirazu-cfg/onigirazu/internal/core"
-    "github.com/onigirazu-cfg/onigirazu/internal/plugins"
-)
-
-// Create core engine with plugin support
-pluginManager := plugins.NewManager(loader)
-engine := core.NewCoreEngineWithPlugins(logger, pluginManager)
-
-// Or add plugins to existing engine
-engine.SetPluginManager(pluginManager)
-```
+> **Status:** `onigirazu apply` loads plugins from `plugins.yml` but currently uses only
+> **filter** plugins (in templates). Callback and module plugins are loaded and not yet
+> called by the execution engine.
 
 **Callback Events:**
 
