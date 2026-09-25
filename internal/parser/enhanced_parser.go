@@ -77,6 +77,13 @@ func (p *EnhancedParser) ParsePlaybook(ctx context.Context, filePath string) (*t
 	playbook.FilePath = filePath
 	playbook.Name = filepath.Base(filePath)
 
+	// vars_files, relative to the playbook, override the play's vars
+	for i := range playbook.Plays {
+		if err := loadVarsFiles(&playbook.Plays[i], filepath.Dir(filePath)); err != nil {
+			return nil, fmt.Errorf("play %q: %w", playbook.Plays[i].Name, err)
+		}
+	}
+
 	// Expand includes first, so validation sees the included tasks
 	if err := p.processIncludes(ctx, &playbook, filepath.Dir(filePath)); err != nil {
 		return nil, fmt.Errorf("failed to process includes in playbook %s: %w", filePath, err)
@@ -510,6 +517,30 @@ func (p *EnhancedParser) processRoles(ctx context.Context, playbook *types.Playb
 		}
 
 		p.logger.Debug("Loaded %d roles for play %d", len(playbook.Plays[i].RoleObjects), i)
+	}
+	return nil
+}
+
+func loadVarsFiles(play *types.Play, baseDir string) error {
+	for _, name := range play.VarsFiles {
+		path := name
+		if !filepath.IsAbs(path) {
+			path = filepath.Join(baseDir, path)
+		}
+		content, err := os.ReadFile(path) // #nosec G304 -- vars_files come from the playbook
+		if err != nil {
+			return fmt.Errorf("vars_files: %w", err)
+		}
+		vars := make(map[string]interface{})
+		if err := yaml.Unmarshal(content, &vars); err != nil {
+			return fmt.Errorf("vars_files %s: %w", name, err)
+		}
+		if play.Vars == nil {
+			play.Vars = make(map[string]interface{}, len(vars))
+		}
+		for k, v := range vars {
+			play.Vars[k] = v
+		}
 	}
 	return nil
 }

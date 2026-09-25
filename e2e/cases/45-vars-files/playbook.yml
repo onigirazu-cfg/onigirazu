@@ -1,0 +1,13 @@
+plays:
+  - name: vars_files and a list of host patterns
+    hosts: [e2e]
+    become: true
+    vars:
+      port: 80
+    vars_files:
+      - vars/app.yml
+    tasks:
+      - name: Values from vars and vars_files
+        copy:
+          content: "{{ app_name }} {{ port }}\n"
+          dest: /root/onigirazu-e2e-vars-files
