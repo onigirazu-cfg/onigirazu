@@ -36,3 +36,24 @@ func TestRender_ExpressionBlocks(t *testing.T) {
 		assert.Equal(t, want, got, in)
 	}
 }
+
+func TestRenderTaskArgs_ListsAndMapsKeepTheirType(t *testing.T) {
+	e := NewEngine()
+	defer e.Close()
+	vars := map[string]interface{}{
+		"pkgs": []interface{}{"curl", "git"},
+		"env":  map[string]interface{}{"A": "1"},
+		"port": 8080,
+	}
+	out, err := e.RenderTaskArgs(context.Background(), map[string]interface{}{
+		"name":  "{{ pkgs }}",
+		"env":   "{{ env }}",
+		"port":  "{{ port }}",
+		"mixed": "pkgs: {{ pkgs }}",
+	}, vars)
+	require.NoError(t, err)
+	assert.Equal(t, []interface{}{"curl", "git"}, out["name"])
+	assert.Equal(t, map[string]interface{}{"A": "1"}, out["env"])
+	assert.Equal(t, "8080", out["port"])
+	assert.Equal(t, `pkgs: ["curl","git"]`, out["mixed"])
+}
