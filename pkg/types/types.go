@@ -231,6 +231,7 @@ func (t *Task) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	if err := unmarshal(&taskMap); err != nil {
 		return err
 	}
+	shortModuleKeys(taskMap)
 
 	// Define reserved field names that are not module arguments
 	reservedFields := map[string]bool{

@@ -1,0 +1,17 @@
+plays:
+  - name: one host at a time, modules by their full names
+    hosts: "{{ e2e_target | default('all') }}"
+    serial: "{{ batch }}"
+    become: true
+    vars:
+      batch: 1
+    tasks:
+      - name: Busy for a while, recording when
+        ansible.builtin.shell: date +%s > /tmp/onigirazu-e2e-serial; sleep 4; date +%s >> /tmp/onigirazu-e2e-serial
+        args: {creates: /tmp/onigirazu-e2e-serial}
+      - name: Config
+        ansible.builtin.copy: {content: "v1\n", dest: /root/onigirazu-e2e-fqcn}
+        notify: Mark
+    handlers:
+      - name: Mark
+        ansible.legacy.copy: {content: "handled\n", dest: /root/onigirazu-e2e-fqcn-handler}

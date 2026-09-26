@@ -297,7 +297,7 @@ plays:
 
 ### Rolling Update with Rollback
 
-Current limitation: play-level `serial` and `max_fail_percentage` are accepted but not applied; each task runs on all hosts of the play in parallel. `serial: true` on a task runs that task one host at a time. For a real rolling update, run the playbook once per batch with `--limit`.
+Play-level `serial` runs the whole play on one batch of hosts after another (`serial: 1`, `"30%"` or `[1, 5, "20%"]`); a failed batch stops the play. `max_fail_percentage` is not applied. `serial: true` on a task runs that task one host at a time.
 
 ```yaml
 # rolling-update.yml
