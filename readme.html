@@ -900,8 +900,8 @@ evaluated per host with that host's facts and registered results:</p>
 
 <p>Supported: <code>==</code>, <code>!=</code>, <code>&lt;</code>, <code>&gt;</code>, <code>and</code>, <code>or</code>, <code>not</code>, <code>in</code> (list item, dictionary
 key or substring), <code>is defined</code>,
-<code>is not defined</code>, filters <code>| length</code>, <code>| lower</code>, <code>| upper</code>, <code>| int</code>,
-<code>| trim</code>. A list under <code>when</code> means all items must hold; <code>{{ }}</code> around
+<code>is not defined</code>, <code>a if cond else b</code>, <code>~</code> and the filters listed under
+Templates. A list under <code>when</code> means all items must hold; <code>{{ }}</code> around
 the expression is optional. A condition that cannot be evaluated fails the task.</p>
 <h3>Variables</h3>
 <p>Use variables for dynamic configurations. An undefined variable fails the task;
@@ -936,6 +936,16 @@ server {{ b.name }} {{ b.ip }}:{{ b.port | default(80) }}
 {% endfor %}
 </code></pre>
 
+<p>Filters: <code>default</code>, <code>length</code>/<code>count</code>, <code>lower</code>, <code>upper</code>, <code>capitalize</code>, <code>title</code>,
+<code>trim</code>, <code>replace</code>, <code>split</code>, <code>join</code>, <code>int</code>, <code>float</code>, <code>string</code>, <code>bool</code>, <code>first</code>,
+<code>last</code>, <code>sort</code>, <code>unique</code>, <code>reverse</code>, <code>flatten</code>, <code>sum</code>, <code>min</code>, <code>max</code>, <code>abs</code>,
+<code>round</code>, <code>list</code>, <code>keys</code>/<code>values</code> (sorted), <code>dict2items</code>, <code>items2dict</code>,
+<code>combine</code>, <code>map('filter')</code>, <code>map(attribute='x')</code>, <code>select</code>/<code>reject</code>,
+<code>selectattr</code>/<code>rejectattr</code> (tests <code>defined</code>, <code>equalto</code>, <code>match</code>, <code>search</code>,
+<code>in</code>, <code>&gt;</code>, ...), <code>regex_replace</code>, <code>regex_search</code>, <code>regex_findall</code>, <code>to_json</code>,
+<code>to_nice_json</code>, <code>to_yaml</code>, <code>from_json</code>, <code>from_yaml</code>, <code>b64encode</code>,
+<code>b64decode</code>, <code>basename</code>, <code>dirname</code>, <code>quote</code>, <code>ternary</code>, <code>mandatory</code>, and
+<code>range()</code>.</p>
 <h3>Plugins</h3>
 <p><code>--plugins-config plugins.yml</code> (or a <code>plugins.yml</code> next to the playbook) loads
 Go plugins (<code>go build -buildmode=plugin</code>, exporting <code>NewPlugin() plugins.Plugin</code>):</p>
