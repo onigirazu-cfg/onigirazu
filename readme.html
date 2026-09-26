@@ -995,8 +995,12 @@ server {{ b.name }} {{ b.ip }}:{{ b.port | default(80) }}
 <code>selectattr</code>/<code>rejectattr</code> (tests <code>defined</code>, <code>equalto</code>, <code>match</code>, <code>search</code>,
 <code>in</code>, <code>&gt;</code>, ...), <code>regex_replace</code>, <code>regex_search</code>, <code>regex_findall</code>, <code>to_json</code>,
 <code>to_nice_json</code>, <code>to_yaml</code>, <code>from_json</code>, <code>from_yaml</code>, <code>b64encode</code>,
-<code>b64decode</code>, <code>basename</code>, <code>dirname</code>, <code>quote</code>, <code>ternary</code>, <code>mandatory</code>, and
+<code>b64decode</code>, <code>basename</code>, <code>dirname</code>, <code>quote</code>, <code>ternary</code>, <code>mandatory</code>,
+<code>password_hash('sha512'|'sha256', salt)</code> (crypt(3) hashes for <code>user</code>), and
 <code>range()</code>.</p>
+<p><code>lookup()</code> and <code>query()</code> run on the control machine, relative paths from the
+playbook directory: <code>env</code>, <code>file</code>, <code>pipe</code>, <code>lines</code>, <code>fileglob</code>,
+<code>first_found</code>, <code>dict</code>, <code>items</code>.</p>
 <h3>Plugins</h3>
 <p><code>--plugins-config plugins.yml</code> (or a <code>plugins.yml</code> next to the playbook) loads
 Go plugins (<code>go build -buildmode=plugin</code>, exporting <code>NewPlugin() plugins.Plugin</code>):</p>
