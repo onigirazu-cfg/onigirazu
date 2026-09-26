@@ -181,6 +181,18 @@ func filterFunctions() []expr.Option {
 			}
 			return out, nil
 		}),
+		// extract(key, container, morekey): container[key][morekey], as in
+		// groups['web'] | map('extract', hostvars, 'ansible_host')
+		fn("extract", func(p ...interface{}) (interface{}, error) {
+			if len(p) < 2 {
+				return nil, fmt.Errorf("extract needs a container")
+			}
+			value := index(p[1], p[0])
+			for _, key := range p[2:] {
+				value = index(value, key)
+			}
+			return value, nil
+		}),
 		fn("combine", func(p ...interface{}) (interface{}, error) {
 			out := map[string]interface{}{}
 			for _, v := range p {
@@ -385,4 +397,17 @@ func jinjaTest(v interface{}, args []interface{}) (bool, error) {
 		return a <= b, nil
 	}
 	return false, fmt.Errorf("unknown test %q", test)
+}
+
+// index reads container[key] from a map or a list; missing is nil
+func index(container, key interface{}) interface{} {
+	switch c := container.(type) {
+	case map[string]interface{}:
+		return c[fmt.Sprint(key)]
+	case []interface{}:
+		if i, ok := number(key); ok && int(i) >= 0 && int(i) < len(c) {
+			return c[int(i)]
+		}
+	}
+	return nil
 }

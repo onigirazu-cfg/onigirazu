@@ -1,0 +1,21 @@
+plays:
+  - name: Ansible facts and magic variables
+    hosts: all
+    become: true
+    gather_facts: true
+    vars:
+      role_port: 8080
+    tasks:
+      - name: Render Ansible names
+        copy:
+          dest: /root/onigirazu-e2e-av
+          content: |
+            family={{ ansible_os_family }}
+            same={{ ansible_facts['os_family'] == ansible_os_family }}
+            dist={{ ansible_distribution }}
+            major={{ ansible_distribution_major_version }}
+            hostname={{ ansible_hostname }}
+            self={{ hostvars[inventory_hostname]['role_port'] }}
+            all={{ groups['all'] | length }}
+            inall={{ inventory_hostname in groups['all'] }}
+            ips={{ groups['all'] | map('extract', hostvars, 'inventory_hostname') | list | length }}

@@ -191,7 +191,21 @@ func (m *MockInventoryManager) LoadInventory(ctx context.Context, filePath strin
 	return args.Error(0)
 }
 
+// expects tells whether a test set up calls of method; the engine also asks
+// the inventory for hostvars and groups, which most tests do not care about
+func (m *MockInventoryManager) expects(method string) bool {
+	for _, c := range m.ExpectedCalls {
+		if c.Method == method {
+			return true
+		}
+	}
+	return false
+}
+
 func (m *MockInventoryManager) GetHosts(pattern string) ([]types.Host, error) {
+	if !m.expects("GetHosts") {
+		return m.hosts, nil
+	}
 	args := m.Called(pattern)
 	if m.hosts != nil {
 		return m.hosts, nil
@@ -232,6 +246,9 @@ func (m *MockInventoryManager) ListHosts() []string {
 }
 
 func (m *MockInventoryManager) ListGroups() []string {
+	if !m.expects("ListGroups") {
+		return nil
+	}
 	args := m.Called()
 	return args.Get(0).([]string)
 }

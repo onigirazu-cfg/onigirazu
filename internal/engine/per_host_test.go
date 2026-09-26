@@ -399,3 +399,30 @@ func TestRenderError_IsAFailedTaskResult(t *testing.T) {
 		assert.Contains(t, got.Error, "undefined variable")
 	}
 }
+
+func TestMagicVariables_HostvarsAndGroups(t *testing.T) {
+	engine, mockConfig, _, mockInventory, _, mockTemplate := createTestEngine()
+	mockConfig.On("GetDryRun").Return(false)
+	mockTemplate.On("RenderTaskArgs", mock.Anything, mock.Anything, mock.Anything).Return(nil, nil)
+	hosts := []types.Host{
+		{Name: "h1", Address: "10.0.0.1", Vars: map[string]interface{}{"port": 80}},
+		{Name: "h2", Address: "10.0.0.2", Vars: map[string]interface{}{"port": 81}},
+	}
+	mockInventory.On("GetHosts", "all").Return(hosts, nil)
+	mockInventory.On("GetHosts", "web").Return(hosts[1:], nil)
+	mockInventory.On("ListGroups").Return([]string{"web"})
+	engine.setHostVar("h2", "token", "abc")
+
+	vars := engine.withMagicVariables(map[string]interface{}{"hostvars": "stale"})
+	again := engine.withMagicVariables(vars)
+	for _, v := range []map[string]interface{}{vars, again} {
+		hv := v["hostvars"].(map[string]interface{})
+		assert.Equal(t, 81, hv["h2"].(map[string]interface{})["port"])
+		assert.Equal(t, "abc", hv["h2"].(map[string]interface{})["token"])
+		_, nested := hv["h1"].(map[string]interface{})["hostvars"]
+		assert.False(t, nested, "no hostvars inside hostvars")
+		groups := v["groups"].(map[string]interface{})
+		assert.Equal(t, []interface{}{"h1", "h2"}, groups["all"])
+		assert.Equal(t, []interface{}{"h2"}, groups["web"])
+	}
+}
