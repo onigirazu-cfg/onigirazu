@@ -42,6 +42,12 @@ import (
 
 // NewApplyCommand creates the apply command with improved TUI architecture
 func NewApplyCommand() *cobra.Command {
+	return newApplyCommand(nil)
+}
+
+// newApplyCommand is apply; with onResult the run prints nothing on stdout
+// and hands its result to onResult instead (drift uses it)
+func newApplyCommand(onResult func(*types.PlaybookResult)) *cobra.Command {
 	var (
 		// Command-specific flags
 		check          bool
@@ -111,13 +117,18 @@ Examples:
 			resultOut := io.Writer(os.Stdout)
 			var runResult *types.PlaybookResult
 			var runStart time.Time
-			if outputFormat == "json" || outputFormat == "yaml" {
+			if outputFormat == "json" || outputFormat == "yaml" || onResult != nil {
 				realStdout := os.Stdout
 				resultOut = realStdout
 				os.Stdout = os.Stderr
 				defer func() {
 					os.Stdout = realStdout
-					if runResult != nil {
+					if runResult == nil {
+						return
+					}
+					if onResult != nil {
+						onResult(runResult)
+					} else {
 						writeRunResult(realStdout, outputFormat, runResult, playbookPath, runStart)
 					}
 				}()

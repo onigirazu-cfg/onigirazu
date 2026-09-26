@@ -1,0 +1,7 @@
+plays:
+  - name: someone changes the host by hand
+    hosts: all
+    become: true
+    tasks:
+      - name: Edit the file
+        copy: {content: "edited by hand\n", dest: /root/onigirazu-e2e-drift}

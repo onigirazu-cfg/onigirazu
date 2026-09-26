@@ -25,47 +25,46 @@ var (
 	driftInfo       bool
 	driftReportID   string
 	driftParallel   int
+	driftCheck      driftCheckOptions
 )
 
 func newDriftCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "drift",
 		Short: "Detect and fix configuration drift",
-		Long: `Detect configuration drift by comparing current system state with snapshots.
+		Use:   "drift PLAYBOOK",
+		Long: `Check whether hosts still match a playbook: the playbook runs in check mode and
+every task that would change a host is drift. Nothing is changed unless --fix is given.
 
-Drift detection helps identify unauthorized or unexpected changes to your infrastructure
-by comparing the current state with the expected state captured in snapshots.
-
-Features:
-  • Detect drift from snapshots
-  • Auto-fix detected drift
-  • Generate reports in multiple formats (text, JSON, HTML)
-  • List all drift reports
-  • View detailed drift information
+Exit code: 0 in sync, 2 drift found, 1 a task could not be checked.
 
 Examples:
-  # Detect drift from a snapshot
-  onigirazu drift detect --snapshot <snapshot-id>
+  onigirazu drift site.yml -i hosts.yml
+  onigirazu drift site.yml -i hosts.yml --limit web --format json --output drift.json
+  onigirazu drift site.yml -i hosts.yml --fix    # apply the playbook when drift is found
 
-  # Detect and auto-fix drift
-  onigirazu drift detect --snapshot <snapshot-id> --auto-fix
-
-  # Dry-run (preview fixes without applying)
-  onigirazu drift detect --snapshot <snapshot-id> --auto-fix --dry-run
-
-  # Generate HTML report
-  onigirazu drift detect --snapshot <snapshot-id> --format html --output report.html
-
-  # List all drift reports
-  onigirazu drift --list
-
-  # Show drift report details
-  onigirazu drift --info --report <report-id>
-`,
-		RunE: runDrift,
+The older snapshot comparison is still available with --snapshot <id>.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if driftSnapshotID != "" || driftList || driftInfo || (len(args) == 1 && args[0] == "detect") {
+				return runDrift(cmd, args)
+			}
+			if len(args) != 1 {
+				return fmt.Errorf("usage: onigirazu drift PLAYBOOK [flags]")
+			}
+			driftCheck.format, driftCheck.output = driftFormat, driftOutput
+			return runDriftCheck(cmd, args[0], driftCheck)
+		},
 	}
 
-	cmd.Flags().StringVar(&driftSnapshotID, "snapshot", "", "Snapshot ID to compare against")
+	cmd.Flags().BoolVar(&driftCheck.fix, "fix", false, "Apply the playbook when drift is found")
+	cmd.Flags().StringArrayVarP(&driftCheck.extraVars, "extra-vars", "e", nil, "Extra variables, as for apply (repeatable)")
+	cmd.Flags().StringVar(&driftCheck.limit, "limit", "", "Check only hosts matching this pattern")
+	cmd.Flags().StringVar(&driftCheck.tags, "tags", "", "Check only tasks with these tags")
+	cmd.Flags().StringVar(&driftCheck.skipTags, "skip-tags", "", "Skip tasks with these tags")
+	cmd.Flags().BoolVarP(&driftCheck.become, "become", "b", false, "Use privilege escalation in every play")
+	cmd.Flags().StringVar(&driftCheck.becomeUser, "become-user", "", "User to become")
+	cmd.Flags().StringVarP(&driftCheck.user, "user", "u", "", "SSH user for every host")
+	cmd.Flags().StringVar(&driftCheck.privateKey, "private-key", "", "SSH private key for every host")
+	cmd.Flags().StringVar(&driftSnapshotID, "snapshot", "", "Compare with a snapshot instead (older mode)")
 	cmd.Flags().BoolVar(&driftAutoFix, "auto-fix", false, "Automatically fix detected drift")
 	cmd.Flags().BoolVar(&driftDryRun, "dry-run", false, "Preview fixes without applying them")
 	cmd.Flags().StringVar(&driftFormat, "format", "text", "Report format (text, json, html)")

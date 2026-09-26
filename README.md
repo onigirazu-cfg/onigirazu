@@ -1031,18 +1031,28 @@ onigirazu rollback --cleanup --max-age 30d
 
 ## 🎯 Drift Detection
 
-Detect and automatically fix configuration drift:
+`drift` checks whether hosts still match a playbook: the playbook runs in check
+mode, and every task that would change a host is drift. Nothing is changed
+unless `--fix` is given.
 
 ```bash
-# Detect drift
-onigirazu drift detect -p playbook.yml -i inventory.yml
-
-# Show drift report
-onigirazu drift report
-
-# Fix detected drift
-onigirazu drift fix -p playbook.yml -i inventory.yml
+onigirazu drift site.yml -i hosts.yml                  # report
+onigirazu drift site.yml -i hosts.yml --format json    # for scripts
+onigirazu drift site.yml -i hosts.yml --fix            # apply when drift is found
 ```
+
+```
+Drift: 1 task(s) on 1 of 3 host(s) differ from site.yml
+
+web1
+  ~ Config file (copy): file would be updated
+
+In sync: web2, db1
+```
+
+Exit code: 0 in sync, 2 drift, 1 a task could not be checked. `--limit`,
+`--tags`, `-e`, `-b`, `-u` and `--private-key` work as for `apply`, so a cron
+job or a CI schedule can watch a fleet.
 
 ## Architecture
 
