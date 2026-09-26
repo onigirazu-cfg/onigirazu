@@ -1,0 +1,34 @@
+plays:
+  - name: command and shell results
+    hosts: all
+    become: true
+    tasks:
+      - name: Output without the trailing newline
+        command: echo ready
+        register: r
+        changed_when: false
+      - name: Compare stdout
+        copy: {content: "match\n", dest: /root/onigirazu-e2e-cr-eq}
+        when: r.stdout == "ready"
+      - name: rc and stderr apart
+        shell: echo out; echo err >&2; exit 3
+        register: s
+        failed_when: s.rc != 3
+        changed_when: false
+      - name: Record them
+        copy:
+          dest: /root/onigirazu-e2e-cr-rc
+          content: "{{ s.rc }}|{{ s.stdout }}|{{ s.stderr }}\n"
+      - name: command with chdir
+        command: pwd
+        args: {chdir: /tmp}
+        register: p
+        changed_when: false
+      - name: Record pwd
+        copy: {content: "{{ p.stdout }}\n", dest: /root/onigirazu-e2e-cr-pwd}
+      - name: command runs no shell
+        command: echo a;b
+        register: n
+        changed_when: false
+      - name: Record literal
+        copy: {content: "{{ n.stdout }}\n", dest: /root/onigirazu-e2e-cr-literal}

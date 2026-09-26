@@ -3,6 +3,7 @@ package modules
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -65,14 +66,7 @@ func (m *CommandModuleFixed) Execute(ctx context.Context, host types.Host, args 
 		return result, nil
 	}
 
-	command, _ := args["command"].(string)
-	shell := getBoolArg(args, "shell", false)
-
-	if shell {
-		return m.executeShellCommand(exec, ctx, command, result, startTime)
-	} else {
-		return m.executeCommand(exec, ctx, command, result, startTime)
-	}
+	return runCommand(ctx, exec, args, getBoolArg(args, "shell", false), result, startTime)
 }
 
 func (m *CommandModuleFixed) Validate(args map[string]interface{}) error {
@@ -114,81 +108,85 @@ func (m *CommandModuleFixed) Validate(args map[string]interface{}) error {
 	return nil
 }
 
-func (m *CommandModuleFixed) executeCommand(exec *executor.CommandExecutor, ctx context.Context, command string, result types.TaskResult, startTime time.Time) (types.TaskResult, error) {
-	// Split like a shell would (quotes, backslashes), without running one
-	parts, err := splitCommandLine(command)
-	if err != nil {
-		result.Success = false
-		result.Failed = true
-		result.Error = err.Error()
-		result.Duration = time.Since(startTime)
-		return result, err
-	}
-	if len(parts) == 0 {
-		result.Success = false
-		result.Failed = true
-		result.Error = "command is empty"
-		result.Duration = time.Since(startTime)
-		return result, fmt.Errorf("command is empty")
-	}
-
-	// Execute using remote executor with context for graceful shutdown support
-	output, err := exec.ExecuteWithContext(ctx, parts[0], parts[1:]...)
-
-	if err != nil {
-		result.Success = false
-		result.Failed = true
-		result.Error = fmt.Sprintf("command failed: %v", err)
-		result.Output = map[string]interface{}{
-			"message": "Command execution failed",
-			"error":   err.Error(),
-			"stdout":  output,
-			"command": command,
+// runCommand runs a command or shell task: the command line gets chdir,
+// the module's environment argument and executable (shell only), and the
+// result carries stdout, stderr and rc as in Ansible. A non-zero exit code
+// fails the task; failed_when can still accept it.
+func runCommand(ctx context.Context, exec *executor.CommandExecutor, args map[string]interface{}, shell bool, result types.TaskResult, startTime time.Time) (types.TaskResult, error) {
+	command := getStringArg(args, "command", getStringArg(args, "cmd", ""))
+	line := command
+	if !shell {
+		// split like a shell would (quotes, backslashes), then quote each word:
+		// no shell syntax is interpreted
+		parts, err := splitCommandLine(command)
+		if err == nil && len(parts) == 0 {
+			err = fmt.Errorf("command is empty")
 		}
-		result.Duration = time.Since(startTime)
-		return result, fmt.Errorf("command failed: %v", err)
+		if err != nil {
+			result.Success, result.Failed, result.Error = false, true, err.Error()
+			result.Duration = time.Since(startTime)
+			return result, nil
+		}
+		line = shellJoin(parts...)
+	} else if executable := getStringArg(args, "executable", ""); executable != "" {
+		line = shellJoin(executable, "-c", command)
+	}
+	if env, ok := args["environment"].(map[string]interface{}); ok && len(env) > 0 {
+		keys := make([]string, 0, len(env))
+		for k := range env {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		words := []string{"env"}
+		for _, k := range keys {
+			words = append(words, k+"="+fmt.Sprint(env[k]))
+		}
+		// its own shell, so $VAR in the command sees the new value
+		line = shellJoin(append(words, "sh", "-c", line)...)
+	}
+	if chdir := getStringArg(args, "chdir", ""); chdir != "" {
+		line = "cd " + shellQuote(chdir) + " && " + line
 	}
 
-	result.Success = true
-	result.Changed = true
+	run, err := exec.Run(ctx, line)
+	end := time.Now()
+	stdout := strings.TrimRight(run.Stdout, "\r\n")
+	stderr := strings.TrimRight(run.Stderr, "\r\n")
 	result.Output = map[string]interface{}{
-		"message": "Command executed successfully",
-		"stdout":  output,
-		"command": command,
+		"cmd":    command,
+		"stdout": stdout,
+		"stderr": stderr,
+		"rc":     run.RC,
+		"start":  startTime.Format("2006-01-02 15:04:05.000000"),
+		"end":    end.Format("2006-01-02 15:04:05.000000"),
+		"delta":  end.Sub(startTime).String(),
 	}
 	result.Duration = time.Since(startTime)
-
+	if err != nil {
+		result.Success, result.Failed = false, true
+		result.Error = fmt.Sprintf("command could not run: %v", err)
+		return result, nil
+	}
+	result.Changed = true
+	if run.RC != 0 {
+		result.Success, result.Failed = false, true
+		result.Error = fmt.Sprintf("non-zero return code %d", run.RC)
+		if stderr != "" {
+			result.Error += ": " + lastLines(stderr, 5)
+		}
+		return result, nil
+	}
+	result.Success = true
 	return result, nil
 }
 
-func (m *CommandModuleFixed) executeShellCommand(exec *executor.CommandExecutor, ctx context.Context, command string, result types.TaskResult, startTime time.Time) (types.TaskResult, error) {
-	// Execute command through shell using remote executor with context for graceful shutdown support
-	output, err := exec.ExecuteWithContext(ctx, "sh", "-c", command)
-
-	if err != nil {
-		result.Success = false
-		result.Failed = true
-		result.Error = fmt.Sprintf("shell command failed: %v", err)
-		result.Output = map[string]interface{}{
-			"message": "Shell command execution failed",
-			"error":   err.Error(),
-			"stdout":  output,
-			"command": command,
-		}
-		result.Duration = time.Since(startTime)
-		return result, fmt.Errorf("shell command failed: %v", err)
+// lastLines is the tail of a text, for error messages
+func lastLines(text string, n int) string {
+	lines := strings.Split(text, "\n")
+	if len(lines) > n {
+		lines = lines[len(lines)-n:]
 	}
-
-	result.Success = true
-	result.Changed = true
-	result.Output = map[string]interface{}{
-		"message": "Shell command executed successfully",
-		"stdout":  output,
-		"command": command,
-	}
-	result.Duration = time.Since(startTime)
-
-	return result, nil
+	return strings.Join(lines, " | ")
 }
 
 // ShellModuleFixed executes shell commands with advanced features using remote executor
@@ -275,70 +273,13 @@ func (m *ShellModuleFixed) Execute(ctx context.Context, host types.Host, args ma
 	}
 	defer exec.Close()
 
-	// Support both 'command' and 'cmd' (Ansible compatibility)
-	command, hasCommand := args["command"].(string)
-	if !hasCommand {
-		if cmd, hasCmd := args["cmd"].(string); hasCmd {
-			command = cmd
-			args["command"] = cmd
-		}
-	}
-
-	// Build the command with environment and working directory
-	fullCommand := command
-
 	if skip, msg := skipByCreatesRemoves(exec, args); skip {
 		result.Success = true
 		result.Output = map[string]interface{}{"msg": msg}
 		result.Duration = time.Since(startTime)
 		return result, nil
 	}
-
-	// Handle working directory change
-	if chdir, ok := args["chdir"].(string); ok {
-		fullCommand = fmt.Sprintf("cd %s && %s", shellQuote(chdir), command)
-	}
-
-	// Handle environment variables
-	if env, ok := args["environment"].(map[string]interface{}); ok {
-		envVars := make([]string, 0, len(env))
-		for key, value := range env {
-			if strValue, ok := value.(string); ok {
-				envVars = append(envVars, shellQuote(key+"="+strValue))
-			}
-		}
-		if len(envVars) > 0 {
-			envString := strings.Join(envVars, " ")
-			// its own shell, so $VAR in the command sees the new value
-			fullCommand = fmt.Sprintf("env %s sh -c %s", envString, shellQuote(fullCommand))
-		}
-	}
-
-	// Execute the command using remote executor
-	// Note: executor.Execute will automatically use shell if needed
-	output, execErr := exec.Execute(fullCommand)
-
-	if execErr != nil {
-		result.Output = map[string]interface{}{
-			"message": "Shell command failed",
-			"error":   execErr.Error(),
-			"stdout":  output,
-			"command": command,
-		}
-		result.Duration = time.Since(startTime)
-		return result, fmt.Errorf("command failed: %v", execErr)
-	}
-
-	result.Success = true
-	result.Changed = true
-	result.Output = map[string]interface{}{
-		"message": "Shell command executed successfully",
-		"stdout":  output,
-		"command": command,
-	}
-	result.Duration = time.Since(startTime)
-
-	return result, nil
+	return runCommand(ctx, exec, args, true, result, startTime)
 }
 
 func (m *ShellModuleFixed) IsIdempotent() bool {

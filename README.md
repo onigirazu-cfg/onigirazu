@@ -685,8 +685,9 @@ Onigirazu includes 22+ built-in modules for common automation tasks:
 - **service**: Service management
 - **user**: User management
 - **group**: Group management
-- **command**: Execute shell commands
-- **shell**: Execute shell commands with shell features
+- **command**: run a program without a shell (`chdir`, `creates`, `removes`); the result has
+  `rc`, `stdout`, `stderr` (trailing newline removed) and `*_lines`; a non-zero `rc` fails the task
+- **shell**: the same through `sh -c` (or `executable`)
 
 ### Configuration Modules
 
