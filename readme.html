@@ -1067,6 +1067,7 @@ mode, and every task that would change a host is drift. Nothing is changed
 unless <code>--fix</code> is given.</p>
 <pre class="codehilite"><code class="language-bash">onigirazu drift site.yml -i hosts.yml                  # report
 onigirazu drift site.yml -i hosts.yml --format json    # for scripts
+onigirazu drift site.yml -i hosts.yml --format html --output drift.html   # one page to share
 onigirazu drift site.yml -i hosts.yml --fix            # apply when drift is found
 </code></pre>
 
