@@ -26,6 +26,8 @@ type Host struct {
 	// the module registry, never read from inventory
 	Become       bool   `yaml:"-" json:"-"`
 	BecomeUser   string `yaml:"-" json:"-"`
+	// Environment of the current task, set by the registry for the executor
+	Environment map[string]string `yaml:"-" json:"-"`
 	BecomeMethod string `yaml:"-" json:"-"`
 }
 
@@ -198,6 +200,12 @@ type Task struct {
 	Rescuable bool `yaml:"-"`
 	// CheckMode overrides --check for this task (check_mode: true/false)
 	CheckMode *bool `yaml:"check_mode,omitempty"`
+	// Environment variables for the commands the task runs
+	Environment map[string]interface{} `yaml:"environment,omitempty"`
+	// Vars are variables of this task only
+	Vars map[string]interface{} `yaml:"vars,omitempty"`
+	// NoLog hides the task's arguments, output and errors from logs and state
+	NoLog bool `yaml:"no_log,omitempty"`
 }
 
 // UnmarshalYAML implements custom YAML unmarshaling for Task
@@ -241,6 +249,31 @@ func (t *Task) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		"rescue":        true,
 		"always":        true,
 		"check_mode":    true,
+		"environment":   true,
+		"vars":          true,
+		"no_log":        true,
+		"loop_control":  true,
+		"with_items":    true,
+		"with_list":     true,
+	}
+
+	if env, ok := taskMap["environment"].(map[string]interface{}); ok {
+		t.Environment = env
+	}
+	if vars, ok := taskMap["vars"].(map[string]interface{}); ok {
+		t.Vars = vars
+	}
+	if noLog, ok := taskMap["no_log"].(bool); ok {
+		t.NoLog = noLog
+	}
+	// with_items / with_list: the old spelling of loop
+	for _, key := range []string{"with_items", "with_list"} {
+		switch items := taskMap[key].(type) {
+		case []interface{}:
+			t.Loop = &Loop{Items: items}
+		case string:
+			t.Loop = &Loop{Expr: items}
+		}
 	}
 
 	// check_mode: false runs the task for real in a check run; true checks
@@ -405,6 +438,16 @@ func (t *Task) UnmarshalYAML(unmarshal func(interface{}) error) error {
 			if index, ok := loopMap["index"].(string); ok {
 				t.Loop.Index = index
 			}
+		}
+	}
+
+	// loop_control: loop_var / index_var name the item and index variables
+	if lc, ok := taskMap["loop_control"].(map[string]interface{}); ok && t.Loop != nil {
+		if v, ok := lc["loop_var"].(string); ok {
+			t.Loop.Variable = v
+		}
+		if v, ok := lc["index_var"].(string); ok {
+			t.Loop.Index = v
 		}
 	}
 

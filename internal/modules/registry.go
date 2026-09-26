@@ -195,6 +195,13 @@ func (r *Registry) ExecuteTask(ctx context.Context, task *types.Task, host types
 	}
 
 	// Every executor a module creates for this host picks the settings up
+	host.Environment = nil
+	if len(task.Environment) > 0 {
+		host.Environment = make(map[string]string, len(task.Environment))
+		for k, v := range task.Environment {
+			host.Environment[k] = fmt.Sprint(v)
+		}
+	}
 	host.Become = task.Become
 	host.BecomeUser = task.BecomeUser
 	host.BecomeMethod = task.BecomeMethod

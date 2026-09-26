@@ -755,6 +755,15 @@ Execute tasks multiple times:
       - git
 ```
 
+### Task options
+
+Besides `when`, `loop`, `register` and friends, a task takes `environment`
+(variables for its commands, also under `become`), `vars` (variables of this
+task only), `no_log: true` (output and errors hidden from logs, state and
+`-o json`; `register` still gets them), `loop_control` (`loop_var`,
+`index_var`) and the older `with_items`. `command` and `shell` honour
+`creates` and `removes`.
+
 ### Machine-readable output
 
 `onigirazu apply site.yml -o json` (or `-o yaml`) writes one document to
