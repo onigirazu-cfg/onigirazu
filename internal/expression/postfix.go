@@ -1,6 +1,7 @@
 package expression
 
 import (
+	"strconv"
 	"strings"
 )
 
@@ -186,7 +187,7 @@ func testsToCalls(s string) string {
 			from = i + 1
 			continue
 		}
-		call := "jinja_is(" + s[start:end+1] + `, "` + name + `"`
+		call := "jinja_is(" + s[start:end+1] + ", " + strconv.Quote(name)
 		if args != "" {
 			call += ", " + args
 		}
