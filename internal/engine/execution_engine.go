@@ -287,6 +287,11 @@ func (e *ExecutionEngine) ExecutePlaybook(ctx context.Context, playbook *types.P
 		e.metricsManager.IncrementPlaysExecuted()
 
 		playResult, err := e.executePlay(ctx, &play)
+		if err != nil && playResult != nil {
+			// keep what the failed play did: the tasks that ran and failed
+			playResult.Success = false
+			result.Plays = append(result.Plays, *playResult)
+		}
 		if err != nil {
 			e.logger.Error("Play '%s' failed: %v", play.Name, err)
 			result.Failed = true

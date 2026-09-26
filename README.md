@@ -755,6 +755,13 @@ Execute tasks multiple times:
       - git
 ```
 
+### Machine-readable output
+
+`onigirazu apply site.yml -o json` (or `-o yaml`) writes one document to
+stdout: status (`success`, `partial_success`, `failed`), totals, and every task
+with its result per host. Logs and progress go to stderr; the exit code is
+non-zero when the run failed.
+
 ### Check mode
 
 `onigirazu apply site.yml --check` runs every module that supports it in check

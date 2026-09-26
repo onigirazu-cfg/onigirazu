@@ -89,6 +89,8 @@ func FromPlaybookResult(result *types.PlaybookResult, playbookPath, playbookName
 		}
 	}
 	switch {
+	case result.Failed && failedHosts == 0:
+		exec.Status = "failed" // the run failed outside any host task (a play error)
 	case failedHosts == 0:
 		exec.Status = "success"
 	case failedHosts == len(exec.HostResults):
