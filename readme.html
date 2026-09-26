@@ -831,7 +831,10 @@ onigirazu run all -m ping -i inventory.yml -o table
 <p><code>-e</code> sets variables that override all others: <code>-e env=prod -e version=1.2</code>,
 <code>-e '{"replicas": 3}'</code> or <code>-e @vars.yml</code> (repeatable, later ones win).
 <code>--limit web1,db1</code> (or <code>--limit 'web:!web3'</code>) runs every play only on the
-matching hosts.</p>
+matching hosts.
+<code>-b</code> (<code>--become</code>, <code>--become-user</code>) turns on privilege escalation in every play,
+<code>-u</code>/<code>--private-key</code> set the SSH user and key for every host, and
+<code>--start-at-task NAME</code> skips everything before that task.</p>
 <h3>Task options</h3>
 <p>Besides <code>when</code>, <code>loop</code>, <code>register</code> and friends, a task takes <code>environment</code>
 (variables for its commands, also under <code>become</code>), <code>vars</code> (variables of this
@@ -853,7 +856,7 @@ failure handled by <code>rescue</code> does not fail the play.</p>
 <p><code>onigirazu apply site.yml --check</code> runs every module that supports it in check
 mode: it reports what would change and changes nothing. Supported: <code>copy</code>,
 <code>template</code>, <code>file</code>, <code>lineinfile</code>, <code>blockinfile</code>, <code>apt</code>, <code>yum</code>, <code>package</code>,
-<code>service</code>, <code>user</code>, <code>group</code>, <code>cron</code>, <code>sysctl</code>, <code>systemd</code>, <code>git</code>, <code>get_url</code> and the read-only modules
+<code>service</code>, <code>user</code>, <code>group</code>, <code>cron</code>, <code>sysctl</code>, <code>systemd</code>, <code>git</code>, <code>get_url</code>, <code>mount</code>, <code>config</code> and the read-only modules
 (<code>stat</code>, <code>find</code>, <code>debug</code>, <code>set_fact</code>, <code>ping</code>, <code>fail</code>, <code>wait_for</code>); other
 modules are skipped with a note. <code>check_mode: false</code> on a task runs it for real
 in a check run (e.g. a probe whose result later tasks use); <code>check_mode: true</code>
