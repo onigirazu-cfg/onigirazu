@@ -370,6 +370,14 @@ plays:
 <li>✅ Task notifications and handlers</li>
 <li>✅ Error handling with <code>ignore_errors</code> and <code>retries</code></li>
 </ul>
+<p>Ansible short forms work too:</p>
+<pre class="codehilite"><code class="language-yaml">- command: make install chdir=/src creates=/usr/local/bin/app
+- shell: ./configure
+  args: {chdir: /src}
+- file: path=/etc/app state=directory mode=0750
+- ping:
+</code></pre>
+
 <p>📚 <strong>For detailed examples, see <a href="docs/examples/README.md">docs/examples/README.md</a></strong></p>
 <h2>CLI Commands</h2>
 <h3>All Available Commands</h3>
