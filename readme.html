@@ -826,6 +826,14 @@ onigirazu run all -m ping -i inventory.yml -o table
       - git
 </code></pre>
 
+<h3>Check mode</h3>
+<p><code>onigirazu apply site.yml --check</code> runs every module that supports it in check
+mode: it reports what would change and changes nothing. Supported: <code>copy</code>,
+<code>template</code>, <code>file</code>, <code>lineinfile</code>, <code>blockinfile</code> and the read-only modules
+(<code>stat</code>, <code>find</code>, <code>debug</code>, <code>set_fact</code>, <code>ping</code>, <code>fail</code>, <code>wait_for</code>); other
+modules are skipped with a note. <code>check_mode: false</code> on a task runs it for real
+in a check run (e.g. a probe whose result later tasks use); <code>check_mode: true</code>
+checks a single task in a normal run.</p>
 <h3>Conditionals</h3>
 <p><code>when</code>, <code>until</code>, <code>changed_when</code> and <code>failed_when</code> take an expression,
 evaluated per host with that host's facts and registered results:</p>
