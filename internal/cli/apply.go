@@ -53,6 +53,11 @@ func NewApplyCommand() *cobra.Command {
 		outputFormat   string
 		extraVars      []string
 		limit          string
+		become         bool
+		becomeUser     string
+		remoteUser     string
+		privateKey     string
+		startAtTask    string
 		parallel       int
 		timeout        time.Duration
 		interactive    bool
@@ -385,6 +390,9 @@ Examples:
 				executionEngine.SetExtraVars(vars)
 			}
 			executionEngine.SetLimit(limit)
+			executionEngine.SetForceBecome(become || becomeUser != "", becomeUser)
+			executionEngine.SetStartAtTask(startAtTask)
+
 			if policySource != "" {
 				log.Info("Security policy loaded from %s", policySource)
 			} else {
@@ -678,6 +686,11 @@ Examples:
 
 			// === EXECUTION ===
 			log.Info("Starting playbook execution")
+			// -u / --private-key apply to the loaded inventory
+			if remoteUser != "" || privateKey != "" {
+				inventoryManager.ApplyHostOverrides(remoteUser, privateKey)
+			}
+
 			startTime := time.Now()
 
 			// Initialize profiler if enabled
@@ -715,6 +728,9 @@ Examples:
 			result, err := executionEngine.ExecutePlaybook(ctx, playbook)
 			duration := time.Since(startTime)
 			runResult, runStart = result, startTime
+			if err == nil && !executionEngine.StartAtTaskFound() {
+				err = fmt.Errorf("--start-at-task: no task named %q ran", startAtTask)
+			}
 
 			// Wait for TUI to finish if it's running (user presses Q to exit)
 			if interactive && tuiModel != nil {
@@ -1055,6 +1071,11 @@ Examples:
 	cmd.Flags().StringVarP(&outputFormat, "output", "o", "text", "Output format (text, json, yaml)")
 	cmd.Flags().StringArrayVarP(&extraVars, "extra-vars", "e", nil, "Variables that override all others: key=value ..., JSON/YAML, or @file (repeatable)")
 	cmd.Flags().StringVar(&limit, "limit", "", "Run only on hosts matching this pattern (e.g. web1, web:!web3)")
+	cmd.Flags().BoolVarP(&become, "become", "b", false, "Use privilege escalation in every play")
+	cmd.Flags().StringVar(&becomeUser, "become-user", "", "User to become (implies --become)")
+	cmd.Flags().StringVarP(&remoteUser, "user", "u", "", "SSH user for every host")
+	cmd.Flags().StringVar(&privateKey, "private-key", "", "SSH private key for every host")
+	cmd.Flags().StringVar(&startAtTask, "start-at-task", "", "Skip tasks until the one with this name")
 	cmd.Flags().IntVarP(&parallel, "parallel", "f", 10, "Number of parallel executions")
 	cmd.Flags().DurationVarP(&timeout, "timeout", "t", 30*time.Minute, "Execution timeout")
 	cmd.Flags().BoolVar(&interactive, "interactive", false, "Interactive mode with beautiful TUI")

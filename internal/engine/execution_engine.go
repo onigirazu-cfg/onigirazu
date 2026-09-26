@@ -37,6 +37,13 @@ type ExecutionEngine struct {
 	// narrows the hosts of every play
 	extraVars map[string]interface{}
 	limit     string
+	// forceBecome (-b) turns become on for every play
+	forceBecome     bool
+	forceBecomeUser string
+	// startAt (--start-at-task) skips tasks until one with this name;
+	// startedAt records that it was reached
+	startAt   string
+	startedAt bool
 
 	config            interfaces.Config
 	logger            interfaces.Logger
@@ -393,6 +400,12 @@ func (e *ExecutionEngine) ExecutePlaybook(ctx context.Context, playbook *types.P
 func (e *ExecutionEngine) executePlay(ctx context.Context, play *types.Play) (*types.PlayResult, error) {
 	e.mutex.Lock()
 	e.playBecome = becomeSettings{Become: play.Become, User: play.BecomeUser, Method: play.BecomeMethod}
+	if e.forceBecome {
+		e.playBecome.Become = true
+		if e.forceBecomeUser != "" {
+			e.playBecome.User = e.forceBecomeUser
+		}
+	}
 	e.mutex.Unlock()
 	defer func() {
 		e.mutex.Lock()
@@ -588,6 +601,17 @@ func (e *ExecutionEngine) executeTaskList(ctx context.Context, tasks []types.Tas
 		}
 
 		e.logger.Debug("Executing task %d/%d: %s (tags: %v)", i+1, len(tasks), task.Name, task.Tags)
+
+		// --start-at-task: skip until the named task (a block only if the task
+		// is not inside it)
+		if e.startAt != "" && !e.isStarted() {
+			if task.Name == e.startAt {
+				e.markStarted()
+			} else if !containsTask(&task, e.startAt) {
+				e.logger.Debug("Skipping task '%s' before --start-at-task", task.Name)
+				continue
+			}
+		}
 
 		// a block filters its own tasks by tag, so it is not filtered here
 		if len(task.Block) > 0 {
@@ -1627,6 +1651,17 @@ func (e *ExecutionEngine) executeTaskListWithRetry(ctx context.Context, tasks []
 
 		e.logger.Debug("Executing task %d/%d: %s (tags: %v)", i+1, len(tasks), task.Name, task.Tags)
 
+		// --start-at-task: skip until the named task (a block only if the task
+		// is not inside it)
+		if e.startAt != "" && !e.isStarted() {
+			if task.Name == e.startAt {
+				e.markStarted()
+			} else if !containsTask(&task, e.startAt) {
+				e.logger.Debug("Skipping task '%s' before --start-at-task", task.Name)
+				continue
+			}
+		}
+
 		// a block filters its own tasks by tag, so it is not filtered here
 		if len(task.Block) > 0 {
 			if err := e.executeBlock(ctx, &task, hosts, variables, playResult); err != nil {
@@ -1977,4 +2012,43 @@ func censored(result types.TaskResult) types.TaskResult {
 		result.Error = noLogMessage
 	}
 	return result
+}
+
+// SetForceBecome turns become on for every play (-b), optionally as user
+func (e *ExecutionEngine) SetForceBecome(become bool, user string) {
+	e.forceBecome, e.forceBecomeUser = become, user
+}
+
+// SetStartAtTask skips every task before the one with this name
+func (e *ExecutionEngine) SetStartAtTask(name string) {
+	e.startAt = strings.TrimSpace(name)
+}
+
+func (e *ExecutionEngine) isStarted() bool {
+	e.mutex.RLock()
+	defer e.mutex.RUnlock()
+	return e.startedAt
+}
+
+func (e *ExecutionEngine) markStarted() {
+	e.mutex.Lock()
+	defer e.mutex.Unlock()
+	e.startedAt = true
+}
+
+// StartAtTaskFound reports whether --start-at-task named a task that ran
+func (e *ExecutionEngine) StartAtTaskFound() bool {
+	return e.startAt == "" || e.isStarted()
+}
+
+// containsTask reports whether a block holds a task with this name
+func containsTask(task *types.Task, name string) bool {
+	for _, list := range [][]types.Task{task.Block, task.Rescue, task.Always} {
+		for i := range list {
+			if list[i].Name == name || containsTask(&list[i], name) {
+				return true
+			}
+		}
+	}
+	return false
 }
