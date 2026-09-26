@@ -1,13 +1,12 @@
 package cli
 
 import (
+	"context"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v3"
 )
 
 func newGraphCmd() *cobra.Command {
@@ -51,26 +50,20 @@ Output formats:
 		RunE: func(cmd *cobra.Command, args []string) error {
 			filename := args[0]
 
-			// Read and parse playbook
-			// #nosec G304 - Reading user-provided playbook files is the intended functionality of the graph command
-			data, err := os.ReadFile(filename)
+			// as apply reads it: includes, roles and short forms resolved
+			playbook, err := parsePlaybook(context.Background(), filename)
 			if err != nil {
-				return fmt.Errorf("cannot read file: %w", err)
-			}
-
-			var playbook types.Playbook
-			if err := yaml.Unmarshal(data, &playbook); err != nil {
 				return fmt.Errorf("cannot parse playbook: %w", err)
 			}
 
 			// Generate graph based on format
 			switch outputFormat {
 			case "ascii":
-				generateASCIIGraph(&playbook, showVars, showHandlers, compact)
+				generateASCIIGraph(playbook, showVars, showHandlers, compact)
 			case "dot":
-				generateDOTGraph(&playbook, showVars, showHandlers)
+				generateDOTGraph(playbook, showVars, showHandlers)
 			case "mermaid":
-				generateMermaidGraph(&playbook, showVars, showHandlers)
+				generateMermaidGraph(playbook, showVars, showHandlers)
 			default:
 				return fmt.Errorf("unknown format: %s (supported: ascii, dot, mermaid)", outputFormat)
 			}

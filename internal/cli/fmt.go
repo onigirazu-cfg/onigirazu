@@ -127,11 +127,12 @@ func formatFile(path string, indent int, check, showDiff, write bool) (bool, err
 		return false, fmt.Errorf("failed to read file: %w", err)
 	}
 
-	// Parse YAML
-	var data interface{}
+	// Parse YAML as nodes: key order, comments and flow style are kept
+	var data yaml.Node
 	if err := yaml.Unmarshal(originalData, &data); err != nil {
 		return false, fmt.Errorf("failed to parse YAML: %w", err)
 	}
+	nameFirst(&data)
 
 	// Format YAML with custom encoder
 	var formattedData []byte
@@ -143,7 +144,7 @@ func formatFile(path string, indent int, check, showDiff, write bool) (bool, err
 	encoder = yaml.NewEncoder(&buf)
 	encoder.SetIndent(indent)
 
-	if err := encoder.Encode(data); err != nil {
+	if err := encoder.Encode(&data); err != nil {
 		return false, fmt.Errorf("failed to encode YAML: %w", err)
 	}
 
@@ -239,6 +240,31 @@ func showDifference(original, formatted string) {
 			}
 			if formLine != "" {
 				fmt.Printf("+ %s\n", formLine)
+			}
+		}
+	}
+}
+
+// nameFirst moves the name key to the front of every mapping in a list
+// (plays, tasks, handlers), where readers look for it
+func nameFirst(n *yaml.Node) {
+	for _, c := range n.Content {
+		nameFirst(c)
+	}
+	if n.Kind != yaml.SequenceNode {
+		return
+	}
+	for _, item := range n.Content {
+		if item.Kind != yaml.MappingNode {
+			continue
+		}
+		for i := 2; i+1 < len(item.Content); i += 2 {
+			if item.Content[i].Value == "name" {
+				reordered := make([]*yaml.Node, 0, len(item.Content))
+				reordered = append(reordered, item.Content[i], item.Content[i+1])
+				reordered = append(reordered, item.Content[:i]...)
+				item.Content = append(reordered, item.Content[i+2:]...)
+				break
 			}
 		}
 	}

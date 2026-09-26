@@ -7,8 +7,6 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-
-	"github.com/onigirazu-cfg/onigirazu/internal/parser"
 )
 
 // newValidateCmd creates the validate command
@@ -66,15 +64,12 @@ func runValidate(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("playbook file not found: %s", playbookPath)
 	}
 
-	// Create parser
-	p := parser.New()
-
 	// Parse and validate playbook
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	startTime := time.Now()
-	playbook, err := p.ParsePlaybook(ctx, playbookPath)
+	playbook, err := parsePlaybook(ctx, playbookPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Validation failed: %v\n", err)
 		return err
