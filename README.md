@@ -1070,6 +1070,26 @@ Exit code: 0 in sync, 2 drift, 1 a task could not be checked. `--limit`,
 `--tags`, `-e`, `-b`, `-u` and `--private-key` work as for `apply`, so a cron
 job or a CI schedule can watch a fleet.
 
+`--notify URL` (repeatable) posts `{"text": ..., "report": ...}` to a Slack or
+Mattermost style webhook when drift or errors are found (`--notify-always`:
+also when in sync). A systemd timer that checks every hour:
+
+```ini
+# /etc/systemd/system/onigirazu-drift.service
+[Service]
+Type=oneshot
+WorkingDirectory=/srv/infra
+ExecStart=/usr/local/bin/onigirazu drift site.yml -i hosts.yml --notify ${WEBHOOK}
+EnvironmentFile=/etc/onigirazu/drift.env
+SuccessExitStatus=2
+
+# /etc/systemd/system/onigirazu-drift.timer
+[Timer]
+OnCalendar=hourly
+[Install]
+WantedBy=timers.target
+```
+
 ## Architecture
 
 Onigirazu follows a clean, modular architecture:

@@ -56,6 +56,8 @@ The older snapshot comparison is still available with --snapshot <id>.`,
 	}
 
 	cmd.Flags().BoolVar(&driftCheck.fix, "fix", false, "Apply the playbook when drift is found")
+	cmd.Flags().StringArrayVar(&driftCheck.notify, "notify", nil, "Webhook (Slack/Mattermost style) to post to when drift or errors are found (repeatable)")
+	cmd.Flags().BoolVar(&driftCheck.notifyOK, "notify-always", false, "Post to --notify also when all hosts are in sync")
 	cmd.Flags().StringArrayVarP(&driftCheck.extraVars, "extra-vars", "e", nil, "Extra variables, as for apply (repeatable)")
 	cmd.Flags().StringVar(&driftCheck.limit, "limit", "", "Check only hosts matching this pattern")
 	cmd.Flags().StringVar(&driftCheck.tags, "tags", "", "Check only tasks with these tags")
