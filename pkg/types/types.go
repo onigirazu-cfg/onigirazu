@@ -1066,6 +1066,9 @@ type Role struct {
 	Meta        RoleMeta               `yaml:"meta"`
 	PreTasks    []Task                 `yaml:"pre_tasks"`
 	PostTasks   []Task                 `yaml:"post_tasks"`
+	// Params are the variables given with the role in the play
+	// ("- role: web" + "port: 80"); they win over the role's own vars
+	Params map[string]interface{} `yaml:"-" json:"-"`
 }
 
 // RoleMeta contains role metadata

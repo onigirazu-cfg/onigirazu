@@ -557,6 +557,11 @@ func (e *ExecutionEngine) executePlay(ctx context.Context, play *types.Play) (*t
 			}
 
 			// Execute role with dependencies
+			if len(roleRef.Vars) > 0 {
+				withParams := *role
+				withParams.Params = roleRef.Vars
+				role = &withParams
+			}
 			if err := e.executeRoleWithDependencies(ctx, role, hosts, playVars, result); err != nil {
 				e.logger.Error("Role '%s' failed: %v", role.Name, err)
 				if !play.IgnoreErrors {
@@ -1613,8 +1618,8 @@ func (e *ExecutionEngine) mergeRoleVariables(role *types.Role, playVars map[stri
 	// Use the role loader's merge function for proper precedence handling
 	// This ensures: RoleVars > OverrideVars > PlayVars > Defaults
 	// Note: overrideVars are empty here; they should be passed from RoleReference if available
-	overrideVars := make(map[string]interface{})
-	return e.roleLoader.MergeVariables(role.Defaults, role.Vars, playVars, overrideVars)
+	merged := e.roleLoader.MergeVariables(role.Defaults, role.Vars, playVars, nil)
+	return e.mergeVariables(merged, role.Params, e.extraVars)
 }
 
 // mergeVariables merges multiple variable maps (later maps take precedence)

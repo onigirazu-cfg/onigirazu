@@ -1,0 +1,5 @@
+- name: Template from the role
+  template: {src: web.conf.j2, dest: /root/onigirazu-e2e-rf-tpl}
+- block:
+    - name: File from the role, in a block
+      copy: {src: static.txt, dest: /root/onigirazu-e2e-rf-file}

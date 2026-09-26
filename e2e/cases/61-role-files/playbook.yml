@@ -1,0 +1,7 @@
+plays:
+  - name: role templates and files
+    hosts: all
+    become: true
+    roles:
+      - role: web
+        web_port: 9090
