@@ -534,6 +534,10 @@ func (p *EnhancedParser) processRoles(ctx context.Context, playbook *types.Playb
 			if role.Handlers, err = p.expandIncludes(ctx, role.Handlers, filepath.Join(role.Path, "handlers"), 0); err != nil {
 				return fmt.Errorf("role %s: %w", roleRef.Name, err)
 			}
+			// tasks brought in by includes point into the role too
+			for _, list := range [][]types.Task{role.Tasks, role.Handlers} {
+				resolveRoleFiles(list, role.Path)
+			}
 			playbook.Plays[i].RoleObjects = append(playbook.Plays[i].RoleObjects, role)
 		}
 

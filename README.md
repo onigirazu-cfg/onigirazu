@@ -776,6 +776,21 @@ Execute tasks multiple times:
 is looped over as `{key, value}` items sorted by key, with `with_dict: "{{ d }}"`
 or `loop: "{{ d | dict2items }}"`; `items2dict` turns them back.
 
+### Roles
+
+`roles:` in a play runs `roles/<name>` next to the playbook: `tasks/`,
+`handlers/`, `defaults/` and `vars/` (`main.yml`). A role's `template`, `copy`,
+`script` and `unarchive` tasks find a relative `src` in the role's
+`templates/` or `files/`. `meta/main.yml` dependencies (a name, or `role:`
+with variables) run first. Variables given with the role win over its own:
+
+```yaml
+roles:
+  - common
+  - role: web
+    web_port: 9090
+```
+
 ### Extra variables and limits
 
 `-e` sets variables that override all others: `-e env=prod -e version=1.2`,

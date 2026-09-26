@@ -1066,6 +1066,9 @@ type Role struct {
 	Meta        RoleMeta               `yaml:"meta"`
 	PreTasks    []Task                 `yaml:"pre_tasks"`
 	PostTasks   []Task                 `yaml:"post_tasks"`
+	// Params are the variables given with the role in the play
+	// ("- role: web" + "port: 80"); they win over the role's own vars
+	Params map[string]interface{} `yaml:"-" json:"-"`
 }
 
 // RoleMeta contains role metadata
@@ -1149,6 +1152,17 @@ func (r *RoleReference) UnmarshalYAML(value *yaml.Node) error {
 		}
 		r.Vars[k] = v
 	}
+	return nil
+}
+
+// UnmarshalYAML accepts a dependency in meta/main.yml the ways Ansible does:
+// a bare role name, "role:" or "name:", and role variables next to it
+func (d *RoleDependency) UnmarshalYAML(value *yaml.Node) error {
+	var ref RoleReference
+	if err := ref.UnmarshalYAML(value); err != nil {
+		return err
+	}
+	d.Name, d.Vars = ref.Name, ref.Vars
 	return nil
 }
 

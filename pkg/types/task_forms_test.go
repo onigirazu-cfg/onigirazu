@@ -103,3 +103,12 @@ func TestTask_BooleanKeywords(t *testing.T) {
 	assert.True(t, !no.Become && no.BecomeSet)
 	assert.False(t, none.BecomeSet)
 }
+
+func TestRoleDependency_Forms(t *testing.T) {
+	var meta RoleMeta
+	require.NoError(t, yaml.Unmarshal([]byte("dependencies:\n  - common\n  - role: web\n    port: 80\n"), &meta))
+	require.Len(t, meta.Dependencies, 2)
+	assert.Equal(t, "common", meta.Dependencies[0].Name)
+	assert.Equal(t, "web", meta.Dependencies[1].Name)
+	assert.Equal(t, 80, meta.Dependencies[1].Vars["port"])
+}

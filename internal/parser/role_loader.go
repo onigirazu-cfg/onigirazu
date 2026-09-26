@@ -93,6 +93,11 @@ func (rl *RoleLoader) LoadRole(ctx context.Context, roleRef types.RoleReference)
 		return nil, fmt.Errorf("error loading role dependencies for %s: %w", roleRef.Name, err)
 	}
 
+	// relative sources of template/copy/... point into the role
+	for _, list := range [][]types.Task{role.Tasks, role.Handlers, role.PreTasks, role.PostTasks} {
+		resolveRoleFiles(list, role.Path)
+	}
+
 	// Cache the role
 	rl.cache[roleRef.Name] = role
 
@@ -407,6 +412,11 @@ func (rl *RoleLoader) resolveDependencyOrderRecursive(ctx context.Context, role 
 			depRole, err := rl.LoadRole(ctx, depRef)
 			if err != nil {
 				return fmt.Errorf("error loading dependency %s: %w", dep.Name, err)
+			}
+			if len(dep.Vars) > 0 { // the dependency's parameters, on a copy
+				withParams := *depRole
+				withParams.Params = dep.Vars
+				depRole = &withParams
 			}
 
 			// Recursively resolve this dependency's dependencies

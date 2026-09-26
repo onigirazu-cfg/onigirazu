@@ -473,3 +473,18 @@ func TestBecomeFalseAndBlockInheritance(t *testing.T) {
 	assert.Equal(t, 1, out[0].Vars["x"])
 	assert.True(t, out[1].Become, "a task's own become stays")
 }
+
+func TestRoleVariablePrecedence(t *testing.T) {
+	engine, _, _, _, _, _ := createTestEngine()
+	engine.SetExtraVars(map[string]interface{}{"e": "extra"})
+	role := &types.Role{
+		Defaults: map[string]interface{}{"d": "default", "p": "default", "v": "default", "e": "default"},
+		Vars:     map[string]interface{}{"v": "role-vars", "p": "role-vars"},
+		Params:   map[string]interface{}{"p": "param"},
+	}
+	vars := engine.mergeRoleVariables(role, map[string]interface{}{"d": "play"})
+	assert.Equal(t, "play", vars["d"], "play vars over defaults")
+	assert.Equal(t, "role-vars", vars["v"])
+	assert.Equal(t, "param", vars["p"], "role params over role vars")
+	assert.Equal(t, "extra", vars["e"], "-e wins")
+}
