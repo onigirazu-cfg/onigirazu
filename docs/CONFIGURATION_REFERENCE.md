@@ -49,8 +49,8 @@ Environment variables only change the defaults; a key in `onigirazu.yml` wins ov
 
 Durations are written as `30s`, `5m`, `1h`.
 
-Current limitation: `check_mode: true` (or `ONIGIRAZU_CHECK_MODE=true`) prints
-"Running in check mode" but tasks still make changes. Use `apply --check`.
+`check_mode: true` and `dry_run: true` (or their `ONIGIRAZU_*` variables) are the
+same as `apply --check`: no task changes anything.
 
 ## Keys that are accepted but have no effect
 

@@ -52,11 +52,8 @@ all:
         env: production
 ```
 
-Current limitation: only hosts defined under `all.hosts` are loaded. A host that appears
-only under a group in `children` is ignored, and a file without `all.hosts` fails with
-"no valid hosts found in Ansible inventory". Define every host (with its connection
-variables) under `all.hosts` and list it by name in the groups, as above, or convert
-the inventory to INI.
+Hosts may be defined under `all.hosts` or directly in any group, at any depth of
+`children`. A host listed in several groups gets the settings of all of them.
 
 `children` of a group may be a map (Ansible style) or a list of group names.
 
@@ -90,8 +87,8 @@ Playbooks use the Ansible layout: a list of plays with `hosts`, `vars` and `task
 
 ## Troubleshooting
 
-- `no valid hosts found in Ansible inventory`: add the hosts under `all.hosts`.
-- A group has no hosts: the hosts listed in it must also exist under `all.hosts`.
+- `no valid hosts found in Ansible inventory`: the file has no host under `all` (hosts
+  must be inside the `all:` tree).
 - More output: `-v` or `--show-debug`.
 
 Example inventory: `examples/inventory-ansible-full.yml`.

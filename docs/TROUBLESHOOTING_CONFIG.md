@@ -17,11 +17,6 @@ onigirazu apply site.yml -i inventory.yml
 - Most keys have no effect; see the list in [CONFIGURATION_REFERENCE.md](CONFIGURATION_REFERENCE.md).
 - A key in the file wins over the matching `ONIGIRAZU_*` environment variable.
 
-## `check_mode: true` in onigirazu.yml still changes hosts
-
-Current limitation: the config key is not honoured by task execution. Use
-`onigirazu apply site.yml --check` or `onigirazu plan site.yml`.
-
 ## `invalid security policy …: unknown or unsupported keys: …`
 
 The policy is strict JSON. Remove the listed keys. `require_encryption`,
@@ -58,9 +53,9 @@ web1 ansible_host=192.168.1.10 ansible_user=deploy ansible_port=2222
 
 ## `no valid hosts found in Ansible inventory`
 
-Current limitation: in Ansible-format YAML only hosts listed under `all.hosts` are
-loaded. List every host under `all.hosts` (groups may then refer to them by name),
-or use an INI inventory.
+An Ansible-format YAML file needs its hosts inside the `all:` tree (under
+`all.hosts` or in any group below `all.children`). Top-level keys other than `all`
+are ignored.
 
 ## Host key verification fails
 
