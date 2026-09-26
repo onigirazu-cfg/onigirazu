@@ -755,7 +755,8 @@ onigirazu run all -m ping -i inventory.yml -o table
 <p>Onigirazu includes 22+ built-in modules for common automation tasks:</p>
 <h3>System Modules</h3>
 <ul>
-<li><strong>file</strong>: File and directory operations</li>
+<li><strong>file</strong>: files, directories, <code>link</code>/<code>hard</code> links, <code>touch</code>, <code>absent</code>; without <code>state</code> it sets
+  mode/owner/group of an existing path; <code>recurse: true</code> for directories; <code>dest</code>/<code>name</code> alias <code>path</code></li>
 <li><strong>package</strong>: Package management</li>
 <li><strong>service</strong>: Service management</li>
 <li><strong>user</strong>: User management</li>
