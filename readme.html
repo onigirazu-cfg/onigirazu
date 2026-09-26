@@ -827,6 +827,9 @@ onigirazu run all -m ping -i inventory.yml -o table
       - git
 </code></pre>
 
+<p><code>loop:</code> also takes an expression (<code>"{{ result.stdout_lines }}"</code>). A dictionary
+is looped over as <code>{key, value}</code> items sorted by key, with <code>with_dict: "{{ d }}"</code>
+or <code>loop: "{{ d | dict2items }}"</code>; <code>items2dict</code> turns them back.</p>
 <h3>Extra variables and limits</h3>
 <p><code>-e</code> sets variables that override all others: <code>-e env=prod -e version=1.2</code>,
 <code>-e '{"replicas": 3}'</code> or <code>-e @vars.yml</code> (repeatable, later ones win).
@@ -887,7 +890,8 @@ evaluated per host with that host's facts and registered results:</p>
   failed_when: app.rc is defined and app.rc &gt; 3
 </code></pre>
 
-<p>Supported: <code>==</code>, <code>!=</code>, <code>&lt;</code>, <code>&gt;</code>, <code>and</code>, <code>or</code>, <code>not</code>, <code>in</code>, <code>is defined</code>,
+<p>Supported: <code>==</code>, <code>!=</code>, <code>&lt;</code>, <code>&gt;</code>, <code>and</code>, <code>or</code>, <code>not</code>, <code>in</code> (list item, dictionary
+key or substring), <code>is defined</code>,
 <code>is not defined</code>, filters <code>| length</code>, <code>| lower</code>, <code>| upper</code>, <code>| int</code>,
 <code>| trim</code>. A list under <code>when</code> means all items must hold; <code>{{ }}</code> around
 the expression is optional. A condition that cannot be evaluated fails the task.</p>
