@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/pelletier/go-toml/v2"
@@ -334,45 +335,36 @@ func (p *InventoryParser) parseAnsibleYamlInventory(data []byte) (*types.Invento
 		Hosts:  make([]types.Host, 0),
 	}
 
-	// Parse the "all" group which contains all hosts and groups
+	// The tree under "all": hosts may be defined in any group, groups nest
+	// through children (as a map of groups or a list of names), and every
+	// host belongs to "all"
 	if ansibleInv.All != nil {
-		allData := ansibleInv.All
-		// First pass: collect all hosts from the "all" section
-		parsedHosts := make(map[string]*types.Host)
-
-		if hostsData, ok := allData["hosts"].(map[string]interface{}); ok {
-			for hostName, hostData := range hostsData {
-				host := p.parseAnsibleHost(hostName, hostData)
-				if host != nil {
-					parsedHosts[hostName] = host
-					inventory.Hosts = append(inventory.Hosts, *host)
+		w := &ansibleWalk{inventory: inventory, raw: map[string]map[string]interface{}{}, members: map[string][]string{}}
+		w.group("all", ansibleInv.All, 0)
+		// a host may be listed in several groups: its settings from all of
+		// them are merged, then it is parsed once
+		hosts := map[string]*types.Host{}
+		for _, name := range w.order {
+			var data interface{}
+			if raw := w.raw[name]; len(raw) > 0 {
+				data = raw
+			}
+			if host := p.parseAnsibleHost(name, data); host != nil {
+				hosts[name] = host
+				inventory.Hosts = append(inventory.Hosts, *host)
+			}
+		}
+		w.members["all"] = w.order
+		for groupName, names := range w.members {
+			for _, name := range names {
+				if host, ok := hosts[name]; ok {
+					inventory.Groups[groupName].Hosts[name] = host
 				}
 			}
 		}
-
-		// Second pass: parse groups and their hosts
-		if groupsData, ok := allData["children"].(map[string]interface{}); ok {
-			for groupName, groupData := range groupsData {
-				group := p.parseAnsibleGroup(groupName, groupData, parsedHosts)
-				if group != nil {
-					inventory.Groups[groupName] = group
-				}
-			}
-		}
-
-		// Parse group-level vars if present
-		if vars, ok := allData["vars"].(map[string]interface{}); ok {
-			allGroup := &types.Group{
-				Name:     "all",
-				Hosts:    make(map[string]*types.Host),
-				Children: make([]string, 0),
-				Vars:     vars,
-			}
-			// Add all hosts to "all" group
-			for _, host := range parsedHosts {
-				allGroup.Hosts[host.Name] = host
-			}
-			inventory.Groups["all"] = allGroup
+		// "all" is implicit; it is kept as a group only to carry its vars
+		if len(inventory.Groups["all"].Vars) == 0 {
+			delete(inventory.Groups, "all")
 		}
 	}
 
@@ -446,57 +438,6 @@ func (p *InventoryParser) parseAnsibleHost(hostName string, hostData interface{}
 	}
 
 	return host
-}
-
-// parseAnsibleGroup converts Ansible group definition to Onigirazu Group
-func (p *InventoryParser) parseAnsibleGroup(groupName string, groupData interface{}, allHosts map[string]*types.Host) *types.Group {
-	group := &types.Group{
-		Name:     groupName,
-		Hosts:    make(map[string]*types.Host),
-		Children: make([]string, 0),
-		Vars:     make(map[string]interface{}),
-	}
-
-	if groupData == nil {
-		return group
-	}
-
-	groupMap, ok := groupData.(map[string]interface{})
-	if !ok {
-		return group
-	}
-
-	// Parse hosts in this group
-	if hostsData, ok := groupMap["hosts"].(map[string]interface{}); ok {
-		for hostName := range hostsData {
-			if host, exists := allHosts[hostName]; exists {
-				group.Hosts[hostName] = host
-			}
-		}
-	}
-
-	// Parse child groups
-	if childrenData, ok := groupMap["children"].([]interface{}); ok {
-		for _, childName := range childrenData {
-			if name, ok := childName.(string); ok {
-				group.Children = append(group.Children, name)
-			}
-		}
-	} else if childrenData, ok := groupMap["children"].(map[string]interface{}); ok {
-		// Handle children as map (Ansible format can use both)
-		for childName := range childrenData {
-			group.Children = append(group.Children, childName)
-		}
-	}
-
-	// Parse group variables
-	if vars, ok := groupMap["vars"].(map[string]interface{}); ok {
-		for key, value := range vars {
-			group.Vars[key] = value
-		}
-	}
-
-	return group
 }
 
 // TOML structure for inventory
@@ -821,4 +762,77 @@ func (p *InventoryParser) ParseInventoryOrInline(ctx context.Context, inventoryP
 	// Otherwise, treat it as a file path
 	p.logger.Debug("Treating as inventory file path: %s", inventoryPath)
 	return p.ParseInventoryFile(ctx, inventoryPath)
+}
+
+// ansibleWalk collects the hosts and groups of an Ansible YAML inventory
+type ansibleWalk struct {
+	inventory *types.Inventory
+	raw       map[string]map[string]interface{} // host -> merged settings
+	members   map[string][]string               // group -> host names
+	order     []string                          // hosts as they first appear
+}
+
+func (w *ansibleWalk) group(name string, data interface{}, depth int) *types.Group {
+	group, ok := w.inventory.Groups[name]
+	if !ok {
+		group = &types.Group{Name: name, Hosts: map[string]*types.Host{}, Children: []string{}, Vars: map[string]interface{}{}}
+		w.inventory.Groups[name] = group
+	}
+	m, ok := data.(map[string]interface{})
+	if !ok || depth > 32 {
+		return group
+	}
+	if hostsData, ok := m["hosts"].(map[string]interface{}); ok {
+		names := make([]string, 0, len(hostsData))
+		for hostName := range hostsData {
+			names = append(names, hostName)
+		}
+		sort.Strings(names)
+		for _, hostName := range names {
+			if _, seen := w.raw[hostName]; !seen {
+				w.raw[hostName] = map[string]interface{}{}
+				w.order = append(w.order, hostName)
+			}
+			if settings, ok := hostsData[hostName].(map[string]interface{}); ok {
+				for k, v := range settings {
+					w.raw[hostName][k] = v
+				}
+			}
+			w.members[name] = appendUnique(w.members[name], hostName)
+		}
+	}
+	if vars, ok := m["vars"].(map[string]interface{}); ok {
+		for k, v := range vars {
+			group.Vars[k] = v
+		}
+	}
+	switch children := m["children"].(type) {
+	case map[string]interface{}:
+		names := make([]string, 0, len(children))
+		for childName := range children {
+			names = append(names, childName)
+		}
+		sort.Strings(names)
+		for _, childName := range names {
+			w.group(childName, children[childName], depth+1)
+			group.Children = appendUnique(group.Children, childName)
+		}
+	case []interface{}:
+		for _, c := range children {
+			if childName, ok := c.(string); ok {
+				w.group(childName, nil, depth+1)
+				group.Children = appendUnique(group.Children, childName)
+			}
+		}
+	}
+	return group
+}
+
+func appendUnique(list []string, s string) []string {
+	for _, v := range list {
+		if v == s {
+			return list
+		}
+	}
+	return append(list, s)
 }
