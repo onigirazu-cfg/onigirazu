@@ -759,8 +759,10 @@ onigirazu run all -m ping -i inventory.yml -o table
   mode/owner/group of an existing path; <code>recurse: true</code> for directories; <code>dest</code>/<code>name</code> alias <code>path</code></li>
 <li><strong>package</strong>: Package management</li>
 <li><strong>service</strong>: Service management</li>
-<li><strong>user</strong>: User management</li>
-<li><strong>group</strong>: Group management</li>
+<li><strong>user</strong>: creates a user or brings an existing one to the given <code>shell</code>, <code>home</code>, <code>uid</code>,
+  <code>group</code>, <code>groups</code> (list or comma separated; <code>append: true</code> only adds), <code>comment</code> and
+  <code>password</code> (hash); <code>state: absent</code> removes the home only with <code>remove: true</code></li>
+<li><strong>group</strong>: <code>state</code> defaults to <code>present</code></li>
 <li><strong>command</strong>: run a program without a shell (<code>chdir</code>, <code>creates</code>, <code>removes</code>); the result has
   <code>rc</code>, <code>stdout</code>, <code>stderr</code> (trailing newline removed) and <code>*_lines</code>; a non-zero <code>rc</code> fails the task</li>
 <li><strong>shell</strong>: the same through <code>sh -c</code> (or <code>executable</code>)</li>
