@@ -761,8 +761,9 @@ onigirazu run all -m ping -i inventory.yml -o table
 <li><strong>service</strong>: Service management</li>
 <li><strong>user</strong>: User management</li>
 <li><strong>group</strong>: Group management</li>
-<li><strong>command</strong>: Execute shell commands</li>
-<li><strong>shell</strong>: Execute shell commands with shell features</li>
+<li><strong>command</strong>: run a program without a shell (<code>chdir</code>, <code>creates</code>, <code>removes</code>); the result has
+  <code>rc</code>, <code>stdout</code>, <code>stderr</code> (trailing newline removed) and <code>*_lines</code>; a non-zero <code>rc</code> fails the task</li>
+<li><strong>shell</strong>: the same through <code>sh -c</code> (or <code>executable</code>)</li>
 </ul>
 <h3>Configuration Modules</h3>
 <ul>
