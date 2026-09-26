@@ -50,3 +50,23 @@ func TestContainerRunQuoting(t *testing.T) {
 		})
 	}
 }
+
+func TestContainerCheckMode(t *testing.T) {
+	log := fakeContainerTool(t, "docker")
+	args := map[string]interface{}{"name": "web", "image": "alpine:3", "state": "started", "_check_mode": true}
+	result, err := NewDockerContainerModule().Execute(context.Background(), types.Host{Name: "localhost", Address: "127.0.0.1"}, args)
+	require.NoError(t, err)
+	assert.True(t, result.Changed)
+	assert.Equal(t, "started", result.Output["action"])
+	_, err = os.Stat(log)
+	assert.True(t, os.IsNotExist(err), "check mode must not run docker")
+}
+
+func TestPlannedContainerAction(t *testing.T) {
+	assert.Equal(t, "created", plannedContainerAction("present", false, false))
+	assert.Equal(t, "", plannedContainerAction("present", true, false))
+	assert.Equal(t, "", plannedContainerAction("started", true, true))
+	assert.Equal(t, "stopped", plannedContainerAction("stopped", true, true))
+	assert.Equal(t, "", plannedContainerAction("absent", false, false))
+	assert.Equal(t, "removed", plannedContainerAction("absent", true, false))
+}

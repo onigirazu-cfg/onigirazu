@@ -91,6 +91,16 @@ func (m *PodmanModule) execute(ctx context.Context, host types.Host, args map[st
 		return result, err
 	}
 
+	if inCheckMode(args) {
+		running := exists && currentState.Running
+		if action := plannedContainerAction(state, exists, running); action != "" {
+			result.Changed = true
+			result.Output["action"] = action
+		}
+		result.Duration = time.Since(startTime)
+		return result, nil
+	}
+
 	switch state {
 	case "present", "started":
 		if !exists {

@@ -79,6 +79,27 @@ func (m *DockerImageModule) Execute(ctx context.Context, host types.Host, args m
 		return result, err
 	}
 
+	if inCheckMode(args) {
+		force, _ := args["force"].(bool)
+		action := ""
+		switch {
+		case state == "present" && !exists:
+			action = "pulled"
+		case state == "present" && force:
+			action = "updated"
+		case state == "absent" && exists:
+			action = "removed"
+		case state == "build":
+			action = "built"
+		}
+		if action != "" {
+			result.Changed = true
+			result.Output["action"] = action
+		}
+		result.Duration = time.Since(startTime)
+		return result, nil
+	}
+
 	switch state {
 	case "present":
 		if !exists {
