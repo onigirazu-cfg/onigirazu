@@ -14,7 +14,7 @@ import (
 //	command: make                   together with "args: {chdir: /src}"
 
 // freeFormModules take their main argument as a string
-var freeFormModules = map[string]string{"command": "cmd", "shell": "cmd", "raw": "cmd", "script": "script", "meta": "free_form"}
+var freeFormModules = map[string]string{"command": "cmd", "shell": "cmd", "raw": "cmd", "script": "script", "meta": "free_form", "include_vars": "file"}
 
 // options of the free-form modules that may be written inline as key=value
 var inlineOption = regexp.MustCompile(`(^|\s)(chdir|creates|removes|executable|stdin)=("[^"]*"|'[^']*'|\S+)`)

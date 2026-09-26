@@ -693,6 +693,8 @@ Onigirazu includes 22+ built-in modules for common automation tasks:
 - **shell**: the same through `sh -c` (or `executable`)
 - **assert**: `that` (one expression or a list), `fail_msg`/`msg`, `success_msg`
 - **replace**: replace every match of `regexp` in a file (multiline, `\1` back references)
+- **include_vars**: variables from YAML files on the control machine (`file`, relative to the
+  playbook or the role's `vars/`; `dir`; `name` to put them under one key)
 
 ### Configuration Modules
 
@@ -775,7 +777,8 @@ Execute tasks multiple times:
 
 `loop:` also takes an expression (`"{{ result.stdout_lines }}"`). A dictionary
 is looped over as `{key, value}` items sorted by key, with `with_dict: "{{ d }}"`
-or `loop: "{{ d | dict2items }}"`; `items2dict` turns them back.
+or `loop: "{{ d | dict2items }}"`; `items2dict` turns them back. `with_sequence:
+start=1 end=5 stride=1 format=web%02d` (or `count=`) gives numbered items.
 
 ### Roles
 

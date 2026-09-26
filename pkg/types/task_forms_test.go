@@ -124,3 +124,18 @@ func TestTask_LocalAction(t *testing.T) {
 	assert.Equal(t, map[string]interface{}{"dest": "/tmp/x", "content": "y"}, m.Args)
 	assert.Equal(t, "localhost", m.DelegateTo)
 }
+
+func TestTask_WithSequence(t *testing.T) {
+	cases := map[string][]interface{}{
+		"start=1 end=3":           {"1", "2", "3"},
+		"start=0 end=10 stride=5": {"0", "5", "10"},
+		"count=2 format=web%02d":  {"web01", "web02"},
+		"start=3 end=1 stride=-1": {"3", "2", "1"},
+	}
+	for spec, want := range cases {
+		var task Task
+		require.NoError(t, yaml.Unmarshal([]byte("name: a\ndebug: {msg: x}\nwith_sequence: "+spec+"\n"), &task), spec)
+		require.NotNil(t, task.Loop, spec)
+		assert.Equal(t, want, task.Loop.Items, spec)
+	}
+}
