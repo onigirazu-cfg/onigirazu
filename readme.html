@@ -764,6 +764,8 @@ onigirazu run all -m ping -i inventory.yml -o table
 <li><strong>command</strong>: run a program without a shell (<code>chdir</code>, <code>creates</code>, <code>removes</code>); the result has
   <code>rc</code>, <code>stdout</code>, <code>stderr</code> (trailing newline removed) and <code>*_lines</code>; a non-zero <code>rc</code> fails the task</li>
 <li><strong>shell</strong>: the same through <code>sh -c</code> (or <code>executable</code>)</li>
+<li><strong>assert</strong>: <code>that</code> (one expression or a list), <code>fail_msg</code>/<code>msg</code>, <code>success_msg</code></li>
+<li><strong>replace</strong>: replace every match of <code>regexp</code> in a file (multiline, <code>\1</code> back references)</li>
 </ul>
 <h3>Configuration Modules</h3>
 <ul>
