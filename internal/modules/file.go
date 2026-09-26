@@ -129,7 +129,7 @@ func (m *FileModule) ensureLink(ctx context.Context, host types.Host, args map[s
 	}
 	q, qs := shellQuote(path), shellQuote(src)
 	// same: the link is in place; other: path exists and is something else
-	probe := fmt.Sprintf(`if [ "$(readlink %s)" = %s ]; then echo same; elif [ -e %s ] || [ -L %s ]; then echo other; fi`, q, qs, q, q)
+	probe := fmt.Sprintf(`l=$(readlink %s); if [ "$l" = %s ]; then echo same; elif [ -e %s ] || [ -L %s ]; then echo other; fi`, q, qs, q, q)
 	if hard {
 		probe = fmt.Sprintf(`if [ %s -ef %s ] && [ ! -L %s ]; then echo same; elif [ -e %s ] || [ -L %s ]; then echo other; fi`, q, qs, q, q, q)
 	}
