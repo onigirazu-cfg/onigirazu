@@ -778,6 +778,13 @@ stdout: status (`success`, `partial_success`, `failed`), totals, and every task
 with its result per host. Logs and progress go to stderr; the exit code is
 non-zero when the run failed.
 
+### Blocks
+
+`block` groups tasks; after the first failure the rest of the block is skipped
+and `rescue` runs, where `ansible_failed_task` (name, module) and
+`ansible_failed_result` describe the failure; `always` runs in any case. A
+failure handled by `rescue` does not fail the play.
+
 ### Check mode
 
 `onigirazu apply site.yml --check` runs every module that supports it in check
