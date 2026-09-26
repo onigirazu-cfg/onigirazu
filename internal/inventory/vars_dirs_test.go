@@ -108,3 +108,26 @@ func TestHostPatterns_UnionAndExclusion(t *testing.T) {
 	assert.ElementsMatch(t, []string{"w1"}, names("web:!db"))
 	assert.ElementsMatch(t, []string{"d1", "w1"}, names("all:!w2"))
 }
+
+func TestVarsDirNextToPlaybookWins(t *testing.T) {
+	root := t.TempDir()
+	writeFiles(t, root, map[string]string{
+		"inventories/prod/hosts.yml":          "groups:\n  web:\n    hosts:\n      w1: {}\n",
+		"inventories/prod/group_vars/web.yml": "port: 80\nregion: eu\n",
+		"playbooks/group_vars/web.yml":        "port: 8080\n",
+		"playbooks/host_vars/w1.yml":          "role: primary\n",
+	})
+	p := parser.NewEnhancedParser(nil, &mockLogger{})
+	loader := NewMultiSourceLoader(p, &mockLogger{}, newMockCache(), 0)
+	loader.AddVarsDir(filepath.Join(root, "playbooks"))
+	inv, err := loader.LoadFromMultipleSources(context.Background(), []string{filepath.Join(root, "inventories/prod/hosts.yml")})
+	require.NoError(t, err)
+	m := NewManager(p, &mockLogger{}, newMockCache())
+	require.NoError(t, m.SetInventory(inv))
+	hosts, err := m.GetHosts("all")
+	require.NoError(t, err)
+	require.Len(t, hosts, 1)
+	assert.Equal(t, 8080, hosts[0].Vars["port"], "the playbook's group_vars win")
+	assert.Equal(t, "eu", hosts[0].Vars["region"], "the inventory's still apply")
+	assert.Equal(t, "primary", hosts[0].Vars["role"])
+}

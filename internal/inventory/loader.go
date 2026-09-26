@@ -31,6 +31,15 @@ type MultiSourceLoader struct {
 	// variables from group_vars/ and host_vars/ next to the sources
 	groupVarsFiles map[string]map[string]interface{}
 	hostVarsFiles  map[string]map[string]interface{}
+	// more directories with group_vars/ and host_vars/ (the playbook's),
+	// read after the sources, so they win
+	extraVarsDirs []string
+}
+
+// AddVarsDir reads group_vars/ and host_vars/ in dir as well, after the
+// inventory sources (Ansible reads them next to the playbook too)
+func (msl *MultiSourceLoader) AddVarsDir(dir string) {
+	msl.extraVarsDirs = append(msl.extraVarsDirs, dir)
 }
 
 // NewMultiSourceLoader creates a new multi-source inventory loader
@@ -88,6 +97,15 @@ func (msl *MultiSourceLoader) LoadFromMultipleSources(
 		}
 	}
 
+	for _, dir := range msl.extraVarsDirs {
+		abs, err := filepath.Abs(dir)
+		if err != nil {
+			return nil, err
+		}
+		if err := msl.loadVarsDirs(abs); err != nil {
+			return nil, fmt.Errorf("failed to load group_vars/host_vars in %s: %w", dir, err)
+		}
+	}
 	msl.applyVarsFiles()
 
 	// Build final inventory with merged data
