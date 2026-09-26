@@ -159,3 +159,10 @@ func TestJinjaFilters(t *testing.T) {
 		assert.Equal(t, want, got, e)
 	}
 }
+
+func TestExtractFilter(t *testing.T) {
+	vars := map[string]interface{}{"hv": map[string]interface{}{"a": map[string]interface{}{"ip": "10.0.0.1"}}}
+	out, err := Eval(`['a', 'missing'] | map('extract', hv, 'ip') | list`, vars)
+	require.NoError(t, err)
+	assert.Equal(t, []interface{}{"10.0.0.1", nil}, out)
+}

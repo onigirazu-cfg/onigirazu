@@ -688,6 +688,8 @@ func (e *ExecutionEngine) executeTask(ctx context.Context, task *types.Task, hos
 		return nil
 	}
 
+	variables = e.withMagicVariables(variables)
+
 	// Handle loops
 	if task.Loop != nil {
 		return e.executeTaskWithLoop(ctx, task, hosts, variables, playResult)
@@ -1305,6 +1307,9 @@ func (e *ExecutionEngine) gatherFacts(ctx context.Context, hosts []types.Host) e
 				"HOME": systemFacts.HomeDir,
 				"PATH": systemFacts.Path,
 			},
+		}
+		for k, v := range ansibleFacts(systemFacts, e.facts[host.Name]) {
+			e.facts[host.Name][k] = v
 		}
 	}
 
