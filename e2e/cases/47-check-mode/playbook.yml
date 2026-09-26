@@ -57,7 +57,11 @@ plays:
         systemd: {operation: service, name: cron, state: stopped}
         check_mode: true
         register: ss
+      - name: Checked mount
+        mount: {path: /mnt/onigirazu-e2e-check, src: tmpfs, fstype: tmpfs, opts: size=8m, state: mounted}
+        check_mode: true
+        register: mt
       - name: Record what check mode reported
         copy:
-          content: "{{ checked.changed }} {{ u.changed }} {{ g.changed }} {{ s.changed }} {{ k.changed }} {{ c.changed }} {{ gc.changed }} {{ gu.changed }} {{ su.changed }} {{ ss.changed }}\n"
+          content: "{{ checked.changed }} {{ u.changed }} {{ g.changed }} {{ s.changed }} {{ k.changed }} {{ c.changed }} {{ gc.changed }} {{ gu.changed }} {{ su.changed }} {{ ss.changed }} {{ mt.changed }}\n"
           dest: /root/onigirazu-e2e-check-report

@@ -35,3 +35,34 @@ func TestConfigSet_NestedKeyIdempotent(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, res.Changed, "second set changes nothing")
 }
+
+func TestConfig_CheckModeMergeAndDelete(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "app.json")
+	orig := []byte(`{"server":{"port":8080}}`)
+	require.NoError(t, os.WriteFile(path, orig, 0o644))
+	host := types.Host{Name: "localhost", Address: "127.0.0.1"}
+	run := func(args map[string]interface{}) types.TaskResult {
+		args["path"], args["format"] = path, "json"
+		res, err := NewConfigModule().Execute(context.Background(), host, args)
+		require.NoError(t, err)
+		require.True(t, res.Success, res.Error)
+		return res
+	}
+
+	res := run(map[string]interface{}{"action": "set", "key": "server.host", "value": "x", "_check_mode": true})
+	assert.True(t, res.Changed)
+	res = run(map[string]interface{}{"action": "delete", "_check_mode": true})
+	assert.True(t, res.Changed)
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, orig, data, "check mode changed nothing")
+
+	// merge compares by JSON form: 8080 (int) equals 8080 read back from JSON
+	res = run(map[string]interface{}{"action": "merge", "values": map[string]interface{}{"server": map[string]interface{}{"port": 8080}}})
+	assert.False(t, res.Changed)
+
+	require.NoError(t, os.Remove(path))
+	res = run(map[string]interface{}{"action": "delete"})
+	assert.False(t, res.Changed, "deleting a missing file is no change")
+}
