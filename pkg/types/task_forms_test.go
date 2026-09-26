@@ -164,3 +164,24 @@ until: result.rc == 0
 	assert.Equal(t, []string{"web", "db"}, handler.Listens)
 	assert.Equal(t, "web", handler.Listen)
 }
+
+func TestTask_FullyQualifiedModules(t *testing.T) {
+	var tasks []Task
+	require.NoError(t, yaml.Unmarshal([]byte(`
+- ansible.builtin.copy: {dest: /x, content: y}
+- ansible.builtin.command: echo hi chdir=/tmp
+- ansible.posix.sysctl: {name: vm.swappiness, value: 10}
+- module: ansible.legacy.file
+  path: /x
+- local_action: ansible.builtin.command echo hi
+- ansible.builtin.include_tasks: other.yml
+`), &tasks))
+	assert.Equal(t, "copy", tasks[0].Module)
+	assert.Equal(t, "command", tasks[1].Module)
+	assert.Equal(t, "echo hi", tasks[1].Args["cmd"])
+	assert.Equal(t, "/tmp", tasks[1].Args["chdir"])
+	assert.Equal(t, "sysctl", tasks[2].Module)
+	assert.Equal(t, "file", tasks[3].Module)
+	assert.Equal(t, "command", tasks[4].Module)
+	assert.Equal(t, "other.yml", tasks[5].Include)
+}

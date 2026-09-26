@@ -419,6 +419,71 @@ func (e *ExecutionEngine) ExecutePlaybook(ctx context.Context, playbook *types.P
 
 // executePlay executes a single play
 func (e *ExecutionEngine) executePlay(ctx context.Context, play *types.Play) (*types.PlayResult, error) {
+	// hosts: and serial: may be templates of -e and play vars
+	if strings.Contains(play.Hosts, "{{") || isTemplate(play.Serial) {
+		vars := e.mergeVariables(e.mergeVariables(e.variables, play.Vars), e.extraVars)
+		rendered := *play
+		if strings.Contains(play.Hosts, "{{") {
+			out, err := e.templateEngine.Render(ctx, play.Hosts, vars)
+			if err != nil {
+				return nil, fmt.Errorf("play '%s': hosts: %w", play.Name, err)
+			}
+			rendered.Hosts = strings.TrimSpace(out)
+		}
+		if serial, ok := play.Serial.(string); ok && strings.Contains(serial, "{{") {
+			out, err := e.templateEngine.Render(ctx, serial, vars)
+			if err != nil {
+				return nil, fmt.Errorf("play '%s': serial: %w", play.Name, err)
+			}
+			rendered.Serial = strings.TrimSpace(out)
+		}
+		play = &rendered
+	}
+
+	hosts, err := e.getPlayHosts(play)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get hosts for play '%s': %w", play.Name, err)
+	}
+	batches, err := serialBatches(play.Serial, len(hosts))
+	if err != nil {
+		return nil, fmt.Errorf("play '%s': %w", play.Name, err)
+	}
+	if len(batches) <= 1 {
+		return e.executePlayOn(ctx, play, hosts)
+	}
+
+	// serial: the whole play runs on one batch of hosts after another; a
+	// failed batch stops the rollout
+	result := &types.PlayResult{Name: play.Name, PlayName: play.Name, StartTime: time.Now(), Success: true}
+	finish := func() {
+		result.EndTime = time.Now()
+		result.Duration = result.EndTime.Sub(result.StartTime)
+	}
+	start := 0
+	for i, size := range batches {
+		batch := hosts[start : start+size]
+		start += size
+		e.logger.Info("Play '%s': batch %d/%d (%d hosts)", play.Name, i+1, len(batches), len(batch))
+		batchResult, err := e.executePlayOn(ctx, play, batch)
+		if batchResult != nil {
+			result.Hosts = append(result.Hosts, batchResult.Hosts...)
+			result.Tasks = append(result.Tasks, batchResult.Tasks...)
+			if !batchResult.Success {
+				result.Success = false
+			}
+		}
+		if err != nil {
+			result.Success = false
+			finish()
+			return result, fmt.Errorf("batch %d/%d: %w", i+1, len(batches), err)
+		}
+	}
+	finish()
+	return result, nil
+}
+
+// executePlayOn runs a play on the given hosts
+func (e *ExecutionEngine) executePlayOn(ctx context.Context, play *types.Play, hosts []types.Host) (*types.PlayResult, error) {
 	e.mutex.Lock()
 	e.playBecome = becomeSettings{Become: play.Become, User: play.BecomeUser, Method: play.BecomeMethod}
 	e.playEnvironment = play.Environment
@@ -435,12 +500,6 @@ func (e *ExecutionEngine) executePlay(ctx context.Context, play *types.Play) (*t
 		e.playEnvironment = nil
 		e.mutex.Unlock()
 	}()
-
-	// Get target hosts
-	hosts, err := e.getPlayHosts(play)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get hosts for play '%s': %w", play.Name, err)
-	}
 
 	if len(hosts) == 0 {
 		e.logger.Warn("No hosts found for play '%s'", play.Name)

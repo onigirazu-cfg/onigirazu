@@ -300,6 +300,25 @@ Ansible short forms work too:
 - local_action: command make package   # delegate_to: localhost
 ```
 
+Fully qualified names work for the built-in modules (`ansible.builtin.copy`,
+`ansible.legacy.command`) and for collection modules Onigirazu implements
+(`ansible.posix.sysctl`, `ansible.posix.mount`, `ansible.posix.authorized_key`,
+`community.general.archive`, `community.docker.docker_container`/`docker_image`/`docker_compose`,
+`community.mysql.mysql_db`/`mysql_user`, `community.postgresql.postgresql_db`/`postgresql_user`).
+
+### Rolling updates: serial
+
+```yaml
+plays:
+  - name: Update web servers
+    hosts: "{{ target | default('webservers') }}"   # hosts may use -e and play vars
+    serial: [1, "30%"]    # a number, a percentage, or a list whose last entry repeats
+    tasks: ...
+```
+
+With `serial` the whole play (facts, tasks, handlers) runs on one batch of hosts after
+another. A batch that fails stops the play: later batches do not start.
+
 📚 **For detailed examples, see [docs/examples/README.md](docs/examples/README.md)**
 
 ## CLI Commands
