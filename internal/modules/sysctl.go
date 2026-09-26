@@ -31,7 +31,7 @@ func (m *SysctlModule) GetDescription() string {
 func (m *SysctlModule) Execute(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
 	startTime := time.Now()
 	result := types.TaskResult{
-		TaskName:  getStringArg(args, "name", "sysctl"),
+		TaskName:  taskName(args),
 		Host:      host.Name,
 		Module:    m.GetName(),
 		Success:   true,
@@ -82,86 +82,59 @@ func (m *SysctlModule) Execute(ctx context.Context, host types.Host, args map[st
 	return execResult, nil
 }
 
-// handlePresent ensures a kernel parameter is set
+// handlePresent sets a kernel parameter now and, with persist (default), in
+// sysctl_file. Each part changes only when it differs.
 func (m *SysctlModule) handlePresent(ctx context.Context, exec *executor.CommandExecutor, host types.Host, args map[string]interface{}, result types.TaskResult, name, value, sysctlFile string, reload bool) (types.TaskResult, error) {
-	// Get current value
+	value = normalizeSysctl(value)
 	currentValue, err := m.getCurrentValue(exec, name)
 	if err != nil {
 		return m.failResult(result, fmt.Sprintf("failed to get current sysctl value: %v", err))
 	}
-
 	result.Output["sysctl_key"] = name
 	result.Output["current_value"] = currentValue
 	result.Output["desired_value"] = value
 
-	// Check if value is already set correctly
-	if currentValue == value {
-		result.Changed = false
+	persist := getBoolArg(args, "persist", true)
+	var newFile []byte
+	if persist {
+		data, _, err := readHostFile(ctx, host, args, sysctlFile)
+		if err != nil {
+			return m.failResult(result, fmt.Sprintf("failed to read %s: %v", sysctlFile, err))
+		}
+		if updated, changed := setSysctlLine(string(data), name, value); changed {
+			newFile = []byte(updated)
+		}
+	}
+	runtimeWrong := normalizeSysctl(currentValue) != value
+
+	if !runtimeWrong && newFile == nil {
 		result.Output["msg"] = fmt.Sprintf("Kernel parameter %s is already set to %s", name, value)
 		result.Duration = time.Since(result.Timestamp)
 		return result, nil
 	}
-
-	// Set the value immediately with sysctl
-	cmd := fmt.Sprintf("sysctl -w '%s=%s' 2>&1", name, strings.TrimSpace(value))
-	output, err := exec.Execute("sh", "-c", cmd)
-	if err != nil {
-		return m.failResult(result, fmt.Sprintf("failed to set kernel parameter: %v", err))
+	result.Changed = true
+	if inCheckMode(args) {
+		result.Output["msg"] = fmt.Sprintf("Kernel parameter %s would be set to %s", name, value)
+		result.Duration = time.Since(result.Timestamp)
+		return result, nil
 	}
 
-	result.Output["sysctl_output"] = output
-	result.Changed = true
-
-	// Persist to sysctl configuration file if requested
-	if getBoolArg(args, "persist", true) {
-		// Read current file content
-		catCmd := fmt.Sprintf("cat %s 2>/dev/null || echo ''", shellQuote(sysctlFile))
-		fileContent, err := exec.Execute("sh", "-c", catCmd)
+	if runtimeWrong {
+		output, err := runOnHost(ctx, host, args, "sysctl", "-w", name+"="+value)
 		if err != nil {
-			return m.failResult(result, fmt.Sprintf("failed to read sysctl file: %v", err))
+			return m.failResult(result, fmt.Sprintf("failed to set kernel parameter: %v", err))
 		}
-
-		// Check if parameter is already in file
-		lines := strings.Split(fileContent, "\n")
-		paramPattern := name + "="
-		found := false
-		newLines := []string{}
-
-		for _, line := range lines {
-			trimmed := strings.TrimSpace(line)
-			if strings.HasPrefix(trimmed, paramPattern) {
-				// Update existing parameter
-				newLines = append(newLines, fmt.Sprintf("%s=%s", name, value))
-				found = true
-			} else if trimmed != "" && !strings.HasPrefix(trimmed, "#") {
-				newLines = append(newLines, line)
-			} else if trimmed != "" {
-				newLines = append(newLines, line)
-			}
-		}
-
-		if !found {
-			// Add new parameter
-			newLines = append(newLines, fmt.Sprintf("%s=%s", name, value))
-		}
-
-		// Write updated content back
-		newContent := strings.Join(newLines, "\n")
-		writeCmd := fmt.Sprintf("printf '%%s\\n' %s | tee %s > /dev/null", shellQuote(newContent), shellQuote(sysctlFile))
-		_, err = exec.Execute("sh", "-c", writeCmd)
-		if err != nil {
+		result.Output["sysctl_output"] = strings.TrimSpace(output)
+	}
+	if newFile != nil {
+		if err := writeHostFile(ctx, host, args, sysctlFile, newFile, 0o644); err != nil {
 			return m.failResult(result, fmt.Sprintf("failed to persist sysctl parameter: %v", err))
 		}
-
 		result.Output["persisted_to_file"] = sysctlFile
-	}
-
-	// Reload sysctl settings if requested
-	if reload {
-		_, err := exec.Execute("sysctl", "-p")
-		if err != nil {
-			// Don't fail if reload fails - the setting is still in effect
-			result.Output["reload_error"] = err.Error()
+		if reload {
+			if _, err := runOnHost(ctx, host, args, "sysctl", "-p", sysctlFile); err != nil {
+				result.Output["reload_error"] = err.Error()
+			}
 		}
 	}
 
@@ -170,60 +143,95 @@ func (m *SysctlModule) handlePresent(ctx context.Context, exec *executor.Command
 	return result, nil
 }
 
-// handleAbsent removes a kernel parameter
+// handleAbsent removes a parameter from sysctl_file. The kernel keeps its
+// current value until reboot; there is nothing to "unset" at runtime.
 func (m *SysctlModule) handleAbsent(ctx context.Context, exec *executor.CommandExecutor, host types.Host, args map[string]interface{}, result types.TaskResult, name, sysctlFile string, reload bool) (types.TaskResult, error) {
-	// Get current value
-	currentValue, err := m.getCurrentValue(exec, name)
-	if err != nil || currentValue == "" {
-		result.Changed = false
-		result.Output["msg"] = fmt.Sprintf("Kernel parameter %s is not set", name)
+	result.Output["sysctl_key"] = name
+	data, exists, err := readHostFile(ctx, host, args, sysctlFile)
+	if err != nil {
+		return m.failResult(result, fmt.Sprintf("failed to read %s: %v", sysctlFile, err))
+	}
+	updated, changed := removeSysctlLine(string(data), name)
+	if !exists || !changed {
+		result.Output["msg"] = fmt.Sprintf("Kernel parameter %s is not in %s", name, sysctlFile)
 		result.Duration = time.Since(result.Timestamp)
 		return result, nil
 	}
-
-	result.Output["sysctl_key"] = name
-	result.Output["removed_value"] = currentValue
-
-	// Remove from sysctl file if requested
-	if getBoolArg(args, "persist", true) {
-		// Read current file content
-		catCmd := fmt.Sprintf("cat %s 2>/dev/null || echo ''", shellQuote(sysctlFile))
-		fileContent, err := exec.Execute("sh", "-c", catCmd)
-		if err == nil && fileContent != "" {
-			// Remove the parameter line
-			lines := strings.Split(fileContent, "\n")
-			paramPattern := name + "="
-			newLines := []string{}
-
-			for _, line := range lines {
-				trimmed := strings.TrimSpace(line)
-				if !strings.HasPrefix(trimmed, paramPattern) && trimmed != "" {
-					newLines = append(newLines, line)
-				}
-			}
-
-			newContent := strings.Join(newLines, "\n")
-			if newContent != "" {
-				writeCmd := fmt.Sprintf("printf '%%s\\n' %s | tee %s > /dev/null", shellQuote(newContent), shellQuote(sysctlFile))
-				_, _ = exec.Execute("sh", "-c", writeCmd)
-			} else {
-				// Remove empty file
-				_, _ = exec.Execute("rm", "-f", sysctlFile)
-			}
-
-			result.Output["removed_from_file"] = sysctlFile
-		}
-	}
-
-	// Reload sysctl settings if requested
-	if reload {
-		_, _ = exec.Execute("sysctl", "-p")
-	}
-
 	result.Changed = true
-	result.Output["msg"] = fmt.Sprintf("Kernel parameter %s removed", name)
+	if inCheckMode(args) {
+		result.Output["msg"] = fmt.Sprintf("Kernel parameter %s would be removed from %s", name, sysctlFile)
+		result.Duration = time.Since(result.Timestamp)
+		return result, nil
+	}
+	if err := writeHostFile(ctx, host, args, sysctlFile, []byte(updated), 0o644); err != nil {
+		return m.failResult(result, fmt.Sprintf("failed to update %s: %v", sysctlFile, err))
+	}
+	result.Output["removed_from_file"] = sysctlFile
+	result.Output["msg"] = fmt.Sprintf("Kernel parameter %s removed from %s", name, sysctlFile)
 	result.Duration = time.Since(result.Timestamp)
 	return result, nil
+}
+
+// normalizeSysctl compares multi-value parameters (e.g. port ranges) by
+// their fields: sysctl prints them tab-separated
+func normalizeSysctl(v string) string {
+	return strings.Join(strings.Fields(v), " ")
+}
+
+// setSysctlLine sets "name = value" in a sysctl.d file, keeping other lines
+func setSysctlLine(content, name, value string) (string, bool) {
+	lines := strings.Split(strings.TrimRight(content, "\n"), "\n")
+	if content == "" {
+		lines = nil
+	}
+	want := name + " = " + value
+	found := false
+	for i, line := range lines {
+		key, val, ok := strings.Cut(line, "=")
+		if !ok || strings.TrimSpace(key) != name || strings.HasPrefix(strings.TrimSpace(line), "#") {
+			continue
+		}
+		if found { // a duplicate: drop it
+			lines[i] = "\x00"
+			continue
+		}
+		found = true
+		if normalizeSysctl(val) == value {
+			continue
+		}
+		lines[i] = want
+	}
+	if !found {
+		lines = append(lines, want)
+	}
+	out := make([]string, 0, len(lines))
+	for _, l := range lines {
+		if l != "\x00" {
+			out = append(out, l)
+		}
+	}
+	updated := strings.Join(out, "\n") + "\n"
+	return updated, updated != content
+}
+
+// removeSysctlLine drops every "name = ..." line
+func removeSysctlLine(content, name string) (string, bool) {
+	var out []string
+	changed := false
+	for _, line := range strings.Split(strings.TrimRight(content, "\n"), "\n") {
+		key, _, ok := strings.Cut(line, "=")
+		if ok && strings.TrimSpace(key) == name && !strings.HasPrefix(strings.TrimSpace(line), "#") {
+			changed = true
+			continue
+		}
+		if line != "" || len(out) > 0 {
+			out = append(out, line)
+		}
+	}
+	if len(out) == 0 {
+		return "", changed
+	}
+	return strings.Join(out, "\n") + "\n", changed
 }
 
 // getCurrentValue gets the current value of a sysctl parameter

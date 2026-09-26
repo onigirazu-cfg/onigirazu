@@ -3,6 +3,7 @@ package modules
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -141,8 +142,8 @@ func (m *CronModule) handleJob(ctx context.Context, exec *executor.CommandExecut
 		}
 	}
 
-	// Write crontab if changed
-	if changed {
+	// Write crontab if changed; check mode stops here
+	if changed && !inCheckMode(args) {
 		newCrontab := m.buildCrontab(jobs)
 		if err := m.setCrontab(exec, user, newCrontab); err != nil {
 			return m.failResult(result, fmt.Sprintf("failed to set crontab: %v", err))
@@ -172,12 +173,15 @@ func (m *CronModule) handleFile(ctx context.Context, exec *executor.CommandExecu
 		// Get current crontab for comparison
 		currentCrontab, _ := m.getCrontab(exec, user)
 
-		if currentCrontab != content {
+		if currentCrontab != content && inCheckMode(args) {
+			changed = true
+			result.Output["action"] = "crontab_would_be_updated"
+		} else if currentCrontab != content {
 			// Backup if requested
 			if backup && currentCrontab != "" {
 				timestamp := time.Now().Format("20060102-150405")
-				backupFile := fmt.Sprintf("/tmp/crontab.%s.%s.backup", user, timestamp)
-				if _, err := exec.Execute("sh", "-c", fmt.Sprintf("echo '%s' > %s", currentCrontab, backupFile)); err != nil {
+				backupFile := fmt.Sprintf("/root/crontab.%s.%s.backup", user, timestamp)
+				if err := writeHostFile(ctx, host, args, backupFile, []byte(currentCrontab), 0o600); err != nil {
 					result.Output["backup_warning"] = fmt.Sprintf("failed to create backup: %v", err)
 				} else {
 					result.Output["backup_file"] = backupFile
@@ -193,6 +197,17 @@ func (m *CronModule) handleFile(ctx context.Context, exec *executor.CommandExecu
 			result.Output["action"] = "crontab_updated"
 		}
 	} else if state == "absent" {
+		current, _ := m.getCrontab(exec, user)
+		if strings.TrimSpace(current) == "" {
+			result.Duration = time.Since(result.Timestamp)
+			return result, nil
+		}
+		if inCheckMode(args) {
+			result.Changed = true
+			result.Output["action"] = "crontab_would_be_removed"
+			result.Duration = time.Since(result.Timestamp)
+			return result, nil
+		}
 		// Remove crontab
 		if out, err := exec.Execute("crontab", "-r", "-u", user); err != nil {
 			if !strings.Contains(out, "no crontab") {
@@ -239,56 +254,45 @@ func (m *CronModule) handleSystem(ctx context.Context, exec *executor.CommandExe
 		return m.failResult(result, fmt.Sprintf("invalid cron_type: %s", cronType))
 	}
 
-	cronFile := fmt.Sprintf("%s/%s", cronDir, name)
+	if strings.ContainsAny(name, "/\\") || name == "." || name == ".." {
+		return m.failResult(result, fmt.Sprintf("invalid name %q: a file name in %s", name, cronDir))
+	}
+	cronFile := cronDir + "/" + name
+	mode := os.FileMode(0o755)
+	if cronType == "d" {
+		mode = 0o644
+	}
+
+	current, exists, err := readHostFile(ctx, host, args, cronFile)
+	if err != nil {
+		return m.failResult(result, fmt.Sprintf("failed to read %s: %v", cronFile, err))
+	}
 
 	if state == "present" {
 		if content == "" {
 			return m.failResult(result, "content parameter is required when state is present")
 		}
-
-		// Check if file exists and compare content
-		currentContent, err := exec.Execute("cat", cronFile)
-		fileExists := err == nil
-
-		if !fileExists || currentContent != content {
-			// Write content to temp file
-			tmpFile := fmt.Sprintf("/tmp/%s", name)
-			if _, err := exec.Execute("sh", "-c", fmt.Sprintf("cat > %s << 'EOF'\n%s\nEOF", tmpFile, content)); err != nil {
-				return m.failResult(result, fmt.Sprintf("failed to write temp file: %v", err))
-			}
-
-			// Move to cron directory
-			if _, err := exec.Execute("mv", tmpFile, cronFile); err != nil {
-				return m.failResult(result, fmt.Sprintf("failed to move file: %v", err))
-			}
-
-			// Set permissions
-			if cronType == "d" {
-				if _, err := exec.Execute("chmod", "644", cronFile); err != nil {
-					return m.failResult(result, fmt.Sprintf("failed to set permissions: %v", err))
-				}
-			} else {
-				if _, err := exec.Execute("chmod", "755", cronFile); err != nil {
-					return m.failResult(result, fmt.Sprintf("failed to set permissions: %v", err))
-				}
-			}
-
-			changed = true
-			result.Output["action"] = "cron_file_created"
-			result.Output["file"] = cronFile
+		if !strings.HasSuffix(content, "\n") {
+			content += "\n" // cron ignores a last line without a newline
 		}
-	} else if state == "absent" {
-		// Check if file exists
-		_, err := exec.Execute("test", "-f", cronFile)
-		if err == nil {
-			// Remove file
-			if _, err := exec.Execute("rm", "-f", cronFile); err != nil {
+		if !exists || string(current) != content {
+			changed = true
+			result.Output["action"] = "cron_file_written"
+			result.Output["file"] = cronFile
+			if !inCheckMode(args) {
+				if err := writeHostFile(ctx, host, args, cronFile, []byte(content), mode); err != nil {
+					return m.failResult(result, fmt.Sprintf("failed to write %s: %v", cronFile, err))
+				}
+			}
+		}
+	} else if state == "absent" && exists {
+		changed = true
+		result.Output["action"] = "cron_file_removed"
+		result.Output["file"] = cronFile
+		if !inCheckMode(args) {
+			if _, err := runOnHost(ctx, host, args, "rm", "-f", cronFile); err != nil {
 				return m.failResult(result, fmt.Sprintf("failed to remove file: %v", err))
 			}
-
-			changed = true
-			result.Output["action"] = "cron_file_removed"
-			result.Output["file"] = cronFile
 		}
 	}
 
