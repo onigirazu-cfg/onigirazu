@@ -1,0 +1,31 @@
+plays:
+  - name: file links, recurse and the default state
+    hosts: all
+    become: true
+    tasks:
+      - name: Target
+        copy: {content: "target\n", dest: /root/onigirazu-e2e-fl-target}
+      - name: Symbolic link (dest alias)
+        file: {src: /root/onigirazu-e2e-fl-target, dest: /root/onigirazu-e2e-fl-sym, state: link}
+      - name: Symbolic link without state
+        file: {src: /root/onigirazu-e2e-fl-target, path: /root/onigirazu-e2e-fl-sym2}
+      - name: Hard link
+        file: {src: /root/onigirazu-e2e-fl-target, path: /root/onigirazu-e2e-fl-hard, state: hard}
+      - name: Attributes of an existing file (no state)
+        file: path=/root/onigirazu-e2e-fl-target mode=0600
+      - name: Tree
+        shell: mkdir -p /root/onigirazu-e2e-fl-tree/a/b && touch /root/onigirazu-e2e-fl-tree/a/b/f
+        args: {creates: /root/onigirazu-e2e-fl-tree/a/b/f}
+      - name: Recursive owner and mode
+        file:
+          path: /root/onigirazu-e2e-fl-tree
+          state: directory
+          owner: nobody
+          mode: "0750"
+          recurse: true
+      - name: A missing file without state fails
+        file: path=/root/onigirazu-e2e-fl-missing mode=0600
+        register: missing
+        ignore_errors: true
+      - name: Record the failure
+        copy: {content: "{{ missing.failed }}\n", dest: /root/onigirazu-e2e-fl-missing-result}
