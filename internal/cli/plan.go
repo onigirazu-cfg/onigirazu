@@ -23,7 +23,7 @@ when there are changes (1 when a task cannot be checked).`,
 			return runDriftCheck(cmd, args[0], o)
 		},
 	}
-	cmd.Flags().StringVar(&o.format, "format", "text", "Report format (text, json)")
+	cmd.Flags().StringVar(&o.format, "format", "text", "Report format (text, json, html)")
 	cmd.Flags().StringVar(&o.output, "output", "", "Write the report to this file")
 	cmd.Flags().StringArrayVarP(&o.extraVars, "extra-vars", "e", nil, "Extra variables, as for apply (repeatable)")
 	cmd.Flags().StringVar(&o.limit, "limit", "", "Plan only for hosts matching this pattern")
