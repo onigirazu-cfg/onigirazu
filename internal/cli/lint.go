@@ -553,11 +553,8 @@ func checkSecurity(playbook *types.Playbook, filename string, result *LintResult
 }
 
 func checkBestPractices(playbook *types.Playbook, filename string, result *LintResult) {
-	// Check playbook has a name
-	if playbook.Name == "" {
-		result.addInfo("best-practices", "Playbook should have a name", filename, 0, "", "")
-	}
-
+	// a playbook file has no name of its own; unnamed plays are reported
+	// by the required-fields check
 	for _, play := range playbook.Plays {
 		playName := play.Name
 		if playName == "" {
