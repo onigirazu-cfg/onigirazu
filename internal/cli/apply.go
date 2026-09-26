@@ -439,6 +439,9 @@ Examples:
 					10*time.Minute, // Dynamic inventory cache TTL
 				)
 
+				// group_vars/ and host_vars/ next to the playbook as well
+				multiSourceLoader.AddVarsDir(filepath.Dir(playbookPath))
+
 				// Load from all sources
 				mergedInventory, err := multiSourceLoader.LoadFromMultipleSources(ctx, finalInventoryPaths)
 				if err != nil {
