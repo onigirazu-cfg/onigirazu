@@ -112,7 +112,12 @@ ssh-keygen -q -t ed25519 -N '' -C "onigirazu-e2e-$RUN_ID" -f "$KEY"
 
 # --- create the VMs ------------------------------------------------------------
 log "Creating VMs (run $RUN_ID)"
-terraform -chdir="$TF_DIR" init -input=false >/dev/null
+# the provider registry drops connections now and then
+for try in 1 2 3; do
+  terraform -chdir="$TF_DIR" init -input=false >/dev/null && break
+  [ "$try" = 3 ] && exit 1
+  sleep 15
+done
 # One vars file for apply and destroy
 jq -n --arg run_id "$RUN_ID" --arg run_url "$RUN_URL" --argjson images "$images_json" \
   --arg public_key "$(cat "$KEY.pub")" \

@@ -52,7 +52,14 @@ jobs:
           go-version-file: go.mod
           cache: false
 
+      # releases.hashicorp.com drops connections now and then: one retry
       - uses: hashicorp/setup-terraform@v4
+        id: terraform
+        continue-on-error: true
+        with:
+          terraform_wrapper: false
+      - uses: hashicorp/setup-terraform@v4
+        if: steps.terraform.outcome == 'failure'
         with:
           terraform_wrapper: false
 
