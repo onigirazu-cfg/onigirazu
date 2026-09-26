@@ -17,8 +17,8 @@ Restrictions on what a playbook may do live in a separate security policy, see
 
 Notes:
 
-- A `-c` file that does not exist is silently ignored and the defaults are used.
-- Unknown keys are silently ignored, so check spelling.
+- A `-c` file that does not exist is an error.
+- Unknown keys and keys that have no effect are reported as warnings at start.
 - No file is read from `~/.onigirazu/`.
 
 ## Order of precedence
@@ -46,6 +46,13 @@ Environment variables only change the defaults; a key in `onigirazu.yml` wins ov
 | `metrics_port` | `ONIGIRAZU_METRICS_PORT` | `9090` | Port of the metrics server. |
 | `metrics_auth_token` | `ONIGIRAZU_METRICS_AUTH_TOKEN` | empty | If set, requests need `Authorization: Bearer <token>`. |
 | `metrics_ip_whitelist` | `ONIGIRAZU_METRICS_IP_WHITELIST` | empty | If set, only these client IPs may connect (env: comma-separated). |
+| `ssh_timeout` | `ONIGIRAZU_SSH_TIMEOUT` | `30s` | Time to connect to a host. |
+| `show_diff` | — | `false` | As `apply --diff`. |
+| `default_timeout` | — | none | As `apply --timeout` (the whole run). |
+| `verbose` | — | `false` | Debug logging, as `apply -v`. |
+
+`show_diff`, `default_timeout` and `verbose` apply only when written in the file, and the
+command-line flag wins.
 
 Durations are written as `30s`, `5m`, `1h`.
 
@@ -54,19 +61,19 @@ same as `apply --check`: no task changes anything.
 
 ## Keys that are accepted but have no effect
 
-These keys are parsed but nothing reads them. Leave them out:
+These keys are parsed but nothing reads them; a file that sets one gets a warning:
 
-`default_timeout`, `retry_attempts`, `retry_delay`, `config_file`,
+`retry_attempts`, `retry_delay`, `config_file`,
 `allow_shell_commands`, `blocked_commands` (use the security policy instead),
 `enable_caching`, `cache_ttl`, `enable_checksum`, `enable_parallel`,
-`parallel_strategy`, `verbose`, `show_diff`, `progress_bar`, `interactive_mode`,
+`parallel_strategy`, `progress_bar`, `interactive_mode`,
 `output_format`, `metrics_path` (the path is always `/metrics`), `enable_profiling`,
-`ssh_timeout`, `ssh_keepalive`, `ssh_max_sessions`, `connection_reuse`,
+`ssh_keepalive`, `ssh_max_sessions`, `connection_reuse`,
 `default_insecure_ignore_host_key`, `vault_enabled`, `vault_address`, `vault_token`,
 `preferred_module_syntax`, `enforce_module_syntax`.
 
-Use command-line flags instead: `apply --timeout`, `--diff`, `--interactive`,
-`-o json|yaml`, `--profile`; task-level `retries`/`delay` for retries.
+Use command-line flags instead: `--interactive`, `-o json|yaml`, `--profile`;
+task-level `retries`/`delay` for retries.
 
 ## Example
 

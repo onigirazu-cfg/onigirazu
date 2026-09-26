@@ -200,6 +200,9 @@ func runAdHocCommand(
 	shouldBeVerbose := verbose || verboseMode || showDebug
 	// stdout carries only the results (-o json/yaml stays parseable)
 	log := logger.NewWithWriter(shouldBeVerbose, os.Stderr)
+	for _, w := range cfg.Warnings {
+		log.Warn("%s", w)
+	}
 
 	// Initialize SSH connection pool with logger
 	sshpkg.InitializeGlobalPoolWithLogger(cfg, log)

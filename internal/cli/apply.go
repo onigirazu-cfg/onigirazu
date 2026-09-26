@@ -197,6 +197,16 @@ Examples:
 			if interactive {
 				cfg.InteractiveMode = true
 			}
+			// keys of the file that stand for flags, unless the flag is given
+			if cfg.IsSet("show_diff") && !cmd.Flags().Changed("diff") {
+				diff = cfg.ShowDiff
+			}
+			if cfg.IsSet("default_timeout") && !cmd.Flags().Changed("timeout") {
+				timeout = cfg.DefaultTimeout
+			}
+			if cfg.IsSet("verbose") && cfg.Verbose && !verbose && !cmd.Flags().Changed("log-level") {
+				cfg.LogLevel = "debug"
+			}
 
 			// Create TUI model early if interactive mode to capture all logs
 			var tuiModel *execution.EnhancedTUIModel
@@ -209,6 +219,9 @@ Examples:
 
 			// Initialize logger - redirect to TUI if in interactive mode
 			log := logger.NewEnhanced(cfg.LogLevel, logger.LogFormat(cfg.LogFormat), logWriter)
+			for _, w := range cfg.Warnings {
+				log.Warn("%s", w)
+			}
 
 			// Set display mode based on verbosity flag or log level
 			if verboseOutput || cfg.LogLevel == "debug" {

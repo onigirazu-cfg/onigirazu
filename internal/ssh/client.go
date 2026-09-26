@@ -118,7 +118,7 @@ func NewClientWithHostKeyManagerAndLogger(host types.Host, hostKeyManager *HostK
 		User:            host.User,
 		Auth:            auth,
 		HostKeyCallback: hostKeyManager.VerifyHostKey, // ✅ БЕЗОПАСНАЯ ПРОВЕРКА HOST KEY
-		Timeout:         30 * time.Second,
+		Timeout:         dialTimeout,
 	}
 
 	address := dialAddress(host)
