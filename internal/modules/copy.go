@@ -58,7 +58,8 @@ func (m *CopyModule) Execute(ctx context.Context, host types.Host, args map[stri
 	src, _ := args["src"].(string)
 	dest, _ := args["dest"].(string)
 	backup := getBoolArg(args, "backup", false)
-	force := getBoolArg(args, "force", false)
+	// Ansible: force: false leaves an existing dest alone, whatever it holds
+	force := getBoolArg(args, "force", true)
 	remoteSrc := getBoolArg(args, "remote_src", false)
 	mode := getStringArg(args, "mode", "")
 	owner := getStringArg(args, "owner", "")
@@ -143,7 +144,7 @@ func (m *CopyModule) executeLocal(dest string, sourceData []byte, backup, force 
 	}
 
 	// Check if file needs to be copied
-	needsCopy := !destExists || sourceChecksum != destChecksum || force
+	needsCopy := !destExists || (force && sourceChecksum != destChecksum)
 
 	if !needsCopy {
 		result.Success = true
@@ -262,7 +263,7 @@ func (m *CopyModule) executeRemote(ctx context.Context, host types.Host, args ma
 		result.Output["dest_checksum"] = current.SHA256
 	}
 
-	if current.Exists && current.SHA256 == sourceChecksum && !force {
+	if current.Exists && (current.SHA256 == sourceChecksum || !force) {
 		result.Success = true
 		result.Output["msg"] = "file already exists with correct content"
 		if mode != "" && current.Mode.Perm() != fileMode.Perm() {

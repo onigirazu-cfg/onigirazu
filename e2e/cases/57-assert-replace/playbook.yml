@@ -1,0 +1,36 @@
+plays:
+  - name: assert and replace
+    hosts: all
+    become: true
+    vars:
+      pkgs: [curl]
+    tasks:
+      - name: Assertions that hold
+        assert:
+          that:
+            - pkgs | length == 1
+            - "'curl' in pkgs"
+      - name: An assertion that does not
+        assert:
+          that: pkgs | length > 5
+          fail_msg: too few packages
+        register: a
+        ignore_errors: true
+      - name: Record the failure
+        copy: {content: "{{ a.failed }}|{{ a.msg }}\n", dest: /root/onigirazu-e2e-ar-assert}
+      - name: A config file
+        copy:
+          dest: /root/onigirazu-e2e-ar-conf
+          content: |
+            listen 80;
+            server_name old.example.com;
+            listen 8080;
+        # the replace below changes it; this task only creates it
+        args: {force: false}
+      - name: Replace with back references
+        replace:
+          path: /root/onigirazu-e2e-ar-conf
+          regexp: '^listen (\d+);$'
+          replace: 'listen \1 reuseport;'
+      - name: Replace a name
+        replace: path=/root/onigirazu-e2e-ar-conf regexp=old\.example\.com replace=new.example.com

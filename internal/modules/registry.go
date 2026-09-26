@@ -55,6 +55,8 @@ func NewRegistry() *Registry {
 
 	// New modules for completeness
 	registry.RegisterModule(NewFailModule())
+	registry.RegisterModule(NewAssertModule())
+	registry.RegisterModule(NewReplaceModule())
 	registry.RegisterModule(NewPauseModule())
 	registry.RegisterModule(NewScriptModule())
 	registry.RegisterModule(NewWaitForModule())
@@ -231,12 +233,12 @@ func (r *Registry) ExecuteTask(ctx context.Context, task *types.Task, host types
 var checkModeModules = map[string]bool{
 	// read only
 	"ping": true, "debug": true, "set_fact": true, "stat": true, "find": true,
-	"fail": true, "wait_for": true,
+	"fail": true, "wait_for": true, "assert": true,
 	// compare, then change
 	"file": true, "copy": true, "template": true, "lineinfile": true, "blockinfile": true,
 	"apt": true, "yum": true, "package": true, "service": true, "user": true, "group": true,
 	"cron": true, "sysctl": true, "get_url": true, "git": true, "systemd": true,
-	"mount": true, "config": true, "docker_container": true, "podman": true, "docker_image": true,
+	"mount": true, "config": true, "replace": true, "docker_container": true, "podman": true, "docker_image": true,
 }
 
 // dataArgModules take their arguments as data whose types are kept:
