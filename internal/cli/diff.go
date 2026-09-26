@@ -12,7 +12,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/onigirazu-cfg/onigirazu/internal/execution"
-	"github.com/onigirazu-cfg/onigirazu/internal/parser"
 	sshpkg "github.com/onigirazu-cfg/onigirazu/internal/ssh"
 	"github.com/onigirazu-cfg/onigirazu/internal/state"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
@@ -94,8 +93,6 @@ func runDiff(cmd *cobra.Command, args []string) error {
 		fmt.Printf("📖 Parsing playbook: %s\n", playbookPath)
 	}
 
-	p := parser.New()
-
 	// Create context with graceful shutdown support
 	baseCtx := context.Background()
 	signalHandler := execution.NewSignalHandler(baseCtx, 10*time.Second)
@@ -110,7 +107,7 @@ func runDiff(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithTimeout(signalHandler.Context(), 30*time.Second)
 	defer cancel()
 
-	playbook, err := p.ParsePlaybook(ctx, playbookPath)
+	playbook, err := parsePlaybook(ctx, playbookPath)
 	if err != nil {
 		return fmt.Errorf("failed to parse playbook: %w", err)
 	}
