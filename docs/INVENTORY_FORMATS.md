@@ -1,35 +1,24 @@
-# Onigirazu Inventory Formats - Complete Reference
+# Inventory Formats
 
-This document describes **all inventory formats actually supported** by the Onigirazu code (verified by analyzing `internal/parser/inventory_parser.go`).
+An inventory lists the hosts and groups a playbook or ad-hoc command runs on. Pass it
+with `-i`; `-i` can be repeated and can point to a file, a directory or an executable
+script.
 
-## ✅ Supported Formats Overview
+| Format | How it is recognised |
+|--------|----------------------|
+| YAML (Onigirazu `groups:` or Ansible `all:`) | `.yml`, `.yaml` |
+| JSON | `.json` |
+| TOML | `.toml` |
+| INI (Ansible style) | `.ini` |
+| Plain host list | other files whose lines contain no `:`, `=` or `[` |
+| Dynamic inventory | executable file |
 
-| Format | Extension | Status | Parser | Use Case |
-|--------|-----------|--------|--------|----------|
-| YAML | `.yml`, `.yaml` | ✅ Full support | `parseYamlInventory()` | Primary format, human-readable |
-| JSON | `.json` | ✅ Full support | `parseJsonInventory()` | Programmatic generation, APIs |
-| TOML | `.toml` | ✅ Full support | `parseTomlInventory()` | Configuration-focused |
-| INI | `.ini` | ✅ Full support | `parseIniInventory()` | Ansible compatibility |
-| Simple List | (plain text) | ✅ Full support | `parseSimpleList()` | Quick host lists |
-| Dynamic Scripts | (executable) | ✅ Full support | `parseDynamicInventory()` | Cloud integration |
-| Inline Specs | (CLI string) | ✅ Full support | `InlineInventoryDetector` | Quick ad-hoc hosts |
-| Auto-detect | (no extension) | ✅ Full support | `autoDetectAndParse()` | Flexible format detection |
+A file with another or no extension is detected from its content: executable script,
+plain list, then JSON, YAML, TOML and INI are tried in that order.
 
----
-
-## 📋 1. YAML Format (`.yml`, `.yaml`)
-
-**Primary format for Onigirazu. Most feature-rich.**
-
-### Parser Location
-
-- `internal/parser/inventory_parser.go` - line 276
-- Library: `gopkg.in/yaml.v3`
-
-### Basic Structure
+## YAML
 
 ```yaml
----
 groups:
   webservers:
     hosts:
@@ -37,225 +26,75 @@ groups:
         onigirazu_host: 192.168.1.1
         onigirazu_port: 22
         onigirazu_user: admin
+        app_port: 8080          # any other key is a host variable
       web2:
         onigirazu_host: 192.168.1.2
-  databases:
-    hosts:
-      db1:
-        onigirazu_host: 192.168.1.10
-        onigirazu_user: postgres
-    children:
-      - webservers
-    vars:
-      backup_enabled: true
-      environment: production
-```
-
-### Advanced Features
-
-**Group Variables:**
-
-```yaml
-groups:
-  webservers:
     vars:
       http_port: 80
-      ssl_port: 443
-```
-
-**Host Variables (custom):**
-
-```yaml
-groups:
-  webservers:
-    hosts:
-      web1:
-        onigirazu_host: 192.168.1.1
-        app_name: backend
-        app_port: 8080
-        max_connections: 500
-```
-
-**Group Inheritance:**
-
-```yaml
-groups:
   production:
     children:
       - webservers
-      - databases
-  webservers:
-    hosts:
-      web1: {}
-  databases:
-    hosts:
-      db1: {}
+    vars:
+      environment: production
 ```
 
-### Ansible Compatibility
+A YAML file with a top-level `all:` key is read as an Ansible inventory, see
+[ANSIBLE_INVENTORY_QUICK_START.md](ANSIBLE_INVENTORY_QUICK_START.md).
 
-Works with both Ansible and Onigirazu variable names:
-
-```yaml
-hosts:
-  web1:
-    ansible_host: 192.168.1.1      # Works
-    onigirazu_host: 192.168.1.1    # Also works (preferred)
-    ansible_user: admin             # Works
-    onigirazu_user: admin           # Also works (preferred)
-```
-
----
-
-## 📋 2. JSON Format (`.json`)
-
-**Structured data format, suitable for programmatic generation.**
-
-### Parser Location
-
-- `internal/parser/inventory_parser.go` - line 387
-- Library: `encoding/json`
-
-### Basic Structure
+## JSON
 
 ```json
 {
   "hosts": [
-    {
-      "name": "web1",
-      "address": "192.168.1.1",
-      "port": 22,
-      "user": "admin",
-      "key_file": "/home/admin/.ssh/id_rsa",
-      "password": "",
-      "insecure_ignore_host_key": false,
-      "vars": {
-        "app_port": 8080,
-        "environment": "production"
-      }
-    },
-    {
-      "name": "db1",
-      "address": "192.168.1.10",
-      "port": 22,
-      "user": "postgres",
-      "vars": {
-        "backup_enabled": true
-      }
-    }
+    {"name": "web1", "address": "192.168.1.1", "port": 22, "user": "admin",
+     "key_file": "/home/admin/.ssh/id_rsa", "vars": {"app_port": 8080}},
+    {"name": "db1", "address": "192.168.1.10", "user": "postgres"}
   ],
   "groups": {
-    "webservers": {
-      "name": "webservers",
-      "hosts": {
-        "web1": {}
-      },
-      "vars": {
-        "http_port": 80
-      },
-      "children": []
-    },
-    "databases": {
-      "name": "databases",
-      "hosts": {
-        "db1": {}
-      },
-      "vars": {
-        "db_port": 5432
-      },
-      "children": []
-    }
+    "webservers": {"name": "webservers", "hosts": {"web1": {}}, "vars": {"http_port": 80}, "children": []},
+    "databases":  {"name": "databases",  "hosts": {"db1": {}},  "vars": {"db_port": 5432}, "children": []}
   }
 }
 ```
 
-### Use Cases
-
-- Generated by API/cloud tools
-- CI/CD pipeline integration
-- Programmatic inventory management
-
----
-
-## 📋 3. TOML Format (`.toml`)
-
-**Configuration file format, clean and structured.**
-
-### Parser Location
-
-- `internal/parser/inventory_parser.go` - line 316
-- Library: `github.com/pelletier/go-toml/v2`
-
-### Basic Structure
+## TOML
 
 ```toml
 [hosts.web1]
 address = "192.168.1.1"
-port = 22
 user = "admin"
 key_file = "/home/admin/.ssh/id_rsa"
-insecure_ignore_host_key = false
-vars = { app_port = 8080, environment = "production" }
-
-[hosts.web2]
-address = "192.168.1.2"
-port = 22
-user = "admin"
+vars = { app_port = 8080 }
 
 [hosts.db1]
 address = "192.168.1.10"
 user = "postgres"
 
 [groups.webservers]
-hosts = ["web1", "web2"]
-children = []
-vars = { http_port = 80, ssl_port = 443 }
+hosts = ["web1"]
+vars = { http_port = 80 }
 
 [groups.databases]
 hosts = ["db1"]
-children = []
-vars = { backup_enabled = true }
 
 [groups.production]
 children = ["webservers", "databases"]
 vars = { environment = "production" }
 ```
 
-### Features
-
-- Inline variables: `vars = { key = "value" }`
-- Host-specific settings: port, user, key_file
-- Group variables and children
-- Clean, readable format
-
----
-
-## 📋 4. INI Format (`.ini`)
-
-**Ansible-compatible inventory format.**
-
-### Parser Location
-
-- `internal/parser/inventory_parser.go` - line 405
-- Format: Ansible INI style with sections
-
-### Basic Structure
+## INI
 
 ```ini
-# Comment lines are supported
+# comments start with # or ;
 [webservers]
 web1 ansible_host=192.168.1.1 ansible_user=admin app_port=8080
-web2 ansible_host=192.168.1.2 ansible_user=admin
+web2 ansible_host=192.168.1.2 ansible_port=2222
 
 [databases]
 db1 ansible_host=192.168.1.10 ansible_user=postgres
 
 [webservers:vars]
 http_port=80
-ssl_port=443
-
-[databases:vars]
-backup_enabled=true
 
 [production:children]
 webservers
@@ -265,569 +104,85 @@ databases
 environment=production
 ```
 
-### Variable Names Supported
+## Plain host list
 
-**Ansible-compatible (work in Onigirazu):**
-
-- `ansible_host` - IP or hostname
-- `ansible_port` - SSH port
-- `ansible_user` - SSH username
-- `ansible_ssh_private_key_file` - Path to private key
-- `ansible_password` - SSH password
-
-**Onigirazu-specific (preferred):**
-
-- `onigirazu_host` - IP or hostname
-- `onigirazu_port` - SSH port
-- `onigirazu_user` - SSH username
-- `onigirazu_ssh_private_key_file` - Path to private key
-- `onigirazu_password` - SSH password
-
-### Special Sections
-
-**Group Hosts:**
-
-```ini
-[webservers]
-web1 ansible_host=192.168.1.1
-web2 ansible_host=192.168.1.2
-```
-
-**Group Variables:**
-
-```ini
-[webservers:vars]
-http_port=80
-debug_mode=true
-```
-
-**Group Children (Inheritance):**
-
-```ini
-[production:children]
-webservers
-databases
-```
-
-### Features
-
-- Fully compatible with Ansible inventory format
-- Supports both Ansible and Onigirazu variable names
-- Group inheritance via `:children`
-- Group variables via `:vars`
-- Comments with `#` or `;`
-
----
-
-## 📋 5. Simple List Format (plain text)
-
-**Simplest format - one host per line.**
-
-### Parser Location
-
-- `internal/parser/inventory_parser.go` - line 173
-
-### Supported Formats
-
-**Just IP addresses:**
+One address or host name per line; `#` starts a comment. Hosts get port 22 and user
+`root` and belong to the group `all`.
 
 ```
 192.168.1.1
 192.168.1.2
-192.168.1.3
+web3.example.com
 ```
 
-**With ports:**
+Current limitation: `user@host` and `host:port` lines are not parsed (the file fails with
+"inventory must contain at least one group"). Use an INI file for per-host users and ports.
 
-```
-192.168.1.1:22
-192.168.1.2:2222
-192.168.1.3:3333
-```
+## Dynamic inventory
 
-**With usernames:**
-
-```
-admin@192.168.1.1
-user@192.168.1.2
-root@192.168.1.3
-```
-
-**Combined (user@host:port):**
-
-```
-admin@192.168.1.1:22
-user@192.168.1.2:2222
-root@192.168.1.3:3333
-```
-
-**With comments and empty lines:**
-
-```
-# Web servers
-192.168.1.1
-192.168.1.2
-
-# Database servers
-192.168.1.10
-
-# SSH on custom port
-192.168.1.20:2222
-```
-
-### Defaults
-
-- Default SSH port: 22
-- Default SSH user: root
-
-### Use Cases
-
-- Quick testing
-- Simple host lists
-- Script-generated inventories
-
----
-
-## 📋 6. Dynamic Inventory (Executable Scripts)
-
-**Integration with cloud providers, APIs, or custom systems.**
-
-### Parser Location
-
-- `internal/parser/inventory_parser.go` - line 589 (`parseDynamicInventory()`)
-
-### Requirements
-
-1. File must have execute bit: `chmod +x inventory.sh`
-2. Script must accept `--list` argument
-3. Script must output JSON inventory on stdout
-
-### Example: Bash Script
+An executable file (`chmod +x`) that prints a JSON inventory (format as above) on stdout.
 
 ```bash
 #!/bin/bash
-# inventory.sh
-
-if [ "$1" == "--list" ]; then
-  cat << 'EOF'
+cat <<'EOF'
 {
-  "hosts": [
-    {
-      "name": "web1",
-      "address": "192.168.1.1",
-      "port": 22,
-      "user": "admin"
-    }
-  ],
-  "groups": {
-    "webservers": {
-      "name": "webservers",
-      "hosts": {"web1": {}},
-      "vars": {}
-    }
-  }
+  "hosts": [{"name": "web1", "address": "192.168.1.1", "user": "admin"}],
+  "groups": {"webservers": {"name": "webservers", "hosts": {"web1": {}}, "vars": {}}}
 }
 EOF
-fi
 ```
 
-### Example: Python Script
+`apply`, `plan`, `drift` and `run` execute the script without arguments (30 s timeout,
+output cached for 10 minutes); `onigirazu inventory` runs it with `--list`. Print the
+inventory in both cases.
 
-```python
-#!/usr/bin/env python3
-import json
-import sys
+## Host variables
 
-if "--list" in sys.argv:
-    inventory = {
-        "hosts": [
-            {
-                "name": "web1",
-                "address": "192.168.1.1",
-                "port": 22,
-                "user": "admin"
-            }
-        ],
-        "groups": {
-            "webservers": {
-                "name": "webservers",
-                "hosts": {"web1": {}},
-                "vars": {}
-            }
-        }
-    }
-    print(json.dumps(inventory))
-```
+| Variable | Meaning | Default |
+|----------|---------|---------|
+| `onigirazu_host` / `ansible_host` (`address` in JSON/TOML) | address to connect to | host name |
+| `onigirazu_port` / `ansible_port` (`port`) | SSH port | 22 |
+| `onigirazu_user` / `ansible_user` (`user`) | SSH user | `root` in plain lists and Ansible YAML, otherwise the local `$USER` |
+| `onigirazu_ssh_private_key_file` / `ansible_ssh_private_key_file` (`key_file`) | private key | — |
+| `onigirazu_password` / `ansible_password` (`password`) | SSH password | — |
+| any other key | host variable for templates | — |
 
-### Example: Cloud Integration (AWS EC2)
+`apply -u USER` and `--private-key FILE` (`run -u`/`-k`) override user and key for every host.
+
+## group_vars and host_vars
+
+As in Ansible, variables are also read from `group_vars/<group>.yml` and
+`host_vars/<host>.yml` (`.yaml`, `.json`, no extension, or a directory of such files
+merged in name order). They are looked up next to each inventory file, inside an
+inventory directory, and, for `apply`/`plan`/`drift`, next to the playbook (read last,
+so they win). They override variables written in the inventory itself.
+
+## Several sources and directories
+
+- `-i a.yml -i b.ini`: sources are merged; for the same host or group the later source wins.
+- `-i inventory/`: every `.yml`, `.yaml`, `.json`, `.ini` and `.toml` file (alphabetically)
+  and then every executable in the directory tree is loaded. Other files, hidden
+  directories and `group_vars/`/`host_vars/` are skipped.
+
+## Without -i
+
+`run` requires `-i`. `apply` (and `plan`/`drift`) look in the playbook's directory for
+`inventory.yml`, `inventory.yaml`, `inventory.toml`, `inventory.json`, `inventory.ini`,
+`hosts`, `hosts.yml`, `hosts.yaml`, `hosts.toml`, `hosts.json`, `hosts.ini`, `inventory`,
+then in `/etc/onigirazu/` for `inventory.yml`, `hosts.yml`, `inventory`.
+
+## Limitations
+
+- Inline inventories (`-i "192.168.1.1,192.168.1.2"`, `-i host,`) do not work with
+  `apply`, `plan`, `drift` and `run`: `-i` values are split on commas and each part is
+  opened as a file. Put the hosts in a file.
+- `onigirazu inventory` takes a single `-i`, and a relative path without `/` or extension
+  is taken as a host name; write `./hosts`.
+
+## Inspecting an inventory
 
 ```bash
-#!/bin/bash
-# Fetch instances from AWS and output as JSON inventory
-
-aws ec2 describe-instances \
-  --query 'Reservations[].Instances[]' \
-  --output json | python3 << 'EOF'
-import json
-import sys
-
-data = json.load(sys.stdin)
-inventory = {"hosts": [], "groups": {}}
-
-for instance in data:
-    if instance['State']['Name'] != 'running':
-        continue
-
-    host = {
-        "name": instance['Tags'][0]['Value'],  # Instance name
-        "address": instance['PrivateIpAddress'],
-        "port": 22,
-        "user": "ec2-user"
-    }
-    inventory["hosts"].append(host)
-
-print(json.dumps(inventory))
-EOF
+onigirazu inventory --list -i inventory.yml       # hosts and groups
+onigirazu inventory --graph -i inventory.yml      # group tree
+onigirazu inventory --host web1 -i inventory.yml  # groups of one host
 ```
-
-### Use Cases
-
-- AWS EC2, Azure VMs, GCP instances
-- Kubernetes node discovery
-- DNS-based inventory
-- Container orchestration platforms
-- Custom enterprise systems
-
----
-
-## 📋 7. Inline Inventory (CLI Strings)
-
-**Direct host specifications passed on command line (no file needed).**
-
-### Parser Location
-
-- `internal/parser/inline_inventory.go` - `InlineInventoryDetector` class
-
-### Single Host Specifications
-
-```bash
-# Just IP address
-onigirazu run -i 192.168.1.1 playbook.yml
-
-# With port
-onigirazu run -i 192.168.1.1:2222 playbook.yml
-
-# With username
-onigirazu run -i admin@192.168.1.1 playbook.yml
-
-# Full specification
-onigirazu run -i admin@192.168.1.1:2222 playbook.yml
-```
-
-### Multiple Hosts (Comma-Separated)
-
-```bash
-# List of IPs
-onigirazu run -i "192.168.1.1,192.168.1.2,192.168.1.3" playbook.yml
-
-# With different ports and users
-onigirazu run -i "root@192.168.1.1:22,admin@192.168.1.2:2222,deploy@host.com" playbook.yml
-```
-
-### Ansible Trailing Comma Format
-
-```bash
-# Ansible-style with trailing comma (indicates inline inventory)
-onigirazu run -i "192.168.1.1," playbook.yml
-```
-
-### Detection Logic
-
-The `InlineInventoryDetector` distinguishes inline specs from file paths by analyzing:
-
-1. **File separators** - Check for path separators (/, \, etc.)
-2. **Path patterns** - Look for patterns like `..`, `./`, etc.
-3. **Host validity** - Validate host specifications
-4. **Trailing comma** - Ansible marker for inline inventory
-
-### Valid Inline Specifications
-
-✅ **These are recognized as inline inventory:**
-
-- `192.168.1.1`
-- `192.168.1.1:2222`
-- `user@192.168.1.1`
-- `user@192.168.1.1:2222`
-- `localhost`
-- `host.example.com`
-- `192.168.1.1,192.168.1.2`
-- `192.168.1.1,` (Ansible style)
-
-❌ **These are treated as file paths:**
-
-- `./inventory.yml`
-- `../hosts`
-- `/etc/ansible/hosts`
-- `~/inventory`
-- `inventory.txt`
-
-### Use Cases
-
-- Quick testing: `onigirazu run -i 192.168.1.1 playbook.yml`
-- Ad-hoc deployments: Multiple hosts without creating inventory file
-- CI/CD pipelines: Direct host passing
-- Script integration: Programmatic host specification
-
-### Examples
-
-**Single host quick test:**
-
-```bash
-onigirazu run -i 192.168.1.100 deploy.yml
-```
-
-**Multiple hosts with different configurations:**
-
-```bash
-onigirazu run -i "root@192.168.1.1:22,admin@192.168.1.2:2222,deploy@web.example.com" production.yml
-```
-
-**Ansible-style notation:**
-
-```bash
-onigirazu run -i "192.168.1.1," playbook.yml
-```
-
----
-
-## 📋 8. Auto-Detection (No Extension)
-
-**Parser intelligently detects format from content.**
-
-### Parser Location
-
-- `internal/parser/inventory_parser.go` - line 95 (`autoDetectAndParse()`)
-
-### Detection Order
-
-1. **Executable script?**
-   - Check execute bit: `info.Mode()&0111 != 0`
-   - Execute with `--list` argument
-   - Parse JSON output
-
-2. **Simple list?**
-   - Look for YAML/TOML syntax markers
-   - If mostly simple lines → treat as simple list
-
-3. **Try parsers in order:**
-   - JSON parser
-   - YAML parser
-   - TOML parser
-   - INI parser
-   - Fall back to simple list
-
-### Example: No Extension File
-
-```
-# hosts file (no .ini extension)
-[webservers]
-web1 ansible_host=192.168.1.1
-web2 ansible_host=192.168.1.2
-
-[webservers:vars]
-http_port=80
-```
-
----
-
-## 🔍 Host Configuration Options
-
-### All Supported Host Variables
-
-| Variable | Type | Default | Example |
-|----------|------|---------|---------|
-| `name` | string | - | `web1` |
-| `address` / `onigirazu_host` / `ansible_host` | string | (required) | `192.168.1.1` |
-| `port` / `onigirazu_port` / `ansible_port` | int | 22 | 2222 |
-| `user` / `onigirazu_user` / `ansible_user` | string | root (simple list) | `admin` |
-| `key_file` / `onigirazu_ssh_private_key_file` / `ansible_ssh_private_key_file` | string | - | `/home/admin/.ssh/id_rsa` |
-| `password` / `onigirazu_password` / `ansible_password` | string | - | `secret123` |
-| `insecure_ignore_host_key` | boolean | false | `true` |
-| Custom vars | any | - | `app_port: 8080` |
-
----
-
-## 📋 Inventory File Discovery
-
-### Auto-Search Locations
-
-When using `FindInventoryFile()`, these files are searched in order:
-
-1. `inventory.yml`
-2. `inventory.yaml`
-3. `inventory.toml`
-4. `inventory.json`
-5. `inventory.ini`
-6. `hosts`
-7. `hosts.yml`
-8. `hosts.yaml`
-9. `hosts.toml`
-10. `hosts.json`
-11. `hosts.ini`
-12. `inventory` (extension-less)
-
----
-
-## 🔧 Parser Implementation Details
-
-### Main Functions
-
-**Create Parser:**
-
-```go
-parser := NewInventoryParser(logger)
-```
-
-**Parse File (auto-detect format):**
-
-```go
-inventory, err := parser.ParseInventoryFile(ctx, "/path/to/inventory.yml")
-```
-
-**Find Inventory File:**
-
-```go
-filePath, err := parser.FindInventoryFile("/path/to/dir")
-```
-
-**Format-Specific Parsers:**
-
-```go
-// Direct YAML parsing
-inv, err := parser.parseYamlInventory(data)
-
-// Direct JSON parsing
-inv, err := parser.parseJsonInventory(data)
-
-// Direct TOML parsing
-inv, err := parser.parseTomlInventory(data)
-
-// Direct INI parsing
-inv, err := parser.parseIniInventory(data)
-
-// Direct simple list parsing
-inv, err := parser.parseSimpleList(data)
-```
-
-### Return Type
-
-All parsers return `*types.Inventory`:
-
-```go
-type Inventory struct {
-    Groups map[string]*Group  // Group name → Group
-    Hosts  []Host            // List of all hosts
-}
-
-type Group struct {
-    Name     string                     // Group name
-    Hosts    map[string]*Host          // Hosts in this group
-    Children []string                  // Child group names
-    Vars     map[string]interface{}    // Group variables
-}
-
-type Host struct {
-    Name                  string                 // Host name
-    Address               string                 // IP or hostname
-    Port                  int                    // SSH port
-    User                  string                 // SSH username
-    KeyFile               string                 // SSH private key path
-    Password              string                 // SSH password
-    InsecureIgnoreHostKey bool                   // Skip host key verification
-    Vars                  map[string]interface{} // Custom variables
-}
-```
-
----
-
-## ✅ Quick Reference: Which Format to Use?
-
-| Use Case | Recommended | Why |
-|----------|-------------|-----|
-| Human editing | YAML | Most readable |
-| Ansible migration | INI or YAML | Full compatibility |
-| API/Automation | JSON | Structured data |
-| Configuration | TOML | Clean syntax |
-| Quick testing | Simple list or Inline | Minimal syntax |
-| Ad-hoc CLI | Inline specs | No file needed |
-| Cloud integration | Dynamic script | Programmatic |
-| Unknown format | Auto-detect | Let parser decide |
-
-## 📊 Format Comparison Matrix
-
-| Feature | YAML | JSON | TOML | INI | Simple | Inline |
-|---------|------|------|------|-----|--------|--------|
-| Host specs | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Port number | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| SSH user | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| SSH key | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |
-| Host key insecure | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |
-| Groups | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |
-| Group vars | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |
-| Host vars | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |
-| Comments | ✅ | ❌ | ✅ | ✅ | ✅ | ❌ |
-| Readable | ✅ | ⚠️ | ✅ | ✅ | ✅ | ✅ |
-| File-based | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
-| Dynamic exec | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
-
----
-
-## 📊 Test Coverage
-
-All formats have comprehensive tests in `internal/parser/inventory_parser_test.go`:
-
-- ✅ YAML parsing (lines 309-351)
-- ✅ JSON parsing (lines 647-713)
-- ✅ TOML parsing (lines 111-412)
-- ✅ INI parsing (lines 715-768)
-- ✅ Simple list parsing (lines 142-257)
-- ✅ Dynamic inventory (parseDynamicInventory)
-- ✅ Auto-detection (autoDetectAndParse)
-- ✅ Edge cases: comments, ports, users, empty files
-- ✅ Ansible compatibility
-- ✅ Variable name variations
-
----
-
-## 🐛 Troubleshooting
-
-### Issue: "no inventory file found"
-
-**Solution:** Ensure your file is named with one of the recognized names (see File Discovery section).
-
-### Issue: Format not recognized
-
-**Solution:** Use explicit extension or let auto-detect try all parsers.
-
-### Issue: Variables not parsed
-
-**Solution:** Check you're using correct variable name format for your file type:
-
-- YAML/JSON/TOML: `onigirazu_user` or `ansible_user`
-- INI: Variable names as `key=value` pairs
-
-### Issue: Dynamic inventory not executing
-
-**Solution:** Ensure script has execute bit: `chmod +x inventory.sh`
-
-### Issue: Simple list not parsing
-
-**Solution:** Use only one host per line. For complex scenarios, use YAML/JSON/TOML/INI.
-
----
-
-## 📚 Related Documentation
-
-- [Ansible Inventory Format](https://docs.ansible.com/ansible/latest/user_guide/intro_inventory.html)
-- [Onigirazu CLI Guide](docs/CLI.md)
-- [SSH Configuration](docs/SSH_CONFIG.md)

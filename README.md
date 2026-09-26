@@ -183,7 +183,6 @@ onigirazu apply playbook.yaml -i inventory.yaml
 📖 **For complete playbook format reference, see:**
 
 - **[Playbook Format Guide](docs/examples/README.md)** - Real playbook examples and patterns
-- **[Playbook Types Documentation](docs/api/pkg/types.md)** - Technical type definitions
 
 ## 🖥️ Interactive Mode (v1.54.0+)
 
@@ -493,7 +492,6 @@ onigirazu audit show <execution_id>
 onigirazu audit export > audit-report.json
 ```
 
-📚 See [Audit & Analytics Guide](../onigirazu_docs/features/AUDIT_AND_ANALYTICS_SYSTEM.md)
 
 ### Advanced Features
 
@@ -1119,33 +1117,16 @@ All components implement well-defined interfaces for:
 
 ## 📚 Documentation
 
-### Configuration & Security (⭐ NEW in v1.52.0)
+All guides are listed in [docs/README.md](docs/README.md). Start with:
 
-These comprehensive guides cover all configuration options and security policies:
-
-- **[Complete Configuration Reference](docs/CONFIGURATION_REFERENCE.md)** - All 35+ configuration options with examples
-- **[Security Policy Guide](docs/SECURITY_POLICY_GUIDE.md)** - Optional policy file: where it is loaded from and every key
-- **[Quick Start Configuration](docs/QUICK_START_CONFIGURATION.md)** - Get configured in 5 minutes
-- **[Configuration & Security Index](docs/INDEX_CONFIGURATION_SECURITY.md)** - Find answers by problem or role
-
-### User Documentation
-
-- **[Quick Start Guide](docs/QUICK_START_CONFIGURATION.md)** - Get started in 5 minutes
-- **[Installation Guide](INSTALLATION.md)** - Detailed installation instructions
-- **[Playbook Format & Examples](docs/examples/README.md)** - Real playbook examples and patterns
-- **[Inventory Formats](docs/INVENTORY_FORMATS.md)** - Supported inventory formats
-- **[Variables Reference](docs/VARIABLES_CHEATSHEET.md)** - Complete variables guide
-- **[Modules Reference](docs/modules/README.md)** - All built-in modules
-- **[Ad-hoc Commands Guide](docs/ADHOC_GUIDE.md)** - Ad-hoc command documentation
-- **[Loop Guide](docs/LOOPS_GUIDE.md)** - Loop syntax and examples
-- **[Handlers Guide](docs/HANDLERS_GUIDE.md)** - Task notifications and handlers
-- **[Audit & Analytics Guide](../onigirazu_docs/features/AUDIT_AND_ANALYTICS_SYSTEM.md)** - Track execution history and analyze performance
-
-### Developer Documentation
-
-- **[Contributing Guide](CONTRIBUTING.md)** - How to contribute
-- **[Module Development Guide](docs/MODULE_DEVELOPMENT_GUIDE.md)** - Create custom modules
-- **[Architecture Guide](docs/ARCHITECTURE_DIAGRAM.md)** - System architecture
+- **[Quick Start](docs/QUICK_START_CONFIGURATION.md)** - inventory, playbook, plan, apply
+- **[Plan, drift, diff and rollback](docs/DRIFT_AND_ROLLBACK.md)** - see and control what a playbook changes
+- **[Modules Reference](docs/modules/README.md)** - every built-in module and its arguments
+- **[Playbook Examples](docs/examples/README.md)** - working playbooks
+- **[Inventory Formats](docs/INVENTORY_FORMATS.md)** - YAML, Ansible YAML/INI, TOML, JSON, scripts
+- **[Variables](docs/VARIABLES_CHEATSHEET.md)**, **[Filters and lookups](docs/FILTERS_GUIDE.md)**, **[Loops](docs/LOOPS_GUIDE.md)**, **[Handlers](docs/HANDLERS_GUIDE.md)**
+- **[Configuration Reference](docs/CONFIGURATION_REFERENCE.md)** and **[Security Policy](docs/SECURITY_POLICY_GUIDE.md)**
+- **[Contributing](CONTRIBUTING.md)**, **[Module Development](docs/MODULE_DEVELOPMENT_GUIDE.md)**
 
 ## 🧪 Testing & Quality
 
@@ -1236,7 +1217,7 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ## Support
 
-- 📖 **Documentation**: [Guide](docs/README.md) | [API Docs](docs/api/index.html)
+- 📖 **Documentation**: [Guide](docs/README.md)
 - 🐛 **Issues**: [GitHub Issues](https://github.com/onigirazu-cfg/onigirazu/issues)
 - 💬 **Discussions**: [GitHub Discussions](https://github.com/onigirazu-cfg/onigirazu/discussions)
 - 📝 **Contributing**: [Contributing Guide](CONTRIBUTING.md)

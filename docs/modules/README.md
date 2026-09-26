@@ -2,7 +2,7 @@
 
 This document provides comprehensive documentation for all built-in modules in Onigirazu.
 
-> 📑 **Looking for a specific module?** Check the [Alphabetical Index](INDEX.md) for a quick reference of all 45 modules!
+> 📑 **Looking for a specific module?** Check the [Alphabetical Index](INDEX.md) for a quick reference of all 50 modules.
 
 ## 📋 Table of Contents
 
@@ -37,201 +37,180 @@ Onigirazu modules are the building blocks for automation tasks. Each module perf
   register: "variable_name"
 ```
 
-### Common Parameters
+### Task Keywords
 
-All modules support these common parameters:
+Every task accepts these keywords next to its module:
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `when` | string | Conditional execution |
-| `register` | string | Store result in variable |
-| `ignore_errors` | boolean | Continue on failure |
-| `timeout` | duration | Task timeout |
-| `retries` | integer | Retry attempts |
-| `delay` | duration | Delay between retries |
+| Keyword | Description |
+|---------|-------------|
+| `when` | Run only when the expression is true |
+| `register` | Store the result under this name (also for failed or skipped tasks) |
+| `loop`, `with_items`, `with_list`, `with_dict`, `with_sequence`, `loop_control` | Repeat the task |
+| `until`, `retries`, `delay` | Repeat until the expression is true |
+| `changed_when`, `failed_when` | Override the changed/failed status |
+| `ignore_errors` | Continue on failure |
+| `notify`, `listen` | Handlers |
+| `become`, `become_user`, `become_method` | Privilege escalation |
+| `delegate_to`, `run_once`, `local_action` | Where and how often the task runs |
+| `block`, `rescue`, `always` | Task groups with error handling |
+| `check_mode` | `false` runs the task for real in a check run |
+| `environment`, `vars`, `tags`, `no_log`, `timeout` | Task environment, variables, tags, hidden output, time limit |
+
+`retries` must be a number and `delay`/`timeout` a number of seconds or a duration such as `10s`. Current limitation: a template such as `retries: "{{ n }}"` is not rendered and counts as 0.
+
+### Short Forms
+
+Ansible's short forms work:
+
+```yaml
+- command: echo hi chdir=/tmp       # free form; inline options: chdir, creates, removes, executable
+- file: path=/tmp/x state=touch     # key=value pairs
+- ping:                             # no arguments
+- command: make
+  args:
+    chdir: /src
+- local_action: command hostname    # runs on the control machine (delegate_to: localhost)
+```
+
+### Argument Values
+
+- A YAML integer given as `mode` is octal, as in Ansible: `mode: 0644` and `mode: "0644"` are the same.
+- Other numbers are passed to modules as strings, so `minute: 0` works in cron.
+
+### Check Mode
+
+With `--check` only these modules run, reporting what they would change: ping, debug, set_fact, stat, find, fail, wait_for, assert, include_vars, file, copy, template, lineinfile, blockinfile, replace, apt, yum, package, service, user, group, cron, sysctl, get_url, git, systemd, mount, config, docker_container, podman, docker_image. Every other module (command, shell, script, uri, firewall, archive, fetch, reboot, authorized_key, docker_compose, database modules, ...) is skipped.
 
 ## 🖥️ System Modules
 
-### facts
+### Facts
 
-Gather system information and facts about target hosts.
-
-#### Parameters
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `filter` | string | `*` | Filter facts by pattern |
-| `gather_subset` | list | `all` | Subset of facts to gather |
-| `timeout` | duration | `30s` | Gathering timeout |
-
-#### Subsets
-
-- `all`: All available facts
-- `hardware`: Hardware information
-- `network`: Network configuration
-- `virtual`: Virtualization facts
-- `ohai`: Ohai-style facts
-- `facter`: Facter-style facts
-
-#### Example
-
-```yaml
-- name: "Gather system facts"
-  facts:
-    gather_subset:
-      - "hardware"
-      - "network"
-    filter: "onigirazu_*"
-```
-
-#### Return Values
-
-```json
-{
-  "onigirazu_facts": {
-    "onigirazu_hostname": "webserver01",
-    "onigirazu_os_family": "RedHat",
-    "onigirazu_distribution": "CentOS",
-    "onigirazu_distribution_version": "8.4",
-    "onigirazu_architecture": "x86_64",
-    "onigirazu_processor_count": 4,
-    "onigirazu_memtotal_mb": 8192,
-    "onigirazu_interfaces": ["eth0", "lo"],
-    "onigirazu_default_ipv4": {
-      "address": "192.168.1.100",
-      "gateway": "192.168.1.1",
-      "interface": "eth0"
-    }
-  }
-}
-```
+There is no facts module. Facts are gathered at the start of every play unless the play sets `gather_facts: false`. See the [Variables Cheat Sheet](../VARIABLES_CHEATSHEET.md) for their names (`ansible_*` and `onigirazu_*`).
 
 ### command
 
-Execute commands on target hosts.
+Run a command without a shell: pipes, redirections and variables such as `$HOME` are not interpreted. Use `shell` for those.
 
 #### Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `cmd` | string | - | Command to execute (required) |
-| `chdir` | string | - | Change directory before execution |
-| `creates` | string | - | Skip if file exists |
-| `removes` | string | - | Skip if file doesn't exist |
-| `warn` | boolean | `true` | Show warnings for dangerous commands |
+| `cmd` | string | - | Command to run (required; free form in the short form) |
+| `chdir` | string | - | Change into this directory first |
+| `creates` | string | - | Skip when this path exists |
+| `removes` | string | - | Skip when this path does not exist |
+| `environment` | dict | - | Extra environment variables |
+
+A non-zero exit code fails the task; use `failed_when` or `ignore_errors` to accept it. The task always reports `changed`; use `changed_when: false` for read-only commands.
 
 #### Example
 
 ```yaml
-- name: "Get file stats for size checking"
-  stat:
-    path: "/var/log"
-  register: "log_dir_stats"
+- name: "Show disk usage"
+  command:
+    cmd: "df -h /"
+  register: disk
+  changed_when: false
 
-- name: "Create backup directory"
-  file:
-    path: "/backup/{{ onigirazu_date_time.date }}"
-    state: "directory"
-    mode: "0755"
+- name: "Build"
+  command: make install chdir=/src creates=/usr/local/bin/app
 ```
 
 #### Return Values
 
 ```json
 {
-  "cmd": "df -h",
-  "stdout": "/dev/sda1  20G  5.5G   14G  30% /\n...",
+  "cmd": "df -h /",
+  "stdout": "Filesystem  Size  Used Avail Use% Mounted on\n...",
   "stderr": "",
   "rc": 0,
-  "start": "2023-10-01 10:30:00",
-  "end": "2023-10-01 10:30:01",
-  "delta": "0:00:01.234567"
+  "stdout_lines": ["Filesystem  Size  Used Avail Use% Mounted on", "..."],
+  "stderr_lines": [],
+  "start": "2026-09-26 10:30:00.000000",
+  "end": "2026-09-26 10:30:00.042000",
+  "delta": "42ms"
 }
 ```
 
 ### shell
 
-Execute shell commands with full shell features.
+Run a command through a shell (`/bin/sh` unless `executable` is set). Same results and failure rule as `command`.
 
 #### Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `cmd` | string | - | Shell command (required) |
+| `cmd` | string | - | Shell command (required; free form in the short form) |
 | `chdir` | string | - | Working directory |
-| `executable` | string | `/bin/sh` | Shell executable |
-| `stdin` | string | - | Input to command |
+| `executable` | string | - | Shell to run the command with, e.g. `/bin/bash` |
+| `creates` | string | - | Skip when this path exists |
+| `removes` | string | - | Skip when this path does not exist |
+| `environment` | dict | - | Extra environment variables |
 
 #### Example
 
 ```yaml
-# Find log files and compress them using archive module
-- name: "Find log files to compress"
-  find:
-    paths: "/var/log"
-    patterns: "*.log"
-    file_type: "file"
-  register: "log_files"
-
-- name: "Archive and compress log files"
-  archive:
-    path: "{{ log_files.files | map(attribute='path') | list }}"
-    dest: "/var/log/archive-{{ onigirazu_date_time.date }}.tar.gz"
-    format: "tar.gz"
-  when: "log_files.files | length > 0"
+- name: "Count failed logins"
+  shell:
+    cmd: "grep -c 'Failed password' /var/log/auth.log || true"
+    executable: /bin/bash
+  register: failed_logins
+  changed_when: false
 ```
 
 ### script
 
-Execute local scripts on remote hosts.
+Copy a local script to the host and run it with bash.
 
 #### Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `path` | string | - | Path to local script (required) |
-| `args` | list | - | Script arguments |
-| `interpreter` | string | - | Script interpreter |
-| `creates` | string | - | Skip if file exists |
-| `removes` | string | - | Skip if file doesn't exist |
+| `script` | string | - | Path to the local script (required) |
+| `args` | string | - | Arguments, separated by spaces |
 
 #### Example
 
 ```yaml
 - name: "Run deployment script"
   script:
-    path: "./scripts/deploy.sh"
-    args:
-      - "production"
-      - "v1.2.3"
-    interpreter: "/bin/bash"
+    script: "./scripts/deploy.sh"
+    args: "production v1.2.3"
+
+- name: "Short form"
+  script: ./scripts/deploy.sh production v1.2.3
 ```
 
 ## 📁 File System Modules
 
 ### file
 
-Manage files and directories.
+Manage files, directories and links.
 
 #### Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `path` | string | - | File/directory path (required) |
-| `state` | string | `file` | Desired state |
-| `mode` | string | - | File permissions |
-| `owner` | string | - | File owner |
-| `group` | string | - | File group |
-| `recurse` | boolean | `false` | Apply recursively |
+| `path` | string | - | Path (required); `dest` and `name` are aliases |
+| `state` | string | see below | Desired state |
+| `src` | string | - | Link target (`link`, `hard`) |
+| `mode` | string | - | Permissions, e.g. `"0644"` |
+| `owner` | string | - | Owner |
+| `group` | string | - | Group |
+| `recurse` | boolean | `false` | With `state: directory`: apply owner/group/mode to everything below |
+| `force` | boolean | `false` | Replace an existing non-link path with the link |
 
 #### States
 
-- `file`: Ensure file exists
-- `directory`: Ensure directory exists
-- `absent`: Remove file/directory
-- `touch`: Touch file (update timestamps)
-- `hard`: Create hard link
-- `link`: Create symbolic link
+- `file`: the path must exist; only its attributes are set (fails otherwise)
+- `directory`: create the directory (with parents)
+- `touch`: create an empty file or update its timestamps
+- `present`: create the file if it is missing; with `content`, write that content when it differs
+- `absent`: remove the file or directory
+- `link`: symbolic link at `path` pointing to `src`
+- `hard`: hard link at `path` pointing to `src`
+
+Without `state` the module creates a link when `src` is given, and otherwise sets attributes of an existing path.
 
 #### Example
 
@@ -244,10 +223,10 @@ Manage files and directories.
     owner: "appuser"
     group: "appgroup"
 
-- name: "Create symbolic link"
+- name: "Point current at a release"
   file:
-    src: "/opt/myapp/current"
-    dest: "/opt/myapp/releases/v1.2.3"
+    src: "/opt/myapp/releases/v1.2.3"
+    dest: "/opt/myapp/current"
     state: "link"
 ```
 
@@ -266,7 +245,8 @@ Copy files to target hosts.
 | `mode` | string | - | File permissions |
 | `owner` | string | - | File owner |
 | `group` | string | - | File group |
-| `force` | boolean | `true` | Overwrite existing files |
+| `force` | boolean | `true` | `false` leaves an existing `dest` alone, whatever it contains |
+| `remote_src` | boolean | `false` | `src` is a path on the host, not on the control machine |
 
 #### Example
 
@@ -501,14 +481,17 @@ Process Jinja2 templates and copy to target hosts.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `src` | string | - | Template file path (required) |
+| `src` | string | - | Template file path (`src` or `content` required) |
+| `content` | string | - | Template text instead of a file |
 | `dest` | string | - | Destination path (required) |
+| `vars` | dict | - | Extra variables for this template |
 | `backup` | boolean | `false` | Create backup |
-| `mode` | string | - | File permissions |
+| `mode` | string | `0644` | File permissions |
 | `owner` | string | - | File owner |
 | `group` | string | - | File group |
-| `trim_blocks` | boolean | `true` | Trim template blocks |
-| `lstrip_blocks` | boolean | `false` | Strip leading whitespace |
+| `force` | boolean | `false` | Rewrite the file even when the content is unchanged |
+
+The newline after a `{% ... %}` tag is removed, as with Ansible's `trim_blocks`; `{%-`/`-%}` strip whitespace.
 
 #### Example
 
@@ -536,7 +519,7 @@ Fetch files from target hosts to local machine.
 | `dest` | string | - | Local destination (required) |
 | `flat` | boolean | `false` | Store without host directory |
 | `fail_on_missing` | boolean | `true` | Fail if source missing |
-| `validate_checksum` | boolean | `true` | Validate file integrity |
+| `validate` | boolean | `true` | Compare checksums after the transfer |
 
 #### Example
 
@@ -1081,7 +1064,7 @@ Create and manage compressed archives. Supports multiple formats including tar, 
 # Database backup
 - archive:
     path: "/var/backups/database"
-    dest: "/secure/backup-{{ onigirazu_date_time.iso8601_basic }}.tar.xz"
+    dest: "/secure/backup-{{ onigirazu_date_time.epoch }}.tar.xz"
     format: "tar.xz"
 
 # Log rotation archive
@@ -1138,7 +1121,6 @@ Universal package management.
 | `state` | string | `present` | Package state |
 | `version` | string | - | Specific version |
 | `update_cache` | boolean | `false` | Update package cache |
-| `cache_valid_time` | integer | `0` | Cache validity time |
 
 #### States
 
@@ -1185,13 +1167,19 @@ Debian/Ubuntu package management.
 - name: "Update package cache"
   apt:
     update_cache: true
-    cache_valid_time: 3600
 
-- name: "Upgrade all packages"
+- name: "Upgrade nginx to the latest version"
   apt:
-    upgrade: "dist"
+    name: nginx
+    state: latest
     update_cache: true
     autoremove: true
+
+# upgrade and cache_valid_time are not supported (ignored); for a full upgrade:
+- name: "Upgrade all packages"
+  shell:
+    cmd: "DEBIAN_FRONTEND=noninteractive apt-get -y dist-upgrade"
+  become: true
 ```
 
 ### yum
@@ -1300,22 +1288,28 @@ Download files from HTTP/HTTPS/FTP.
 
 ### user
 
-Manage user accounts.
+Manage user accounts. An existing account is brought to the given settings.
 
 #### Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `name` | string | - | Username (required) |
-| `state` | string | `present` | User state |
+| `state` | string | `present` | `present` or `absent` |
 | `uid` | integer | - | User ID |
-| `gid` | integer | - | Primary group ID |
-| `groups` | list | - | Additional groups |
+| `group` | string | - | Primary group (name or GID) |
+| `groups` | list/string | - | Supplementary groups |
+| `append` | boolean | `false` | Add to `groups` instead of replacing the list |
 | `home` | string | - | Home directory |
+| `move_home` | boolean | `false` | Move the old home when `home` changes |
 | `shell` | string | - | Login shell |
-| `password` | string | - | Encrypted password |
-| `create_home` | boolean | `true` | Create home directory |
-| `system` | boolean | `false` | System user |
+| `comment` | string | - | GECOS field |
+| `password` | string | - | Encrypted password (see the `password_hash` filter) |
+| `create_home` | boolean | `true` | Create the home directory (new accounts) |
+| `system` | boolean | `false` | System account (new accounts) |
+| `remove` | boolean | `false` | With `state: absent`: also remove the home directory |
+
+`gid` is accepted only when the account is created; use `group` to change the primary group of an existing account.
 
 #### Example
 
@@ -1327,7 +1321,6 @@ Manage user accounts.
     group: "appgroup"
     home: "/opt/myapp"
     shell: "/bin/bash"
-    create_home: true
 
 - name: "Add user to groups"
   user:
@@ -1336,18 +1329,24 @@ Manage user accounts.
       - "docker"
       - "sudo"
     append: true
+
+- name: "Remove a user with their home"
+  user:
+    name: "olduser"
+    state: absent
+    remove: true
 ```
 
 ### group
 
-Manage user groups.
+Manage groups.
 
 #### Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `name` | string | - | Group name (required) |
-| `state` | string | `present` | Group state |
+| `state` | string | `present` | `present` or `absent` |
 | `gid` | integer | - | Group ID |
 | `system` | boolean | `false` | System group |
 
@@ -1358,7 +1357,6 @@ Manage user groups.
   group:
     name: "appgroup"
     gid: 1001
-    system: false
 ```
 
 ### authorized_key
@@ -1434,13 +1432,17 @@ Tests connectivity to target hosts.
 
 ### stat
 
-Retrieve file or directory status information.
+Read the status of a path. Never changes anything.
 
 #### Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `path` | string | - | File or directory path (required) |
+| `path` | string | - | Path (required) |
+| `get_checksum` | boolean | `true` | Compute a checksum of regular files |
+| `checksum_algorithm` | string | `sha1` | `md5`, `sha1`, `sha224`, `sha256`, `sha384` or `sha512` |
+
+A link is reported as a link, not followed.
 
 #### Example
 
@@ -1448,12 +1450,12 @@ Retrieve file or directory status information.
 - name: "Get file status"
   stat:
     path: "/etc/nginx/nginx.conf"
-  register: "nginx_config"
+  register: nginx_config
 
-- name: "Check if directory exists and show permissions"
-  stat:
-    path: "/opt/myapp"
-  register: "app_dir"
+- name: "Show owner and mode"
+  debug:
+    msg: "{{ nginx_config.stat.pw_name }} {{ nginx_config.stat.mode }}"
+  when: nginx_config.stat.exists
 ```
 
 #### Return Values
@@ -1462,14 +1464,30 @@ Retrieve file or directory status information.
 {
   "stat": {
     "exists": true,
-    "type": "file",
-    "size": "4096",
+    "path": "/etc/nginx/nginx.conf",
+    "isreg": true,
+    "isdir": false,
+    "islnk": false,
+    "size": 1482,
     "mode": "0644",
-    "mtime": "1696086600"
-  },
-  "exists": true
+    "uid": 0,
+    "gid": 0,
+    "pw_name": "root",
+    "gr_name": "root",
+    "mtime": 1696086600,
+    "atime": 1696086600,
+    "ctime": 1696086600,
+    "inode": 131090,
+    "nlink": 1,
+    "readable": true,
+    "writable": true,
+    "executable": false,
+    "checksum": "2aae6c35c94fcfb415dbe95f408b9ce91ee846ed"
+  }
 }
 ```
+
+Links also carry `lnk_source` (resolved path) and `lnk_target` (link text). For a missing path only `exists: false` and `path` are returned. The same fields are also available at the top level of the result.
 
 ## 🔄 Version Control
 
@@ -1873,48 +1891,124 @@ Manage MongoDB databases and users.
 
 ### debug
 
-Print debug information.
+Print a message or a variable.
 
 #### Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `msg` | string | - | Debug message |
-| `var` | string | - | Variable to display |
-| `verbosity` | integer | `0` | Minimum verbosity level |
+| `msg` | string | - | Message (templated) |
+| `var` | string | - | Variable to print; a dotted path such as `result.stdout` |
+
+`var` does not evaluate expressions or brackets (`hostvars[inventory_hostname]` prints "VARIABLE IS NOT DEFINED!"); use `msg: "{{ ... }}"` for those.
 
 #### Example
 
 ```yaml
 - name: "Debug variable"
   debug:
-    var: "onigirazu_facts"
+    var: ansible_facts
 
 - name: "Debug message"
   debug:
-    msg: "Current user is {{ onigirazu_user_id }}"
+    msg: "Current user is {{ ansible_user_id }}"
 ```
 
 ### set_fact
 
-Set variables for use in subsequent tasks.
-
-#### Parameters
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `key_value` | dict | - | Variables to set |
-| `cacheable` | boolean | `false` | Cache across plays |
+Set variables for the current host for the rest of the run. Every argument becomes a variable; types are kept.
 
 #### Example
 
 ```yaml
 - name: "Set deployment facts"
   set_fact:
-    deployment_time: "{{ onigirazu_date_time.iso8601 }}"
+    deployment_time: "{{ ansible_date_time.iso8601 }}"
     app_version: "v1.2.3"
-    environment: "production"
-    cacheable: true
+    replicas: 3
+```
+
+### assert
+
+Fail unless every expression holds.
+
+#### Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `that` | string/list | - | Expression or list of expressions (required) |
+| `fail_msg` | string | `Assertion failed` | Message on failure (`msg` is an alias) |
+| `success_msg` | string | `All assertions passed` | Message on success |
+
+#### Example
+
+```yaml
+- name: "Check prerequisites"
+  assert:
+    that:
+      - ansible_os_family == "Debian"
+      - ansible_processor_vcpus >= 2
+    fail_msg: "Unsupported host"
+```
+
+### include_vars
+
+Load variables from YAML files on the control machine into the host's variables.
+
+#### Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `file` | string | - | File, relative to the playbook directory (free form in the short form) |
+| `dir` | string | - | Load every `.yml`, `.yaml` and `.json` file of this directory, in name order |
+| `name` | string | - | Put the variables under this one key |
+
+#### Example
+
+```yaml
+- include_vars: vars/{{ ansible_os_family }}.yml
+
+- name: "Load all settings under one key"
+  include_vars:
+    dir: settings
+    name: settings
+```
+
+### include_role / import_role
+
+Run a role's tasks at this point. Both are resolved when the playbook is loaded.
+
+#### Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `name` | string | - | Role name (required) |
+| `tasks_from` | string | `main` | Task file of the role to run |
+
+Tags of the task are added to the role's tasks.
+
+#### Example
+
+```yaml
+- name: "Configure nginx"
+  include_role:
+    name: nginx
+    tasks_from: install
+```
+
+### meta
+
+Engine actions.
+
+| Action | Effect |
+|--------|--------|
+| `flush_handlers` | Run notified handlers now |
+| `end_host` | Stop the play for this host |
+| `end_play` | Stop the play for all hosts |
+| `noop`, `clear_host_errors`, `refresh_inventory`, `reset_connection` | Accepted, no effect |
+
+```yaml
+- meta: flush_handlers
 ```
 
 ### wait_for
@@ -1926,7 +2020,7 @@ Wait for conditions to be met.
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `port` | integer | - | Port number to wait for (check if listening) |
-| `host` | string | `localhost` | Hostname/IP address to check |
+| `host` | string | `127.0.0.1` | Hostname/IP address to check |
 | `path` | string | - | File path to wait for (check if exists) |
 | `search_regex` | string | - | Regex pattern to search in file content |
 | `state` | string | `started` | Condition state (`started` = expect condition met, `stopped` = expect condition failed) |
@@ -1994,12 +2088,15 @@ Fail execution with custom message.
 
 ## 📚 Complete Module List
 
-All available modules in Onigirazu (40 total - v1.55.0+):
+All 50 modules:
 
-**System & Connectivity**: command, shell, script, ping, facts, debug, set_fact, wait_for, pause, fail
-**File Management**: file, copy, fetch, find, template, lineinfile, blockinfile, stat
+**Execution**: command, shell, script
+**Connectivity and Utilities**: ping, debug, set_fact, assert, fail, wait_for, pause
+**Playbook Control**: include_vars, include_role, import_role, meta
+**File Management**: file, copy, fetch, find, template, lineinfile, blockinfile, replace, stat, archive
 **Package Management**: package, apt, yum
-**Service Management**: service, systemd, cron
+**Service Management**: service, systemd, cron, reboot
+**System Control**: sysctl, mount
 **Security & Firewall**: firewall, authorized_key
 **Version Control**: git
 **Configuration**: config
@@ -2008,20 +2105,3 @@ All available modules in Onigirazu (40 total - v1.55.0+):
 **Network**: get_url, uri
 **User Management**: user, group
 
-### New in v1.55.0
-
-The following 9 modules were added to complete the module coverage:
-
-- **fail**: Fail execution with custom message (Control Flow)
-- **pause**: Pause execution for user input or time duration (Control Flow)
-- **wait_for**: Wait for conditions like ports, files, or regex patterns (System Utility)
-- **script**: Execute local scripts on remote hosts (Execution)
-- **authorized_key**: Manage SSH public keys (Security)
-- **blockinfile**: Insert/update/remove multi-line text blocks (File Management)
-- **apt**: Debian/Ubuntu package management (Package Management)
-- **yum**: RedHat/CentOS package management (Package Management)
-- **uri**: HTTP/HTTPS API requests with full method support (Network)
-
----
-
-This comprehensive module documentation provides detailed information about all built-in modules, their parameters, usage examples, and return values. Each module is designed to be idempotent and provide consistent behavior across different platforms.

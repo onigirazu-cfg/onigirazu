@@ -300,7 +300,7 @@ Text format is fine if you don't need advanced features:
 - [Complete insecure_ignore_host_key Guide](./README_insecure_ignore_host_key.md)
 - [Quick Reference](./QUICK_REFERENCE_insecure_ignore_host_key.md)
 - [YAML Inventory Example](./inventory_with_insecure_host_key.yml)
-- [Inventory Examples](../../onigirazu/docs/examples/)
+- [Inventory Examples](./README.md)
 
 ## Summary
 

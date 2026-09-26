@@ -141,6 +141,8 @@ func (sm *SnapshotManager) ListSnapshots() ([]Snapshot, error) {
 		snapshots = append(snapshots, snapshot)
 	}
 
+	// newest first
+	sort.Slice(snapshots, func(i, j int) bool { return snapshots[i].Timestamp.After(snapshots[j].Timestamp) })
 	return snapshots, nil
 }
 

@@ -320,6 +320,6 @@ all:
 
 ## See Also
 
-- [Inventory Configuration](../inventory/README.md)
-- [Playbook Examples](./PLAYBOOK_EXAMPLES.md)
-- [Variable Usage Guide](../variables/README.md)
+- [Inventory Formats](../INVENTORY_FORMATS.md)
+- [Playbook Examples](./README.md)
+- [Variables Cheat Sheet](../VARIABLES_CHEATSHEET.md)
