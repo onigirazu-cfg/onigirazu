@@ -915,6 +915,9 @@ mode: it reports what would change and changes nothing. Supported: <code>copy</c
 modules are skipped with a note. <code>check_mode: false</code> on a task runs it for real
 in a check run (e.g. a probe whose result later tasks use); <code>check_mode: true</code>
 checks a single task in a normal run.</p>
+<p><code>--diff</code> (with or without <code>--check</code>) shows what <code>copy</code>, <code>template</code>,
+<code>lineinfile</code>, <code>blockinfile</code>, <code>replace</code> and file modes change, as unified
+diffs after the run; <code>drift</code> includes them in its report.</p>
 <h3>Conditionals</h3>
 <p><code>when</code>, <code>until</code>, <code>changed_when</code> and <code>failed_when</code> take an expression,
 evaluated per host with that host's facts and registered results:</p>
@@ -1064,7 +1067,13 @@ onigirazu drift site.yml -i hosts.yml --fix            # apply when drift is fou
 <pre class="codehilite"><code>Drift: 1 task(s) on 1 of 3 host(s) differ from site.yml
 
 web1
-  ~ Config file (copy): file would be updated
+  ~ Config file (copy)
+      --- before: /etc/app.conf
+      +++ after: /etc/app.conf
+      @@ -1,2 +1,2 @@
+      -port = 8081
+      +port = 8080
+       workers = 4
 
 In sync: web2, db1
 </code></pre>
