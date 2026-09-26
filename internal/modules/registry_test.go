@@ -495,11 +495,16 @@ func TestRegistry_ExecuteTask_SuccessFalseIsFailure(t *testing.T) {
 }
 
 func TestNormalizeArgs_YAMLNumbers(t *testing.T) {
-	args := map[string]interface{}{"mode": 420, "owner": 1000, "group": "staff"}
+	args := map[string]interface{}{"mode": 420, "owner": 1000, "group": "staff", "minute": 0, "version": 1.5,
+		"force": true, "_become": true, "ports": []interface{}{80}}
 	normalizeArgs(args)
 	assert.Equal(t, "0644", args["mode"])
 	assert.Equal(t, "1000", args["owner"])
 	assert.Equal(t, "staff", args["group"])
+	assert.Equal(t, "0", args["minute"])
+	assert.Equal(t, "1.5", args["version"])
+	assert.Equal(t, true, args["force"])
+	assert.Equal(t, []interface{}{80}, args["ports"])
 	quoted := map[string]interface{}{"mode": "u=rw"}
 	normalizeArgs(quoted)
 	assert.Equal(t, "u=rw", quoted["mode"])

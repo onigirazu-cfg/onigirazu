@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/onigirazu-cfg/onigirazu/internal/interfaces"
@@ -236,20 +237,25 @@ var checkModeModules = map[string]bool{
 	"mount": true, "config": true, "docker_container": true, "podman": true, "docker_image": true,
 }
 
-// normalizeArgs turns YAML numbers into the strings modules expect:
-// "mode: 0644" is the integer 420 in YAML (octal, as in Ansible) and
-// "owner: 1000" a uid
+// normalizeArgs turns top-level YAML numbers into strings: modules read
+// text arguments as strings (cron "minute: 0" became "*") and numeric ones
+// through toInt, which takes both. "mode: 0644" is the integer 420 in YAML
+// (octal, as in Ansible) and becomes "0644".
 func normalizeArgs(args map[string]interface{}) {
-	if mode, ok := toInt(args["mode"]); ok {
-		if _, isString := args["mode"].(string); !isString {
-			args["mode"] = fmt.Sprintf("%04o", mode)
+	for key, value := range args {
+		if strings.HasPrefix(key, "_") {
+			continue
 		}
-	}
-	for _, key := range []string{"owner", "group"} {
-		if n, ok := toInt(args[key]); ok {
-			if _, isString := args[key].(string); !isString {
+		switch v := value.(type) {
+		case int, int64, uint64:
+			n, _ := toInt(v)
+			if key == "mode" {
+				args[key] = fmt.Sprintf("%04o", n)
+			} else {
 				args[key] = strconv.Itoa(n)
 			}
+		case float64:
+			args[key] = strconv.FormatFloat(v, 'f', -1, 64)
 		}
 	}
 }

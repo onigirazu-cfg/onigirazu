@@ -19,3 +19,10 @@ plays:
           src: t.j2
           dest: /root/onigirazu-e2e-mode-tpl
           mode: 0640
+      - name: cron with numeric minute and hour
+        cron:
+          name: onigirazu-e2e-numeric
+          minute: 0
+          hour: 3
+          job: /bin/true
+          user: root
