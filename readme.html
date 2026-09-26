@@ -826,6 +826,11 @@ onigirazu run all -m ping -i inventory.yml -o table
       - git
 </code></pre>
 
+<h3>Machine-readable output</h3>
+<p><code>onigirazu apply site.yml -o json</code> (or <code>-o yaml</code>) writes one document to
+stdout: status (<code>success</code>, <code>partial_success</code>, <code>failed</code>), totals, and every task
+with its result per host. Logs and progress go to stderr; the exit code is
+non-zero when the run failed.</p>
 <h3>Check mode</h3>
 <p><code>onigirazu apply site.yml --check</code> runs every module that supports it in check
 mode: it reports what would change and changes nothing. Supported: <code>copy</code>,
