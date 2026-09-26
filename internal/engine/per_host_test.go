@@ -457,3 +457,19 @@ func TestMeta_EndHostStopsTheHost(t *testing.T) {
 	require.Len(t, *calls, 1)
 	assert.Equal(t, "h2", (*calls)[0]["host"])
 }
+
+func TestBecomeFalseAndBlockInheritance(t *testing.T) {
+	play := becomeSettings{Become: true, User: "root"}
+	assert.False(t, effectiveBecome(&types.Task{BecomeSet: true}, play).Become, "become: false wins")
+	assert.True(t, effectiveBecome(&types.Task{}, play).Become)
+
+	block := &types.Task{BecomeSet: true, Environment: map[string]interface{}{"A": "1", "B": "1"}, Vars: map[string]interface{}{"x": 1}}
+	out := inheritBlock(block, []types.Task{
+		{Name: "t", Environment: map[string]interface{}{"B": "2"}},
+		{Name: "own", Become: true, BecomeSet: true},
+	}, false)
+	assert.True(t, out[0].BecomeSet && !out[0].Become)
+	assert.Equal(t, map[string]interface{}{"A": "1", "B": "2"}, out[0].Environment)
+	assert.Equal(t, 1, out[0].Vars["x"])
+	assert.True(t, out[1].Become, "a task's own become stays")
+}

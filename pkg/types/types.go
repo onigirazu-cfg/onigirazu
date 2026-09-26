@@ -188,10 +188,13 @@ type Task struct {
 	Serial       bool                   `yaml:"serial,omitempty"`
 	RetryDelay   time.Duration          `yaml:"retry_delay,omitempty"`
 	Become       bool                   `yaml:"become,omitempty"`
-	BecomeUser   string                 `yaml:"become_user,omitempty"`
-	BecomeMethod string                 `yaml:"become_method,omitempty"`
-	RunOnce      bool                   `yaml:"run_once,omitempty"`
-	DelegateTo   string                 `yaml:"delegate_to,omitempty"`
+	// BecomeSet tells become: false (run without escalation even in a play
+	// with become: true) from no become at all
+	BecomeSet    bool   `yaml:"-" json:"-"`
+	BecomeUser   string `yaml:"become_user,omitempty"`
+	BecomeMethod string `yaml:"become_method,omitempty"`
+	RunOnce      bool   `yaml:"run_once,omitempty"`
+	DelegateTo   string `yaml:"delegate_to,omitempty"`
 	// block / rescue / always (a task with a block has no module)
 	Block  []Task `yaml:"block,omitempty"`
 	Rescue []Task `yaml:"rescue,omitempty"`
@@ -265,7 +268,7 @@ func (t *Task) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	if vars, ok := taskMap["vars"].(map[string]interface{}); ok {
 		t.Vars = vars
 	}
-	if noLog, ok := taskMap["no_log"].(bool); ok {
+	if noLog, ok := yamlBool(taskMap["no_log"]); ok {
 		t.NoLog = noLog
 	}
 	// with_items / with_list: the old spelling of loop
@@ -300,7 +303,7 @@ func (t *Task) UnmarshalYAML(unmarshal func(interface{}) error) error {
 
 	// check_mode: false runs the task for real in a check run; true checks
 	// it in a normal run
-	if check, ok := taskMap["check_mode"].(bool); ok {
+	if check, ok := yamlBool(taskMap["check_mode"]); ok {
 		t.CheckMode = &check
 	}
 
@@ -331,7 +334,7 @@ func (t *Task) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	if register, ok := taskMap["register"].(string); ok {
 		t.Register = register
 	}
-	if ignoreErrors, ok := taskMap["ignore_errors"].(bool); ok {
+	if ignoreErrors, ok := yamlBool(taskMap["ignore_errors"]); ok {
 		t.IgnoreErrors = ignoreErrors
 	}
 	// include, include_tasks and import_tasks are expanded by the parser
@@ -340,14 +343,14 @@ func (t *Task) UnmarshalYAML(unmarshal func(interface{}) error) error {
 			t.Include = include
 		}
 	}
-	if serial, ok := taskMap["serial"].(bool); ok {
+	if serial, ok := yamlBool(taskMap["serial"]); ok {
 		t.Serial = serial
 	}
 	if retries, ok := taskMap["retries"].(int); ok {
 		t.Retries = retries
 	}
-	if become, ok := taskMap["become"].(bool); ok {
-		t.Become = become
+	if become, ok := yamlBool(taskMap["become"]); ok {
+		t.Become, t.BecomeSet = become, true
 	}
 	if becomeUser, ok := taskMap["become_user"].(string); ok {
 		t.BecomeUser = becomeUser
@@ -355,7 +358,7 @@ func (t *Task) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	if becomeMethod, ok := taskMap["become_method"].(string); ok {
 		t.BecomeMethod = becomeMethod
 	}
-	if runOnce, ok := taskMap["run_once"].(bool); ok {
+	if runOnce, ok := yamlBool(taskMap["run_once"]); ok {
 		t.RunOnce = runOnce
 	}
 	if delegateTo, ok := taskMap["delegate_to"].(string); ok {
@@ -668,8 +671,10 @@ type Play struct {
 	AnyErrorsFatal    bool                   `yaml:"any_errors_fatal,omitempty"`
 	IgnoreErrors      bool                   `yaml:"ignore_errors,omitempty"`
 	GatherFacts       bool                   `yaml:"gather_facts,omitempty"`
-	Roles             []RoleReference        `yaml:"roles,omitempty"` // NEW: List of roles to execute
-	RoleObjects       []*Role                `yaml:"-" json:"-"`      // NEW: Loaded role objects (internal)
+	// Environment of every task of the play; a task's own environment wins
+	Environment map[string]interface{} `yaml:"environment,omitempty"`
+	Roles       []RoleReference        `yaml:"roles,omitempty"` // NEW: List of roles to execute
+	RoleObjects []*Role                `yaml:"-" json:"-"`      // NEW: Loaded role objects (internal)
 }
 
 // Playbook represents a complete playbook
@@ -1313,4 +1318,21 @@ func durationValue(v interface{}) (time.Duration, bool) {
 		return time.Duration(d * float64(time.Second)), true
 	}
 	return 0, false
+}
+
+// yamlBool reads a boolean task keyword: YAML true/false, or the yes/no,
+// on/off strings Ansible playbooks use (YAML 1.2 keeps them as strings)
+func yamlBool(v interface{}) (bool, bool) {
+	switch b := v.(type) {
+	case bool:
+		return b, true
+	case string:
+		switch strings.ToLower(b) {
+		case "yes", "true", "on", "y":
+			return true, true
+		case "no", "false", "off", "n":
+			return false, true
+		}
+	}
+	return false, false
 }

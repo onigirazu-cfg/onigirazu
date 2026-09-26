@@ -93,3 +93,13 @@ func TestPlay_GatherFactsDefault(t *testing.T) {
 		assert.Equal(t, want, p.GatherFacts, src)
 	}
 }
+
+func TestTask_BooleanKeywords(t *testing.T) {
+	var yes, no, none Task
+	require.NoError(t, yaml.Unmarshal([]byte("name: a\nping:\nbecome: yes\nignore_errors: 'on'\n"), &yes))
+	require.NoError(t, yaml.Unmarshal([]byte("name: b\nping:\nbecome: no\n"), &no))
+	require.NoError(t, yaml.Unmarshal([]byte("name: c\nping:\n"), &none))
+	assert.True(t, yes.Become && yes.BecomeSet && yes.IgnoreErrors)
+	assert.True(t, !no.Become && no.BecomeSet)
+	assert.False(t, none.BecomeSet)
+}

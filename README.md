@@ -795,6 +795,10 @@ task only), `no_log: true` (output and errors hidden from logs, state and
 `index_var`) and the older `with_items`. `command` and `shell` honour
 `creates` and `removes`.
 
+`environment` also works on a play and a block, `vars` on a block; the task's
+own values win. `become: false` on a task or block runs it without escalation
+in a play with `become: true`. Boolean keywords take `yes`/`no` as well.
+
 ### Machine-readable output
 
 `onigirazu apply site.yml -o json` (or `-o yaml`) writes one document to
