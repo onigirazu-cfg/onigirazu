@@ -342,6 +342,22 @@ Examples:
 			executionPool := execution.NewPoolWithContext(ctx, cfg.MaxConcurrency, log)
 			progressTracker := progress.NewTracker()
 			moduleRegistry := modules.NewRegistry()
+			var callbacks []plugins.CallbackPlugin
+			if pluginManager != nil {
+				// module plugins are used like built-in modules
+				for _, p := range pluginManager.List(plugins.PluginTypeModule) {
+					if module, ok := p.(plugins.ModulePlugin); ok {
+						if err := moduleRegistry.Register(module.GetName(), module); err != nil {
+							log.Warn("Module plugin %s not registered: %v", module.GetName(), err)
+						}
+					}
+				}
+				for _, p := range pluginManager.List(plugins.PluginTypeCallback) {
+					if cb, ok := p.(plugins.CallbackPlugin); ok {
+						callbacks = append(callbacks, cb)
+					}
+				}
+			}
 
 			// Initialize parser and inventory manager
 			enhancedParser := parser.NewEnhancedParser(templateEngine, log)
@@ -374,6 +390,7 @@ Examples:
 				executionPool,
 				cacheManager,
 			)
+			executionEngine.SetCallbacks(callbacks)
 
 			policy, policySource, err := security.LoadPolicy(securityPolicyPath)
 			if err != nil {
