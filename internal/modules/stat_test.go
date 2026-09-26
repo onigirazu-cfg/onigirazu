@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestStatModule_Validate tests stat module argument validation
@@ -509,4 +511,35 @@ func BenchmarkStatModule_Execute(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		_, _ = module.Execute(ctx, host, args)
 	}
+}
+
+func TestStat_AnsibleFields(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "f")
+	require.NoError(t, os.WriteFile(file, []byte("hello\n"), 0o640))
+	link := filepath.Join(dir, "l")
+	require.NoError(t, os.Symlink(file, link))
+	host := types.Host{Name: "localhost", Address: "127.0.0.1"}
+
+	r, err := NewStatModule().Execute(context.Background(), host, map[string]interface{}{"path": file})
+	require.NoError(t, err)
+	st := r.Output["stat"].(map[string]interface{})
+	assert.Equal(t, true, st["exists"])
+	assert.Equal(t, "0640", st["mode"])
+	assert.Equal(t, "f572d396fae9206628714fb2ce00f72e94f2258f", st["checksum"], "sha1 by default")
+	assert.NotEmpty(t, st["pw_name"])
+
+	r, err = NewStatModule().Execute(context.Background(), host, map[string]interface{}{"path": file, "checksum_algorithm": "sha256"})
+	require.NoError(t, err)
+	assert.Len(t, r.Output["stat"].(map[string]interface{})["checksum"], 64)
+
+	r, err = NewStatModule().Execute(context.Background(), host, map[string]interface{}{"path": link})
+	require.NoError(t, err)
+	st = r.Output["stat"].(map[string]interface{})
+	assert.Equal(t, true, st["islnk"])
+	assert.Equal(t, file, st["lnk_target"])
+
+	r, err = NewStatModule().Execute(context.Background(), host, map[string]interface{}{"path": filepath.Join(dir, "missing")})
+	require.NoError(t, err)
+	assert.Equal(t, false, r.Output["stat"].(map[string]interface{})["exists"])
 }
