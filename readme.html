@@ -856,6 +856,16 @@ with variables) run first. Variables given with the role win over its own:</p>
     web_port: 9090
 </code></pre>
 
+<p><code>include_role</code> / <code>import_role</code> run a role as a task (<code>name</code>, <code>tasks_from</code>),
+on the hosts where its <code>when</code> holds; the task's <code>vars</code> are role parameters:</p>
+<pre class="codehilite"><code class="language-yaml">- include_role:
+    name: web
+    tasks_from: upgrade
+  vars:
+    web_port: 9090
+  when: upgrade | bool
+</code></pre>
+
 <h3>Extra variables and limits</h3>
 <p><code>-e</code> sets variables that override all others: <code>-e env=prod -e version=1.2</code>,
 <code>-e '{"replicas": 3}'</code> or <code>-e @vars.yml</code> (repeatable, later ones win).
