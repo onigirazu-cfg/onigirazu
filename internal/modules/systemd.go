@@ -95,7 +95,7 @@ func (m *SystemdModule) handleService(ctx context.Context, exec *executor.Comman
 		switch state {
 		case "started":
 			if currentState != "active" {
-				if _, err := exec.Execute("systemctl", "start", name); err != nil {
+				if _, err := m.systemctl(exec, args, "start", name); err != nil {
 					return m.failResult(result, fmt.Sprintf("failed to start service: %v", err))
 				}
 				changed = true
@@ -103,20 +103,20 @@ func (m *SystemdModule) handleService(ctx context.Context, exec *executor.Comman
 			}
 		case "stopped":
 			if currentState == "active" {
-				if _, err := exec.Execute("systemctl", "stop", name); err != nil {
+				if _, err := m.systemctl(exec, args, "stop", name); err != nil {
 					return m.failResult(result, fmt.Sprintf("failed to stop service: %v", err))
 				}
 				changed = true
 				result.Output["action"] = "stopped"
 			}
 		case "restarted":
-			if _, err := exec.Execute("systemctl", "restart", name); err != nil {
+			if _, err := m.systemctl(exec, args, "restart", name); err != nil {
 				return m.failResult(result, fmt.Sprintf("failed to restart service: %v", err))
 			}
 			changed = true
 			result.Output["action"] = "restarted"
 		case "reloaded":
-			if _, err := exec.Execute("systemctl", "reload", name); err != nil {
+			if _, err := m.systemctl(exec, args, "reload", name); err != nil {
 				return m.failResult(result, fmt.Sprintf("failed to reload service: %v", err))
 			}
 			changed = true
@@ -133,13 +133,13 @@ func (m *SystemdModule) handleService(ctx context.Context, exec *executor.Comman
 		}
 
 		if enabledBool && !isEnabled {
-			if _, err := exec.Execute("systemctl", "enable", name); err != nil {
+			if _, err := m.systemctl(exec, args, "enable", name); err != nil {
 				return m.failResult(result, fmt.Sprintf("failed to enable service: %v", err))
 			}
 			changed = true
 			result.Output["enabled"] = true
 		} else if !enabledBool && isEnabled {
-			if _, err := exec.Execute("systemctl", "disable", name); err != nil {
+			if _, err := m.systemctl(exec, args, "disable", name); err != nil {
 				return m.failResult(result, fmt.Sprintf("failed to disable service: %v", err))
 			}
 			changed = true
@@ -156,13 +156,13 @@ func (m *SystemdModule) handleService(ctx context.Context, exec *executor.Comman
 		}
 
 		if maskedBool && !isMasked {
-			if _, err := exec.Execute("systemctl", "mask", name); err != nil {
+			if _, err := m.systemctl(exec, args, "mask", name); err != nil {
 				return m.failResult(result, fmt.Sprintf("failed to mask service: %v", err))
 			}
 			changed = true
 			result.Output["masked"] = true
 		} else if !maskedBool && isMasked {
-			if _, err := exec.Execute("systemctl", "unmask", name); err != nil {
+			if _, err := m.systemctl(exec, args, "unmask", name); err != nil {
 				return m.failResult(result, fmt.Sprintf("failed to unmask service: %v", err))
 			}
 			changed = true
@@ -186,6 +186,9 @@ func (m *SystemdModule) handleUnit(ctx context.Context, exec *executor.CommandEx
 	name, ok := args["name"].(string)
 	if !ok {
 		return m.failResult(result, "name parameter is required")
+	}
+	if getStringArg(args, "path", "") == "" && (strings.ContainsAny(name, "/\\") || name == "." || name == "..") {
+		return m.failResult(result, fmt.Sprintf("invalid unit name %q", name))
 	}
 
 	content := getStringArg(args, "content", "")
@@ -211,8 +214,10 @@ func (m *SystemdModule) handleUnit(ctx context.Context, exec *executor.CommandEx
 				return m.failResult(result, err.Error())
 			}
 			if !exists || string(current) != content {
-				if err := writeHostFile(ctx, host, args, unitPath, []byte(content), 0644); err != nil {
-					return m.failResult(result, fmt.Sprintf("failed to write unit file: %v", err))
+				if !inCheckMode(args) {
+					if err := writeHostFile(ctx, host, args, unitPath, []byte(content), 0644); err != nil {
+						return m.failResult(result, fmt.Sprintf("failed to write unit file: %v", err))
+					}
 				}
 				changed = true
 				result.Output["action"] = "unit_written"
@@ -223,7 +228,7 @@ func (m *SystemdModule) handleUnit(ctx context.Context, exec *executor.CommandEx
 
 		// Reload systemd only when a unit file changed
 		if changed {
-			if _, err := exec.Execute("systemctl", "daemon-reload"); err != nil {
+			if _, err := m.systemctl(exec, args, "daemon-reload"); err != nil {
 				return m.failResult(result, fmt.Sprintf("failed to reload systemd: %v", err))
 			}
 		}
@@ -237,16 +242,16 @@ func (m *SystemdModule) handleUnit(ctx context.Context, exec *executor.CommandEx
 		_, err := exec.Execute("test", "-f", unitPath)
 		if err == nil {
 			// Stop and disable service first (ignore errors as service might not be running/enabled)
-			_, _ = exec.Execute("systemctl", "stop", name)
-			_, _ = exec.Execute("systemctl", "disable", name)
+			_, _ = m.systemctl(exec, args, "stop", name)
+			_, _ = m.systemctl(exec, args, "disable", name)
 
 			// Remove unit file
-			if _, err := exec.Execute("rm", "-f", unitPath); err != nil {
+			if _, err := m.run(exec, args, "rm", "-f", unitPath); err != nil {
 				return m.failResult(result, fmt.Sprintf("failed to remove unit file: %v", err))
 			}
 
 			// Reload systemd
-			if _, err := exec.Execute("systemctl", "daemon-reload"); err != nil {
+			if _, err := m.systemctl(exec, args, "daemon-reload"); err != nil {
 				return m.failResult(result, fmt.Sprintf("failed to reload systemd: %v", err))
 			}
 
@@ -287,7 +292,7 @@ func (m *SystemdModule) handleTimer(ctx context.Context, exec *executor.CommandE
 		switch state {
 		case "started":
 			if currentState != "active" {
-				if _, err := exec.Execute("systemctl", "start", name); err != nil {
+				if _, err := m.systemctl(exec, args, "start", name); err != nil {
 					return m.failResult(result, fmt.Sprintf("failed to start timer: %v", err))
 				}
 				changed = true
@@ -295,7 +300,7 @@ func (m *SystemdModule) handleTimer(ctx context.Context, exec *executor.CommandE
 			}
 		case "stopped":
 			if currentState == "active" {
-				if _, err := exec.Execute("systemctl", "stop", name); err != nil {
+				if _, err := m.systemctl(exec, args, "stop", name); err != nil {
 					return m.failResult(result, fmt.Sprintf("failed to stop timer: %v", err))
 				}
 				changed = true
@@ -313,13 +318,13 @@ func (m *SystemdModule) handleTimer(ctx context.Context, exec *executor.CommandE
 		}
 
 		if enabledBool && !isEnabled {
-			if _, err := exec.Execute("systemctl", "enable", name); err != nil {
+			if _, err := m.systemctl(exec, args, "enable", name); err != nil {
 				return m.failResult(result, fmt.Sprintf("failed to enable timer: %v", err))
 			}
 			changed = true
 			result.Output["enabled"] = true
 		} else if !enabledBool && isEnabled {
-			if _, err := exec.Execute("systemctl", "disable", name); err != nil {
+			if _, err := m.systemctl(exec, args, "disable", name); err != nil {
 				return m.failResult(result, fmt.Sprintf("failed to disable timer: %v", err))
 			}
 			changed = true
@@ -340,7 +345,7 @@ func (m *SystemdModule) handleTimer(ctx context.Context, exec *executor.CommandE
 
 // handleDaemonReload reloads systemd daemon
 func (m *SystemdModule) handleDaemonReload(ctx context.Context, exec *executor.CommandExecutor, host types.Host, args map[string]interface{}, result types.TaskResult) (types.TaskResult, error) {
-	if _, err := exec.Execute("systemctl", "daemon-reload"); err != nil {
+	if _, err := m.systemctl(exec, args, "daemon-reload"); err != nil {
 		return m.failResult(result, fmt.Sprintf("failed to reload systemd: %v", err))
 	}
 
@@ -439,4 +444,18 @@ func (m *SystemdModule) Validate(args map[string]interface{}) error {
 	}
 
 	return nil
+}
+
+// systemctl runs a systemctl command that changes the host; in check mode it
+// is not run, and the caller reports the change it would have made
+func (m *SystemdModule) systemctl(exec *executor.CommandExecutor, args map[string]interface{}, cmdArgs ...string) (string, error) {
+	return m.run(exec, args, "systemctl", cmdArgs...)
+}
+
+// run executes a changing command unless the task is in check mode
+func (m *SystemdModule) run(exec *executor.CommandExecutor, args map[string]interface{}, command string, cmdArgs ...string) (string, error) {
+	if inCheckMode(args) {
+		return "", nil
+	}
+	return exec.Execute(command, cmdArgs...)
 }
