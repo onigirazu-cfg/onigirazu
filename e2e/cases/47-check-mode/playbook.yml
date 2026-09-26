@@ -38,7 +38,15 @@ plays:
         cron: {operation: system, name: onigirazu-e2e-check, content: "* * * * * root true"}
         check_mode: true
         register: c
+      - name: Checked clone
+        git: {repo: "https://github.com/onigirazu-cfg/onigirazu.git", dest: /opt/onigirazu-e2e-check-clone, version: v1.63.1}
+        check_mode: true
+        register: gc
+      - name: Checked download
+        get_url: {url: "https://raw.githubusercontent.com/onigirazu-cfg/onigirazu/main/README.md", dest: /root/onigirazu-e2e-check-readme}
+        check_mode: true
+        register: gu
       - name: Record what check mode reported
         copy:
-          content: "{{ checked.changed }} {{ u.changed }} {{ g.changed }} {{ s.changed }} {{ k.changed }} {{ c.changed }}\n"
+          content: "{{ checked.changed }} {{ u.changed }} {{ g.changed }} {{ s.changed }} {{ k.changed }} {{ c.changed }} {{ gc.changed }} {{ gu.changed }}\n"
           dest: /root/onigirazu-e2e-check-report

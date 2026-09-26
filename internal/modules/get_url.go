@@ -102,7 +102,7 @@ func (m *GetURLModule) Execute(ctx context.Context, host types.Host, args map[st
 	defer exec.Close()
 
 	// Check if destination exists
-	checkCmd := fmt.Sprintf("test -f %s && echo 'exists' || echo 'not_exists'", dest)
+	checkCmd := fmt.Sprintf("test -f %s && echo 'exists' || echo 'not_exists'", shellQuote(dest))
 	checkOutput, _ := exec.ExecuteWithContext(ctx, "sh", "-c", checkCmd)
 	destExists := strings.TrimSpace(checkOutput) == "exists"
 
@@ -128,9 +128,17 @@ func (m *GetURLModule) Execute(ctx context.Context, host types.Host, args map[st
 		}
 	}
 
+	if inCheckMode(args) {
+		result.Success = true
+		result.Changed = true
+		result.Output["msg"] = map[bool]string{true: "file would be downloaded again", false: "file would be downloaded"}[destExists]
+		result.Duration = time.Since(startTime)
+		return result, nil
+	}
+
 	// Create backup if requested and file exists
 	if backup && destExists {
-		backupCmd := fmt.Sprintf("cp %s %s.%d.backup", dest, dest, time.Now().Unix())
+		backupCmd := fmt.Sprintf("cp %s %s", shellQuote(dest), shellQuote(fmt.Sprintf("%s.%d.backup", dest, time.Now().Unix())))
 		_, err := exec.ExecuteWithContext(ctx, "sh", "-c", backupCmd)
 		if err != nil {
 			result.Output["warning"] = fmt.Sprintf("Failed to create backup: %v", err)
@@ -247,7 +255,7 @@ func (m *GetURLModule) Execute(ctx context.Context, host types.Host, args map[st
 
 	// Create destination directory if needed
 	destDir := filepath.Dir(dest)
-	mkdirCmd := fmt.Sprintf("mkdir -p %s", destDir)
+	mkdirCmd := fmt.Sprintf("mkdir -p %s", shellQuote(destDir))
 	_, err = exec.ExecuteWithContext(ctx, "sh", "-c", mkdirCmd)
 	if err != nil {
 		result.Failed = true
@@ -256,7 +264,7 @@ func (m *GetURLModule) Execute(ctx context.Context, host types.Host, args map[st
 	}
 
 	// Write file to remote host using base64 encoding to handle binary files
-	writeCmd := fmt.Sprintf("echo '%s' | base64 -d > %s", encodeBase64(fileContent), dest)
+	writeCmd := fmt.Sprintf("echo '%s' | base64 -d > %s", encodeBase64(fileContent), shellQuote(dest))
 	_, err = exec.ExecuteWithContext(ctx, "sh", "-c", writeCmd)
 	if err != nil {
 		result.Failed = true
@@ -296,11 +304,11 @@ func (m *GetURLModule) getRemoteFileChecksum(ctx context.Context, exec *executor
 
 	switch checksumAlgo {
 	case "md5":
-		cmd = fmt.Sprintf("md5sum %s 2>/dev/null || md5 -q %s 2>/dev/null", path, path)
+		cmd = fmt.Sprintf("md5sum %[1]s 2>/dev/null || md5 -q %[1]s 2>/dev/null", shellQuote(path))
 	case "sha1":
-		cmd = fmt.Sprintf("sha1sum %s 2>/dev/null || shasum -a 1 %s 2>/dev/null", path, path)
+		cmd = fmt.Sprintf("sha1sum %[1]s 2>/dev/null || shasum -a 1 %[1]s 2>/dev/null", shellQuote(path))
 	case "sha256":
-		cmd = fmt.Sprintf("sha256sum %s 2>/dev/null || shasum -a 256 %s 2>/dev/null", path, path)
+		cmd = fmt.Sprintf("sha256sum %[1]s 2>/dev/null || shasum -a 256 %[1]s 2>/dev/null", shellQuote(path))
 	default:
 		return "", fmt.Errorf("unsupported checksum type: %s", checksumAlgo)
 	}
