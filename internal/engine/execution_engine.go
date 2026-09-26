@@ -778,6 +778,15 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 	e.notifyTaskStart(task.Name, host.Name)
 	e.callbackTaskStart(ctx, task, *host)
 
+	// a task that cannot even start is a failed task: counted, reported and
+	// subject to ignore_errors and rescue like any other failure
+	failed := func(err error) error {
+		return e.finishTask(task, host, types.TaskResult{
+			TaskName: task.Name, Host: host.Name, Module: task.Module,
+			Failed: true, Error: err.Error(), Timestamp: time.Now(),
+		}, playResult)
+	}
+
 	taskVars := e.hostVariables(host, variables)
 	// task vars come last; string values may use other variables
 	for k, v := range task.Vars {
@@ -785,7 +794,7 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 			if rendered, err := e.templateEngine.Render(ctx, str, taskVars); err == nil {
 				v = rendered
 			} else {
-				return fmt.Errorf("task var %s: %w", k, err)
+				return failed(fmt.Errorf("task var %s: %w", k, err))
 			}
 		}
 		taskVars[k] = v
@@ -818,7 +827,7 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 	// Render task arguments with templates
 	renderedArgs, err := e.templateEngine.RenderTaskArgs(ctx, task.Args, taskVars)
 	if err != nil {
-		return fmt.Errorf("failed to render task arguments: %w", err)
+		return failed(fmt.Errorf("failed to render task arguments: %w", err))
 	}
 
 	// Perform security validation
@@ -829,12 +838,12 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 	}
 	if err := e.securityValidator.ValidateHostAccess(*host); err != nil {
 		e.metricsManager.IncrementErrorByType("security_validation")
-		return fmt.Errorf("security validation failed: %w", err)
+		return failed(fmt.Errorf("security validation failed: %w", err))
 	}
 	validationResult := e.securityValidator.ValidateTask(taskForValidation)
 	if !validationResult.Valid {
 		e.metricsManager.IncrementErrorByType("security_validation")
-		return fmt.Errorf("security validation failed: %s", validationResult.Error())
+		return failed(fmt.Errorf("security validation failed: %s", validationResult.Error()))
 	}
 
 	// Create execution context (for future use)
@@ -852,7 +861,7 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 		for k, v := range task.Environment {
 			rendered, err := e.templateEngine.Render(ctx, fmt.Sprint(v), taskVars)
 			if err != nil {
-				return fmt.Errorf("environment %s: %w", k, err)
+				return failed(fmt.Errorf("environment %s: %w", k, err))
 			}
 			environment[k] = rendered
 		}
@@ -888,7 +897,7 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 	if task.DelegateTo != "" {
 		delegate, err := e.templateEngine.Render(ctx, task.DelegateTo, taskVars)
 		if err != nil {
-			return fmt.Errorf("delegate_to: %w", err)
+			return failed(fmt.Errorf("delegate_to: %w", err))
 		}
 		target = e.delegateHost(strings.TrimSpace(delegate))
 	}

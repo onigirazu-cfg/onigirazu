@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -373,5 +374,28 @@ func TestRunOnce_InsideBlockRunsOnceForAllHosts(t *testing.T) {
 		r, ok := engine.getHostVar(h, "r").(map[string]interface{})
 		require.True(t, ok, h)
 		assert.Equal(t, "v", r["stdout"])
+	}
+}
+
+func TestRenderError_IsAFailedTaskResult(t *testing.T) {
+	for _, ignore := range []bool{false, true} {
+		engine, mockConfig, _, _, mockRegistry, mockTemplate := createTestEngine()
+		mockConfig.On("GetDryRun").Return(false)
+		mockTemplate.On("RenderTaskArgs", mock.Anything, mock.Anything, mock.Anything).
+			Return(nil, fmt.Errorf("undefined variable: nope"))
+		playResult := &types.PlayResult{}
+		task := &types.Task{Name: "bad", Module: "debug", IgnoreErrors: ignore}
+		err := engine.executeTask(context.Background(), task, twoHosts()[:1], map[string]interface{}{}, playResult)
+		if ignore {
+			assert.NoError(t, err)
+		} else {
+			assert.Error(t, err)
+		}
+		mockRegistry.AssertNotCalled(t, "ExecuteTask", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+		require.Len(t, playResult.Hosts, 1)
+		require.Len(t, playResult.Hosts[0].Tasks, 1)
+		got := playResult.Hosts[0].Tasks[0]
+		assert.True(t, got.Failed)
+		assert.Contains(t, got.Error, "undefined variable")
 	}
 }
