@@ -53,3 +53,29 @@ func TestTask_WithDict(t *testing.T) {
 	require.NotNil(t, expr.Loop)
 	assert.Equal(t, "(users) | dict2items", expr.Loop.Expr)
 }
+
+func TestTask_ShortForms(t *testing.T) {
+	cases := map[string]struct {
+		module string
+		args   map[string]interface{}
+	}{
+		"command: echo hi there":                      {"command", map[string]interface{}{"cmd": "echo hi there"}},
+		"command: make install chdir=/src creates=/x": {"command", map[string]interface{}{"cmd": "make install", "chdir": "/src", "creates": "/x"}},
+		"shell: 'echo a | tr a b'":                    {"shell", map[string]interface{}{"cmd": "echo a | tr a b"}},
+		"file: path=/tmp/x state=touch":               {"file", map[string]interface{}{"path": "/tmp/x", "state": "touch"}},
+		`debug: msg="hello {{ who }}"`:                {"debug", map[string]interface{}{"msg": "hello {{ who }}"}},
+		"debug: msg={{ a | default('x y') }}":         {"debug", map[string]interface{}{"msg": "{{ a | default('x y') }}"}},
+		"ping:":                                       {"ping", map[string]interface{}{}},
+		"script: /opt/run.sh --fast now":              {"script", map[string]interface{}{"script": "/opt/run.sh", "args": "--fast now"}},
+		"command: make\nargs: {chdir: /src}":          {"command", map[string]interface{}{"cmd": "make", "chdir": "/src"}},
+		"copy: {dest: /x}\nargs: {mode: '0600'}":      {"copy", map[string]interface{}{"dest": "/x", "mode": "0600"}},
+	}
+	for src, want := range cases {
+		var task Task
+		require.NoError(t, yaml.Unmarshal([]byte("name: t\n"+src+"\n"), &task), src)
+		assert.Equal(t, want.module, task.Module, src)
+		assert.Equal(t, want.args, task.Args, src)
+	}
+	var bad Task
+	assert.Error(t, yaml.Unmarshal([]byte("name: t\nfile: path=/x touch\n"), &bad))
+}

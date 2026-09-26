@@ -1,0 +1,18 @@
+plays:
+  - name: Ansible short forms
+    hosts: all
+    become: true
+    tasks:
+      - name: ping without arguments
+        ping:
+      - name: key=value form
+        file: path=/root/onigirazu-e2e-sf-dir state=directory mode=0750
+      - name: free-form command with inline creates
+        command: touch /root/onigirazu-e2e-sf-dir/made creates=/root/onigirazu-e2e-sf-dir/made
+      - name: free-form shell with args
+        shell: echo "$(pwd)" > /root/onigirazu-e2e-sf-pwd
+        args:
+          chdir: /root/onigirazu-e2e-sf-dir
+          creates: /root/onigirazu-e2e-sf-pwd
+      - name: quoted value
+        copy: dest=/root/onigirazu-e2e-sf-msg content="hello world"
