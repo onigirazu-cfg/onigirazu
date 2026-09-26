@@ -72,5 +72,6 @@ require (
 
 require (
 	github.com/expr-lang/expr v1.17.8
+	github.com/pmezard/go-difflib v1.0.0
 	github.com/stretchr/testify v1.12.1
 )

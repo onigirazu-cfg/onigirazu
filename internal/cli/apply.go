@@ -404,6 +404,7 @@ Examples:
 			executionEngine.SetCallbacks(callbacks)
 			executionEngine.SetRolesPath(filepath.Join(filepath.Dir(playbookPath), "roles"))
 			executionEngine.SetPlaybookDir(filepath.Dir(playbookPath))
+			executionEngine.SetShowDiff(diff)
 
 			policy, policySource, err := security.LoadPolicy(securityPolicyPath)
 			if err != nil {
@@ -758,6 +759,9 @@ Examples:
 			result, err := executionEngine.ExecutePlaybook(ctx, playbook)
 			duration := time.Since(startTime)
 			runResult, runStart = result, startTime
+			if diff && onResult == nil && result != nil && outputFormat != "json" && outputFormat != "yaml" {
+				printDiffs(resultOut, result)
+			}
 			if err == nil && !executionEngine.StartAtTaskFound() {
 				err = fmt.Errorf("--start-at-task: no task named %q ran", startAtTask)
 			}

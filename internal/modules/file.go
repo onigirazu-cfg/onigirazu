@@ -234,6 +234,9 @@ func (m *FileModule) applyAttributes(ctx context.Context, host types.Host, args 
 			return fail(fmt.Sprintf("failed to read mode of %s: %v", path, err))
 		}
 		have, _ := strconv.ParseUint(strings.TrimSpace(out), 8, 32)
+		if have != want && out != "" {
+			addDiff(args, &result, path+" (mode)", fmt.Sprintf("%04o\n", have), fmt.Sprintf("%04o\n", want))
+		}
 		if have != want && inCheckMode(args) {
 			result.Changed = true
 		} else if have != want {

@@ -6,5 +6,8 @@ d >/dev/null
 set +e; out="$(d --format json)"; rc=$?; set -e
 test "$rc" = 2
 test "$(echo "$out" | jq -r --arg h "$HOST" '.drift[$h] | map(.task) | join(",")')" = "Managed file"
+echo "$out" | jq -r --arg h "$HOST" '.drift[$h][0].diff' | grep -qx -- '-edited by hand'
+echo "$out" | jq -r --arg h "$HOST" '.drift[$h][0].diff' | grep -qx -- '+managed'
+"$BIN" apply playbook.yml -i "$INVENTORY" --limit "$HOST" --check --diff 2>/dev/null | grep -qx -- '+managed'
 d --fix >/dev/null
 d >/dev/null

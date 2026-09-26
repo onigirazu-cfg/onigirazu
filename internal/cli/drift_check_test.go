@@ -34,7 +34,7 @@ func TestBuildDriftReport(t *testing.T) {
 func TestDriftApplyArgs(t *testing.T) {
 	o := driftCheckOptions{limit: "web", extraVars: []string{"a=1"}, become: true}
 	args := o.applyArgs("site.yml", true)
-	assert.Equal(t, []string{"site.yml", "--check", "-e", "a=1"}, args[:4])
+	assert.Equal(t, []string{"site.yml", "--check", "--diff", "-e", "a=1"}, args[:5])
 	assert.Contains(t, args, "--limit")
 	assert.Contains(t, args, "--become")
 	assert.NotContains(t, o.applyArgs("site.yml", false), "--check")

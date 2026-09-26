@@ -865,6 +865,10 @@ modules are skipped with a note. `check_mode: false` on a task runs it for real
 in a check run (e.g. a probe whose result later tasks use); `check_mode: true`
 checks a single task in a normal run.
 
+`--diff` (with or without `--check`) shows what `copy`, `template`,
+`lineinfile`, `blockinfile`, `replace` and file modes change, as unified
+diffs after the run; `drift` includes them in its report.
+
 ### Conditionals
 
 `when`, `until`, `changed_when` and `failed_when` take an expression,
@@ -1045,7 +1049,13 @@ onigirazu drift site.yml -i hosts.yml --fix            # apply when drift is fou
 Drift: 1 task(s) on 1 of 3 host(s) differ from site.yml
 
 web1
-  ~ Config file (copy): file would be updated
+  ~ Config file (copy)
+      --- before: /etc/app.conf
+      +++ after: /etc/app.conf
+      @@ -1,2 +1,2 @@
+      -port = 8081
+      +port = 8080
+       workers = 4
 
 In sync: web2, db1
 ```

@@ -186,6 +186,7 @@ func (m *BlockinfileModule) Execute(ctx context.Context, host types.Host, args m
 	}
 
 	result.Changed = newContent != fileContent
+	addDiff(args, &result, filePath, fileContent, newContent)
 
 	// Write on the target host only if something changed; check mode stops here
 	if result.Changed && !inCheckMode(args) {

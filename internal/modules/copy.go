@@ -267,6 +267,7 @@ func (m *CopyModule) executeRemote(ctx context.Context, host types.Host, args ma
 		result.Success = true
 		result.Output["msg"] = "file already exists with correct content"
 		if mode != "" && current.Mode.Perm() != fileMode.Perm() {
+			addDiff(args, &result, dest+" (mode)", fmt.Sprintf("%04o\n", current.Mode.Perm()), fmt.Sprintf("%04o\n", fileMode.Perm()))
 			if inCheckMode(args) {
 				result.Changed = true
 				result.Output["msg"] = "mode would be updated"
@@ -281,6 +282,9 @@ func (m *CopyModule) executeRemote(ctx context.Context, host types.Host, args ma
 		return result, nil
 	}
 
+	if sourceData != nil {
+		addFileDiff(ctx, host, args, &result, dest, current.Exists, sourceData)
+	}
 	if inCheckMode(args) {
 		result.Changed = true
 		result.Success = true
