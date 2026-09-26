@@ -66,24 +66,29 @@ func ensureOwnership(ctx context.Context, host types.Host, args map[string]inter
 
 	qPath := shellQuote(path)
 	// GNU stat first, BSD stat as a fallback
-	current, err := runShellOnHost(ctx, host, args, fmt.Sprintf("stat -c '%%U:%%G' %s 2>/dev/null || stat -f '%%Su:%%Sg' %s", qPath, qPath))
+	current, err := runShellOnHost(ctx, host, args, fmt.Sprintf("stat -c '%%U:%%G:%%u:%%g' %s 2>/dev/null || stat -f '%%Su:%%Sg:%%u:%%g' %s", qPath, qPath))
 	if err != nil {
 		if inCheckMode(args) {
 			return true, nil // the file does not exist yet; its ownership would be set
 		}
 		return false, fmt.Errorf("failed to read ownership of %s: %w", path, err)
 	}
-	currentOwner, currentGroup, _ := strings.Cut(strings.TrimSpace(current), ":")
-
+	// name:group:uid:gid; owner and group may be given by name or id
+	ids := strings.Split(strings.TrimSpace(current), ":")
+	for len(ids) < 4 {
+		ids = append(ids, "")
+	}
+	ownerOK := owner == "" || owner == ids[0] || owner == ids[2]
+	groupOK := group == "" || group == ids[1] || group == ids[3]
+	if ownerOK && groupOK {
+		return false, nil
+	}
 	wantOwner, wantGroup := owner, group
 	if wantOwner == "" {
-		wantOwner = currentOwner
+		wantOwner = ids[0]
 	}
 	if wantGroup == "" {
-		wantGroup = currentGroup
-	}
-	if wantOwner == currentOwner && wantGroup == currentGroup {
-		return false, nil
+		wantGroup = ids[1]
 	}
 	if inCheckMode(args) {
 		return true, nil
