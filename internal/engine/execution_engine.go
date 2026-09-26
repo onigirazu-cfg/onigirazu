@@ -642,6 +642,29 @@ func (e *ExecutionEngine) executeTaskList(ctx context.Context, tasks []types.Tas
 // executeTask executes a single task on multiple hosts
 func (e *ExecutionEngine) executeTask(ctx context.Context, task *types.Task, hosts []types.Host,
 	variables map[string]interface{}, playResult *types.PlayResult) error {
+	// run_once inside a block: blocks run per host, so the hosts share a
+	// registry; the first runs the task, the others wait and take its result
+	if task.RunOnce && len(hosts) == 1 {
+		if once, ok := ctx.Value(runOnceKey{}).(*sync.Map); ok {
+			entry := &runOnceEntry{host: hosts[0].Name, done: make(chan struct{})}
+			actual, loaded := once.LoadOrStore(fmt.Sprint(task.Name, "\x00", task.Module, "\x00", task.Args), entry)
+			if loaded {
+				first, ok := actual.(*runOnceEntry)
+				if !ok {
+					return fmt.Errorf("run_once: unexpected registry entry %T", actual)
+				}
+				<-first.done
+				if task.Register != "" {
+					e.setHostVar(hosts[0].Name, task.Register, e.getHostVar(first.host, task.Register))
+				}
+				return first.err
+			}
+			entry.err = e.executeTask(ctx, runOnceTask(task), hosts, variables, playResult)
+			close(entry.done)
+			return entry.err
+		}
+	}
+
 	// run_once: the first host runs it, the others get its registered result
 	if task.RunOnce && len(hosts) > 1 {
 		if err := e.executeTask(ctx, runOnceTask(task), hosts[:1], variables, playResult); err != nil {
@@ -1933,6 +1956,10 @@ func (e *ExecutionEngine) delegateHost(name string) types.Host {
 // ignore_errors apply to all its tasks.
 func (e *ExecutionEngine) executeBlock(ctx context.Context, block *types.Task, hosts []types.Host,
 	variables map[string]interface{}, playResult *types.PlayResult) error {
+	// run_once inside the block: once for all hosts, not once per host
+	if ctx.Value(runOnceKey{}) == nil {
+		ctx = context.WithValue(ctx, runOnceKey{}, &sync.Map{})
+	}
 	body := inheritBlock(block, block.Block, len(block.Rescue) > 0)
 	rescue := inheritBlock(block, block.Rescue, false)
 	always := inheritBlock(block, block.Always, false)
@@ -2051,4 +2078,14 @@ func containsTask(task *types.Task, name string) bool {
 		}
 	}
 	return false
+}
+
+// runOnceKey carries the run_once registry of a block through the context
+type runOnceKey struct{}
+
+// runOnceEntry is a run_once task started by one host of a block
+type runOnceEntry struct {
+	host string
+	done chan struct{}
+	err  error
 }

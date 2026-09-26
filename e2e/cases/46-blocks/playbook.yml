@@ -45,6 +45,13 @@ plays:
             copy:
               content: "outer\n"
               dest: /root/onigirazu-e2e-block-outer
+      - name: run_once inside a block runs once for all hosts
+        block:
+          - name: Append once
+            shell:
+              cmd: "echo once >> /root/onigirazu-e2e-block-once"
+            run_once: true
+            delegate_to: u2404
       - name: The play goes on after rescued failures
         copy:
           content: "after\n"
