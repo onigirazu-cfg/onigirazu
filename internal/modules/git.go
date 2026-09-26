@@ -98,6 +98,10 @@ func (m *GitModuleFixed) Execute(ctx context.Context, host types.Host, args map[
 		return result, nil
 	}
 
+	if inCheckMode(args) {
+		return m.checkRepository(exec, repo, dest, version, !destExists || !isGitRepo, update, result, startTime)
+	}
+
 	if !destExists || (destExists && !isGitRepo && force) {
 		// Clone repository
 		return m.cloneRepository(exec, repo, dest, version, result, startTime)
@@ -324,19 +328,76 @@ func (m *GitModuleFixed) isGitRepository(exec *executor.CommandExecutor, path st
 }
 
 func (m *GitModuleFixed) pathExists(exec *executor.CommandExecutor, path string) bool {
-	_, err := exec.Execute(fmt.Sprintf("test -e %s", path))
+	_, err := exec.Execute("test -e " + shellQuote(path))
 	return err == nil
 }
 
 func (m *GitModuleFixed) executeInDirectory(exec *executor.CommandExecutor, dir string, command string, args ...string) (string, error) {
-	// Change to directory and execute command
-	fullCommand := fmt.Sprintf("cd %s && %s", dir, command)
-	for _, arg := range args {
-		fullCommand += " " + arg
-	}
+	// Change to directory and execute command; every part is quoted
+	fullCommand := "cd " + shellQuote(dir) + " && " + shellJoin(append([]string{command}, args...)...)
 	return exec.Execute(fullCommand)
 }
 
 func (m *GitModuleFixed) IsIdempotent() bool {
+	return true
+}
+
+// checkRepository is check mode: a clone would change the host; an update
+// would when the requested version resolves to another commit than HEAD
+func (m *GitModuleFixed) checkRepository(exec *executor.CommandExecutor, repo, dest, version string, clone, update bool, result types.TaskResult, startTime time.Time) (types.TaskResult, error) {
+	result.Success = true
+	result.Duration = time.Since(startTime)
+	switch {
+	case clone:
+		result.Changed = true
+		result.Output["message"] = "repository would be cloned"
+		return result, nil
+	case !update:
+		result.Output["message"] = "repository exists and update is disabled"
+		return result, nil
+	}
+	current, err := m.getCurrentCommit(exec, dest)
+	if err != nil {
+		result.Success = false
+		result.Error = fmt.Sprintf("failed to get current commit: %v", err)
+		return result, nil
+	}
+	want := version
+	if !isCommitHash(version) {
+		// the peeled ^{} line of an annotated tag names the commit; it comes last
+		out, err := exec.Execute(shellJoin("git", "ls-remote", repo, version, version+"^{}"))
+		if err != nil {
+			result.Success = false
+			result.Error = fmt.Sprintf("failed to resolve %s: %v", version, err)
+			return result, nil
+		}
+		lines := strings.Fields(strings.TrimSpace(out))
+		if len(lines) < 2 {
+			result.Success = false
+			result.Error = fmt.Sprintf("version %s not found in %s", version, repo)
+			return result, nil
+		}
+		want = lines[len(lines)-2]
+	}
+	result.Changed = !strings.HasPrefix(current, want) && !strings.HasPrefix(want, current)
+	result.Output["current_commit"] = current
+	result.Output["target_commit"] = want
+	if result.Changed {
+		result.Output["message"] = "repository would be updated"
+	} else {
+		result.Output["message"] = "repository is at the requested version"
+	}
+	return result, nil
+}
+
+func isCommitHash(v string) bool {
+	if len(v) < 7 || len(v) > 40 {
+		return false
+	}
+	for _, r := range v {
+		if !(r >= '0' && r <= '9' || r >= 'a' && r <= 'f') {
+			return false
+		}
+	}
 	return true
 }
