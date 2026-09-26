@@ -339,7 +339,9 @@ func (e *ExecutionEngine) ExecutePlaybook(ctx context.Context, playbook *types.P
 		for _, host := range play.Hosts {
 			for _, task := range host.Tasks {
 				totalTasks++
-				if task.Failed {
+				if task.Failed && task.Ignored {
+					successCount++ // handled failures do not count as failed
+				} else if task.Failed {
 					failedCount++
 				} else if task.Skipped {
 					skippedCount++
@@ -914,6 +916,9 @@ func (e *ExecutionEngine) finishTask(task *types.Task, host *types.Host, result 
 	hostResult.Tasks = append(hostResult.Tasks, result)
 	// an ignored failure is recorded but does not fail the host or the play;
 	// nor does one inside a block with a rescue section, which handles it
+	if result.Failed && (task.IgnoreErrors || task.Rescuable) {
+		hostResult.Tasks[len(hostResult.Tasks)-1].Ignored = true
+	}
 	if result.Failed && !task.IgnoreErrors && !task.Rescuable {
 		hostResult.Failed = true
 		hostResult.Success = false

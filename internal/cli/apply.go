@@ -956,6 +956,10 @@ Examples:
 					} else {
 						log.Info("Snapshot created successfully: %s", snapshot.ID)
 					}
+					// one snapshot per run: keep the recent ones only
+					if err := snapshotMgr.KeepNewest(100); err != nil {
+						log.Warn("Failed to prune old snapshots: %v", err)
+					}
 				} else {
 					log.Warn("Failed to create snapshot: %v", err)
 				}

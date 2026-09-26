@@ -83,6 +83,9 @@ func (d *Displayer) displayNormal(result *ExecutionResult) {
 		fmt.Printf("✓ %d success / ⟳ %d changed / ✗ %d failed / ⊝ %d skipped\n",
 			result.TotalSuccess, result.TotalChanged, result.TotalFailed, result.TotalSkipped)
 	}
+	if result.TotalIgnored > 0 {
+		fmt.Printf("                 %d failed task(s) handled by ignore_errors or rescue\n", result.TotalIgnored)
+	}
 	fmt.Println()
 
 	// Per-task summary

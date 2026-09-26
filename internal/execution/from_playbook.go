@@ -43,6 +43,8 @@ func FromPlaybookResult(result *types.PlaybookResult, playbookPath, playbookName
 					task.ErrorsByType["error"] = append(task.ErrorsByType["error"], host.Host)
 				case "skipped":
 					task.Skipped++
+				case "ignored":
+					task.Success++
 				case "changed":
 					task.Changed++
 					task.Success++
@@ -57,6 +59,8 @@ func FromPlaybookResult(result *types.PlaybookResult, playbookPath, playbookName
 				switch {
 				case status == "skipped":
 					exec.TotalSkipped++
+				case status == "ignored":
+					exec.TotalIgnored++
 				case status == "failed":
 					exec.TotalFailed++
 				default:
@@ -97,6 +101,8 @@ func FromPlaybookResult(result *types.PlaybookResult, playbookPath, playbookName
 
 func hostStatus(t types.TaskResult) string {
 	switch {
+	case t.Failed && t.Ignored:
+		return "ignored"
 	case t.Failed:
 		return "failed"
 	case t.Skipped:

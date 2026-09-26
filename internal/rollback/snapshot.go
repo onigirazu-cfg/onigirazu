@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"time"
 
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
@@ -168,6 +169,21 @@ func (sm *SnapshotManager) CleanupOldSnapshots(maxAge time.Duration) error {
 		}
 	}
 
+	return nil
+}
+
+// KeepNewest deletes all but the newest keep snapshots
+func (sm *SnapshotManager) KeepNewest(keep int) error {
+	snapshots, err := sm.ListSnapshots()
+	if err != nil || len(snapshots) <= keep {
+		return err
+	}
+	sort.Slice(snapshots, func(i, j int) bool { return snapshots[i].Timestamp.After(snapshots[j].Timestamp) })
+	for _, snapshot := range snapshots[keep:] {
+		if err := sm.DeleteSnapshot(snapshot.ID); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

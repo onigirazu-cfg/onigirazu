@@ -108,6 +108,11 @@ func (t *Tracker) TaskCompleted(success bool, skipped bool) {
 	} else {
 		t.failed++
 	}
+	// the planned total leaves out handlers and loop items; grow it rather
+	// than show more than 100%
+	if done := t.completed + t.failed + t.skipped; done > t.total {
+		t.total = done
+	}
 
 	if t.showBar {
 		t.render()
