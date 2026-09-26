@@ -762,6 +762,9 @@ Execute tasks multiple times:
 `-e '{"replicas": 3}'` or `-e @vars.yml` (repeatable, later ones win).
 `--limit web1,db1` (or `--limit 'web:!web3'`) runs every play only on the
 matching hosts.
+`-b` (`--become`, `--become-user`) turns on privilege escalation in every play,
+`-u`/`--private-key` set the SSH user and key for every host, and
+`--start-at-task NAME` skips everything before that task.
 
 ### Task options
 

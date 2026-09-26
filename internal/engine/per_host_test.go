@@ -327,3 +327,36 @@ func TestRescue_SeesTheFailedTask(t *testing.T) {
 	assert.Equal(t, "boom", res["msg"])
 	assert.NotNil(t, engine.getHostVar("h1", "onigirazu_failed_task"))
 }
+
+func TestStartAtTask_SkipsUntilTheTask(t *testing.T) {
+	engine, _, calls := perHostEngine(t, types.TaskResult{Success: true})
+	engine.SetStartAtTask("two")
+	tasks := []types.Task{
+		{Name: "one", Module: "debug"},
+		{Name: "outer", Block: []types.Task{{Name: "skipped in block", Module: "debug"}}},
+		{Name: "wrapper", Block: []types.Task{{Name: "before", Module: "debug"}, {Name: "two", Module: "debug"}, {Name: "three", Module: "debug"}}},
+		{Name: "four", Module: "debug"},
+	}
+	require.NoError(t, engine.executeTaskList(context.Background(), tasks, twoHosts()[:1], map[string]interface{}{}, &types.PlayResult{}))
+	assert.Len(t, *calls, 3, "two, three and four ran")
+	assert.True(t, engine.StartAtTaskFound())
+}
+
+func TestForceBecome_AppliesToEveryPlay(t *testing.T) {
+	engine, mockConfig, _, mockInventory, mockRegistry, mockTemplate := createTestEngine()
+	mockConfig.On("GetDryRun").Return(false)
+	mockTemplate.On("RenderTaskArgs", mock.Anything, mock.Anything, mock.Anything).Return(nil, nil)
+	hosts := twoHosts()[:1]
+	mockInventory.hosts = hosts
+	mockInventory.On("GetHosts", "all").Return(hosts, nil)
+	var became bool
+	mockRegistry.On("ExecuteTask", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) { became = args.Get(1).(*types.Task).Become }).
+		Return(types.TaskResult{Success: true}, nil)
+	engine.SetForceBecome(true, "")
+	_, err := engine.ExecutePlaybook(context.Background(), &types.Playbook{Plays: []types.Play{{
+		Name: "p", Hosts: "all", Tasks: []types.Task{{Name: "t", Module: "debug"}},
+	}}})
+	require.NoError(t, err)
+	assert.True(t, became)
+}
