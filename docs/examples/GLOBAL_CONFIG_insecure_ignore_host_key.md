@@ -437,8 +437,6 @@ onigirazu-cli apply playbook.yml
 
 - [Main README](./README_insecure_ignore_host_key.md) - Complete guide
 - [Quick Reference](./QUICK_REFERENCE_insecure_ignore_host_key.md) - Quick lookup
-- [FAQ](./FAQ_insecure_ignore_host_key.md) - Common questions
-- [Ukrainian Quick Start](./ШВИДКИЙ_СТАРТ.md) - Швидкий старт українською
 
 ## Summary
 

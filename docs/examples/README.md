@@ -1,17 +1,14 @@
 # Examples and Use Cases
 
-This directory contains comprehensive examples demonstrating various Onigirazu features and real-world use cases.
+Example playbooks for common tasks. Templates (`./templates/*.j2`) and variables such as `db_host` or `vault_*` are placeholders you provide.
 
 ## 📋 Table of Contents
 
 - [Basic Examples](#basic-examples)
 - [Advanced Workflows](#advanced-workflows)
 - [Infrastructure Management](#infrastructure-management)
-- [Application Deployment](#application-deployment)
 - [Security and Compliance](#security-and-compliance)
 - [Monitoring and Alerting](#monitoring-and-alerting)
-- [Custom Modules](#custom-modules)
-- [Integration Examples](#integration-examples)
 
 ## 🚀 Basic Examples
 
@@ -24,22 +21,20 @@ plays:
   - name: "System Information"
     hosts: "all"
     tasks:
-      - name: "Gather system facts"
-        facts:
-        register: "system_info"
-
-      - name: "Display hostname"
+      # facts are gathered at the start of the play (gather_facts defaults to true)
+      - name: "Display host facts"
         debug:
-          msg: "Hostname: {{ onigirazu_hostname }}"
+          msg: "{{ ansible_hostname }}: {{ ansible_distribution }} {{ ansible_distribution_version }}"
 
       - name: "Check disk space"
         command:
           cmd: "df -h /"
         register: "disk_space"
+        changed_when: false
 
       - name: "Display disk usage"
         debug:
-          var: "disk_space.stdout"
+          var: "disk_space.stdout_lines"
 ```
 
 ### File Management
@@ -114,8 +109,7 @@ plays:
       - name: "Update package cache (Debian/Ubuntu)"
         apt:
           update_cache: true
-          cache_valid_time: 3600
-        when: "onigirazu_os_family == 'Debian'"
+        when: "ansible_os_family == 'Debian'"
 
       - name: "Install essential packages"
         package:
@@ -139,14 +133,7 @@ plays:
           name: "{{ db_client_package }}"
           state: "present"
         vars:
-          db_client_package: >-
-            {%- if onigirazu_os_family == 'Debian' -%}
-            mysql-client
-            {%- elif onigirazu_os_family == 'RedHat' -%}
-            mysql
-            {%- else -%}
-            mysql-client
-            {%- endif -%}
+          db_client_package: "{{ 'mysql' if ansible_os_family == 'RedHat' else 'mysql-client' }}"
 
     handlers:
       - name: "start nginx"
@@ -166,13 +153,13 @@ name: "Multi-Stage Deployment Workflow"
 plays:
   - name: "Pre-deployment Checks"
     hosts: "all"
-    serial: 1
 
     tasks:
       - name: "Check system resources"
-        command:
-          cmd: "free -m | awk 'NR==2{printf \"%.2f%%\", $3*100/$2}'"
+        shell:
+          cmd: "free -m | awk 'NR==2{printf \"%.2f\", $3*100/$2}'"
         register: "memory_usage"
+        changed_when: false
 
       - name: "Fail if memory usage too high"
         fail:
@@ -180,9 +167,10 @@ plays:
         when: "memory_usage.stdout | float > 80"
 
       - name: "Check disk space"
-        command:
+        shell:
           cmd: "df / | awk 'NR==2 {print $5}' | sed 's/%//'"
         register: "disk_usage"
+        changed_when: false
 
       - name: "Fail if disk usage too high"
         fail:
@@ -191,7 +179,6 @@ plays:
 
   - name: "Database Backup"
     hosts: "database"
-    serial: 1
 
     tasks:
       - name: "Create backup directory"
@@ -201,7 +188,7 @@ plays:
           mode: "0755"
 
       - name: "Backup database"
-        command:
+        shell:
           cmd: >
             mysqldump -u {{ db_user }} -p{{ db_password }}
             --single-transaction --routines --triggers
@@ -214,7 +201,6 @@ plays:
 
   - name: "Application Deployment"
     hosts: "webservers"
-    serial: "30%"
 
     tasks:
       - name: "Stop application service"
@@ -311,19 +297,17 @@ plays:
 
 ### Rolling Update with Rollback
 
+Current limitation: play-level `serial` and `max_fail_percentage` are accepted but not applied; each task runs on all hosts of the play in parallel. `serial: true` on a task runs that task one host at a time. For a real rolling update, run the playbook once per batch with `--limit`.
+
 ```yaml
 # rolling-update.yml
 name: "Rolling Update with Rollback"
 plays:
   - name: "Rolling Update"
     hosts: "webservers"
-    serial: 1
-    max_fail_percentage: 0
     any_errors_fatal: true
 
     vars:
-      health_check_retries: 5
-      health_check_delay: 10
       rollback_on_failure: true
 
     tasks:
@@ -358,8 +342,9 @@ plays:
           method: "GET"
           status_code: 200
         register: "health_check"
-        retries: "{{ health_check_retries }}"
-        delay: "{{ health_check_delay }}"
+        until: "health_check.status == 200"
+        retries: 5         # retries/delay must be literal numbers, templates are not rendered
+        delay: 10
         failed_when: false
 
       - name: "Rollback on health check failure"
@@ -436,18 +421,15 @@ plays:
         - "unattended-upgrades"
 
     tasks:
-      - name: "Update system packages"
-        package:
-          name: "*"
-          state: "latest"
-        when: "onigirazu_os_family == 'RedHat'"
+      - name: "Update system packages (RedHat)"
+        shell:
+          cmd: "dnf -y upgrade"
+        when: "ansible_os_family == 'RedHat'"
 
       - name: "Update system packages (Debian)"
-        apt:
-          upgrade: "dist"
-          update_cache: true
-          autoremove: true
-        when: "onigirazu_os_family == 'Debian'"
+        shell:
+          cmd: "apt-get update && DEBIAN_FRONTEND=noninteractive apt-get -y dist-upgrade && apt-get -y autoremove"
+        when: "ansible_os_family == 'Debian'"
 
       - name: "Install security packages"
         package:
@@ -483,14 +465,15 @@ plays:
         notify: "restart ssh"
 
       - name: "Configure firewall"
-        ufw:
-          rule: "{{ item.rule }}"
-          port: "{{ item.port }}"
-          proto: "{{ item.proto | default('tcp') }}"
+        firewall:
+          operation: "rule"
+          port: "{{ item }}"
+          protocol: "tcp"
+          action: "allow"
         loop:
-          - { rule: "allow", port: "{{ ssh_port | default(22) }}" }
-          - { rule: "allow", port: "80" }
-          - { rule: "allow", port: "443" }
+          - "{{ ssh_port | default(22) }}"
+          - "80"
+          - "443"
         notify: "enable firewall"
 
       - name: "Configure automatic updates"
@@ -508,8 +491,12 @@ plays:
         notify: "restart fail2ban"
 
       - name: "Set timezone"
-        timezone:
-          name: "{{ server_timezone | default('UTC') }}"
+        shell:
+          cmd: >
+            [ "$(timedatectl show -p Timezone --value)" = "{{ server_timezone | default('UTC') }}" ]
+            || { timedatectl set-timezone "{{ server_timezone | default('UTC') }}" && echo changed; }
+        register: "timezone_result"
+        changed_when: "timezone_result.stdout == 'changed'"
 
       - name: "Configure NTP"
         package:
@@ -524,9 +511,8 @@ plays:
           state: "restarted"
 
       - name: "enable firewall"
-        ufw:
-          state: "enabled"
-          policy: "deny"
+        firewall:
+          operation: "enable"
 
       - name: "restart fail2ban"
         service:
@@ -570,8 +556,12 @@ plays:
           src: "./templates/haproxy.cfg.j2"
           dest: "/etc/haproxy/haproxy.cfg"
           backup: true
-          validate: "haproxy -f %s -c"
         notify: "restart haproxy"
+
+      - name: "Check HAProxy configuration"   # template has no validate option
+        command:
+          cmd: "haproxy -c -f /etc/haproxy/haproxy.cfg"
+        changed_when: false
 
       - name: "Enable HAProxy service"
         service:
@@ -916,10 +906,8 @@ plays:
           mode: "0644"
 
       - name: "Extract Prometheus"
-        unarchive:
-          src: "/tmp/prometheus-{{ prometheus_version }}.tar.gz"
-          dest: "/tmp"
-          remote_src: true
+        command:
+          cmd: "tar -xzf /tmp/prometheus-{{ prometheus_version }}.tar.gz -C /tmp"
           creates: "/tmp/prometheus-{{ prometheus_version }}.linux-amd64"
 
       - name: "Install Prometheus binaries"
@@ -958,6 +946,16 @@ plays:
           state: "started"
           enabled: true
 
+    handlers:   # handlers belong to their play; a notify without one is ignored
+      - name: "reload systemd"
+        systemd:
+          operation: "daemon-reload"
+
+      - name: "restart prometheus"
+        service:
+          name: "prometheus"
+          state: "restarted"
+
   - name: "Install Node Exporter"
     hosts: "all"
     become: true
@@ -981,10 +979,8 @@ plays:
           mode: "0644"
 
       - name: "Extract Node Exporter"
-        unarchive:
-          src: "/tmp/node_exporter-{{ node_exporter_version }}.tar.gz"
-          dest: "/tmp"
-          remote_src: true
+        command:
+          cmd: "tar -xzf /tmp/node_exporter-{{ node_exporter_version }}.tar.gz -C /tmp"
           creates: "/tmp/node_exporter-{{ node_exporter_version }}.linux-amd64"
 
       - name: "Install Node Exporter binary"
@@ -1024,22 +1020,42 @@ plays:
           state: "started"
           enabled: true
 
+    handlers:
+      - name: "reload systemd"
+        systemd:
+          operation: "daemon-reload"
+
+      - name: "restart node_exporter"
+        service:
+          name: "node_exporter"
+          state: "restarted"
+
   - name: "Install Grafana"
     hosts: "monitoring"
     become: true
 
     tasks:
+      - name: "Create the APT keyring directory"
+        file:
+          path: "/etc/apt/keyrings"
+          state: "directory"
+          mode: "0755"
+        when: "ansible_os_family == 'Debian'"
+
       - name: "Add Grafana APT key"
-        apt_key:
-          url: "https://packages.grafana.com/gpg.key"
-          state: "present"
-        when: "onigirazu_os_family == 'Debian'"
+        get_url:
+          url: "https://apt.grafana.com/gpg.key"
+          dest: "/etc/apt/keyrings/grafana.asc"
+          mode: "0644"
+        when: "ansible_os_family == 'Debian'"
 
       - name: "Add Grafana repository"
-        apt_repository:
-          repo: "deb https://packages.grafana.com/oss/deb stable main"
-          state: "present"
-        when: "onigirazu_os_family == 'Debian'"
+        copy:
+          content: |
+            deb [signed-by=/etc/apt/keyrings/grafana.asc] https://apt.grafana.com stable main
+          dest: "/etc/apt/sources.list.d/grafana.list"
+          mode: "0644"
+        when: "ansible_os_family == 'Debian'"
 
       - name: "Install Grafana"
         package:
@@ -1061,20 +1077,6 @@ plays:
           enabled: true
 
     handlers:
-      - name: "reload systemd"
-        systemd:
-          daemon_reload: true
-
-      - name: "restart prometheus"
-        service:
-          name: "prometheus"
-          state: "restarted"
-
-      - name: "restart node_exporter"
-        service:
-          name: "node_exporter"
-          state: "restarted"
-
       - name: "restart grafana"
         service:
           name: "grafana-server"
@@ -1129,10 +1131,8 @@ plays:
           mode: "0644"
 
       - name: "Extract Alertmanager"
-        unarchive:
-          src: "/tmp/alertmanager-{{ alertmanager_version }}.tar.gz"
-          dest: "/tmp"
-          remote_src: true
+        command:
+          cmd: "tar -xzf /tmp/alertmanager-{{ alertmanager_version }}.tar.gz -C /tmp"
           creates: "/tmp/alertmanager-{{ alertmanager_version }}.linux-amd64"
 
       - name: "Install Alertmanager binaries"
@@ -1183,7 +1183,7 @@ plays:
     handlers:
       - name: "reload systemd"
         systemd:
-          daemon_reload: true
+          operation: "daemon-reload"
 
       - name: "restart alertmanager"
         service:
@@ -1196,4 +1196,3 @@ plays:
           state: "restarted"
 ```
 
-This comprehensive examples documentation provides real-world use cases and practical implementations for various Onigirazu features, from basic task execution to complex infrastructure management, security hardening, and monitoring setups. Each example includes detailed explanations and can be adapted for specific environments and requirements.

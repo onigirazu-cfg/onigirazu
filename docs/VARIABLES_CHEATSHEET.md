@@ -20,56 +20,95 @@ plays:
 
 ## 📋 Most Common Variables
 
+Every fact exists under two names: `onigirazu_*` and the Ansible name `ansible_*`. The Ansible names are also collected in the `ansible_facts` dictionary without the prefix (`ansible_facts.os_family`).
+
+### Always Defined
+
+```yaml
+{{ inventory_hostname }}              # web01 (name in the inventory)
+{{ group_names }}                     # ["webservers"] (groups of this host)
+{{ groups['webservers'] }}            # ["web01", "web02"]
+{{ hostvars['web02'].ansible_host }}  # variables of another host
+{{ playbook_dir }}                    # directory of the playbook
+```
+
 ### Basic Host Info
 
 ```yaml
-{{ onigirazu_hostname }}              # webserver01
-{{ onigirazu_host }}                  # 192.168.1.10
+{{ onigirazu_hostname }}              # web01 (inventory name)
+{{ ansible_hostname }}                # webserver01 (short hostname of the machine)
+{{ ansible_nodename }}                # webserver01.example.com
+{{ onigirazu_host }}                  # 192.168.1.10 (connection address)
 {{ onigirazu_port }}                  # 22
 {{ onigirazu_user }}                  # deploy
-{{ onigirazu_fqdn }}                  # webserver01.example.com
+{{ ansible_fqdn }}                    # webserver01.example.com (also onigirazu_fqdn)
 ```
 
 ### Operating System
 
 ```yaml
-{{ onigirazu_os_family }}             # Debian, RedHat, Darwin
-{{ onigirazu_distribution }}          # ubuntu, centos, fedora
-{{ onigirazu_distribution_version }}  # 24.04, 8.5
-{{ onigirazu_architecture }}          # x86_64, aarch64
-{{ onigirazu_kernel }}                # Linux, Darwin
+{{ ansible_os_family }}                    # Debian, RedHat, Darwin
+{{ ansible_distribution }}                 # Ubuntu, Rocky, RedHat (Ansible spelling)
+{{ onigirazu_distribution }}               # ubuntu, rocky, rhel (os-release ID)
+{{ ansible_distribution_version }}         # 24.04, 9.4
+{{ ansible_distribution_major_version }}   # 24, 9
+{{ ansible_architecture }}                 # x86_64, aarch64
+{{ ansible_system }}                       # Linux, Darwin (onigirazu_kernel)
+{{ ansible_kernel }}                       # 6.8.0-45-generic (onigirazu_kernel_version)
 ```
 
 ### Hardware
 
 ```yaml
-{{ onigirazu_processor_cores }}       # 16
-{{ onigirazu_memtotal_mb }}           # 15Gi
+{{ ansible_processor_vcpus }}         # 16 (also ansible_processor_cores, onigirazu_processor_cores)
+{{ onigirazu_memtotal_mb }}           # "15Gi"
+```
+
+Current limitation: `onigirazu_memtotal_mb` is the human-readable string from `free -h` ("15Gi", "8.0G" on macOS), not a number of megabytes, and there is no `ansible_memtotal_mb`. For a number use a task:
+
+```yaml
+- shell: awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo
+  register: mem
+  changed_when: false
+# then: mem.stdout | int
 ```
 
 ### User & Environment
 
 ```yaml
-{{ onigirazu_user_id }}               # usx
-{{ onigirazu_env.HOME }}              # /home/usx
-{{ onigirazu_env.PATH }}              # /usr/local/bin:/usr/bin
+{{ ansible_user_id }}                 # usx (also onigirazu_user_id)
+{{ ansible_env.HOME }}                # /home/usx (also onigirazu_env.HOME)
+{{ ansible_env.PATH }}                # /usr/local/bin:/usr/bin
 ```
+
+Only `HOME` and `PATH` are gathered.
 
 ### Date & Time
 
 ```yaml
-{{ onigirazu_date_time.iso8601 }}     # 2025-10-08T18:26:30+02:00
-{{ onigirazu_date_time.date }}        # 2025-10-08
-{{ onigirazu_date_time.time }}        # 18:26:30
-{{ onigirazu_date_time.epoch }}       # 1759940790
-{{ onigirazu_date_time.weekday }}     # Wednesday
+{{ ansible_date_time.iso8601 }}       # 2025-10-08T18:26:30+02:00
+{{ ansible_date_time.date }}          # 2025-10-08
+{{ ansible_date_time.time }}          # 18:26:30
+{{ ansible_date_time.epoch }}         # 1759940790
+{{ ansible_date_time.weekday }}       # Wednesday
 ```
+
+Also `year`, `month`, `day`, `hour`, `minute`, `second`, `weekday_number`. The time is taken when facts are gathered, on the control machine.
 
 ### Network
 
 ```yaml
-{{ onigirazu_default_ipv4.address }}  # 192.168.1.10
+{{ ansible_default_ipv4.address }}    # 192.168.1.10 (only the address is gathered)
 ```
+
+### Registered Results
+
+```yaml
+{{ result.rc }}  {{ result.stdout }}  {{ result.stdout_lines }}  {{ result.stderr_lines }}
+{{ result.changed }}  {{ result.failed }}  {{ result.skipped }}  {{ result.msg }}
+```
+
+A failed or skipped task is registered too. In a `rescue` section `ansible_failed_task` (name, module) and `ansible_failed_result` describe the failure.
 
 ---
 
@@ -82,12 +121,12 @@ tasks:
   - name: Install package (Debian)
     apt:
       name: nginx
-    when: onigirazu_os_family == "Debian"
+    when: ansible_os_family == "Debian"
 
   - name: Install package (RedHat)
     yum:
       name: nginx
-    when: onigirazu_os_family == "RedHat"
+    when: ansible_os_family == "RedHat"
 ```
 
 ### 2. Create Timestamped Files
@@ -164,24 +203,31 @@ groups:
   webservers:
     hosts:
       web01:
-        onigirazu_host: 192.168.1.10
-        onigirazu_port: 22
-        onigirazu_user: deploy
-        onigirazu_ssh_private_key_file: ~/.ssh/id_rsa
-        onigirazu_ssh_common_args: '-o StrictHostKeyChecking=no'
+        ansible_host: 192.168.1.10
+        ansible_port: 22
+        ansible_user: deploy
+        ansible_ssh_private_key_file: ~/.ssh/id_rsa
 ```
+
+Recognised connection variables: `ansible_host`, `ansible_port`, `ansible_user`, `ansible_password`, `ansible_ssh_private_key_file`, `ansible_connection` (`local`); the `onigirazu_` spellings of the same names also work. `ansible_ssh_common_args` and `onigirazu_ssh_common_args` are not read.
 
 ### Privilege Escalation
 
+Set `become`, `become_user` and `become_method` on the play or the task; `ansible_become*` / `onigirazu_become*` inventory variables are not read.
+
 ```yaml
-onigirazu_become: true
-onigirazu_become_user: root
-onigirazu_become_method: sudo
+plays:
+  - name: Configure
+    hosts: all
+    become: true
+    become_user: root
 ```
 
 ---
 
 ## 🎯 Play Variables with Templates
+
+Current limitation: play `vars` are rendered once, with the facts of the **first** host of the play. A play var such as `backup_dir: "/backup/{{ ansible_hostname }}"` gets the same value on every host. Put host-dependent values in task `vars`, `set_fact`, or write the expression directly in the task arguments.
 
 ```yaml
 plays:
@@ -189,18 +235,19 @@ plays:
     hosts: all
     gather_facts: true
     vars:
-      app_dir: "{{ onigirazu_env.HOME }}/myapp"
-      backup_dir: "/backup/{{ onigirazu_hostname }}"
-      log_file: "/var/log/deploy-{{ onigirazu_date_time.epoch }}.log"
+      release: "2.4.1"
     tasks:
-      - name: Create directories
+      - name: Create the application directory
         file:
-          path: "{{ item }}"
+          path: "{{ app_dir }}"
           state: directory
-        loop:
-          items:
-            - "{{ app_dir }}"
-            - "{{ backup_dir }}"
+        vars:                                  # task vars: rendered per host
+          app_dir: "{{ ansible_env.HOME }}/myapp-{{ release }}"
+
+      - name: Create the backup directory
+        file:
+          path: "/backup/{{ ansible_hostname }}"
+          state: directory
 
       # For comprehensive loop documentation, see LOOPS_GUIDE.md
       # Examples:
@@ -229,7 +276,7 @@ plays:
 tasks:
   - name: Show all host variables
     debug:
-      var: hostvars[inventory_hostname]
+      msg: "{{ hostvars[inventory_hostname] }}"   # debug var takes only dotted paths
 ```
 
 ### Show Specific Variable
@@ -264,17 +311,16 @@ With `gather_facts: false` the `onigirazu_*` and `ansible_*` facts are
 undefined; remove it (facts are gathered by default) or guard with
 `is defined`.
 
-### 2. Using Variables Before Facts Are Gathered
+### 2. Host Facts in Play Vars
 
-❌ **Wrong:**
+❌ **Wrong:** (every host gets the first host's value)
 
 ```yaml
 plays:
   - name: My Play
     hosts: all
     vars:
-      app_dir: "{{ onigirazu_env.HOME }}/app"  # Facts not available yet!
-    gather_facts: true
+      app_dir: "{{ ansible_env.HOME }}/app"
 ```
 
 ✅ **Correct:**
@@ -283,9 +329,9 @@ plays:
 plays:
   - name: My Play
     hosts: all
-    gather_facts: true  # Gather facts first!
-    vars:
-      app_dir: "{{ onigirazu_env.HOME }}/app"  # Now it works!
+    tasks:
+      - set_fact:
+          app_dir: "{{ ansible_env.HOME }}/app"   # per host
 ```
 
 ### 3. Missing Default Values
@@ -328,6 +374,7 @@ For complete documentation, see:
 | Quick Start | [QUICK_START_CONFIGURATION.md](QUICK_START_CONFIGURATION.md) |
 | All Formats | [INVENTORY_FORMATS.md](INVENTORY_FORMATS.md) |
 | Modules | [modules/README.md](modules/README.md) |
+| Filters and Lookups | [FILTERS_GUIDE.md](FILTERS_GUIDE.md) |
 | Playbook Examples | [examples/README.md](examples/README.md) |
 
 ---

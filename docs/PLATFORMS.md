@@ -330,7 +330,7 @@ GOOS=darwin GOARCH=arm64 go build -o onigirazu-darwin-arm64 ./cmd/onigirazu
 
 If you encounter issues on your platform:
 
-1. Check the [troubleshooting guide](./TROUBLESHOOTING.md)
+1. Check the [troubleshooting guide](./TROUBLESHOOTING_CONFIG.md)
 2. Search [existing issues](https://github.com/onigirazu-cfg/onigirazu/issues)
 3. Open a [new issue](https://github.com/onigirazu-cfg/onigirazu/issues/new) with:
    - Platform and architecture (`uname -a`)

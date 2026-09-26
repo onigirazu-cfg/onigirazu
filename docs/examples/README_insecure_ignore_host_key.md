@@ -357,7 +357,6 @@ inventory/
 
 - [SSH Client Implementation](../../internal/ssh/client.go)
 - [Host Key Manager](../../internal/ssh/hostkey.go)
-- [BaseExecutorModule](../../internal/modules/base_executor_module.go)
 - [Example Module](./example_module_with_base_executor.go)
 - [Inventory Examples](./inventory_with_insecure_host_key.yml)
 

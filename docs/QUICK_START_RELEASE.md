@@ -98,7 +98,7 @@ sha256sum -c checksums.txt --ignore-missing
 
 ## Full Documentation
 
-- [Complete Release Guide](./RELEASE.md)
+- [Complete Release Guide](./RELEASE_PROCESS.md)
 - [Platform Support](./PLATFORMS.md)
 - [GitHub Actions Workflow](../.github/workflows/release.yml)
 - [GoReleaser Config](../.goreleaser.yml)

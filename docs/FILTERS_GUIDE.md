@@ -1,6 +1,6 @@
 # Onigirazu Filters Guide
 
-Complete guide to using and creating filter plugins in Onigirazu.
+Using the built-in filters, tests and lookups of Onigirazu expressions, and writing filter plugins.
 
 ## 📋 Table of Contents
 
@@ -9,6 +9,10 @@ Complete guide to using and creating filter plugins in Onigirazu.
   - [String Manipulation](#string-manipulation)
   - [Collection Operations](#collection-operations)
   - [Conditional Operations](#conditional-operations)
+  - [Filter Reference](#filter-reference)
+  - [Tests](#tests)
+  - [Lookups](#lookups)
+  - [Expression Syntax](#expression-syntax)
 - [Using Filters in Templates](#using-filters-in-templates)
 - [Creating Custom Filters](#creating-custom-filters)
 - [Advanced Filter Development](#advanced-filter-development)
@@ -17,49 +21,13 @@ Complete guide to using and creating filter plugins in Onigirazu.
 
 ## What are Filters?
 
-Filters are plugin functions that transform data in Onigirazu templates. They allow you to:
+Filters transform values inside `{{ }}` blocks, `when`/`until`/`changed_when`/`failed_when` conditions and loop expressions: `{{ name | upper }}`, `{{ users | map(attribute='name') | join(', ') }}`.
 
-- **Transform text**: Convert case, trim whitespace, replace content
-- **Manipulate collections**: Join arrays, split strings, get length
-- **Provide defaults**: Supply fallback values for empty/null data
-- **Extend functionality**: Create custom filters for domain-specific transformations
-
-### Filter Function Signature
-
-```go
-type FilterFunc func(input interface{}, args ...interface{}) (interface{}, error)
-```
-
-- **input**: The data to transform (required)
-- **args**: Variable arguments for the filter (optional)
-- **Return**: Transformed data and error (if any)
-
-### Filter Architecture
-
-```
-┌─────────────────────────────────────────┐
-│      Onigirazu Template Engine          │
-│  ┌───────────────────────────────────┐  │
-│  │  Template Parser                  │  │
-│  │  {{ variable | filter(args) }}    │  │
-│  └──────────────┬────────────────────┘  │
-│                 │                        │
-│  ┌──────────────▼────────────────────┐  │
-│  │  Filter Plugin Manager            │  │
-│  │  - BuiltinFiltersPlugin          │  │
-│  │  - Custom Filter Plugins         │  │
-│  └──────────────┬────────────────────┘  │
-│                 │                        │
-│  ┌──────────────▼────────────────────┐  │
-│  │  Filter Execution                │  │
-│  │  Transform Data & Return Result  │  │
-│  └───────────────────────────────────┘  │
-└─────────────────────────────────────────┘
-```
+The same expression evaluator handles all of these places, so every built-in filter works in task arguments, conditions and template files alike. Filter plugins are different; see [Creating Custom Filters](#creating-custom-filters).
 
 ## Built-in Filters
 
-Onigirazu provides 9 built-in filters out of the box:
+The most common filters are described below; the [Filter Reference](#filter-reference) lists all of them.
 
 ### String Manipulation
 
@@ -340,6 +308,73 @@ tasks:
     # Output: Value of enabled_by_default
 ```
 
+### Filter Reference
+
+| Group | Filters |
+|-------|---------|
+| Strings | `upper`, `lower`, `title`, `capitalize`, `trim`, `replace(old, new)`, `split(sep)`, `quote` (shell quoting), `basename`, `dirname` |
+| Regular expressions | `regex_replace(pattern, repl)` (`\1` back references), `regex_search(pattern)` (match or none), `regex_findall(pattern)` |
+| Conversion | `int`, `float`, `string`, `bool`, `list`, `abs`, `round` |
+| Data formats | `to_json`, `to_nice_json`, `from_json`, `to_yaml`, `to_nice_yaml`, `from_yaml`, `b64encode`, `b64decode` |
+| Lists | `length`/`count`, `first`, `last`, `join(sep)`, `unique`, `sort`, `reverse`, `flatten`, `sum`, `min`, `max`, `range(n)` |
+| Selection | `select(test, arg)`, `reject(test, arg)`, `selectattr(attr, test, arg)`, `rejectattr(attr, test, arg)`; without a test an item is kept when it is truthy |
+| Mapping | `map(attribute='x')`, `map('filter', args...)`, `map('extract', container, key)` |
+| Dictionaries | `keys`, `values`, `dict2items`, `items2dict`, `combine(other, ...)` (shallow merge) |
+| Other | `default(value)`, `mandatory` (error when undefined), `ternary(if_true, if_false)`, `password_hash('sha512' or 'sha256', salt)` |
+
+Not available: the `d` alias of `default`, `hash`, `default(value, true)` (the second argument is ignored; `default` always replaces undefined, null and `""`).
+
+```yaml
+- debug:
+    msg: "{{ users | selectattr('admin') | map(attribute='name') | join(', ') }}"
+
+- debug:
+    msg: "{{ groups['web'] | map('extract', hostvars, 'ansible_host') | list }}"
+
+- user:
+    name: deploy
+    password: "{{ deploy_password | password_hash('sha512') }}"
+```
+
+### Tests
+
+`is defined`, `is undefined` and `is not defined` work in any expression. The other tests are used through `select`, `reject`, `selectattr` and `rejectattr`: `defined`, `undefined`, `none`, `truthy`, `falsy`, `equalto`/`==`/`eq`, `!=`/`ne`, `>`, `<`, `>=`, `<=` (also `gt`, `lt`, `ge`, `le`), `in`, `contains`, `match`/`search`/`regex`, `string`, `number`.
+
+```yaml
+when: my_var is defined and (my_var | length) > 0
+loop: "{{ packages | select('match', '^python3-') | list }}"
+```
+
+`x is match('re')` is not supported as a condition; use `x | regex_search('re')`.
+
+### Lookups
+
+`lookup(plugin, terms...)` returns one value (several are joined with commas); `query(...)`/`q(...)` returns a list. They run on the control machine; relative paths start at the playbook directory.
+
+| Plugin | Returns |
+|--------|---------|
+| `env` | Environment variable |
+| `file` | File content |
+| `pipe` | Output of a shell command |
+| `lines` | Output of a command, one item per line |
+| `fileglob` | Files matching a pattern |
+| `first_found` | First existing path of a list |
+| `dict` | `{key, value}` items of a dictionary |
+| `items`, `list` | The terms as a list |
+
+```yaml
+key: "{{ lookup('file', 'files/id_ed25519.pub') }}"
+loop: "{{ query('fileglob', 'files/conf.d/*.conf') }}"
+```
+
+### Expression Syntax
+
+- Inline if: `{{ 'big' if n > 3 else 'small' }}`
+- String concatenation: `{{ name ~ '-' ~ version }}`
+- `True`, `False` and `None` as in Jinja; `and`, `or`, `not`, `in`
+- Dictionary methods `d.keys()` and `d.values()`
+- A filter takes everything to its left up to `and`/`or`: write `a and (b | length) > 0`, not `a and b | length > 0` (current limitation)
+
 ## Using Filters in Templates
 
 ### Basic Filter Usage
@@ -438,6 +473,8 @@ tasks:
 
 ## Creating Custom Filters
 
+Current limitation: filters from plugins are registered only in the Go-template engine, not in the expression evaluator. `{{ name | strrev }}` does not find them; call them as functions with Go-template syntax: `{{ strrev .name }}`, `{{ prefix .name "app-" }}`. Plugin filters do not work in conditions. A plugin filter with a built-in's name (such as `reverse`) is shadowed by the built-in.
+
 ### Basic Custom Filter
 
 ```go
@@ -467,7 +504,7 @@ func NewReverseFilterPlugin() *ReverseFilterPlugin {
     }
 
     // Register filter function
-    plugin.AddFilter("reverse", reverseFilter)
+    plugin.AddFilter("strrev", reverseFilter)
 
     return plugin
 }
@@ -758,10 +795,9 @@ func robustFilter(input interface{}, args ...interface{}) (interface{}, error) {
 **Problem**: Template engine says filter doesn't exist.
 
 **Solutions**:
-
-1. Verify plugin is registered with plugin manager
-2. Check filter name matches exactly (case-sensitive)
-3. Ensure template engine has plugin manager set
+1. Call plugin filters as Go-template functions (`{{ strrev .name }}`), not with `|`
+2. Verify plugin is registered with plugin manager
+3. Check filter name matches exactly (case-sensitive)
 4. Check plugin initialization succeeded
 
 ### Type Mismatch Error

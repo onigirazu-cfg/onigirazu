@@ -1,10 +1,10 @@
 # Handler Examples
 
-Ready-to-use examples demonstrating handler usage patterns.
+Examples of handler usage. Handlers fire only when the notifying task reports `changed`, run only on the hosts that notified them, and run at the next flush point (after pre_tasks, after roles and tasks, after post_tasks, or at `meta: flush_handlers`). See [HANDLERS_GUIDE.md](HANDLERS_GUIDE.md).
 
 ## Example 1: Web Server Configuration
 
-Restart web server when configuration changes.
+Restart the web server when its configuration or certificate changes.
 
 ```yaml
 ---
@@ -32,27 +32,18 @@ Restart web server when configuration changes.
     - name: Create web root
       file: path=/var/www/html state=directory
 
-    - name: Copy website files
-      synchronize:
-        src: website/
-        dest: /var/www/html/
-
   handlers:
     - name: restart nginx
       service: name=nginx state=restarted
-
-    - name: reload nginx
-      command: nginx -s reload
-      listen: nginx reloaded
 ```
 
-**Usage**: When either nginx config or SSL cert changes, nginx restarts automatically.
+If either the configuration or the certificate changes, nginx restarts once per host.
 
 ---
 
 ## Example 2: Application Deployment
 
-Multi-step deployment with multiple handlers.
+Several tasks notify one event; several handlers listen to it.
 
 ```yaml
 ---
@@ -74,15 +65,12 @@ Multi-step deployment with multiple handlers.
         repo: "{{ app_repo }}"
         dest: "{{ app_path }}"
         version: "{{ app_version }}"
-        update: true
       become: true
       become_user: "{{ app_user }}"
       notify: deployment complete
 
     - name: Install Python dependencies
-      pip:
-        requirements: "{{ app_path }}/requirements.txt"
-        virtualenv: "{{ app_path }}/venv"
+      shell: "{{ app_path }}/venv/bin/pip install -r {{ app_path }}/requirements.txt"
       become: true
       become_user: "{{ app_user }}"
       notify: deployment complete
@@ -97,17 +85,13 @@ Multi-step deployment with multiple handlers.
 
   handlers:
     - name: run database migrations
-      shell: |
-        source {{ app_path }}/venv/bin/activate
-        python manage.py migrate
+      shell: cd {{ app_path }} && venv/bin/python manage.py migrate
       become: true
       become_user: "{{ app_user }}"
       listen: deployment complete
 
     - name: collect static files
-      shell: |
-        source {{ app_path }}/venv/bin/activate
-        python manage.py collectstatic --noinput
+      shell: cd {{ app_path }} && venv/bin/python manage.py collectstatic --noinput
       become: true
       become_user: "{{ app_user }}"
       listen: deployment complete
@@ -126,18 +110,15 @@ Multi-step deployment with multiple handlers.
       listen: deployment complete
 ```
 
-**Key features**:
+**Key points**:
 
-- Multiple tasks trigger "deployment complete"
-- Handlers execute in order: migrations → static files → restart → health check
-- Variables available in handlers
-- All dependent operations complete atomically
+- Three tasks notify "deployment complete"; each handler still runs once per host
+- Handlers run in definition order: migrations, static files, restart, health check
+- A failing handler stops the remaining handlers (unless it has `ignore_errors: true`)
 
 ---
 
 ## Example 3: System Maintenance
-
-Maintenance handlers triggered by configuration changes.
 
 ```yaml
 ---
@@ -145,10 +126,6 @@ Maintenance handlers triggered by configuration changes.
   hosts: all
 
   tasks:
-    - name: Update system packages
-      package: name=* state=latest
-      notify: system updated
-
     - name: Configure system limits
       template:
         src: limits.conf.j2
@@ -156,13 +133,14 @@ Maintenance handlers triggered by configuration changes.
       notify: system configuration changed
 
     - name: Update sysctl parameters
-      sysctl: name={{ item.key }} value={{ item.value }} state=present
+      sysctl:
+        name: "{{ item.key }}"
+        value: "{{ item.value }}"
+        state: present
       loop:
-        items:
-          - { key: "net.core.somaxconn", value: 65536 }
-          - { key: "net.ipv4.tcp_max_syn_backlog", value: 65536 }
+        - { key: "net.core.somaxconn", value: 65536 }
+        - { key: "net.ipv4.tcp_max_syn_backlog", value: 65536 }
       notify: system configuration changed
-      # See LOOPS_GUIDE.md for comprehensive loop documentation
 
     - name: Configure log rotation
       template:
@@ -171,17 +149,12 @@ Maintenance handlers triggered by configuration changes.
       notify: system maintenance
 
   handlers:
-    - name: update package cache
-      command: apt-get update
-      when: ansible_os_family == "Debian"
-      listen: system updated
-
-    - name: reload system limits
-      command: sysctl -p
+    - name: reload sysctl
+      command: sysctl --system
       listen: system configuration changed
 
     - name: verify sysctl
-      command: sysctl -a | grep net.core.somaxconn
+      shell: sysctl -a | grep net.core.somaxconn
       listen: system configuration changed
 
     - name: create log backups
@@ -195,25 +168,24 @@ Maintenance handlers triggered by configuration changes.
       listen: system maintenance
 ```
 
+A loop notifies if any of its items changed; the handler still runs once per host. See [LOOPS_GUIDE.md](LOOPS_GUIDE.md).
+
 ---
 
-## Example 4: Database Maintenance
-
-Database handler examples.
+## Example 4: Database Configuration
 
 ```yaml
 ---
-- name: Database maintenance
+- name: Database configuration
   hosts: db_servers
 
   vars:
     db_name: production_db
-    db_user: dbuser
     backup_path: /var/backups/db
 
   tasks:
     - name: Create backup directory
-      file: path={{ backup_path }} state=directory mode=0700
+      file: path={{ backup_path }} state=directory mode=0700 owner=postgres
 
     - name: Update PostgreSQL configuration
       template:
@@ -233,39 +205,19 @@ Database handler examples.
         mode: '0640'
       notify: postgresql configuration changed
 
-    - name: Check database size
-      postgresql_query:
-        db: "{{ db_name }}"
-        query: "SELECT pg_database.datname, ROUND(pg_database_size(pg_database.datname) / 1024 / 1024) as size_mb FROM pg_database"
-      register: db_size
-
   handlers:
-    - name: reload postgresql
-      postgresql_service: state=reloaded
+    - name: backup database
+      shell: pg_dump -Fc {{ db_name }} | gzip > {{ backup_path }}/{{ db_name }}-$(date +%Y%m%d-%H%M%S).dump.gz
       become: true
       become_user: postgres
+      listen: postgresql configuration changed
+
+    - name: reload postgresql
+      service: name=postgresql state=reloaded
       listen: postgresql configuration changed
 
     - name: verify postgresql
-      postgresql_query:
-        db: postgres
-        query: "SELECT version();"
-      become: true
-      become_user: postgres
-      listen: postgresql configuration changed
-
-    - name: backup database
-      shell: |
-        pg_dump -U {{ db_user }} -Fc {{ db_name }} | \
-        gzip > {{ backup_path }}/{{ db_name }}-$(date +%Y%m%d-%H%M%S).dump.gz
-      become: true
-      become_user: postgres
-      listen: postgresql configuration changed
-
-    - name: vacuum database
-      postgresql_query:
-        db: "{{ db_name }}"
-        query: "VACUUM ANALYZE;"
+      command: psql -c "SELECT version();"
       become: true
       become_user: postgres
       listen: postgresql configuration changed
@@ -275,72 +227,53 @@ Database handler examples.
 
 ## Example 5: Docker Services
 
-Container management with handlers.
-
 ```yaml
 ---
 - name: Manage Docker services
   hosts: docker_hosts
 
   vars:
-    docker_registry: registry.example.com
-    app_image: myapp:v2.0.0
-    app_container: myapp
+    app_image: registry.example.com/myapp:v2.0.0
+    app_dir: /opt/myapp
     app_port: 8000
 
   tasks:
-    - name: Login to Docker registry
-      docker_login:
-        registry: "{{ docker_registry }}"
-        username: "{{ docker_user }}"
-        password: "{{ docker_password }}"
-
-    - name: Pull latest image
+    - name: Pull image
       docker_image:
-        name: "{{ docker_registry }}/{{ app_image }}"
+        name: "{{ app_image }}"
         state: present
       notify: container updated
 
     - name: Create app directory
-      file: path=/opt/{{ app_container }} state=directory
+      file: path={{ app_dir }} state=directory
 
     - name: Copy docker-compose file
       template:
         src: docker-compose.yml.j2
-        dest: /opt/{{ app_container }}/docker-compose.yml
+        dest: "{{ app_dir }}/docker-compose.yml"
       notify: container updated
 
     - name: Copy .env file
       template:
-        src: .env.j2
-        dest: /opt/{{ app_container }}/.env
+        src: env.j2
+        dest: "{{ app_dir }}/.env"
         mode: '0600'
       notify: container updated
 
   handlers:
-    - name: stop container
-      docker_container:
-        name: "{{ app_container }}"
-        state: stopped
-      listen: container updated
-
-    - name: start container
-      shell: |
-        cd /opt/{{ app_container }}
-        docker-compose up -d
+    - name: recreate containers
+      docker_compose:
+        project_dir: "{{ app_dir }}"
+        state: present
+        force_recreate: true
       listen: container updated
 
     - name: verify container
       uri:
         url: "http://localhost:{{ app_port }}/health"
-        method: GET
         status_code: 200
       retries: 5
       delay: 2
-      listen: container updated
-
-    - name: show logs
-      command: docker logs {{ app_container }} --tail=50
       listen: container updated
 ```
 
@@ -348,49 +281,24 @@ Container management with handlers.
 
 ## Example 6: Firewall Configuration
 
-Firewall rules with validation handlers.
-
 ```yaml
 ---
 - name: Configure firewall
   hosts: firewalls
 
   tasks:
-    - name: Install UFW
-      package: name=ufw state=present
-
-    - name: Configure firewall rules
-      ufw:
-        rule: "{{ item.rule }}"
-        port: "{{ item.port }}"
-        proto: "{{ item.proto }}"
-        state: enabled
-      loop:
-        items:
-          - { rule: 'allow', port: '22', proto: 'tcp' }
-          - { rule: 'allow', port: '80', proto: 'tcp' }
-          - { rule: 'allow', port: '443', proto: 'tcp' }
-          - { rule: 'allow', port: '8000', proto: 'tcp' }
-      notify: firewall updated
-      # See LOOPS_GUIDE.md for comprehensive loop documentation
-
-    - name: Configure iptables rules
-      template:
-        src: iptables.rules.j2
-        dest: /etc/iptables/rules.v4
+    - name: Allow service ports
+      firewall:
+        port: "{{ item }}"
+        protocol: tcp
+        action: allow
+        state: present
+      loop: ['22', '80', '443', '8000']
       notify: firewall updated
 
   handlers:
-    - name: save firewall rules
-      command: ufw enable
-      listen: firewall updated
-
-    - name: apply iptables rules
-      shell: iptables-restore < /etc/iptables/rules.v4
-      listen: firewall updated
-
-    - name: verify firewall
-      shell: ufw status verbose
+    - name: show firewall status
+      command: ufw status verbose
       register: firewall_status
       listen: firewall updated
 
@@ -400,16 +308,17 @@ Firewall rules with validation handlers.
         port: 22
         state: started
         timeout: 5
-      loop:
-        items: "{{ groups['app_servers'] }}"
+      loop: "{{ groups['app_servers'] }}"
       listen: firewall updated
 ```
+
+The `firewall` module reports `changed` only when the rule set actually changed, so the handlers run only then.
 
 ---
 
 ## Example 7: Conditional Handlers
 
-Using `when` conditions with handlers.
+`when` on a handler is evaluated per host when the handler runs.
 
 ```yaml
 ---
@@ -417,7 +326,7 @@ Using `when` conditions with handlers.
   hosts: all
 
   vars:
-    environment: production
+    deploy_env: production
     enable_monitoring: true
 
   tasks:
@@ -430,12 +339,12 @@ Using `when` conditions with handlers.
   handlers:
     - name: restart monitoring on production
       service: name=monitoring state=restarted
-      when: environment == 'production'
+      when: deploy_env == 'production'
       listen: monitoring updated
 
     - name: reload monitoring on staging
-      shell: systemctl reload monitoring
-      when: environment == 'staging'
+      service: name=monitoring state=reloaded
+      when: deploy_env == 'staging'
       listen: monitoring updated
 
     - name: enable monitoring
@@ -446,15 +355,13 @@ Using `when` conditions with handlers.
     - name: run health checks
       uri: url=http://localhost/metrics status_code=200
       retries: 3
-      when: environment in ['production', 'staging']
+      when: deploy_env in ['production', 'staging']
       listen: monitoring updated
 ```
 
 ---
 
-## Example 8: Error Handling in Handlers
-
-Handlers with error handling.
+## Example 8: Error Handling and Early Flush
 
 ```yaml
 ---
@@ -466,26 +373,26 @@ Handlers with error handling.
       copy: src=app.jar dest=/opt/app/app.jar
       notify: app deployed
 
-  handlers:
-    - name: run tests
-      shell: cd /opt/app && npm test
-      listen: app deployed
-      ignore_errors: true
+    - name: Restart now so the check below sees the new version
+      meta: flush_handlers
 
+    - name: Check version
+      uri: url=http://localhost:8000/version status_code=200
+
+  handlers:
     - name: generate reports
-      shell: cd /opt/app && npm run report
+      shell: cd /opt/app && ./report.sh
       listen: app deployed
-      ignore_errors: true
+      ignore_errors: true   # a failure here does not stop the handlers below
 
     - name: restart app
       service: name=app state=restarted
       listen: app deployed
-      # Don't ignore errors - fail if restart fails
+      # no ignore_errors: a failed restart stops the play
 
     - name: verify app
       uri:
         url: http://localhost:8000/health
-        method: GET
         status_code: 200
       retries: 5
       delay: 2
@@ -499,20 +406,18 @@ Handlers with error handling.
 | Pattern | Use Case | Handlers |
 |---------|----------|----------|
 | **Service Restart** | Config changes | Restart service |
-| **Deployment** | Code updates | Migrations → Restart |
-| **Maintenance** | System updates | Multiple cleanup tasks |
-| **Configuration** | Setting changes | Reload + verify |
-| **Monitoring** | Alert config | Restart + test |
-| **Database** | Data updates | Backup + optimize |
+| **Deployment** | Code updates | Migrations, then restart |
+| **Maintenance** | System updates | Cleanup tasks |
+| **Configuration** | Setting changes | Reload, then verify |
+| **Early flush** | Later tasks need the restart | `meta: flush_handlers` |
 
 ---
 
 ## Tips for Writing Effective Handlers
 
-1. **Use `listen` for semantic grouping** - Easier to maintain
-2. **Keep handlers simple** - Complex logic should be in roles/tasks
-3. **Test handler execution** - Verify handlers run when expected
-4. **Document handler dependencies** - Clear execution order
-5. **Use `ignore_errors` wisely** - Only for non-critical operations
-6. **Validate handler success** - Include verification steps
-7. **Consider idempotency** - Handlers may run multiple times across inventory
+1. **Use `listen` for semantic grouping** (a single string; lists are not supported)
+2. **Notify only from tasks that can report `changed`**; `debug` never does
+3. **Order handlers deliberately**: definition order is execution order
+4. **Use `ignore_errors` only for non-critical handlers**
+5. **Use `meta: flush_handlers`** when a later task depends on a handler
+6. **Expect a handler to run again** if it is notified again after a flush
