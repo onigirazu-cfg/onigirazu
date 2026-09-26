@@ -1107,6 +1107,8 @@ func (p *Play) UnmarshalYAML(value *yaml.Node) error {
 			value.Content[i+1] = &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: strings.Join(parts, ",")}
 		}
 	}
+	// Ansible gathers facts unless the play says gather_facts: false
+	p.GatherFacts = true
 	type plain Play
 	return value.Decode((*plain)(p))
 }

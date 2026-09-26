@@ -875,7 +875,8 @@ An argument that is exactly `{{ var }}` keeps a list or map value as it is, so
 
 Always defined: `inventory_hostname`, `group_names`, `groups` (group → host names,
 with `all`) and `hostvars` (host → its variables, facts and registered results,
-as of the start of the task). With `gather_facts: true` the facts are available
+as of the start of the task). Facts are gathered when a play starts (as in
+Ansible; `gather_facts: false` skips it) and are available
 as `onigirazu_*`, under their Ansible names (`ansible_os_family`,
 `ansible_distribution`, `ansible_distribution_major_version`, `ansible_hostname`,
 `ansible_fqdn`, `ansible_default_ipv4.address`, ...) and in `ansible_facts`:
