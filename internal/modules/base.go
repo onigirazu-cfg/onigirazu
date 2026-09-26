@@ -97,16 +97,27 @@ func getStringArg(args map[string]interface{}, key string, defaultValue string) 
 }
 
 func getBoolArg(args map[string]interface{}, key string, defaultValue bool) bool {
-	if val, exists := args[key]; exists {
-		if b, ok := val.(bool); ok {
-			return b
-		}
-		// Handle string values that might come from YAML
-		if s, ok := val.(string); ok {
-			return s == "true" || s == "True" || s == "TRUE" || s == "yes" || s == "Yes" || s == "YES" || s == "1"
-		}
+	if b, ok := parseBool(args[key]); ok {
+		return b
 	}
 	return defaultValue
+}
+
+// parseBool accepts a YAML boolean and the strings templating produces
+// ("{{ flag }}" renders to "true"): true/false, yes/no, on/off, 1/0
+func parseBool(val interface{}) (bool, bool) {
+	switch v := val.(type) {
+	case bool:
+		return v, true
+	case string:
+		switch strings.ToLower(strings.TrimSpace(v)) {
+		case "true", "yes", "on", "1":
+			return true, true
+		case "false", "no", "off", "0":
+			return false, true
+		}
+	}
+	return false, false
 }
 
 func getIntArg(args map[string]interface{}, key string, defaultValue int) int {

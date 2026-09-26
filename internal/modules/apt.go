@@ -115,26 +115,11 @@ func (m *AptModule) Execute(ctx context.Context, host types.Host, args map[strin
 		}
 	}
 
-	updateCache := false
-	if updateVal, exists := args["update_cache"]; exists {
-		if updateBool, ok := updateVal.(bool); ok {
-			updateCache = updateBool
-		}
-	}
+	updateCache := getBoolArg(args, "update_cache", false)
 
-	autoremove := false
-	if autoremoveVal, exists := args["autoremove"]; exists {
-		if autoremoveBool, ok := autoremoveVal.(bool); ok {
-			autoremove = autoremoveBool
-		}
-	}
+	autoremove := getBoolArg(args, "autoremove", false)
 
-	autoclean := false
-	if autocleanVal, exists := args["autoclean"]; exists {
-		if autocleanBool, ok := autocleanVal.(bool); ok {
-			autoclean = autocleanBool
-		}
-	}
+	autoclean := getBoolArg(args, "autoclean", false)
 
 	// Get package names
 	pkgNames := []string{}

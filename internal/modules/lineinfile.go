@@ -63,15 +63,9 @@ func (m *LineinfileModule) Execute(ctx context.Context, host types.Host, args ma
 		state = s
 	}
 
-	create := false
-	if c, ok := args["create"].(bool); ok {
-		create = c
-	}
+	create := getBoolArg(args, "create", false)
 
-	backup := false
-	if b, ok := args["backup"].(bool); ok {
-		backup = b
-	}
+	backup := getBoolArg(args, "backup", false)
 
 	insertafter := ""
 	if ia, ok := args["insertafter"].(string); ok {

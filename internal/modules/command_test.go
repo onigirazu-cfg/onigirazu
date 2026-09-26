@@ -306,7 +306,7 @@ func TestCommandModule_ValidateInvalidShellType(t *testing.T) {
 	args := map[string]interface{}{
 		"name":    "test-task",
 		"command": "echo test",
-		"shell":   "yes",
+		"shell":   "sometimes",
 	}
 
 	err := module.Validate(args)

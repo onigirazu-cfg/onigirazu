@@ -77,10 +77,10 @@ func (m *PostgreSQLUserModule) Execute(ctx context.Context, host types.Host, arg
 			if password, _ := args["password"].(string); password != "" {
 				sql += " PASSWORD " + pgString(password)
 			}
-			if superuser, _ := args["superuser"].(bool); superuser {
+			if superuser := getBoolArg(args, "superuser", false); superuser {
 				sql += " SUPERUSER"
 			}
-			if createdb, _ := args["createdb"].(bool); createdb {
+			if createdb := getBoolArg(args, "createdb", false); createdb {
 				sql += " CREATEDB"
 			}
 			if _, err := exec.Execute(conn.psql("", sql)); err != nil {

@@ -153,19 +153,19 @@ func composeArgs(composeFile, projectName string) string {
 func (m *DockerComposeModule) composeUp(ctx context.Context, exec *executor.CommandExecutor, projectDir, composeFile, projectName string, args map[string]interface{}) error {
 	cmdParts := []string{}
 
-	detach, _ := args["detach"].(bool)
+	detach := getBoolArg(args, "detach", false)
 	if detach || args["detach"] == nil {
 		cmdParts = append(cmdParts, "up -d")
 	} else {
 		cmdParts = append(cmdParts, "up")
 	}
 
-	build, _ := args["build"].(bool)
+	build := getBoolArg(args, "build", false)
 	if build {
 		cmdParts = append(cmdParts, "--build")
 	}
 
-	forceRecreate, _ := args["force_recreate"].(bool)
+	forceRecreate := getBoolArg(args, "force_recreate", false)
 	if forceRecreate {
 		cmdParts = append(cmdParts, "--force-recreate")
 	}
@@ -188,12 +188,12 @@ func (m *DockerComposeModule) composeUp(ctx context.Context, exec *executor.Comm
 func (m *DockerComposeModule) composeDown(ctx context.Context, exec *executor.CommandExecutor, projectDir, composeFile, projectName string, args map[string]interface{}) error {
 	cmdParts := []string{"down"}
 
-	removeVolumes, _ := args["remove_volumes"].(bool)
+	removeVolumes := getBoolArg(args, "remove_volumes", false)
 	if removeVolumes {
 		cmdParts = append(cmdParts, "-v")
 	}
 
-	removeOrphans, _ := args["remove_orphans"].(bool)
+	removeOrphans := getBoolArg(args, "remove_orphans", false)
 	if removeOrphans {
 		cmdParts = append(cmdParts, "--remove-orphans")
 	}
@@ -238,12 +238,12 @@ func (m *DockerComposeModule) composePull(ctx context.Context, exec *executor.Co
 func (m *DockerComposeModule) composeBuild(ctx context.Context, exec *executor.CommandExecutor, projectDir, composeFile, projectName string, args map[string]interface{}) error {
 	cmdParts := []string{"build"}
 
-	noCache, _ := args["nocache"].(bool)
+	noCache := getBoolArg(args, "nocache", false)
 	if noCache {
 		cmdParts = append(cmdParts, "--no-cache")
 	}
 
-	pull, _ := args["pull"].(bool)
+	pull := getBoolArg(args, "pull", false)
 	if pull {
 		cmdParts = append(cmdParts, "--pull")
 	}

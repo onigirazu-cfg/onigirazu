@@ -102,12 +102,7 @@ func (m *BlockinfileModule) Execute(ctx context.Context, host types.Host, args m
 		}
 	}
 
-	backup := false
-	if backupVal, exists := args["backup"]; exists {
-		if backupBool, ok := backupVal.(bool); ok {
-			backup = backupBool
-		}
-	}
+	backup := getBoolArg(args, "backup", false)
 
 	// Read the file on the target host
 	data, fileExists, err := readHostFile(ctx, host, args, filePath)

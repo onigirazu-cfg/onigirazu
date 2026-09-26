@@ -141,12 +141,7 @@ func (m *YumModule) Execute(ctx context.Context, host types.Host, args map[strin
 		}
 	}
 
-	updateCache := false
-	if updateVal, exists := args["update_cache"]; exists {
-		if updateBool, ok := updateVal.(bool); ok {
-			updateCache = updateBool
-		}
-	}
+	updateCache := getBoolArg(args, "update_cache", false)
 
 	enableRepoList := ""
 	if enableVal, exists := args["enablerepo"]; exists {
@@ -162,12 +157,7 @@ func (m *YumModule) Execute(ctx context.Context, host types.Host, args map[strin
 		}
 	}
 
-	security := false
-	if secVal, exists := args["security"]; exists {
-		if secBool, ok := secVal.(bool); ok {
-			security = secBool
-		}
-	}
+	security := getBoolArg(args, "security", false)
 
 	// Get package names
 	pkgNames := []string{}

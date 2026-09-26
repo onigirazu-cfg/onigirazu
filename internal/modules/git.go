@@ -78,15 +78,9 @@ func (m *GitModuleFixed) Execute(ctx context.Context, host types.Host, args map[
 		version = v
 	}
 
-	force := false
-	if f, ok := args["force"].(bool); ok {
-		force = f
-	}
+	force := getBoolArg(args, "force", false)
 
-	update := true
-	if u, ok := args["update"].(bool); ok {
-		update = u
-	}
+	update := getBoolArg(args, "update", true)
 
 	// Check if destination exists and is a git repository
 	isGitRepo := m.isGitRepository(exec, dest)
@@ -147,13 +141,13 @@ func (m *GitModuleFixed) Validate(args map[string]interface{}) error {
 	}
 
 	if force, exists := args["force"]; exists {
-		if _, ok := force.(bool); !ok {
+		if _, ok := parseBool(force); !ok {
 			return fmt.Errorf("argument 'force' must be a boolean")
 		}
 	}
 
 	if update, exists := args["update"]; exists {
-		if _, ok := update.(bool); !ok {
+		if _, ok := parseBool(update); !ok {
 			return fmt.Errorf("argument 'update' must be a boolean")
 		}
 	}
