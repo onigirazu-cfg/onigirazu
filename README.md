@@ -298,6 +298,7 @@ Ansible short forms work too:
   args: {chdir: /src}
 - file: path=/etc/app state=directory mode=0750
 - ping:
+- local_action: command make package   # delegate_to: localhost
 ```
 
 📚 **For detailed examples, see [docs/examples/README.md](docs/examples/README.md)**

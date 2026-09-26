@@ -23,6 +23,9 @@ var inlineOption = regexp.MustCompile(`(^|\s)(chdir|creates|removes|executable|s
 // nothing when the module is already known or the task has no single
 // module key
 func (t *Task) applyShortForm(taskMap map[string]interface{}, reserved map[string]bool) error {
+	if local, ok := taskMap["local_action"]; ok {
+		return t.applyLocalAction(local)
+	}
 	if t.Module != "" {
 		return nil
 	}
@@ -150,4 +153,34 @@ func splitWords(s string) ([]string, error) {
 		words = append(words, b.String())
 	}
 	return words, nil
+}
+
+// applyLocalAction reads "local_action: command echo hi" or
+// "local_action: {module: copy, ...}": the module runs on the control
+// machine, as with delegate_to: localhost
+func (t *Task) applyLocalAction(v interface{}) error {
+	switch a := v.(type) {
+	case string:
+		module, rest, _ := strings.Cut(strings.TrimSpace(a), " ")
+		args, err := shortFormArgs(module, strings.TrimSpace(rest))
+		if err != nil {
+			return fmt.Errorf("local_action: %w", err)
+		}
+		t.Module, t.Args = module, args
+	case map[string]interface{}:
+		module, _ := a["module"].(string)
+		if module == "" {
+			return fmt.Errorf("local_action: module is required")
+		}
+		t.Module, t.Args = module, map[string]interface{}{}
+		for k, val := range a {
+			if k != "module" {
+				t.Args[k] = val
+			}
+		}
+	default:
+		return fmt.Errorf("local_action: expected a string or a map, got %T", v)
+	}
+	t.DelegateTo = "localhost"
+	return nil
 }
