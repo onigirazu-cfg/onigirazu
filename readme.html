@@ -921,6 +921,17 @@ tasks:
 
 <p>An argument that is exactly <code>{{ var }}</code> keeps a list or map value as it is, so
 <code>name: "{{ packages }}"</code> passes the whole list to <code>apt</code>. Other values render as text.</p>
+<p>Always defined: <code>inventory_hostname</code>, <code>group_names</code>, <code>groups</code> (group → host names,
+with <code>all</code>) and <code>hostvars</code> (host → its variables, facts and registered results,
+as of the start of the task). With <code>gather_facts: true</code> the facts are available
+as <code>onigirazu_*</code>, under their Ansible names (<code>ansible_os_family</code>,
+<code>ansible_distribution</code>, <code>ansible_distribution_major_version</code>, <code>ansible_hostname</code>,
+<code>ansible_fqdn</code>, <code>ansible_default_ipv4.address</code>, ...) and in <code>ansible_facts</code>:</p>
+<pre class="codehilite"><code class="language-jinja">{% for h in groups['web'] %}
+server {{ h }} {{ hostvars[h].ansible_default_ipv4.address }}:80
+{% endfor %}
+</code></pre>
+
 <h3>Templates</h3>
 <p>Use Jinja2-like templates for configuration files:</p>
 <pre class="codehilite"><code class="language-yaml">- name: &quot;Generate configuration&quot;
