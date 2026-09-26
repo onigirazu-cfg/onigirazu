@@ -688,6 +688,8 @@ Onigirazu includes 22+ built-in modules for common automation tasks:
 - **command**: run a program without a shell (`chdir`, `creates`, `removes`); the result has
   `rc`, `stdout`, `stderr` (trailing newline removed) and `*_lines`; a non-zero `rc` fails the task
 - **shell**: the same through `sh -c` (or `executable`)
+- **assert**: `that` (one expression or a list), `fail_msg`/`msg`, `success_msg`
+- **replace**: replace every match of `regexp` in a file (multiline, `\1` back references)
 
 ### Configuration Modules
 
