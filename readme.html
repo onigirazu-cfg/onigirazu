@@ -378,6 +378,21 @@ plays:
 - local_action: command make package   # delegate_to: localhost
 </code></pre>
 
+<p>Fully qualified names work for the built-in modules (<code>ansible.builtin.copy</code>,
+<code>ansible.legacy.command</code>) and for collection modules Onigirazu implements
+(<code>ansible.posix.sysctl</code>, <code>ansible.posix.mount</code>, <code>ansible.posix.authorized_key</code>,
+<code>community.general.archive</code>, <code>community.docker.docker_container</code>/<code>docker_image</code>/<code>docker_compose</code>,
+<code>community.mysql.mysql_db</code>/<code>mysql_user</code>, <code>community.postgresql.postgresql_db</code>/<code>postgresql_user</code>).</p>
+<h3>Rolling updates: serial</h3>
+<pre class="codehilite"><code class="language-yaml">plays:
+  - name: Update web servers
+    hosts: &quot;{{ target | default('webservers') }}&quot;   # hosts may use -e and play vars
+    serial: [1, &quot;30%&quot;]    # a number, a percentage, or a list whose last entry repeats
+    tasks: ...
+</code></pre>
+
+<p>With <code>serial</code> the whole play (facts, tasks, handlers) runs on one batch of hosts after
+another. A batch that fails stops the play: later batches do not start.</p>
 <p>📚 <strong>For detailed examples, see <a href="docs/examples/README.md">docs/examples/README.md</a></strong></p>
 <h2>CLI Commands</h2>
 <h3>All Available Commands</h3>
