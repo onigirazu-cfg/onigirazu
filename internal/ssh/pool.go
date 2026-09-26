@@ -325,6 +325,9 @@ func InitializeGlobalPool(cfg interface{}) {
 	InitializeGlobalPoolWithLogger(cfg, logger.New(false))
 }
 
+// dialTimeout limits connecting to a host (ssh_timeout in the config)
+var dialTimeout = 30 * time.Second
+
 // InitializeGlobalPoolWithLogger initializes the global pool with config-based host key manager and custom logger
 func InitializeGlobalPoolWithLogger(cfg interface{}, lg Logger) {
 	strictMode := false
@@ -338,6 +341,9 @@ func InitializeGlobalPoolWithLogger(cfg interface{}, lg Logger) {
 	if sshCfg, ok := cfg.(SSHConfig); ok {
 		strictMode = sshCfg.IsSSHStrictHostKeyEnabled()
 		knownHostsFile = sshCfg.GetSSHKnownHostsFile()
+	}
+	if t, ok := cfg.(interface{ GetSSHTimeout() time.Duration }); ok && t.GetSSHTimeout() > 0 {
+		dialTimeout = t.GetSSHTimeout()
 	}
 
 	if lg == nil {

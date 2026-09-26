@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -76,6 +78,60 @@ type Config struct {
 	// Syntax preferences
 	PreferredModuleSyntax string `yaml:"preferred_module_syntax" json:"preferred_module_syntax"` // "flat", "nested"
 	EnforceModuleSyntax   bool   `yaml:"enforce_module_syntax" json:"enforce_module_syntax"`
+
+	// Warnings about the file: unknown keys, keys that have no effect
+	Warnings []string `yaml:"-" json:"-"`
+	// keys written in the file
+	setKeys map[string]bool
+}
+
+// noEffect are the keys that are parsed but that nothing reads
+var noEffect = map[string]bool{
+	"retry_attempts": true, "retry_delay": true, "config_file": true,
+	"allow_shell_commands": true, "blocked_commands": true, "enable_caching": true,
+	"cache_ttl": true, "enable_checksum": true, "enable_parallel": true,
+	"parallel_strategy": true, "progress_bar": true, "interactive_mode": true,
+	"output_format": true, "metrics_path": true, "enable_profiling": true,
+	"ssh_keepalive": true, "ssh_max_sessions": true, "connection_reuse": true,
+	"default_insecure_ignore_host_key": true, "vault_enabled": true, "vault_address": true,
+	"vault_token": true, "preferred_module_syntax": true, "enforce_module_syntax": true,
+}
+
+// IsSet tells whether the config file sets key
+func (c *Config) IsSet(key string) bool {
+	return c.setKeys[key]
+}
+
+// checkKeys records the keys of the file and warns about unknown keys and
+// keys that have no effect
+func (c *Config) checkKeys(data []byte) error {
+	var raw map[string]interface{}
+	if err := yaml.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	known := map[string]bool{}
+	t := reflect.TypeOf(*c)
+	for i := 0; i < t.NumField(); i++ {
+		if tag, _, _ := strings.Cut(t.Field(i).Tag.Get("yaml"), ","); tag != "" && tag != "-" {
+			known[tag] = true
+		}
+	}
+	keys := make([]string, 0, len(raw))
+	for key := range raw {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	c.setKeys = map[string]bool{}
+	for _, key := range keys {
+		c.setKeys[key] = true
+		switch {
+		case !known[key]:
+			c.Warnings = append(c.Warnings, fmt.Sprintf("unknown key %q is ignored", key))
+		case noEffect[key]:
+			c.Warnings = append(c.Warnings, fmt.Sprintf("key %q has no effect", key))
+		}
+	}
+	return nil
 }
 
 // NewConfig creates a new config instance with defaults
@@ -228,6 +284,14 @@ func LoadConfig(path string) (*Config, error) {
 
 // LoadConfigWithDiscovery loads configuration with priority-based discovery
 func LoadConfigWithDiscovery(path, playbookDir string) (*Config, error) {
+	if path != "" {
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			return nil, fmt.Errorf("config file %s not found", path)
+		} else if err != nil {
+			return nil, err
+		}
+	}
+
 	// First try explicit path or discovery
 	configPath, _ := DiscoverConfigFilePath(path, playbookDir)
 
@@ -244,6 +308,12 @@ func LoadConfigWithDiscovery(path, playbookDir string) (*Config, error) {
 	config := DefaultConfig()
 	if err := yaml.Unmarshal(data, config); err != nil {
 		return nil, fmt.Errorf("failed to parse config file: %w", err)
+	}
+	if err := config.checkKeys(data); err != nil {
+		return nil, fmt.Errorf("failed to parse config file: %w", err)
+	}
+	for i, w := range config.Warnings {
+		config.Warnings[i] = configPath + ": " + w
 	}
 
 	if err := config.Validate(); err != nil {

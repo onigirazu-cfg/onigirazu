@@ -652,17 +652,6 @@ func TestLoadConfigEmptyPath(t *testing.T) {
 	}
 }
 
-func TestLoadConfigNonExistentFile(t *testing.T) {
-	cfg, err := LoadConfig("/nonexistent/path/config.yml")
-	if err != nil {
-		t.Errorf("Expected no error for non-existent file, got %v", err)
-	}
-
-	if cfg == nil {
-		t.Fatal("Expected default config to be returned, got nil")
-	}
-}
-
 func TestLoadConfigValidFile(t *testing.T) {
 	// Create a temporary config file
 	tmpFile, err := os.CreateTemp("", "config-*.yml")

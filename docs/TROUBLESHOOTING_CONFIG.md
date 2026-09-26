@@ -12,9 +12,9 @@ onigirazu apply site.yml -i inventory.yml
 
 - Lookup order: `-c FILE`, `onigirazu.yml` next to the playbook, `/etc/onigirazu/onigirazu.yml`.
   `~/.onigirazu/onigirazu.yml` is not read.
-- A `-c` path that does not exist is silently ignored; the defaults are used.
-- Unknown or misspelled keys are silently ignored.
-- Most keys have no effect; see the list in [CONFIGURATION_REFERENCE.md](CONFIGURATION_REFERENCE.md).
+- A `-c` path that does not exist is an error.
+- Unknown or misspelled keys, and keys that have no effect, are logged as warnings at start
+  (list in [CONFIGURATION_REFERENCE.md](CONFIGURATION_REFERENCE.md)).
 - A key in the file wins over the matching `ONIGIRAZU_*` environment variable.
 
 ## `invalid security policy …: unknown or unsupported keys: …`
@@ -33,23 +33,8 @@ Change the task, or the policy (for example add the path to `allowed_directories
 
 ## `inventory source not found: …/192.168.1.10`
 
-Current limitation: inline inventories (`-i "host1,host2"`, `-i 192.168.1.10,`) are not
-supported by `apply`, `plan`, `drift` and `run`. Put the hosts in a file:
-
-```bash
-printf '192.168.1.10\n192.168.1.11\n' > hosts.txt
-onigirazu run all -m ping -i hosts.txt
-```
-
-## `inventory must contain at least one group`
-
-Current limitation: a plain host list with `user@host` or `host:port` lines is not
-parsed. Use an INI file instead:
-
-```ini
-[web]
-web1 ansible_host=192.168.1.10 ansible_user=deploy ansible_port=2222
-```
+A single host on the command line needs a trailing comma, as in Ansible:
+`-i 192.168.1.10,`. Without a comma the value is a file name.
 
 ## `no valid hosts found in Ansible inventory`
 
