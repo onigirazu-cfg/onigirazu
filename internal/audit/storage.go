@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/onigirazu-cfg/onigirazu/internal/interfaces"
@@ -138,12 +139,19 @@ func (s *Storage) ListRecords(filter FilterOptions) ([]ExecutionRecord, error) {
 		allMeta = append(allMeta, recordMeta{ID: entry.Name(), Metadata: meta})
 	}
 
-	// Filter based on metadata only (efficient)
+	// Filter based on metadata only (efficient); a host filter needs the record
 	var filtered []recordMeta
 	for _, m := range allMeta {
-		if matchesMetadataFilter(m.Metadata, filter) {
-			filtered = append(filtered, m)
+		if !matchesMetadataFilter(m.Metadata, filter) {
+			continue
 		}
+		if filter.HostFilter != "" {
+			record, err := s.LoadRecord(m.ID)
+			if err != nil || !recordTouchesHost(record, filter.HostFilter) {
+				continue
+			}
+		}
+		filtered = append(filtered, m)
 	}
 
 	// Sort filtered metadata
@@ -205,9 +213,30 @@ func matchesMetadataFilter(metadata map[string]interface{}, filter FilterOptions
 		}
 	}
 
-	// Note: Other filters that require full record content will be handled
-	// after loading in a second pass if needed
+	if filter.PlaybookPath != "" {
+		path, _ := metadata["playbook_path"].(string)
+		if !strings.Contains(path, filter.PlaybookPath) {
+			return false
+		}
+	}
 	return true
+}
+
+// recordTouchesHost tells whether a record ran tasks on host
+func recordTouchesHost(r *ExecutionRecord, host string) bool {
+	for _, play := range r.Plays {
+		for _, h := range play.Hosts {
+			if h == host {
+				return true
+			}
+		}
+		for _, t := range play.Tasks {
+			if t.Host == host {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // sortMetadata sorts records by metadata fields
@@ -215,10 +244,16 @@ func sortMetadata(records []recordMeta, sortBy, sortOrder string) {
 	sort.Slice(records, func(i, j int) bool {
 		var iVal, jVal interface{}
 
-		if sortBy == "" || sortBy == "start_time" {
-			iVal = records[i].Metadata["start_time"]
-			jVal = records[j].Metadata["start_time"]
-		} else {
+		switch sortBy {
+		case "", "time", "start_time":
+			// RFC 3339 times with different offsets do not sort as strings
+			ti, _ := time.Parse(time.RFC3339Nano, fmt.Sprint(records[i].Metadata["start_time"]))
+			tj, _ := time.Parse(time.RFC3339Nano, fmt.Sprint(records[j].Metadata["start_time"]))
+			if sortOrder == "asc" {
+				return ti.Before(tj)
+			}
+			return ti.After(tj)
+		default:
 			iVal = records[i].Metadata[sortBy]
 			jVal = records[j].Metadata[sortBy]
 		}
