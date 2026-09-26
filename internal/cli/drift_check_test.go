@@ -39,3 +39,13 @@ func TestDriftApplyArgs(t *testing.T) {
 	assert.Contains(t, args, "--become")
 	assert.NotContains(t, o.applyArgs("site.yml", false), "--check")
 }
+
+func TestPlanWording(t *testing.T) {
+	r := &DriftReport{Playbook: "site.yml", Hosts: 2, Plan: true, Drift: map[string][]DriftItem{"web1": {{Task: "conf"}}}, DriftTasks: 1}
+	var out bytes.Buffer
+	writeDriftText(&out, r)
+	assert.Contains(t, out.String(), "Plan: 1 task(s) would change 1 of 2 host(s)")
+	out.Reset()
+	writeDriftText(&out, &DriftReport{Playbook: "site.yml", Hosts: 2, Plan: true})
+	assert.Contains(t, out.String(), "No changes: 2 host(s) already match site.yml")
+}

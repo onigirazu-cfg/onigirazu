@@ -46,10 +46,12 @@ type DriftReport struct {
 	Drift      map[string][]DriftItem `json:"drift"`
 	Errors     map[string][]DriftItem `json:"errors,omitempty"`
 	Fixed      bool                   `json:"fixed,omitempty"`
+	Plan       bool                   `json:"plan,omitempty"`
 	DriftTasks int                    `json:"drift_tasks"`
 }
 
 type driftCheckOptions struct {
+	plan       bool // plan: the same report, changes are not an error
 	fix        bool
 	format     string
 	output     string
@@ -148,8 +150,12 @@ func writeDriftText(w io.Writer, r *DriftReport) {
 	}
 	sort.Strings(names)
 	switch {
+	case len(r.Drift) == 0 && len(r.Errors) == 0 && r.Plan:
+		fmt.Fprintf(w, "No changes: %d host(s) already match %s\n", r.Hosts, r.Playbook)
 	case len(r.Drift) == 0 && len(r.Errors) == 0:
 		fmt.Fprintf(w, "In sync: %d host(s) match %s\n", r.Hosts, r.Playbook)
+	case len(r.Drift) > 0 && r.Plan:
+		fmt.Fprintf(w, "Plan: %d task(s) would change %d of %d host(s)\n", r.DriftTasks, len(r.Drift), r.Hosts)
 	case len(r.Drift) > 0:
 		fmt.Fprintf(w, "Drift: %d task(s) on %d of %d host(s) differ from %s\n", r.DriftTasks, len(r.Drift), r.Hosts, r.Playbook)
 	}
@@ -193,6 +199,7 @@ func runDriftCheck(cmd *cobra.Command, playbook string, o driftCheckOptions) err
 		return err
 	}
 	report := buildDriftReport(playbook, result)
+	report.Plan = o.plan
 
 	if o.fix && len(report.Drift) > 0 && len(report.Errors) == 0 {
 		if _, err := runPlaybook(o.applyArgs(playbook, false)); err != nil {
@@ -226,7 +233,7 @@ func runDriftCheck(cmd *cobra.Command, playbook string, o driftCheckOptions) err
 	switch {
 	case len(report.Errors) > 0:
 		return &ExitError{Code: 1}
-	case len(report.Drift) > 0 && !report.Fixed:
+	case len(report.Drift) > 0 && !report.Fixed && !o.plan:
 		return &ExitError{Code: 2}
 	}
 	return nil

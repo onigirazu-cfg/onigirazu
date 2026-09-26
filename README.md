@@ -382,12 +382,13 @@ onigirazu run all -m shell "ps aux | grep nginx"
 #### `plan` - Preview changes
 
 ```bash
-# Show what would change
+# Per host: every task that would change something, with diffs of files
 onigirazu plan playbook.yml -i inventory.yml
-
-# Verbose output
-onigirazu plan playbook.yml --verbose
+onigirazu plan playbook.yml -i inventory.yml --limit web --format json
 ```
+
+`plan` runs the playbook in check mode against the hosts; it is the same report
+as `drift`, but changes are not an error (exit code 0).
 
 #### `validate` - Validate playbook syntax
 
