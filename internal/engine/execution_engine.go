@@ -407,6 +407,7 @@ func (e *ExecutionEngine) executePlay(ctx context.Context, play *types.Play) (*t
 
 	result := &types.PlayResult{
 		Name:      play.Name,
+		PlayName:  play.Name,
 		StartTime: time.Now(),
 		Hosts:     []types.HostResult{},
 		Success:   true,

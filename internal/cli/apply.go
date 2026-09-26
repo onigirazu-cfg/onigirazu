@@ -571,6 +571,7 @@ Examples:
 						if err != nil {
 							log.Warn("Failed to load state: %v", err)
 							currentState = &types.State{
+								Version:   state.CurrentVersion,
 								Variables: make(map[string]interface{}),
 								Checksums: make(map[string]string),
 							}
@@ -708,28 +709,8 @@ Examples:
 				cacheDir := filepath.Join(homeDir, ".onigirazu", "cache", "executions")
 				cacheMgr, err := execution.NewCacheManagerWithPath(cacheDir)
 				if err == nil {
-					// Use pre-calculated task counts from PlaybookResult
-					totalSuccess := result.SuccessTasks
-					totalFailed := result.FailedTasks
-					totalChanged := result.ChangedTasks
-					totalSkipped := result.SkippedTasks
-
-					// Build execution result for caching
-					execResult := &execution.ExecutionResult{
-						ExecutionID:    fmt.Sprintf("exec-%d", time.Now().Unix()),
-						PlaybookName:   filepath.Base(playbookPath),
-						PlaybookPath:   playbookPath,
-						Status:         "completed",
-						StartTime:      startTime,
-						EndTime:        time.Now(),
-						Duration:       duration,
-						TotalSuccess:   totalSuccess,
-						TotalFailed:    totalFailed,
-						TotalChanged:   totalChanged,
-						TotalSkipped:   totalSkipped,
-						TotalHosts:     len(result.Stats),
-						PlaybookResult: result,
-					}
+					execResult := execution.FromPlaybookResult(result, playbookPath,
+						filepath.Base(playbookPath), startTime, duration)
 
 					// Save to cache
 					if err := cacheMgr.Save(execResult); err != nil {
@@ -884,6 +865,7 @@ Examples:
 
 				// Still save state even on failure for audit trail
 				currentState := &types.State{
+					Version:   state.CurrentVersion,
 					LastRun:   time.Now(),
 					Playbook:  playbookPath,
 					Variables: result.Variables,
@@ -981,6 +963,7 @@ Examples:
 
 			// Save final state with playbook results
 			currentState := &types.State{
+				Version:   state.CurrentVersion,
 				LastRun:   time.Now(),
 				Playbook:  playbookPath,
 				Variables: result.Variables,
