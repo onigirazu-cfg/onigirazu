@@ -1053,17 +1053,25 @@ onigirazu rollback --cleanup --max-age 30d
 </code></pre>
 
 <h2>🎯 Drift Detection</h2>
-<p>Detect and automatically fix configuration drift:</p>
-<pre class="codehilite"><code class="language-bash"># Detect drift
-onigirazu drift detect -p playbook.yml -i inventory.yml
-
-# Show drift report
-onigirazu drift report
-
-# Fix detected drift
-onigirazu drift fix -p playbook.yml -i inventory.yml
+<p><code>drift</code> checks whether hosts still match a playbook: the playbook runs in check
+mode, and every task that would change a host is drift. Nothing is changed
+unless <code>--fix</code> is given.</p>
+<pre class="codehilite"><code class="language-bash">onigirazu drift site.yml -i hosts.yml                  # report
+onigirazu drift site.yml -i hosts.yml --format json    # for scripts
+onigirazu drift site.yml -i hosts.yml --fix            # apply when drift is found
 </code></pre>
 
+<pre class="codehilite"><code>Drift: 1 task(s) on 1 of 3 host(s) differ from site.yml
+
+web1
+  ~ Config file (copy): file would be updated
+
+In sync: web2, db1
+</code></pre>
+
+<p>Exit code: 0 in sync, 2 drift, 1 a task could not be checked. <code>--limit</code>,
+<code>--tags</code>, <code>-e</code>, <code>-b</code>, <code>-u</code> and <code>--private-key</code> work as for <code>apply</code>, so a cron
+job or a CI schedule can watch a fleet.</p>
 <h2>Architecture</h2>
 <p>Onigirazu follows a clean, modular architecture:</p>
 <ul>
