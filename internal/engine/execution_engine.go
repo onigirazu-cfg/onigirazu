@@ -761,6 +761,13 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 		Facts:     e.facts[host.Name],
 	}
 
+	// check mode: --check, unless the task says check_mode: false; a task with
+	// check_mode: true is checked in any run
+	check := e.config.GetDryRun()
+	if task.CheckMode != nil {
+		check = *task.CheckMode
+	}
+
 	// Execute with retry logic: retries count extra attempts; with until the
 	// task repeats until the condition holds (3 attempts unless retries is set)
 	var result types.TaskResult
@@ -791,27 +798,6 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		// Check if we're in dry-run mode
-		if e.config.GetDryRun() {
-			// In dry-run mode, simulate the task execution
-			result = types.TaskResult{
-				TaskName: task.Name,
-				Host:     host.Name,
-				Module:   task.Module,
-				Success:  true,
-				Changed:  false, // Assume no changes in dry-run
-				Skipped:  false,
-				Failed:   false,
-				Output: map[string]interface{}{
-					"message": "Task would be executed (dry-run mode)",
-					"args":    renderedArgs,
-				},
-				Duration:  time.Since(taskStartTime),
-				Timestamp: taskStartTime,
-			}
-			err = nil
-			break
-		}
-
 		// Execute the task
 		result, err = e.moduleRegistry.ExecuteTask(ctx, &types.Task{
 			Name:         task.Name,
@@ -820,6 +806,7 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 			Become:       become.Become,
 			BecomeUser:   become.User,
 			BecomeMethod: become.Method,
+			CheckMode:    &check,
 		}, target, taskVars)
 
 		if task.Until != "" && err == nil {

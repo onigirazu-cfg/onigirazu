@@ -112,20 +112,6 @@ func (m *LineinfileModule) Execute(ctx context.Context, host types.Host, args ma
 		return result, fmt.Errorf("file does not exist")
 	}
 
-	// Backup if requested
-	if backup && fileExists {
-		backupPath := fmt.Sprintf("%s.%d.backup", path, time.Now().Unix())
-		if err := m.copyFileRemote(exec, path, backupPath); err != nil {
-			result.Success = false
-			result.Error = fmt.Sprintf("failed to create backup: %v", err)
-			result.Duration = time.Since(startTime)
-			return result, err
-		}
-		result.Output = map[string]interface{}{
-			"backup_file": backupPath,
-		}
-	}
-
 	// Read existing lines from remote file
 	var lines []string
 	if fileExists {
@@ -150,8 +136,21 @@ func (m *LineinfileModule) Execute(ctx context.Context, host types.Host, args ma
 		newLines, changed = m.ensureLine(lines, line, regexpPattern, insertafter, insertbefore)
 	}
 
-	// Write back if changed
-	if changed {
+	// Back up and write only when something changes; check mode stops here
+	if changed && !inCheckMode(args) {
+		if backup && fileExists {
+			backupPath := fmt.Sprintf("%s.%d.backup", path, time.Now().Unix())
+			if err := m.copyFileRemote(exec, path, backupPath); err != nil {
+				result.Success = false
+				result.Error = fmt.Sprintf("failed to create backup: %v", err)
+				result.Duration = time.Since(startTime)
+				return result, err
+			}
+			if result.Output == nil {
+				result.Output = make(map[string]interface{})
+			}
+			result.Output["backup_file"] = backupPath
+		}
 		if err := m.writeRemoteFile(exec, path, newLines); err != nil {
 			result.Success = false
 			result.Error = fmt.Sprintf("failed to write file: %v", err)

@@ -185,7 +185,9 @@ func (m *TemplateModule) executeLocal(ctx context.Context, host types.Host, args
 	}
 
 	changed := false
-	if needsUpdate {
+	if needsUpdate && inCheckMode(args) {
+		changed = true
+	} else if needsUpdate {
 		// Create backup if requested and file exists
 		if backup && len(originalContent) > 0 {
 			backupPath := dest + ".backup." + time.Now().Format("20060102-150405")
@@ -214,7 +216,9 @@ func (m *TemplateModule) executeLocal(ctx context.Context, host types.Host, args
 	// os.WriteFile keeps the mode of an existing file, so an explicit mode is enforced here
 	if _, modeSet := args["mode"]; modeSet {
 		info, err := os.Stat(dest)
-		if err == nil && info.Mode().Perm() != fileMode.Perm() {
+		if err == nil && info.Mode().Perm() != fileMode.Perm() && inCheckMode(args) {
+			changed = true
+		} else if err == nil && info.Mode().Perm() != fileMode.Perm() {
 			if err := os.Chmod(dest, fileMode); err != nil {
 				result.Error = fmt.Sprintf("failed to set mode: %v", err)
 				result.Duration = time.Since(startTime)
@@ -329,7 +333,9 @@ func (m *TemplateModule) executeRemote(ctx context.Context, host types.Host, cli
 	needsUpdate := !current.Exists || current.SHA256 != newChecksum || force
 
 	changed := false
-	if needsUpdate {
+	if needsUpdate && inCheckMode(args) {
+		changed = true
+	} else if needsUpdate {
 		if backup && current.Exists {
 			backupPath := dest + ".backup." + time.Now().Format("20060102-150405")
 			if _, err := runOnHost(ctx, host, args, "cp", "-p", dest, backupPath); err != nil {
@@ -349,6 +355,8 @@ func (m *TemplateModule) executeRemote(ctx context.Context, host types.Host, cli
 			result.Duration = time.Since(startTime)
 			return result, fmt.Errorf("%s", result.Error)
 		}
+		changed = true
+	} else if _, modeSet := args["mode"]; modeSet && current.Mode.Perm() != fileMode.Perm() && inCheckMode(args) {
 		changed = true
 	} else if _, modeSet := args["mode"]; modeSet && current.Mode.Perm() != fileMode.Perm() {
 		if _, err := runOnHost(ctx, host, args, "chmod", fmt.Sprintf("%04o", fileMode.Perm()), dest); err != nil {

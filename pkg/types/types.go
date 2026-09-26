@@ -196,6 +196,8 @@ type Task struct {
 	// set by the engine on tasks inside a block with a rescue section: their
 	// failure is handled by the rescue and does not fail the play by itself
 	Rescuable bool `yaml:"-"`
+	// CheckMode overrides --check for this task (check_mode: true/false)
+	CheckMode *bool `yaml:"check_mode,omitempty"`
 }
 
 // UnmarshalYAML implements custom YAML unmarshaling for Task
@@ -238,6 +240,13 @@ func (t *Task) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		"block":         true,
 		"rescue":        true,
 		"always":        true,
+		"check_mode":    true,
+	}
+
+	// check_mode: false runs the task for real in a check run; true checks
+	// it in a normal run
+	if check, ok := taskMap["check_mode"].(bool); ok {
+		t.CheckMode = &check
 	}
 
 	// block / rescue / always: nested task lists

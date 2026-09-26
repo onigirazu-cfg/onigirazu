@@ -647,7 +647,7 @@ func TestExecutePlaybook_IgnoreErrors(t *testing.T) {
 }
 
 func TestExecutePlaybook_DryRun(t *testing.T) {
-	engine, mockConfig, _, mockInventoryMgr, _, mockTemplateEngine := createTestEngine()
+	engine, mockConfig, _, mockInventoryMgr, mockModuleRegistry, mockTemplateEngine := createTestEngine()
 
 	mockConfig.On("GetDryRun").Return(true)
 
@@ -659,6 +659,13 @@ func TestExecutePlaybook_DryRun(t *testing.T) {
 
 	mockTemplateEngine.On("RenderTaskArgs", mock.Anything, mock.Anything, mock.Anything).
 		Return(map[string]interface{}{"command": "test"}, nil)
+
+	// --check calls the module in check mode; the registry decides whether
+	// the module runs its check or is skipped
+	inCheck := func(task *types.Task) bool { return task.CheckMode != nil && *task.CheckMode }
+	mockModuleRegistry.On("ExecuteTask", mock.Anything, mock.MatchedBy(inCheck), mock.Anything, mock.Anything).
+		Return(types.TaskResult{Success: true, Skipped: true,
+			Output: map[string]interface{}{"msg": "skipped: check mode is not supported by command"}}, nil)
 
 	playbook := &types.Playbook{
 		Name: "Test Playbook",
@@ -689,8 +696,9 @@ func TestExecutePlaybook_DryRun(t *testing.T) {
 
 	taskResult := result.Plays[0].Hosts[0].Tasks[0]
 	assert.True(t, taskResult.Success)
-	assert.False(t, taskResult.Changed) // Dry-run should not change anything
-	assert.Contains(t, taskResult.Output["message"], "dry-run")
+	assert.False(t, taskResult.Changed)
+	assert.True(t, taskResult.Skipped)
+	mockModuleRegistry.AssertCalled(t, "ExecuteTask", mock.Anything, mock.MatchedBy(inCheck), mock.Anything, mock.Anything)
 }
 
 func TestExecuteTask_WithRetry(t *testing.T) {
