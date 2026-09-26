@@ -2,6 +2,7 @@
 # mongosh wrapper on PATH. mongo:8 refuses kernels >= 6.19 (SERVER-121912).
 command -v docker >/dev/null || need docker.io  # the image may ship Docker CE
 docker rm -f onigirazu-e2e-mongo >/dev/null 2>&1
+for _ in 1 2 3; do docker pull -q mongo:7 >/dev/null 2>&1 && break; sleep 10; done  # Docker Hub fails now and then
 docker run -d --name onigirazu-e2e-mongo mongo:7 >/dev/null
 printf '#!/bin/sh\nexec docker exec -i onigirazu-e2e-mongo mongosh "$@"\n' > /usr/local/bin/mongosh
 chmod +x /usr/local/bin/mongosh

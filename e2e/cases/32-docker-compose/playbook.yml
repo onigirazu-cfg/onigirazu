@@ -16,3 +16,6 @@ plays:
           project_dir: /opt/onigirazu-e2e-compose
           project_name: onigirazu-e2e
           state: present
+        # the image comes from Docker Hub, which fails now and then
+        retries: 3
+        delay: 10

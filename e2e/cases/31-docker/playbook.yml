@@ -8,6 +8,9 @@ plays:
           name: alpine
           tag: "3.20"
           state: present
+        # Docker Hub fails now and then
+        retries: 3
+        delay: 10
       - name: Container
         docker_container:
           name: onigirazu-e2e
