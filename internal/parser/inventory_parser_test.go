@@ -1347,3 +1347,32 @@ hosts:
 
 	assert.True(t, isAnsibleYaml(ansibleWithVar))
 }
+
+func TestInventoryParser_AnsibleYAML_HostsOnlyInGroups(t *testing.T) {
+	parser := NewInventoryParser(&mockLogger{})
+	inv, err := parser.parseYamlInventory([]byte(`
+all:
+  children:
+    prod:
+      children:
+        web:
+          hosts:
+            web1: {ansible_host: 10.0.0.1}
+            web2:
+          vars: {http_port: 80}
+        db:
+          hosts:
+            db1: {ansible_host: 10.0.0.9, ansible_user: admin}
+    monitored:
+      hosts:
+        web1: {role: frontend}
+`))
+	assert.NoError(t, err)
+	assert.Len(t, inv.Hosts, 3)
+	assert.ElementsMatch(t, []string{"web", "db"}, inv.Groups["prod"].Children)
+	assert.Len(t, inv.Groups["web"].Hosts, 2)
+	assert.Equal(t, 80, inv.Groups["web"].Vars["http_port"])
+	assert.Equal(t, "10.0.0.1", inv.Groups["web"].Hosts["web1"].Address)
+	assert.Equal(t, "frontend", inv.Groups["monitored"].Hosts["web1"].Vars["role"], "a host in two groups keeps both settings")
+	assert.Equal(t, "admin", inv.Groups["db"].Hosts["db1"].User)
+}
