@@ -1099,11 +1099,23 @@ func recordAuditResults(recorder *audit.Recorder, result *types.PlaybookResult, 
 
 	// Record each play
 	for playIndex, play := range result.Plays {
+		// the task results live per host
+		var playTasks []types.TaskResult
+		for _, h := range play.Hosts {
+			for _, t := range h.Tasks {
+				if t.Host == "" {
+					t.Host = h.Host
+				}
+				playTasks = append(playTasks, t)
+			}
+		}
+		playTasks = append(playTasks, play.Tasks...)
+
 		// Get unique hosts for this play
 		hosts := make([]string, 0)
 		hostMap := make(map[string]bool)
 
-		for _, task := range play.Tasks {
+		for _, task := range playTasks {
 			if _, seen := hostMap[task.Host]; !seen && task.Host != "" {
 				hosts = append(hosts, task.Host)
 				hostMap[task.Host] = true
@@ -1118,7 +1130,7 @@ func recordAuditResults(recorder *audit.Recorder, result *types.PlaybookResult, 
 		}
 
 		// Record each task in the play
-		for _, task := range play.Tasks {
+		for _, task := range playTasks {
 			// Convert task status
 			var taskStatus audit.TaskStatus
 			if task.Failed {

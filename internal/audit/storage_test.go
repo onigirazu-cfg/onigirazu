@@ -450,3 +450,46 @@ func TestStorage_ListRecords_PerformanceWithManyRecords(t *testing.T) {
 		t.Errorf("ListRecords took too long: %v", elapsed)
 	}
 }
+
+func TestStorage_ListRecords_SortAndFilters(t *testing.T) {
+	storage := &Storage{path: t.TempDir(), logger: &mockLogger{}}
+	berlin := time.FixedZone("CEST", 2*3600)
+	base := time.Date(2026, 9, 26, 10, 0, 0, 0, time.UTC)
+	for i, rec := range []struct {
+		id, playbook, host string
+		start              time.Time
+	}{
+		{"a", "site.yml", "web1", base.Add(-2 * time.Hour)},
+		{"b", "db.yml", "db1", base.In(berlin)}, // newest, other offset
+		{"c", "site.yml", "web2", base.Add(-time.Hour)},
+	} {
+		r := &ExecutionRecord{ID: rec.id, PlaybookPath: rec.playbook, Status: StatusSuccess, StartTime: rec.start,
+			Plays: []PlayExecution{{Name: "p", Hosts: []string{rec.host}}}}
+		if err := storage.SaveRecord(r); err != nil {
+			t.Fatalf("record %d: %v", i, err)
+		}
+	}
+	ids := func(f FilterOptions) string {
+		records, err := storage.ListRecords(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		out := ""
+		for _, r := range records {
+			out += r.ID
+		}
+		return out
+	}
+	if got := ids(FilterOptions{SortBy: "time", SortOrder: "desc"}); got != "bca" {
+		t.Errorf("newest first: got %q", got)
+	}
+	if got := ids(FilterOptions{SortBy: "time", SortOrder: "asc"}); got != "acb" {
+		t.Errorf("oldest first: got %q", got)
+	}
+	if got := ids(FilterOptions{PlaybookPath: "site", SortBy: "time", SortOrder: "desc"}); got != "ca" {
+		t.Errorf("playbook filter: got %q", got)
+	}
+	if got := ids(FilterOptions{HostFilter: "web2"}); got != "c" {
+		t.Errorf("host filter: got %q", got)
+	}
+}
