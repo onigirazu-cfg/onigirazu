@@ -30,7 +30,15 @@ plays:
         service: {name: cron, state: stopped}
         check_mode: true
         register: s
+      - name: Checked sysctl
+        sysctl: {name: vm.swappiness, value: "7"}
+        check_mode: true
+        register: k
+      - name: Checked cron.d file
+        cron: {operation: system, name: onigirazu-e2e-check, content: "* * * * * root true"}
+        check_mode: true
+        register: c
       - name: Record what check mode reported
         copy:
-          content: "{{ checked.changed }} {{ u.changed }} {{ g.changed }} {{ s.changed }}\n"
+          content: "{{ checked.changed }} {{ u.changed }} {{ g.changed }} {{ s.changed }} {{ k.changed }} {{ c.changed }}\n"
           dest: /root/onigirazu-e2e-check-report
