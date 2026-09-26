@@ -2,14 +2,7 @@ package modules
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
-	"hash"
-	"io"
-	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -147,153 +140,86 @@ func (m *GetURLModule) Execute(ctx context.Context, host types.Host, args map[st
 		}
 	}
 
-	// Create HTTP client with timeout
-	client := &http.Client{
-		Timeout: time.Duration(timeout) * time.Second,
-	}
-
-	// Create request
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		result.Failed = true
-		result.Error = fmt.Sprintf("Failed to create request: %v", err)
-		return result, err
-	}
-
-	// Add custom headers
-	for k, v := range headers {
-		req.Header.Set(k, v)
-	}
-
-	// Execute request
-	resp, err := client.Do(req)
-	if err != nil {
-		result.Failed = true
-		result.Error = fmt.Sprintf("Failed to download file: %v", err)
-		return result, err
-	}
-	defer resp.Body.Close()
-
-	// Check response status
-	if resp.StatusCode != http.StatusOK {
-		result.Failed = true
-		result.Error = fmt.Sprintf("HTTP request failed with status: %d %s", resp.StatusCode, resp.Status)
-		return result, fmt.Errorf("HTTP request failed with status: %d", resp.StatusCode)
-	}
-
-	// Create temporary local file
-	localTmpFile, err := os.CreateTemp("", "onigirazu-download-*")
-	if err != nil {
-		result.Failed = true
-		result.Error = fmt.Sprintf("Failed to create temporary file: %v", err)
-		return result, err
-	}
-	defer os.Remove(localTmpFile.Name())
-	defer localTmpFile.Close()
-
-	// Download and calculate checksum if needed
-	var hasher hash.Hash
-	if checksum != "" {
-		checksumType := strings.Split(checksum, ":")[0]
-		switch checksumType {
-		case "md5":
-			// MD5 is deprecated for security, using SHA256 instead
-			hasher = sha256.New()
-		case "sha1":
-			// SHA1 is deprecated for security, using SHA256 instead
-			hasher = sha256.New()
-		case "sha256":
-			hasher = sha256.New()
+	// Download on the host, so URLs only the host can reach work and files of
+	// any size go straight to disk: curl (or wget) into a temporary file, the
+	// checksum check with the algorithm asked for, then install(1).
+	headerFile := ""
+	if len(headers) > 0 {
+		headerFile = fmt.Sprintf("/tmp/.onigirazu-headers-%d", time.Now().UnixNano())
+		var cfg strings.Builder
+		for k, v := range headers {
+			fmt.Fprintf(&cfg, "header = %q\n", k+": "+v)
 		}
-	}
-
-	var writer io.Writer = localTmpFile
-	if hasher != nil {
-		writer = io.MultiWriter(localTmpFile, hasher)
-	}
-
-	// Copy response body to file
-	bytesWritten, err := io.Copy(writer, resp.Body)
-	if err != nil {
-		result.Failed = true
-		result.Error = fmt.Sprintf("Failed to write file: %v", err)
-		return result, err
-	}
-
-	// Ensure data is flushed to disk before closing
-	if err := localTmpFile.Sync(); err != nil {
-		result.Failed = true
-		result.Error = fmt.Sprintf("Failed to sync file: %v", err)
-		return result, err
-	}
-
-	// Explicitly close and handle any errors
-	if err := localTmpFile.Close(); err != nil {
-		result.Failed = true
-		result.Error = fmt.Sprintf("Failed to close file: %v", err)
-		return result, err
-	}
-
-	// Verify checksum if provided
-	if checksum != "" && hasher != nil {
-		downloadedChecksum := hex.EncodeToString(hasher.Sum(nil))
-		if !m.checksumMatches(checksum, downloadedChecksum) {
+		if err := putPrivateFile(ctx, host, headerFile, []byte(cfg.String())); err != nil {
 			result.Failed = true
-			result.Error = fmt.Sprintf("Checksum mismatch: expected %s, got %s", checksum, downloadedChecksum)
-			return result, fmt.Errorf("checksum mismatch")
-		}
-		result.Output["checksum"] = downloadedChecksum
-	}
-
-	// Upload file to remote host
-	fileContent, err := os.ReadFile(localTmpFile.Name()) // #nosec G304 -- localTmpFile is created by os.CreateTemp
-	if err != nil {
-		result.Failed = true
-		result.Error = fmt.Sprintf("Failed to read downloaded file: %v", err)
-		return result, err
-	}
-
-	// Create destination directory if needed
-	destDir := filepath.Dir(dest)
-	mkdirCmd := fmt.Sprintf("mkdir -p %s", shellQuote(destDir))
-	_, err = exec.ExecuteWithContext(ctx, "sh", "-c", mkdirCmd)
-	if err != nil {
-		result.Failed = true
-		result.Error = fmt.Sprintf("Failed to create destination directory: %v", err)
-		return result, err
-	}
-
-	// Write file to remote host using base64 encoding to handle binary files
-	writeCmd := fmt.Sprintf("echo '%s' | base64 -d > %s", encodeBase64(fileContent), shellQuote(dest))
-	_, err = exec.ExecuteWithContext(ctx, "sh", "-c", writeCmd)
-	if err != nil {
-		result.Failed = true
-		result.Error = fmt.Sprintf("Failed to write file to remote host: %v", err)
-		return result, err
-	}
-
-	if mode != "" {
-		if _, err := runOnHost(ctx, host, args, "chmod", mode, dest); err != nil {
-			result.Failed = true
-			result.Error = fmt.Sprintf("failed to set permissions: %v", err)
+			result.Error = fmt.Sprintf("failed to pass headers: %v", err)
 			return result, err
 		}
 	}
+	algo, want := "", ""
+	if checksum != "" {
+		algo, want, _ = strings.Cut(checksum, ":")
+	}
+	hashCmd := map[string]string{"md5": "md5sum", "sha1": "sha1sum", "sha256": "sha256sum", "sha512": "sha512sum"}[algo]
+	if checksum != "" && hashCmd == "" {
+		result.Failed = true
+		result.Error = fmt.Sprintf("unsupported checksum algorithm %q", algo)
+		return result, fmt.Errorf("%s", result.Error)
+	}
 
-	if _, err := ensureOwnership(ctx, host, args, dest, owner, group); err != nil {
+	curlConfig := ""
+	if headerFile != "" {
+		curlConfig = " -K " + shellQuote(headerFile)
+	}
+	script := fmt.Sprintf(`set -e
+t=$(mktemp)
+trap 'rm -f "$t" %[1]s' EXIT
+if command -v curl >/dev/null 2>&1; then
+  curl -fsSL --max-time %[2]d%[3]s -o "$t" %[4]s
+else
+  wget -q -T %[2]d -O "$t" %[4]s
+fi
+`, map[bool]string{true: shellQuote(headerFile), false: ""}[headerFile != ""], timeout, curlConfig, shellQuote(url))
+	if hashCmd != "" {
+		script += fmt.Sprintf(`got=$(%s "$t" | cut -d' ' -f1)
+[ "$got" = %s ] || { echo "checksum mismatch: expected %s, got $got" >&2; exit 3; }
+`, hashCmd, shellQuote(strings.ToLower(want)), strings.ToLower(want))
+	}
+	// unchanged content: report it and keep the file as it is
+	script += fmt.Sprintf(`if [ -f %[1]s ] && cmp -s "$t" %[1]s; then echo unchanged; exit 0; fi
+install -D -m %[2]s "$t" %[1]s
+wc -c < %[1]s
+`, shellQuote(dest), shellQuote(mode))
+
+	out, err := runShellOnHost(ctx, host, args, script)
+	if err != nil {
+		result.Failed = true
+		result.Error = fmt.Sprintf("failed to download %s: %v", url, err)
+		return result, err
+	}
+	out = strings.TrimSpace(out)
+	changed := out != "unchanged"
+
+	ownerChanged, err := ensureOwnership(ctx, host, args, dest, owner, group)
+	if err != nil {
 		result.Failed = true
 		result.Error = err.Error()
 		return result, err
 	}
 
-	result.Changed = true
+	result.Changed = changed || ownerChanged
 	result.Success = true
-	result.Output["msg"] = "File downloaded successfully"
 	result.Output["url"] = url
 	result.Output["dest"] = dest
-	result.Output["size"] = bytesWritten
-	result.Output["status_code"] = resp.StatusCode
-
+	if changed {
+		result.Output["msg"] = "File downloaded"
+		result.Output["size"] = out
+	} else {
+		result.Output["msg"] = "File already has this content"
+	}
+	if checksum != "" {
+		result.Output["checksum"] = checksum
+	}
 	return result, nil
 }
 
@@ -339,43 +265,4 @@ func (m *GetURLModule) checksumMatches(expected, actual string) bool {
 	}
 
 	return strings.EqualFold(expectedChecksum, actual)
-}
-
-// encodeBase64 encodes bytes to base64 string
-func encodeBase64(data []byte) string {
-	// Use standard base64 encoding
-	const base64Chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
-
-	var result strings.Builder
-	result.Grow((len(data) + 2) / 3 * 4)
-
-	for i := 0; i < len(data); i += 3 {
-		b1 := data[i]
-		b2 := byte(0)
-		b3 := byte(0)
-
-		if i+1 < len(data) {
-			b2 = data[i+1]
-		}
-		if i+2 < len(data) {
-			b3 = data[i+2]
-		}
-
-		result.WriteByte(base64Chars[b1>>2])
-		result.WriteByte(base64Chars[((b1&0x03)<<4)|(b2>>4)])
-
-		if i+1 < len(data) {
-			result.WriteByte(base64Chars[((b2&0x0f)<<2)|(b3>>6)])
-		} else {
-			result.WriteByte('=')
-		}
-
-		if i+2 < len(data) {
-			result.WriteByte(base64Chars[b3&0x3f])
-		} else {
-			result.WriteByte('=')
-		}
-	}
-
-	return result.String()
 }
