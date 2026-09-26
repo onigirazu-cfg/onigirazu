@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/onigirazu-cfg/onigirazu/internal/executor"
@@ -163,7 +162,7 @@ func (m *PodmanModule) execute(ctx context.Context, host types.Host, args map[st
 }
 
 func (m *PodmanModule) getContainerState(ctx context.Context, name string) (*PodmanContainerState, bool, error) {
-	cmd := fmt.Sprintf("podman inspect %s 2>/dev/null", name)
+	cmd := shellJoin("podman", "inspect", name) + " 2>/dev/null"
 	stdout, err := m.executor.Execute(cmd)
 	if err != nil {
 		return nil, false, nil
@@ -206,7 +205,7 @@ func (m *PodmanModule) createContainer(ctx context.Context, name string, args ma
 		return fmt.Errorf("image is required to create container")
 	}
 
-	cmdParts := []string{"podman run -d --name", name}
+	cmdParts := []string{"podman", "run", "-d", "--name", name}
 
 	if ports, ok := args["ports"].([]interface{}); ok {
 		for _, port := range ports {
@@ -240,13 +239,17 @@ func (m *PodmanModule) createContainer(ctx context.Context, name string, args ma
 		cmdParts = append(cmdParts, "--userns=keep-id")
 	}
 
-	if command, ok := args["command"].(string); ok {
-		cmdParts = append(cmdParts, image, command)
-	} else {
-		cmdParts = append(cmdParts, image)
+	cmdParts = append(cmdParts, image)
+	// the command is split into words like a shell would, then each is quoted
+	if command, ok := args["command"].(string); ok && command != "" {
+		words, err := splitCommandLine(command)
+		if err != nil {
+			return fmt.Errorf("invalid command: %w", err)
+		}
+		cmdParts = append(cmdParts, words...)
 	}
 
-	cmd := strings.Join(cmdParts, " ")
+	cmd := shellJoin(cmdParts...)
 	_, err := m.executor.Execute(cmd)
 	if err != nil {
 		return fmt.Errorf("failed to create container: %s", err.Error())
@@ -256,7 +259,7 @@ func (m *PodmanModule) createContainer(ctx context.Context, name string, args ma
 }
 
 func (m *PodmanModule) startContainer(ctx context.Context, name string) error {
-	cmd := fmt.Sprintf("podman start %s", name)
+	cmd := shellJoin("podman", "start", name)
 	_, err := m.executor.Execute(cmd)
 	if err != nil {
 		return fmt.Errorf("failed to start container: %s", err.Error())
@@ -265,7 +268,7 @@ func (m *PodmanModule) startContainer(ctx context.Context, name string) error {
 }
 
 func (m *PodmanModule) stopContainer(ctx context.Context, name string) error {
-	cmd := fmt.Sprintf("podman stop %s", name)
+	cmd := shellJoin("podman", "stop", name)
 	_, err := m.executor.Execute(cmd)
 	if err != nil {
 		return fmt.Errorf("failed to stop container: %s", err.Error())
@@ -274,7 +277,7 @@ func (m *PodmanModule) stopContainer(ctx context.Context, name string) error {
 }
 
 func (m *PodmanModule) restartContainer(ctx context.Context, name string) error {
-	cmd := fmt.Sprintf("podman restart %s", name)
+	cmd := shellJoin("podman", "restart", name)
 	_, err := m.executor.Execute(cmd)
 	if err != nil {
 		return fmt.Errorf("failed to restart container: %s", err.Error())
@@ -284,13 +287,13 @@ func (m *PodmanModule) restartContainer(ctx context.Context, name string) error 
 
 func (m *PodmanModule) removeContainer(ctx context.Context, name string, args map[string]interface{}) error {
 	force, _ := args["force"].(bool)
-	cmdParts := []string{"podman rm"}
+	cmdParts := []string{"podman", "rm"}
 	if force {
 		cmdParts = append(cmdParts, "-f")
 	}
 	cmdParts = append(cmdParts, name)
 
-	cmd := strings.Join(cmdParts, " ")
+	cmd := shellJoin(cmdParts...)
 	_, err := m.executor.Execute(cmd)
 	if err != nil {
 		return fmt.Errorf("failed to remove container: %s", err.Error())

@@ -133,7 +133,7 @@ func (m *DockerImageModule) Execute(ctx context.Context, host types.Host, args m
 }
 
 func (m *DockerImageModule) imageExists(ctx context.Context, exec *executor.CommandExecutor, name string) (bool, *ImageInfo, error) {
-	cmd := fmt.Sprintf("docker images --format '{{json .}}' %s", name)
+	cmd := "docker images --format '{{json .}}' " + shellQuote(name)
 	stdout, err := exec.Execute(cmd)
 	if err != nil {
 		return false, nil, nil
@@ -163,14 +163,14 @@ func (m *DockerImageModule) imageExists(ctx context.Context, exec *executor.Comm
 }
 
 func (m *DockerImageModule) pullImage(ctx context.Context, exec *executor.CommandExecutor, name string, args map[string]interface{}) error {
-	cmdParts := []string{"docker pull"}
+	cmdParts := []string{"docker", "pull"}
 
 	if platform, ok := args["platform"].(string); ok {
 		cmdParts = append(cmdParts, "--platform", platform)
 	}
 
 	cmdParts = append(cmdParts, name)
-	cmd := strings.Join(cmdParts, " ")
+	cmd := shellJoin(cmdParts...)
 
 	_, err := exec.Execute(cmd)
 	if err != nil {
@@ -181,7 +181,7 @@ func (m *DockerImageModule) pullImage(ctx context.Context, exec *executor.Comman
 }
 
 func (m *DockerImageModule) removeImage(ctx context.Context, exec *executor.CommandExecutor, name string, args map[string]interface{}) error {
-	cmdParts := []string{"docker rmi"}
+	cmdParts := []string{"docker", "rmi"}
 
 	force, _ := args["force"].(bool)
 	if force {
@@ -189,7 +189,7 @@ func (m *DockerImageModule) removeImage(ctx context.Context, exec *executor.Comm
 	}
 
 	cmdParts = append(cmdParts, name)
-	cmd := strings.Join(cmdParts, " ")
+	cmd := shellJoin(cmdParts...)
 
 	_, err := exec.Execute(cmd)
 	if err != nil {
@@ -205,7 +205,7 @@ func (m *DockerImageModule) buildImage(ctx context.Context, exec *executor.Comma
 		return fmt.Errorf("path is required for building image")
 	}
 
-	cmdParts := []string{"docker build"}
+	cmdParts := []string{"docker", "build"}
 
 	if dockerfile, ok := args["dockerfile"].(string); ok {
 		cmdParts = append(cmdParts, "-f", dockerfile)
@@ -228,7 +228,7 @@ func (m *DockerImageModule) buildImage(ctx context.Context, exec *executor.Comma
 	fullName := fmt.Sprintf("%s:%s", name, tag)
 	cmdParts = append(cmdParts, "-t", fullName, path)
 
-	cmd := strings.Join(cmdParts, " ")
+	cmd := shellJoin(cmdParts...)
 	_, err := exec.Execute(cmd)
 	if err != nil {
 		return fmt.Errorf("failed to build image: %s", err.Error())
