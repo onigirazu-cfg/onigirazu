@@ -85,6 +85,8 @@ type ExecutionEngine struct {
 	playEnvironment map[string]interface{}
 	// showDiff asks modules for before/after of their changes (--diff)
 	showDiff bool
+	// lazyVars are the play vars rendered per host at task time
+	lazyVars map[string]bool
 }
 
 // becomeSettings is the privilege escalation a task runs with
@@ -469,33 +471,22 @@ func (e *ExecutionEngine) executePlay(ctx context.Context, play *types.Play) (*t
 	// Set play variables - merge with facts if available
 	playVars := e.mergeVariables(e.variables, play.Vars)
 
-	// If we have facts for the first host, merge them into playVars for template rendering
-	// This allows play vars to use facts in their definitions
-	if len(hosts) > 0 {
-		if hostFacts, exists := e.facts[hosts[0].Name]; exists {
-			playVars = e.mergeVariables(playVars, hostFacts)
+	// play vars with templates are rendered per host when a task runs (as
+	// Ansible does): "/backup/{{ inventory_hostname }}" differs per host
+	lazy := map[string]bool{}
+	for key, value := range play.Vars {
+		if str, ok := value.(string); ok && strings.Contains(str, "{{") {
+			lazy[key] = true
 		}
 	}
-
-	// Render play variables that contain templates
-	if len(play.Vars) > 0 {
-		renderedPlayVars := make(map[string]interface{})
-		for key, value := range play.Vars {
-			if strValue, ok := value.(string); ok {
-				// Try to render the value as a template
-				rendered, err := e.templateEngine.Render(ctx, strValue, playVars)
-				if err == nil && rendered != strValue {
-					renderedPlayVars[key] = rendered
-				} else {
-					renderedPlayVars[key] = value
-				}
-			} else {
-				renderedPlayVars[key] = value
-			}
-		}
-		// Merge rendered vars back
-		playVars = e.mergeVariables(e.variables, renderedPlayVars)
-	}
+	e.mutex.Lock()
+	e.lazyVars = lazy
+	e.mutex.Unlock()
+	defer func() {
+		e.mutex.Lock()
+		e.lazyVars = nil
+		e.mutex.Unlock()
+	}()
 	playVars = e.mergeVariables(playVars, e.extraVars)
 	e.startPlayHandlers(hosts, play.Handlers, playVars)
 	defer func() { e.handlers = nil }()
@@ -824,6 +815,7 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 	}
 
 	taskVars := e.hostVariables(host, variables)
+	e.renderLazyVars(ctx, taskVars)
 	// task vars come last; string values may use other variables
 	for k, v := range task.Vars {
 		if str, ok := v.(string); ok && strings.Contains(str, "{{") {
@@ -2125,4 +2117,31 @@ func mergeMaps(a, b map[string]interface{}) map[string]interface{} {
 		out[k] = v
 	}
 	return out
+}
+
+// renderLazyVars renders the templated play vars with one host's variables;
+// a few passes let them refer to each other. -e values are never rendered.
+func (e *ExecutionEngine) renderLazyVars(ctx context.Context, vars map[string]interface{}) {
+	e.mutex.RLock()
+	lazy := e.lazyVars
+	e.mutex.RUnlock()
+	for pass := 0; pass < 3 && len(lazy) > 0; pass++ {
+		changed := false
+		for key := range lazy {
+			if _, fromCLI := e.extraVars[key]; fromCLI {
+				continue
+			}
+			str, ok := vars[key].(string)
+			if !ok || !strings.Contains(str, "{{") {
+				continue
+			}
+			if rendered, err := e.templateEngine.Render(ctx, str, vars); err == nil && rendered != str {
+				vars[key] = rendered
+				changed = true
+			}
+		}
+		if !changed {
+			return
+		}
+	}
 }

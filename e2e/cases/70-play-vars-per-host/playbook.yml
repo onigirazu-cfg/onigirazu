@@ -1,0 +1,10 @@
+plays:
+  - name: play vars are rendered per host
+    hosts: all
+    become: true
+    vars:
+      base: "/root/onigirazu-e2e-pv-{{ inventory_hostname }}"
+      file: "{{ base }}.txt"
+    tasks:
+      - name: A file named after this host
+        copy: {content: "{{ inventory_hostname }}\n", dest: "{{ file }}"}

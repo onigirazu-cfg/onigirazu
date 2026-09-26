@@ -227,7 +227,9 @@ plays:
 
 ## 🎯 Play Variables with Templates
 
-Current limitation: play `vars` are rendered once, with the facts of the **first** host of the play. A play var such as `backup_dir: "/backup/{{ ansible_hostname }}"` gets the same value on every host. Put host-dependent values in task `vars`, `set_fact`, or write the expression directly in the task arguments.
+Play `vars` with templates are rendered per host when a task uses them:
+`backup_dir: "/backup/{{ ansible_hostname }}"` is each host's own directory. Play vars may
+refer to each other. Task `vars` work the same way for a single task.
 
 ```yaml
 plays:
@@ -311,27 +313,17 @@ With `gather_facts: false` the `onigirazu_*` and `ansible_*` facts are
 undefined; remove it (facts are gathered by default) or guard with
 `is defined`.
 
-### 2. Host Facts in Play Vars
+### 2. Play Vars Are Rendered per Host
 
-❌ **Wrong:** (every host gets the first host's value)
+A play var with a template is rendered for each host when a task uses it, so it
+can use that host's facts and `inventory_hostname`:
 
 ```yaml
 plays:
   - name: My Play
     hosts: all
     vars:
-      app_dir: "{{ ansible_env.HOME }}/app"
-```
-
-✅ **Correct:**
-
-```yaml
-plays:
-  - name: My Play
-    hosts: all
-    tasks:
-      - set_fact:
-          app_dir: "{{ ansible_env.HOME }}/app"   # per host
+      app_dir: "{{ ansible_env.HOME }}/app"   # each host's own HOME
 ```
 
 ### 3. Missing Default Values
