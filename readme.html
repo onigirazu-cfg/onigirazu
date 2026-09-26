@@ -844,6 +844,18 @@ onigirazu run all -m ping -i inventory.yml -o table
 <p><code>loop:</code> also takes an expression (<code>"{{ result.stdout_lines }}"</code>). A dictionary
 is looped over as <code>{key, value}</code> items sorted by key, with <code>with_dict: "{{ d }}"</code>
 or <code>loop: "{{ d | dict2items }}"</code>; <code>items2dict</code> turns them back.</p>
+<h3>Roles</h3>
+<p><code>roles:</code> in a play runs <code>roles/&lt;name&gt;</code> next to the playbook: <code>tasks/</code>,
+<code>handlers/</code>, <code>defaults/</code> and <code>vars/</code> (<code>main.yml</code>). A role's <code>template</code>, <code>copy</code>,
+<code>script</code> and <code>unarchive</code> tasks find a relative <code>src</code> in the role's
+<code>templates/</code> or <code>files/</code>. <code>meta/main.yml</code> dependencies (a name, or <code>role:</code>
+with variables) run first. Variables given with the role win over its own:</p>
+<pre class="codehilite"><code class="language-yaml">roles:
+  - common
+  - role: web
+    web_port: 9090
+</code></pre>
+
 <h3>Extra variables and limits</h3>
 <p><code>-e</code> sets variables that override all others: <code>-e env=prod -e version=1.2</code>,
 <code>-e '{"replicas": 3}'</code> or <code>-e @vars.yml</code> (repeatable, later ones win).
