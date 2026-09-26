@@ -1,0 +1,51 @@
+plays:
+  - name: block, rescue, always
+    hosts: all
+    become: true
+    tasks:
+      - name: Failing block is rescued
+        block:
+          - name: Before the failure
+            copy:
+              content: "1\n"
+              dest: /root/onigirazu-e2e-block-before
+          - name: Fails
+            command:
+              cmd: "false"
+          - name: Skipped after the failure
+            copy:
+              content: "no\n"
+              dest: /root/onigirazu-e2e-block-skipped
+        rescue:
+          - name: Rescue runs
+            copy:
+              content: "rescued\n"
+              dest: /root/onigirazu-e2e-block-rescue
+        always:
+          - name: Always runs
+            copy:
+              content: "always\n"
+              dest: /root/onigirazu-e2e-block-always
+      - name: Block inherits when
+        when: onigirazu_hostname == "no-such-host"
+        block:
+          - name: Must be skipped
+            copy:
+              content: "no\n"
+              dest: /root/onigirazu-e2e-block-when
+      - name: Nested block under an outer rescue
+        block:
+          - name: Inner
+            block:
+              - name: Inner fails
+                command:
+                  cmd: "false"
+        rescue:
+          - name: Outer rescue
+            copy:
+              content: "outer\n"
+              dest: /root/onigirazu-e2e-block-outer
+      - name: The play goes on after rescued failures
+        copy:
+          content: "after\n"
+          dest: /root/onigirazu-e2e-block-after

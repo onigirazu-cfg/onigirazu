@@ -217,6 +217,16 @@ func (p *EnhancedParser) validatePlay(play *types.Play, index int) error {
 
 // validateTask validates a single task
 func (p *EnhancedParser) validateTask(task *types.Task, context string) error {
+	if len(task.Block) > 0 {
+		for name, list := range map[string][]types.Task{"block": task.Block, "rescue": task.Rescue, "always": task.Always} {
+			for i := range list {
+				if err := p.validateTask(&list[i], fmt.Sprintf("%s.%s[%d]", context, name, i)); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
 	if task.Include != "" {
 		return nil // replaced by the included tasks, which are validated then
 	}
@@ -397,6 +407,17 @@ func (p *EnhancedParser) expandIncludes(ctx context.Context, tasks []types.Task,
 	}
 	var out []types.Task
 	for _, task := range tasks {
+		if len(task.Block) > 0 {
+			for _, list := range []*[]types.Task{&task.Block, &task.Rescue, &task.Always} {
+				expanded, err := p.expandIncludes(ctx, *list, baseDir, depth+1)
+				if err != nil {
+					return nil, err
+				}
+				*list = expanded
+			}
+			out = append(out, task)
+			continue
+		}
 		if task.Include == "" {
 			out = append(out, task)
 			continue
