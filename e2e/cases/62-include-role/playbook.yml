@@ -1,0 +1,16 @@
+plays:
+  - name: include_role and import_role
+    hosts: all
+    become: true
+    tasks:
+      - name: Include the role with a parameter
+        include_role:
+          name: app
+        vars:
+          app_port: 9090
+      - name: Import another task file of it
+        import_role: {name: app, tasks_from: extra}
+      - name: A role whose when is false
+        include_role: {name: app, tasks_from: extra}
+        vars: {app_port: 1}
+        when: inventory_hostname == 'nobody'

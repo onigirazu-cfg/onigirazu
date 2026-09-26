@@ -34,3 +34,29 @@ func (m *MetaModule) Validate(args map[string]interface{}) error {
 	}
 	return fmt.Errorf("unsupported meta action %q", action)
 }
+
+// IncludeRoleModule stands for include_role/import_role: the parser loads the
+// role and the engine runs it; this only validates the arguments
+type IncludeRoleModule struct {
+	*BaseModule
+}
+
+// NewIncludeRoleModule creates the include_role or import_role module
+func NewIncludeRoleModule(name string) *IncludeRoleModule {
+	return &IncludeRoleModule{BaseModule: NewBaseModule(name)}
+}
+
+func (m *IncludeRoleModule) GetDescription() string {
+	return "Run a role as a task"
+}
+
+func (m *IncludeRoleModule) Execute(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
+	return types.TaskResult{Host: host.Name, Module: m.name, Success: true, Skipped: true}, nil
+}
+
+func (m *IncludeRoleModule) Validate(args map[string]interface{}) error {
+	if getStringArg(args, "name", "") == "" {
+		return fmt.Errorf("argument 'name' is required")
+	}
+	return nil
+}

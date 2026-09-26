@@ -79,3 +79,36 @@ func TestIncludes_InsideRoles(t *testing.T) {
 	require.Len(t, tasks, 1)
 	assert.Equal(t, "install", tasks[0].Name)
 }
+
+func TestIncludeRole_LoadsTheRole(t *testing.T) {
+	dir := t.TempDir()
+	files := map[string]string{
+		"site.yml": "plays:\n  - name: p\n    hosts: all\n    tasks:\n" +
+			"      - include_role: {name: web}\n        tags: [web]\n" +
+			"      - import_role: {name: web, tasks_from: extra}\n",
+		"roles/web/tasks/main.yml":    "- name: main\n  template: {src: a.j2, dest: /tmp/a}\n",
+		"roles/web/tasks/extra.yml":   "- include_tasks: nested.yml\n",
+		"roles/web/tasks/nested.yml":  "- name: nested\n  debug: {msg: n}\n",
+		"roles/web/templates/a.j2":    "x",
+		"roles/web/defaults/main.yml": "port: 80\n",
+	}
+	for name, content := range files {
+		path := filepath.Join(dir, name)
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
+	}
+	p := NewEnhancedParser(&mockTemplateEngine{}, &mockLogger{})
+	pb, err := p.ParsePlaybook(context.Background(), filepath.Join(dir, "site.yml"))
+	require.NoError(t, err)
+	tasks := pb.Plays[0].Tasks
+	require.Len(t, tasks, 2)
+	main := tasks[0].IncludedRole
+	require.NotNil(t, main)
+	assert.Equal(t, 80, main.Defaults["port"])
+	assert.Equal(t, []string{"web"}, main.Tasks[0].Tags, "include tags reach the role's tasks")
+	assert.Equal(t, filepath.Join(dir, "roles/web/templates/a.j2"), main.Tasks[0].Args["src"])
+	extra := tasks[1].IncludedRole
+	require.NotNil(t, extra)
+	require.Len(t, extra.Tasks, 1)
+	assert.Equal(t, "nested", extra.Tasks[0].Name, "tasks_from with its own includes")
+}

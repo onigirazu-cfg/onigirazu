@@ -1,0 +1,2 @@
+- name: tasks_from
+  copy: {content: "extra {{ app_port }}\n", dest: /root/onigirazu-e2e-ir-extra}

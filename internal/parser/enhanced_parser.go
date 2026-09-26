@@ -377,6 +377,7 @@ func (p *EnhancedParser) validateHost(host *types.Host, name string) error {
 func (p *EnhancedParser) processIncludes(ctx context.Context, playbook *types.Playbook, baseDir string) error {
 	// Process includes in each play
 	for i := range playbook.Plays {
+		p.roleLoader.rolesPath = filepath.Join(baseDir, "roles")
 		if err := p.processPlayIncludes(ctx, &playbook.Plays[i], baseDir); err != nil {
 			return fmt.Errorf("failed to process includes in play %d: %w", i, err)
 		}
@@ -414,6 +415,13 @@ func (p *EnhancedParser) expandIncludes(ctx context.Context, tasks []types.Task,
 					return nil, err
 				}
 				*list = expanded
+			}
+			out = append(out, task)
+			continue
+		}
+		if task.Module == "include_role" || task.Module == "import_role" {
+			if err := p.loadIncludedRole(ctx, &task, depth); err != nil {
+				return nil, err
 			}
 			out = append(out, task)
 			continue
