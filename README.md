@@ -960,8 +960,13 @@ Filters: `default`, `length`/`count`, `lower`, `upper`, `capitalize`, `title`,
 `selectattr`/`rejectattr` (tests `defined`, `equalto`, `match`, `search`,
 `in`, `>`, ...), `regex_replace`, `regex_search`, `regex_findall`, `to_json`,
 `to_nice_json`, `to_yaml`, `from_json`, `from_yaml`, `b64encode`,
-`b64decode`, `basename`, `dirname`, `quote`, `ternary`, `mandatory`, and
+`b64decode`, `basename`, `dirname`, `quote`, `ternary`, `mandatory`,
+`password_hash('sha512'|'sha256', salt)` (crypt(3) hashes for `user`), and
 `range()`.
+
+`lookup()` and `query()` run on the control machine, relative paths from the
+playbook directory: `env`, `file`, `pipe`, `lines`, `fileglob`,
+`first_found`, `dict`, `items`.
 
 ### Plugins
 

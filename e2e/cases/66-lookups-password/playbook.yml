@@ -1,0 +1,16 @@
+plays:
+  - name: lookups and password_hash
+    hosts: all
+    become: true
+    tasks:
+      - name: Lookups run on the control machine
+        copy:
+          dest: /root/onigirazu-e2e-lp
+          content: |
+            {{ lookup('file', 'note.txt') }}
+            {{ lookup('pipe', 'echo piped') }}
+            {{ query('fileglob', '*.txt') | length }}
+      - name: A user with a hashed password
+        user:
+          name: onigirazu-e2e-lp
+          password: "{{ 'secret' | password_hash('sha512', 'saltsalt') }}"

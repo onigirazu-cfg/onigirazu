@@ -22,7 +22,7 @@ var filterNames = []string{
 	"dict2items", "items2dict", "to_json", "to_nice_json", "to_yaml", "to_nice_yaml", "from_json",
 	"from_yaml", "unique", "list", "capitalize", "title", "b64encode", "b64decode", "quote", "basename",
 	"dirname", "sort", "sum", "max", "min", "reverse", "flatten", "join", "keys", "values", "abs", "round",
-	"select", "reject", "mandatory",
+	"select", "reject", "mandatory", "password_hash",
 }
 
 func filterFunctions() []expr.Option {
@@ -193,6 +193,9 @@ func filterFunctions() []expr.Option {
 			}
 			return value, nil
 		}),
+		fn("password_hash", passwordHash),
+		fn("jinja_lookup", jinjaLookup),
+		fn("jinja_query", jinjaQuery),
 		fn("combine", func(p ...interface{}) (interface{}, error) {
 			out := map[string]interface{}{}
 			for _, v := range p {

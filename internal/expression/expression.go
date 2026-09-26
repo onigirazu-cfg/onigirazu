@@ -27,6 +27,8 @@ var (
 	mapAttribute = regexp.MustCompile(`\bmap\(\s*attribute\s*=\s*`)
 	// d.keys() and d.values() are Python methods
 	dictMethod = regexp.MustCompile(`\.(keys|values)\(\)`)
+	// lookup() and query() get the playbook directory as their first argument
+	lookupCall = regexp.MustCompile(`\b(lookup|query|q)\(`)
 	jinjaWord  = regexp.MustCompile(`\b(True|False|None)\b`)
 	jinjaWords = strings.NewReplacer("True", "true", "False", "false", "None", "nil")
 	quoted     = regexp.MustCompile(`"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'`)
@@ -176,6 +178,12 @@ func translateCode(code string) string {
 	})
 	code = mapAttribute.ReplaceAllString(code, "map_attribute(")
 	code = dictMethod.ReplaceAllString(code, " | $1()")
+	code = lookupCall.ReplaceAllStringFunc(code, func(m string) string {
+		if strings.HasPrefix(m, "lookup") {
+			return "jinja_lookup(playbook_dir, "
+		}
+		return "jinja_query(playbook_dir, "
+	})
 	return jinjaWordsIn(code)
 }
 
