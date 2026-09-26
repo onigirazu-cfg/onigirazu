@@ -6,6 +6,7 @@ Complete alphabetical reference of all built-in modules in Onigirazu. Click on a
 
 - **[apt](README.md#apt)** - Manage packages on Debian/Ubuntu systems using apt
 - **[archive](README.md#archive)** - Creates a compressed archive of one or more files or directories
+- **[assert](README.md#assert)** - Fail unless the given expressions hold
 - **[authorized_key](README.md#authorized_key)** - Manage SSH authorized keys for user accounts
 
 ## B
@@ -28,7 +29,6 @@ Complete alphabetical reference of all built-in modules in Onigirazu. Click on a
 
 ## F
 
-- **[facts](README.md#facts)** - Gather system facts and information
 - **[fail](README.md#fail)** - Fail playbook execution with a custom message
 - **[fetch](README.md#fetch)** - Fetch files from remote hosts to local machine
 - **[file](README.md#file)** - Manages files and directories
@@ -41,12 +41,19 @@ Complete alphabetical reference of all built-in modules in Onigirazu. Click on a
 - **[git](README.md#git)** - Manages Git repositories
 - **[group](README.md#group)** - Manages system groups
 
+## I
+
+- **[import_role](README.md#include_role--import_role)** - Run a role's tasks at this point
+- **[include_role](README.md#include_role--import_role)** - Run a role's tasks at this point
+- **[include_vars](README.md#include_vars)** - Load variables from YAML files on the control machine
+
 ## L
 
 - **[lineinfile](README.md#lineinfile)** - Manages lines in text files
 
 ## M
 
+- **[meta](README.md#meta)** - Engine actions: flush_handlers, end_host, end_play, noop
 - **[mongodb](README.md#mongodb)** - Manage MongoDB databases and users
 - **[mount](README.md#mount)** - Control active and persistent filesystem mounts
 - **[mysql_db](README.md#mysql_db)** - Manage MySQL databases
@@ -64,6 +71,7 @@ Complete alphabetical reference of all built-in modules in Onigirazu. Click on a
 ## R
 
 - **[reboot](README.md#reboot)** - Reboot the system, with optional delay and pre-reboot checks
+- **[replace](README.md#replace)** - Replace every match of a regular expression in a file
 
 ## S
 
@@ -100,8 +108,8 @@ For detailed documentation on each module, see [Core Modules Documentation](READ
 
 ### By Category
 
-- **System Modules**: [facts](README.md#facts), [command](README.md#command), [shell](README.md#shell), [script](README.md#script)
-- **File System**: [file](README.md#file), [copy](README.md#copy), [fetch](README.md#fetch), [find](README.md#find), [template](README.md#template), [lineinfile](README.md#lineinfile), [blockinfile](README.md#blockinfile)
+- **System Modules**: [command](README.md#command), [shell](README.md#shell), [script](README.md#script)
+- **File System**: [file](README.md#file), [copy](README.md#copy), [fetch](README.md#fetch), [find](README.md#find), [template](README.md#template), [lineinfile](README.md#lineinfile), [blockinfile](README.md#blockinfile), [replace](README.md#replace)
 - **Configuration**: [config](README.md#config), [lineinfile](README.md#lineinfile), [template](README.md#template)
 - **Service Management**: [service](README.md#service), [systemd](README.md#systemd), [reboot](README.md#reboot)
 - **Package Management**: [apt](README.md#apt), [yum](README.md#yum), [package](README.md#package)
@@ -112,10 +120,8 @@ For detailed documentation on each module, see [Core Modules Documentation](READ
 - **Container Management**: [docker_container](README.md#docker_container), [docker_image](README.md#docker_image), [docker_compose](README.md#docker_compose), [podman](README.md#podman)
 - **Database Management**: [mysql_db](README.md#mysql_db), [mysql_user](README.md#mysql_user), [postgresql_db](README.md#postgresql_db), [postgresql_user](README.md#postgresql_user), [mongodb](README.md#mongodb)
 - **System Control**: [sysctl](README.md#sysctl), [mount](README.md#mount)
-- **Utilities**: [debug](README.md#debug), [pause](README.md#pause), [fail](README.md#fail), [set_fact](README.md#set_fact), [stat](README.md#stat), [wait_for](README.md#wait_for), [ping](README.md#ping), [archive](README.md#archive)
+- **Utilities**: [debug](README.md#debug), [pause](README.md#pause), [fail](README.md#fail), [set_fact](README.md#set_fact), [stat](README.md#stat), [wait_for](README.md#wait_for), [ping](README.md#ping), [archive](README.md#archive), [assert](README.md#assert)
+- **Playbook Control**: [include_vars](README.md#include_vars), [include_role / import_role](README.md#include_role--import_role), [meta](README.md#meta)
 
-### Total Modules: 45
+### Total Modules: 50
 
----
-
-*Last updated: Auto-generated from module registry*

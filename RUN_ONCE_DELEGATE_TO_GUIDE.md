@@ -1,352 +1,256 @@
 # Run Once and Delegate To Guide
 
-This guide explains how to use `run_once` and `delegate_to` task directives in Onigirazu.
+This guide covers the `run_once`, `delegate_to` and `local_action` task keywords.
 
 ## Overview
 
-These two Ansible-compatible features allow you to control how tasks are distributed and executed across your inventory:
-
-- **`run_once`**: Execute a task only once, on the first host in your inventory
-- **`delegate_to`**: Execute a task on a different host than the one it's targeting
+- **`run_once`**: run a task on one host instead of every host of the play
+- **`delegate_to`**: run a task's module on another machine, on behalf of the current host
+- **`local_action`**: shorthand for `delegate_to: localhost`
 
 ## run_once
 
 ### Purpose
 
-Use `run_once` when you have a task that should execute only once, regardless of the number of hosts in your inventory. This is useful for:
+Use `run_once` for work that must happen once per play, not once per host:
 
 - Database migrations
-- One-time setup tasks
-- Configuration changes that only need to happen once
-- Generating reports or state files
+- One-time setup or notifications
+- Generating a shared report or file
 
 ### Syntax
 
 ```yaml
 tasks:
-  - name: "Run database migration"
-    shell:
-      cmd: "python manage.py migrate"
+  - name: Run database migration
+    shell: cd /opt/app && python manage.py migrate
     run_once: true
 ```
 
+`run_once` accepts `true`/`false` and `yes`/`no`.
+
 ### Behavior
 
-When `run_once: true` is set:
-
-- The task executes **only on the first host** in the host list
-- All other hosts skip this task
-- The result is only reported for the first host
+- The task runs on the **first host of the play's host list** (after `--limit`).
+- It is not executed on the other hosts, and no result is recorded for them.
+- If the task has `register`, the other hosts get the same registered value.
+- Loops, `when` and `delegate_to` apply as usual on that one host.
+- Inside a `block`, the task still runs once for all hosts of the play: the first host to reach it runs it, the others wait and take its registered result (and its failure, if it failed).
 
 ### Example: Database Migration
 
 ```yaml
-- name: "Deploy Application"
-  hosts: "all"
+- name: Deploy Application
+  hosts: all
   tasks:
-    - name: "Copy application files"
+    - name: Copy application archive
       copy:
-        src: "./app/"
-        dest: "/opt/app/"
+        src: app.tar.gz
+        dest: /opt/app.tar.gz
 
-    - name: "Run database migrations"
-      shell:
-        cmd: "cd /opt/app && python manage.py migrate"
-      run_once: true  # Only run once, on first host
+    - name: Run database migrations
+      shell: cd /opt/app && python manage.py migrate
+      run_once: true
+      register: migrate
 
-    - name: "Start application service"
+    - name: Start application service
       service:
-        name: "myapp"
-        state: "started"
+        name: myapp
+        state: started
 ```
 
-In this example:
-
-- All 3 hosts copy application files
-- Only host1 runs database migrations
-- All 3 hosts start the service
-
-### Execution Flow
-
-Given 3 hosts: [host1, host2, host3]
+With hosts `[host1, host2, host3]`:
 
 ```
-Task: Copy files      → host1 ✓, host2 ✓, host3 ✓
-Task: DB Migrations   → host1 ✓, host2 ⊘, host3 ⊘  (run_once)
-Task: Start service   → host1 ✓, host2 ✓, host3 ✓
+Task: Copy archive    → host1, host2, host3
+Task: DB migrations   → host1 only; host2 and host3 get `migrate` too
+Task: Start service   → host1, host2, host3
 ```
 
 ## delegate_to
 
 ### Purpose
 
-Use `delegate_to` when you need to execute a task on a specific host instead of the target host. This is useful for:
+Use `delegate_to` when a task for a host must run somewhere else:
 
-- Load balancer API calls (execute on localhost or management host)
-- Monitoring/alerting notifications (send to monitoring system)
-- Centralized logging (log events to central server)
-- Running tasks that require access to specific infrastructure
+- Load balancer API calls from the control machine
+- Registering the host in a central system
+- Commands that need access only a management host has
 
 ### Syntax
 
 ```yaml
 tasks:
-  - name: "Notify load balancer"
+  - name: Remove host from load balancer
     uri:
-      url: "https://lb.example.com/api/enable"
-      method: "POST"
-    delegate_to: "localhost"
+      url: "https://lb.example.com/api/server/{{ inventory_hostname }}"
+      method: DELETE
+    delegate_to: localhost
 ```
 
 ### Behavior
 
-When `delegate_to: "hostname"` is set:
-
-- The task executes on the specified host instead of the target host
-- The task still runs for each host in the inventory, but execution happens on the delegated host
-- The task can access variables from the original host context
+- The task still runs once for **each** host of the play; only the module runs on the delegate.
+- The task is rendered with the **current host's** variables (`inventory_hostname`, its facts and vars). The delegate's inventory entry is used only to connect to it.
+- The result (and `register`) is recorded for the current host.
+- `delegate_to` can be a template, e.g. `delegate_to: "{{ groups['lb'][0] }}"`.
 
 ### Host Resolution
 
-Onigirazu matches the delegate target by:
-
-1. **Host name** - Exact match of the `name` field
-2. **Host address** - Exact match of the `address` field
-3. **Fallback** - If no match is found, the task executes on the original target host
+1. `localhost`, `127.0.0.1` or `::1`: runs on the control machine with a local connection; no inventory entry is needed.
+2. An inventory host whose **name** matches exactly: connects with that host's address, port, user and other connection settings.
+3. Anything else: used as an address, connected on port 22 with the default connection settings. There is no fallback to the original host; if the address is unreachable, the task fails.
 
 ### Example: Load Balancer Updates
 
 ```yaml
-- name: "Rolling Update"
-  hosts: "webservers"
-  serial: 1  # One host at a time
+- name: Update web servers
+  hosts: webservers
   tasks:
-    - name: "Remove from load balancer"
+    - name: Remove from load balancer
       uri:
-        url: "https://lb.example.com/api/server/remove"
-        method: "POST"
-        body_format: "json"
+        url: https://lb.example.com/api/server/remove
+        method: POST
+        body_format: json
         body:
           server: "{{ inventory_hostname }}"
-      delegate_to: "localhost"
+      delegate_to: localhost
 
-    - name: "Update application"
+    - name: Update application
       copy:
-        src: "./app/"
-        dest: "/opt/app/"
+        src: app.tar.gz
+        dest: /opt/app.tar.gz
 
-    - name: "Start application"
+    - name: Restart application
       service:
-        name: "webapp"
-        state: "started"
+        name: webapp
+        state: restarted
 
-    - name: "Add back to load balancer"
+    - name: Add back to load balancer
       uri:
-        url: "https://lb.example.com/api/server/add"
-        method: "POST"
-        body_format: "json"
+        url: https://lb.example.com/api/server/add
+        method: POST
+        body_format: json
         body:
           server: "{{ inventory_hostname }}"
-      delegate_to: "localhost"
+      delegate_to: localhost
 ```
 
-### Execution Flow
-
-Given hosts: [web1, web2, web3] with management host localhost:
+Tasks run one after another, each on all hosts in parallel:
 
 ```
-Target: web1
-  ├─ Task: Remove from LB   → localhost (delegated) ✓
-  ├─ Task: Update app       → web1 ✓
-  ├─ Task: Start service    → web1 ✓
-  └─ Task: Add to LB        → localhost (delegated) ✓
+Task: Remove from LB   → localhost, once for web1, web2, web3
+Task: Update app       → web1, web2, web3
+Task: Restart app      → web1, web2, web3
+Task: Add to LB        → localhost, once for web1, web2, web3
+```
 
-Target: web2
-  ├─ Task: Remove from LB   → localhost (delegated) ✓
-  ├─ Task: Update app       → web2 ✓
-  ├─ Task: Start service    → web2 ✓
-  └─ Task: Add to LB        → localhost (delegated) ✓
+**Current limitation**: play-level `serial` is ignored, so all hosts leave the load balancer at the same time. For a one-host-at-a-time rollout, run the playbook once per host with `--limit`.
 
-Target: web3
-  ├─ Task: Remove from LB   → localhost (delegated) ✓
-  ├─ Task: Update app       → web3 ✓
-  ├─ Task: Start service    → web3 ✓
-  └─ Task: Add to LB        → localhost (delegated) ✓
+## local_action
+
+`local_action` sets the module and `delegate_to: localhost` in one keyword. It takes a string or a map:
+
+```yaml
+- name: Record deployment locally
+  local_action: shell echo "{{ inventory_hostname }} deployed" >> /tmp/deploy.log
+
+- name: Same with a map
+  local_action:
+    module: copy
+    content: "{{ inventory_hostname }}\n"
+    dest: /tmp/last-host.txt
 ```
 
 ## Combining run_once and delegate_to
 
-You can use both directives together for tasks that should run once and on a specific host.
-
-### Example: Send Deployment Notification
-
 ```yaml
-- name: "Deploy Application"
-  hosts: "all"
+- name: Deploy Application
+  hosts: all
   tasks:
-    - name: "Copy files"
+    - name: Copy archive
       copy:
-        src: "./app/"
-        dest: "/opt/app/"
+        src: app.tar.gz
+        dest: /opt/app.tar.gz
 
-    - name: "Send deployment notification"
+    - name: Send deployment notification
       uri:
-        url: "https://slack.com/api/chat.postMessage"
-        method: "POST"
-        headers:
-          Authorization: "Bearer {{ slack_token }}"
-        body_format: "json"
+        url: https://hooks.example.com/deploy
+        method: POST
+        body_format: json
         body:
-          channel: "#deployments"
-          text: "✅ App deployment completed: {{ app_version }}"
-      delegate_to: "localhost"
-      run_once: true  # Send notification only once, from localhost
+          text: "Deployed {{ app_version }}"
+      delegate_to: localhost
+      run_once: true
 ```
 
-In this example:
-
-- All hosts copy the application files
-- The Slack notification is sent **only once** by **localhost**
-- Result: Single notification sent, not one per host
-
-### Execution Flow
-
-Given 3 hosts with `run_once` + `delegate_to`:
+The notification is sent once, from the control machine, rendered with the first host's variables.
 
 ```
-Task: Copy files           → host1 ✓, host2 ✓, host3 ✓
-Task: Send notification    → localhost ✓  (run_once + delegate_to)
+Task: Copy archive          → host1, host2, host3
+Task: Send notification     → localhost, once (for host1)
 ```
 
 ## Common Patterns
 
-### Pattern 1: Database-Only Tasks
+### Database-only task
 
 ```yaml
-- name: "Migrate database (once only)"
-  shell:
-    cmd: "python manage.py migrate"
+- name: Migrate database (once)
+  shell: cd /opt/app && python manage.py migrate
   run_once: true
 ```
 
-### Pattern 2: Centralized Logging
+### Central registration
 
 ```yaml
-- name: "Log deployment event"
+- name: Register host with config server
   uri:
-    url: "https://logging.example.com/api/events"
-    method: "POST"
+    url: https://config-server.example.com/register
+    method: POST
+    body_format: json
     body:
-      event_type: "deployment"
-      timestamp: "{{ now() }}"
-  delegate_to: "logging-server"
+      hostname: "{{ inventory_hostname }}"
+      ip_address: "{{ ansible_default_ipv4.address }}"
+  delegate_to: config-manager
 ```
 
-### Pattern 3: Load Balancer Integration
-
-```yaml
-- name: "Update load balancer"
-  uri:
-    url: "https://lb.example.com/api/servers"
-    method: "PUT"
-    body:
-      action: "{{ action }}"
-      server: "{{ inventory_hostname }}"
-  delegate_to: "lb-manager"
-```
-
-### Pattern 4: Monitoring & Alerting
-
-```yaml
-- name: "Alert monitoring system"
-  uri:
-    url: "https://monitoring.example.com/api/alert"
-    method: "POST"
-    body:
-      alert_type: "deployment"
-      host: "{{ inventory_hostname }}"
-      status: "in_progress"
-  delegate_to: "monitoring-agent"
-```
-
-## Important Notes
-
-### Host Resolution
-
-- If `delegate_to: "hostname"` doesn't match any host in your inventory, the task still executes but on the original target host
-- The delegated host must exist in your inventory
-- Delegated tasks still have access to the original target host's variables
-
-### With run_once
-
-When both `run_once: true` and `delegate_to: "host"` are set:
-
-1. Task runs only on the first host in the list (run_once)
-2. Execution is delegated to the specified host (delegate_to)
-3. Result shows which host it executed on
-
-### Variable Access
-
-In delegated tasks, you can access:
-
-- Variables from the original target host via `inventory_hostname`
-- Host-specific variables from both the delegated and original host
-- Global and play variables
-
-### Example with Variables
-
-```yaml
-- name: "Register host with config server"
-  uri:
-    url: "https://config-server.example.com/register"
-    method: "POST"
-    body:
-      hostname: "{{ inventory_hostname }}"  # Original target host
-      ip_address: "{{ ansible_host }}"
-      environment: "{{ environment }}"
-  delegate_to: "config-manager"
-```
+`config-manager` must be an inventory host name (or a reachable address).
 
 ## Troubleshooting
 
-### Issue: Delegated host not found
+### Delegated task fails to connect
 
-**Symptom**: Task executes on original host instead of delegated host
-
-**Solution**: Verify the delegated host name/address matches exactly with an entry in your inventory
+The delegate name is not an inventory host name, so it was used as an address with default settings. Check the exact name:
 
 ```bash
-# Check your inventory
-onigirazu inventory -i inventory.yml
-
-# Verify host names
+onigirazu inventory -i inventory.yml --list
 ```
 
-### Issue: run_once not working
+### run_once runs on every host
 
-**Symptom**: Task runs on multiple hosts
-
-**Solution**: Ensure `run_once: true` is at the task level, not under `args`
+`run_once` must be at task level, not under the module arguments:
 
 ```yaml
-# ❌ WRONG - run_once inside args
-tasks:
-  - name: "Task"
-    shell:
-      cmd: "echo test"
-      run_once: true  # Wrong location
+# Wrong
+- name: Task
+  shell:
+    cmd: echo test
+    run_once: true
 
-# ✅ CORRECT - run_once at task level
-tasks:
-  - name: "Task"
-    shell:
-      cmd: "echo test"
-    run_once: true  # Correct location
+# Correct
+- name: Task
+  shell:
+    cmd: echo test
+  run_once: true
 ```
+
+### run_once picked an unexpected host
+
+It uses the first host of the play after `--limit`. To choose the host, delegate instead: `run_once: true` with `delegate_to: <host>`.
 
 ## See Also
 
-- [Playbook Guide](./README.md)
-- [Task Directives](./LOOPS_GUIDE.md)
-- [Execution Model](./ARCHITECTURE_DIAGRAM.md)
-- [Variables Guide](./VARIABLES_CHEATSHEET.md)
+- [Loops Guide](LOOPS_GUIDE.md)
+- [Handlers Guide](HANDLERS_GUIDE.md)
+- [Variables Cheatsheet](VARIABLES_CHEATSHEET.md)

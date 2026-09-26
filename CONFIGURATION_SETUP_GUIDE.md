@@ -902,6 +902,6 @@ curl http://localhost:8080/health
 2. Follow the setup instructions
 3. Test with a simple playbook
 4. Read [TROUBLESHOOTING_CONFIG.md](TROUBLESHOOTING_CONFIG.md) if issues arise
-5. See [CONFIGURATION_REFERENCE.md](../CONFIGURATION_REFERENCE.md) for all options
+5. See [CONFIGURATION_REFERENCE.md](CONFIGURATION_REFERENCE.md) for all options
 
 Need help? Check [INSTALLATION_CONFIG.md](INSTALLATION_CONFIG.md) for platform-specific details.

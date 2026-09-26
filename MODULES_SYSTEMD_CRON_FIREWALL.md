@@ -12,7 +12,9 @@ This document provides comprehensive documentation for the three new system mana
 
 ## Systemd Module
 
-The **systemd** module provides comprehensive management of systemd services, unit files, and timers.
+The **systemd** module manages systemd services, unit files, and timers. `operation` defaults to `service`.
+
+Ansible's `daemon_reload: true` is not supported; use `operation: daemon-reload`.
 
 ### Operations
 
@@ -69,8 +71,10 @@ Create, modify, or remove systemd unit files.
 
 - `name` (required): Unit file name (e.g., `myapp.service`)
 - `state`: `present` or `absent`
-- `content`: Unit file content (required when state is present)
+- `content`: Unit file content; without it the unit file must already exist
 - `path`: Custom path for unit file (optional, defaults to `/etc/systemd/system/<name>`)
+
+When the file changes, the module runs `daemon-reload` itself. `state: absent` stops and disables the unit, removes the file and reloads.
 
 **Examples:**
 
@@ -112,7 +116,7 @@ Manage systemd timers (systemd's alternative to cron).
 **Parameters:**
 
 - `name` (required): Timer name (automatically adds `.timer` suffix if missing)
-- `state`: Timer state (`started`, `stopped`)
+- `state`: Timer state (`started`, `stopped`; default `started`)
 - `enabled`: Enable/disable timer on boot (boolean)
 
 **Examples:**
@@ -158,7 +162,7 @@ Manage systemd timers (systemd's alternative to cron).
 
 #### 4. Daemon Reload (`operation: daemon-reload`)
 
-Reload systemd daemon configuration (required after modifying unit files).
+Reload the systemd configuration, e.g. after unit files were changed by other modules (`copy`, `template`).
 
 **Examples:**
 
@@ -194,7 +198,7 @@ Get detailed status information about a service.
 
 ## Cron Module
 
-The **cron** module provides comprehensive management of cron jobs, crontab files, and system cron directories.
+The **cron** module manages cron jobs, crontab files, and system cron directories. `operation` defaults to `job`.
 
 ### Operations
 
@@ -383,7 +387,9 @@ List all cron jobs for a user.
 
 ## Firewall Module
 
-The **firewall** module provides unified management of different firewall systems with automatic detection. Supports **UFW** (Ubuntu/Debian), **firewalld** (RHEL/CentOS/Fedora), and **iptables**.
+The **firewall** module manages UFW, firewalld or iptables, whichever the host has. `operation` defaults to `rule`.
+
+Rule, service and source operations report `changed` only when the rule set differs afterwards. The module is skipped in check mode.
 
 ### Automatic Detection
 
@@ -664,8 +670,6 @@ Reload firewall configuration.
 ### Cron Module
 
 - **Linux**: All distributions with cron/crontab
-- **macOS**: Full support
-- **BSD**: Full support
 
 ### Firewall Module
 
@@ -679,7 +683,7 @@ Reload firewall configuration.
 
 ### Systemd
 
-1. Always run `daemon-reload` after creating or modifying unit files
+1. Run `operation: daemon-reload` after changing unit files with `copy` or `template` (`operation: unit` reloads itself)
 2. Use `enabled: true` to ensure services start on boot
 3. Use masking for services you never want to start
 4. Prefer systemd timers over cron for new projects
@@ -706,7 +710,7 @@ Reload firewall configuration.
 ### Systemd
 
 - **Service fails to start**: Check logs with `journalctl -u <service>`
-- **Unit file not found**: Run `daemon-reload` operation
+- **Unit file not found**: Check `path`; units written by other modules need `operation: daemon-reload`
 - **Permission denied**: Ensure proper user permissions in unit file
 
 ### Cron
@@ -729,5 +733,5 @@ Reload firewall configuration.
   - `10-systemd-management.yml`
   - `11-cron-management.yml`
   - `12-firewall-management.yml`
-- [Module Development Guide](CONTRIBUTING.md)
+- [Module Development Guide](MODULE_DEVELOPMENT_GUIDE.md)
 - [Playbook Syntax](README.md)

@@ -315,4 +315,3 @@ print(f"Would execute: {tasks['summary']['executing']} tasks")
 
 - Full guide: [List Tags and Tasks Guide](LIST_TAGS_TASKS_GUIDE.md)
 - Tag filtering: [Tag Filtering Guide](TAG_FILTERING.md)
-- Implementation: [Implementation Guide](LIST_TAGS_TASKS_IMPLEMENTATION.md)
