@@ -1,6 +1,8 @@
 package expression
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -165,4 +167,39 @@ func TestExtractFilter(t *testing.T) {
 	out, err := Eval(`['a', 'missing'] | map('extract', hv, 'ip') | list`, vars)
 	require.NoError(t, err)
 	assert.Equal(t, []interface{}{"10.0.0.1", nil}, out)
+}
+
+func TestPasswordHash_MatchesCrypt(t *testing.T) {
+	// references from openssl passwd -6 / -5
+	assert.Equal(t, "$6$saltstring$svn8UoSVapNtMuq1ukKS4tPQd8iKwSMHWjl/O817G3uBnIFNjnQJuesI68u4OTLiBFdcbYEdFCoEOfaS35inz1",
+		shaCrypt(true, "Hello world!", "saltstring", 0))
+	assert.Equal(t, "$5$saltstring$5B8vYYiY.CVt1RlTTf8KbXBH3hsxY/GNooZaBBGWEc5", shaCrypt(false, "Hello world!", "saltstring", 0))
+	out, err := Eval(`'secret' | password_hash('sha512', 'saltsalt')`, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "$6$saltsalt$TVLlQcbpFVof5W3Yz4DTP6gRstiNuHwwTt6GLc1E5n0U0aDehy0S5knV8wiOQSpT0Y77vwPZN.Pq.H91p5hVO1", out)
+	random, err := Eval(`'secret' | password_hash`, nil)
+	require.NoError(t, err)
+	assert.Regexp(t, `^\$6\$[./0-9A-Za-z]{16}\$[./0-9A-Za-z]{86}$`, random)
+}
+
+func TestLookups(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte("hello\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "b.conf"), []byte("x"), 0o644))
+	t.Setenv("ONIGIRAZU_TEST_ENV", "env-value")
+	vars := map[string]interface{}{"playbook_dir": dir, "d": map[string]interface{}{"k": 1}}
+	cases := map[string]interface{}{
+		`lookup('file', 'a.txt')`:                        "hello",
+		`lookup('env', 'ONIGIRAZU_TEST_ENV')`:            "env-value",
+		`lookup('pipe', 'echo piped')`:                   "piped",
+		`query('lines', 'printf "1\\n2\\n"')`:            []interface{}{"1", "2"},
+		`query('fileglob', '*.conf')`:                    []interface{}{filepath.Join(dir, "b.conf")},
+		`lookup('first_found', ['missing', 'a.txt'])`:    filepath.Join(dir, "a.txt"),
+		`query('dict', d) | map(attribute='key') | list`: []interface{}{"k"},
+	}
+	for e, want := range cases {
+		got, err := Eval(e, vars)
+		require.NoError(t, err, e)
+		assert.Equal(t, want, got, e)
+	}
 }
