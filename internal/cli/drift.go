@@ -26,6 +26,7 @@ var (
 	driftReportID   string
 	driftParallel   int
 	driftCheck      driftCheckOptions
+	driftHistory    bool
 )
 
 func newDriftCmd() *cobra.Command {
@@ -50,12 +51,26 @@ The older snapshot comparison is still available with --snapshot <id>.`,
 			if len(args) != 1 {
 				return fmt.Errorf("usage: onigirazu drift PLAYBOOK [flags]")
 			}
+			if driftHistory {
+				dir, err := driftHistoryDir()
+				if err != nil {
+					return err
+				}
+				abs, _ := filepath.Abs(args[0])
+				history, err := loadDriftHistory(dir, abs)
+				if err != nil {
+					return err
+				}
+				writeDriftHistory(os.Stdout, args[0], history)
+				return nil
+			}
 			driftCheck.format, driftCheck.output = driftFormat, driftOutput
 			return runDriftCheck(cmd, args[0], driftCheck)
 		},
 	}
 
 	cmd.Flags().BoolVar(&driftCheck.fix, "fix", false, "Apply the playbook when drift is found")
+	cmd.Flags().BoolVar(&driftHistory, "history", false, "List past drift checks of the playbook instead of checking")
 	cmd.Flags().StringArrayVar(&driftCheck.notify, "notify", nil, "Webhook (Slack/Mattermost style) to post to when drift or errors are found (repeatable)")
 	cmd.Flags().BoolVar(&driftCheck.notifyOK, "notify-always", false, "Post to --notify also when all hosts are in sync")
 	cmd.Flags().StringArrayVarP(&driftCheck.extraVars, "extra-vars", "e", nil, "Extra variables, as for apply (repeatable)")

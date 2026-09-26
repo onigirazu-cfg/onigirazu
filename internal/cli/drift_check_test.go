@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -79,4 +81,47 @@ func TestWriteDriftHTML(t *testing.T) {
 	assert.Contains(t, html, "conf &lt;x&gt;", "task names are escaped")
 	assert.Contains(t, html, "unreachable")
 	assert.Contains(t, html, "In sync: db1")
+}
+
+func TestAnnotateSince(t *testing.T) {
+	t0 := time.Date(2026, 9, 26, 10, 0, 0, 0, time.UTC)
+	drift := func(at time.Time, hosts ...string) historyEntry {
+		r := DriftReport{CheckedAt: at, Drift: map[string][]DriftItem{}}
+		for _, h := range hosts {
+			r.Drift[h] = []DriftItem{{Task: "conf"}}
+		}
+		return historyEntry{DriftReport: r}
+	}
+	inSync := func(at time.Time, host string) historyEntry {
+		return historyEntry{DriftReport: DriftReport{CheckedAt: at, InSync: []string{host}}}
+	}
+	history := []historyEntry{
+		drift(t0, "web1"),
+		inSync(t0.Add(time.Hour), "web1"),  // fixed: breaks the run
+		drift(t0.Add(2*time.Hour), "web1"), // drifts again
+		drift(t0.Add(3*time.Hour), "db1"),  // did not look at web1
+		drift(t0.Add(4*time.Hour), "web1", "db1"),
+	}
+	now := DriftReport{CheckedAt: t0.Add(5 * time.Hour), Drift: map[string][]DriftItem{
+		"web1": {{Task: "conf"}}, "web2": {{Task: "conf"}}}}
+	annotateSince(&now, history)
+	assert.Equal(t, t0.Add(2*time.Hour), *now.Drift["web1"][0].Since)
+	assert.Equal(t, now.CheckedAt, *now.Drift["web2"][0].Since, "first seen now")
+	assert.Equal(t, "since 3h", sinceText(*now.Drift["web1"][0].Since, now.CheckedAt))
+}
+
+func TestDriftHistoryStore(t *testing.T) {
+	dir := t.TempDir()
+	for i := 0; i < 3; i++ {
+		r := &DriftReport{CheckedAt: time.Now().Add(time.Duration(i) * time.Second)}
+		assert.NoError(t, saveDriftHistory(dir, "/a/site.yml", r))
+	}
+	assert.NoError(t, saveDriftHistory(dir, "/b/site.yml", &DriftReport{CheckedAt: time.Now()}))
+	h, err := loadDriftHistory(dir, "/a/site.yml")
+	assert.NoError(t, err)
+	assert.Len(t, h, 3)
+	assert.True(t, h[0].CheckedAt.Before(h[2].CheckedAt))
+	var out bytes.Buffer
+	writeDriftHistory(&out, "site.yml", h)
+	assert.Equal(t, 4, strings.Count(out.String(), "\n"))
 }
