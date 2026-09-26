@@ -1035,8 +1035,11 @@ ORDER  HOST   RESOURCE        DETAILS
 3      web1   /etc/app.new    remove (did not exist before)
 ```
 
-Packages, services, users and other modules are listed as not reversible;
-binary or larger files too. Snapshots hold file contents (0600 files in your
+Packages installed by the run are removed again (and removed ones reinstalled),
+services get their previous running/enabled state, users and groups the run
+created are deleted (a home directory stays). Upgrades, changes to existing
+accounts, binary or larger files and other modules are listed as not
+reversible. Snapshots hold file contents (0600 files in your
 home); `no_log` tasks keep none.
 
 ## 🎯 Drift Detection

@@ -1,0 +1,13 @@
+plays:
+  - name: changes to roll back
+    hosts: all
+    become: true
+    tasks:
+      - name: Install tree
+        apt: {name: tree}
+      - name: A group
+        group: {name: onigirazu-e2e-rbg}
+      - name: A user
+        user: {name: onigirazu-e2e-rbu, group: onigirazu-e2e-rbg}
+      - name: Stop cron
+        service: {name: cron, state: stopped, enabled: false}
