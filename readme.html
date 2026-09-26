@@ -843,6 +843,11 @@ task only), <code>no_log: true</code> (output and errors hidden from logs, state
 stdout: status (<code>success</code>, <code>partial_success</code>, <code>failed</code>), totals, and every task
 with its result per host. Logs and progress go to stderr; the exit code is
 non-zero when the run failed.</p>
+<h3>Blocks</h3>
+<p><code>block</code> groups tasks; after the first failure the rest of the block is skipped
+and <code>rescue</code> runs, where <code>ansible_failed_task</code> (name, module) and
+<code>ansible_failed_result</code> describe the failure; <code>always</code> runs in any case. A
+failure handled by <code>rescue</code> does not fail the play.</p>
 <h3>Check mode</h3>
 <p><code>onigirazu apply site.yml --check</code> runs every module that supports it in check
 mode: it reports what would change and changes nothing. Supported: <code>copy</code>,
