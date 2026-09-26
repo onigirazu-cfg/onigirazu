@@ -173,6 +173,22 @@ func (m *AptModule) Execute(ctx context.Context, host types.Host, args map[strin
 			result.Duration = time.Since(startTime)
 			return result, nil
 		}
+		if inCheckMode(args) {
+			result.Success = true
+			result.Changed = true
+			result.Output["state"] = state
+			result.Output["packages"] = pkgNames
+			result.Output["msg"] = "would change: " + preCheck.Reason
+			result.Duration = time.Since(startTime)
+			return result, nil
+		}
+	}
+	if inCheckMode(args) {
+		// cache updates, upgrades and cleanups are not predicted
+		result.Success = true
+		result.Output["msg"] = "check mode: nothing done for this apt operation"
+		result.Duration = time.Since(startTime)
+		return result, nil
 	}
 
 	// Update cache if requested

@@ -186,6 +186,15 @@ func (m *ServiceModuleFixed) Execute(ctx context.Context, host types.Host, args 
 		result.Duration = time.Since(startTime)
 		return result, nil
 	}
+	if inCheckMode(args) {
+		result.Changed = true
+		result.Output["message"] = "would change the service"
+		if err == nil {
+			result.Output["service_state"] = preCheck.CurrentState
+		}
+		result.Duration = time.Since(startTime)
+		return result, nil
+	}
 
 	// Use CreateExecutor to get fresh executor for this host
 	exec, err := m.CreateExecutor(host)

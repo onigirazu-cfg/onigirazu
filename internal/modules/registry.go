@@ -222,4 +222,5 @@ var checkModeModules = map[string]bool{
 	"fail": true, "wait_for": true,
 	// compare, then change
 	"file": true, "copy": true, "template": true, "lineinfile": true, "blockinfile": true,
+	"apt": true, "yum": true, "package": true, "service": true, "user": true, "group": true,
 }

@@ -118,6 +118,20 @@ func (m *YumModule) Execute(ctx context.Context, host types.Host, args map[strin
 		result.Duration = time.Since(startTime)
 		return result, nil
 	}
+	if inCheckMode(args) {
+		result.Success = true
+		result.Changed = true
+		if result.Output == nil {
+			result.Output = map[string]interface{}{}
+		}
+		if err == nil {
+			result.Output["msg"] = "would change: " + preCheck.Reason
+		} else {
+			result.Output["msg"] = "would change"
+		}
+		result.Duration = time.Since(startTime)
+		return result, nil
+	}
 
 	// Get parameters
 	state := "present"
