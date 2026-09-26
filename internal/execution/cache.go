@@ -51,6 +51,7 @@ type ExecutionResult struct {
 	TotalFailed    int                    `json:"total_failed"`
 	TotalChanged   int                    `json:"total_changed"`
 	TotalSkipped   int                    `json:"total_skipped"`
+	TotalIgnored   int                    `json:"total_ignored,omitempty"`
 	Duration       time.Duration          `json:"duration"`
 	StartTime      time.Time              `json:"start_time"`
 	EndTime        time.Time              `json:"end_time"`

@@ -644,13 +644,15 @@ func (pb *Playbook) UnmarshalYAML(unmarshal func(interface{}) error) error {
 
 // TaskResult represents the result of task execution
 type TaskResult struct {
-	TaskName  string                 `json:"task_name"`
-	Host      string                 `json:"host"`
-	Module    string                 `json:"module"`
-	Success   bool                   `json:"success"`
-	Failed    bool                   `json:"failed"`
-	Changed   bool                   `json:"changed"`
-	Skipped   bool                   `json:"skipped"`
+	TaskName string `json:"task_name"`
+	Host     string `json:"host"`
+	Module   string `json:"module"`
+	Success  bool   `json:"success"`
+	Failed   bool   `json:"failed"`
+	Changed  bool   `json:"changed"`
+	Skipped  bool   `json:"skipped"`
+	// Ignored: the task failed, but ignore_errors or a rescue section handled it
+	Ignored   bool                   `json:"ignored,omitempty"`
 	Output    map[string]interface{} `json:"output"`
 	Error     string                 `json:"error,omitempty"`
 	Notify    []string               `json:"notify,omitempty"`
