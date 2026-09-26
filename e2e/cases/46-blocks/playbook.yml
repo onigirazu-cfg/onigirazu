@@ -17,9 +17,9 @@ plays:
               content: "no\n"
               dest: /root/onigirazu-e2e-block-skipped
         rescue:
-          - name: Rescue runs
+          - name: Rescue runs and sees what failed
             copy:
-              content: "rescued\n"
+              content: "rescued {{ ansible_failed_task.name }}\n"
               dest: /root/onigirazu-e2e-block-rescue
         always:
           - name: Always runs

@@ -988,6 +988,15 @@ func (e *ExecutionEngine) finishTask(task *types.Task, host *types.Host, result 
 	if task.Register != "" {
 		e.setHostVar(host.Name, task.Register, registeredValue(real))
 	}
+	// a failure a rescue section handles: rescue sees which task and why
+	if task.Rescuable && real.Failed {
+		failedTask := map[string]interface{}{"name": task.Name, "module": task.Module}
+		failedResult := registeredValue(real)
+		for _, prefix := range []string{"ansible", "onigirazu"} {
+			e.setHostVar(host.Name, prefix+"_failed_task", failedTask)
+			e.setHostVar(host.Name, prefix+"_failed_result", failedResult)
+		}
+	}
 	if task.Module == "set_fact" && !real.Failed {
 		if facts, ok := real.Output["onigirazu_facts"].(map[string]interface{}); ok {
 			for key, value := range facts {

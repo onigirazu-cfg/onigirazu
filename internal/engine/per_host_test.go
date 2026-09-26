@@ -310,3 +310,20 @@ func TestExtraVars_OverrideTaskVars(t *testing.T) {
 	require.NoError(t, engine.executeTaskOnHost(context.Background(), task, &host, map[string]interface{}{}, &types.PlayResult{}))
 	assert.Equal(t, 9090, seen)
 }
+
+func TestRescue_SeesTheFailedTask(t *testing.T) {
+	engine, _ := blockEngine(t)
+	block := types.Task{
+		Name:   "b",
+		Block:  []types.Task{{Name: "fail", Module: "command"}},
+		Rescue: []types.Task{{Name: "rescue", Module: "command"}},
+	}
+	require.NoError(t, engine.executeTaskList(context.Background(), []types.Task{block}, twoHosts()[:1], map[string]interface{}{}, &types.PlayResult{}))
+	task, ok := engine.getHostVar("h1", "ansible_failed_task").(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "fail", task["name"])
+	res, ok := engine.getHostVar("h1", "ansible_failed_result").(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "boom", res["msg"])
+	assert.NotNil(t, engine.getHostVar("h1", "onigirazu_failed_task"))
+}
