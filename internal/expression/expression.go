@@ -22,7 +22,11 @@ var (
 	// subject of an "is [not] defined" test: a name with .attr or [key] parts
 	definedTest = regexp.MustCompile(`([A-Za-z_]\w*(?:\.[A-Za-z_]\w*|\[[^\]]+\])*)\s+is\s+(not\s+defined|undefined|defined)\b`)
 	// Jinja filters without arguments that map onto expr builtins
-	bareFilter = regexp.MustCompile(`\|\s*(length|count|lower|upper|int|float|string|trim|bool|first|last|dict2items|items2dict)\b(\s*\()?`)
+	bareFilter = regexp.MustCompile(`\|\s*(` + strings.Join(filterNames, "|") + `)\b(\s*\()?`)
+	// map(attribute='x') has a keyword argument, which expr does not
+	mapAttribute = regexp.MustCompile(`\bmap\(\s*attribute\s*=\s*`)
+	// d.keys() and d.values() are Python methods
+	dictMethod = regexp.MustCompile(`\.(keys|values)\(\)`)
 	jinjaWord  = regexp.MustCompile(`\b(True|False|None)\b`)
 	jinjaWords = strings.NewReplacer("True", "true", "False", "false", "None", "nil")
 	quoted     = regexp.MustCompile(`"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'`)
@@ -72,7 +76,7 @@ func compile(expression string) (*vm.Program, error) {
 			return program, nil
 		}
 	}
-	program, err := expr.Compile(translate(expression),
+	options := append([]expr.Option{
 		expr.Env(map[string]interface{}{}),
 		expr.AllowUndefinedVariables(),
 		expr.Patch(inPatch{}),
@@ -97,7 +101,8 @@ func compile(expression string) (*vm.Program, error) {
 			}
 			return params[0], nil
 		}),
-	)
+	}, filterFunctions()...)
+	program, err := expr.Compile(translate(expression), options...)
 	if err != nil {
 		return nil, err
 	}
@@ -127,6 +132,16 @@ func Items(value interface{}) ([]interface{}, error) {
 // translate rewrites the Jinja parts of a condition into expr syntax.
 // String literals are left alone.
 func translate(condition string) string {
+	// inline if has the lowest precedence, then ~ (string concatenation)
+	if value, cond, otherwise, ok := inlineIf(condition); ok {
+		return "bool(" + translate(cond) + ") ? (" + translate(value) + ") : (" + translate(otherwise) + ")"
+	}
+	if parts := splitTop(condition, "~"); len(parts) > 1 {
+		for i, part := range parts {
+			parts[i] = translate(part)
+		}
+		return "jinja_concat(" + strings.Join(parts, ", ") + ")"
+	}
 	var b strings.Builder
 	last := 0
 	for _, loc := range quoted.FindAllStringIndex(condition, -1) {
@@ -159,6 +174,8 @@ func translateCode(code string) string {
 		}
 		return "| " + name + "()"
 	})
+	code = mapAttribute.ReplaceAllString(code, "map_attribute(")
+	code = dictMethod.ReplaceAllString(code, " | $1()")
 	return jinjaWordsIn(code)
 }
 
@@ -255,8 +272,17 @@ func number(v interface{}) (float64, bool) {
 
 // Dict2Items turns a map into a list of {key, value} maps sorted by key
 func Dict2Items(value interface{}) ([]interface{}, error) {
+	pairs, err := dictPairs(value)
+	items := make([]interface{}, len(pairs))
+	for i, pair := range pairs {
+		items[i] = pair
+	}
+	return items, err
+}
+
+func dictPairs(value interface{}) ([]map[string]interface{}, error) {
 	if value == nil {
-		return []interface{}{}, nil
+		return nil, nil
 	}
 	m, ok := value.(map[string]interface{})
 	if !ok {
@@ -267,11 +293,11 @@ func Dict2Items(value interface{}) ([]interface{}, error) {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
-	items := make([]interface{}, 0, len(keys))
+	pairs := make([]map[string]interface{}, 0, len(keys))
 	for _, k := range keys {
-		items = append(items, map[string]interface{}{"key": k, "value": m[k]})
+		pairs = append(pairs, map[string]interface{}{"key": k, "value": m[k]})
 	}
-	return items, nil
+	return pairs, nil
 }
 
 func items2dict(value interface{}) (map[string]interface{}, error) {
@@ -288,4 +314,46 @@ func items2dict(value interface{}) (map[string]interface{}, error) {
 		out[fmt.Sprint(m["key"])] = m["value"]
 	}
 	return out, nil
+}
+
+// inlineIf splits Jinja's "a if cond else b"; without else, b is ""
+func inlineIf(code string) (string, string, string, bool) {
+	parts := splitTop(code, " if ")
+	if len(parts) != 2 {
+		return "", "", "", false
+	}
+	cond, otherwise := parts[1], `""`
+	if rest := splitTop(parts[1], " else "); len(rest) == 2 {
+		cond, otherwise = rest[0], rest[1]
+	}
+	return parts[0], cond, otherwise, true
+}
+
+// splitTop splits code at sep outside quotes and brackets
+func splitTop(code, sep string) []string {
+	var parts []string
+	depth, start := 0, 0
+	var quote byte
+	for i := 0; i < len(code); i++ {
+		c := code[i]
+		switch {
+		case quote != 0:
+			if c == '\\' {
+				i++
+			} else if c == quote {
+				quote = 0
+			}
+		case c == '"' || c == '\'':
+			quote = c
+		case c == '(' || c == '[' || c == '{':
+			depth++
+		case c == ')' || c == ']' || c == '}':
+			depth--
+		case depth == 0 && strings.HasPrefix(code[i:], sep):
+			parts = append(parts, code[start:i])
+			i += len(sep) - 1
+			start = i + 1
+		}
+	}
+	return append(parts, code[start:])
 }

@@ -1,0 +1,19 @@
+plays:
+  - name: Jinja filters
+    hosts: all
+    become: true
+    vars:
+      users:
+        - {name: alice, admin: true}
+        - {name: bob, admin: false}
+      settings: {port: 8080, host: 0.0.0.0}
+    tasks:
+      - name: Render with filters
+        template:
+          src: app.conf.j2
+          dest: /root/onigirazu-e2e-filters
+      - name: Filter in a condition
+        copy:
+          content: "ok\n"
+          dest: /root/onigirazu-e2e-filters-when
+        when: users | selectattr('admin') | list | length == 1
