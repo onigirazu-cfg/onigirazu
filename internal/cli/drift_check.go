@@ -33,6 +33,8 @@ type DriftItem struct {
 	Task   string `json:"task"`
 	Module string `json:"module,omitempty"`
 	Detail string `json:"detail,omitempty"`
+	// Diff is what the task would change, as a unified diff (file modules)
+	Diff string `json:"diff,omitempty"`
 }
 
 // DriftReport is the outcome of a drift check
@@ -65,7 +67,7 @@ type driftCheckOptions struct {
 func (o driftCheckOptions) applyArgs(playbook string, check bool) []string {
 	args := []string{playbook}
 	if check {
-		args = append(args, "--check")
+		args = append(args, "--check", "--diff")
 	}
 	for _, e := range o.extraVars {
 		args = append(args, "-e", e)
@@ -105,7 +107,7 @@ func buildDriftReport(playbook string, result *types.PlaybookResult) *DriftRepor
 		for _, host := range play.Hosts {
 			hosts[host.Host] = true
 			for _, t := range host.Tasks {
-				item := DriftItem{Play: play.Name, Task: t.TaskName, Module: t.Module, Detail: taskDetail(t)}
+				item := DriftItem{Play: play.Name, Task: t.TaskName, Module: t.Module, Detail: taskDetail(t), Diff: taskDiffs(t)}
 				switch {
 				case t.Failed && !t.Ignored:
 					report.Errors[host.Host] = append(report.Errors[host.Host], item)
@@ -158,10 +160,15 @@ func writeDriftText(w io.Writer, r *DriftReport) {
 			if it.Module != "" {
 				line += " (" + it.Module + ")"
 			}
-			if it.Detail != "" {
+			if it.Detail != "" && it.Diff == "" { // the diff says more than the module message
 				line += ": " + it.Detail
 			}
 			fmt.Fprintln(w, line)
+			for _, l := range strings.Split(strings.TrimRight(it.Diff, "\n"), "\n") {
+				if l != "" {
+					fmt.Fprintln(w, "      "+l)
+				}
+			}
 		}
 	}
 	if len(r.Errors) > 0 {

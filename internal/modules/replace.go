@@ -70,6 +70,7 @@ func (m *ReplaceModule) Execute(ctx context.Context, host types.Host, args map[s
 		return result, nil
 	}
 	result.Changed = true
+	addDiff(args, &result, path, diffText(data, true), diffText([]byte(after), true))
 	if inCheckMode(args) {
 		result.Duration = time.Since(start)
 		return result, nil

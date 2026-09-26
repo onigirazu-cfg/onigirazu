@@ -193,7 +193,9 @@ type Task struct {
 	BecomeSet bool `yaml:"-" json:"-"`
 	// IncludedRole is the role of an include_role/import_role task, loaded
 	// by the parser
-	IncludedRole *Role  `yaml:"-" json:"-"`
+	IncludedRole *Role `yaml:"-" json:"-"`
+	// Diff asks modules for the before/after of what they change (--diff)
+	Diff         bool   `yaml:"-" json:"-"`
 	BecomeUser   string `yaml:"become_user,omitempty"`
 	BecomeMethod string `yaml:"become_method,omitempty"`
 	RunOnce      bool   `yaml:"run_once,omitempty"`

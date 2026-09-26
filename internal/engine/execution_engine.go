@@ -83,6 +83,8 @@ type ExecutionEngine struct {
 	playBecome becomeSettings
 	// environment of the play being executed
 	playEnvironment map[string]interface{}
+	// showDiff asks modules for before/after of their changes (--diff)
+	showDiff bool
 }
 
 // becomeSettings is the privilege escalation a task runs with
@@ -955,6 +957,7 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 			BecomeMethod: become.Method,
 			CheckMode:    &check,
 			Environment:  environment,
+			Diff:         e.showDiff,
 		}, target, taskVars)
 
 		if task.Until != "" && err == nil {
@@ -2035,6 +2038,11 @@ func censored(result types.TaskResult) types.TaskResult {
 		result.Error = noLogMessage
 	}
 	return result
+}
+
+// SetShowDiff makes modules report the before/after of their changes
+func (e *ExecutionEngine) SetShowDiff(show bool) {
+	e.showDiff = show
 }
 
 // SetPlaybookDir sets playbook_dir, the directory relative paths of the

@@ -192,6 +192,10 @@ func (r *Registry) ExecuteTask(ctx context.Context, task *types.Task, host types
 		args["_become_method"] = task.BecomeMethod
 	}
 
+	if task.Diff {
+		args["_diff"] = true
+	}
+
 	// Check mode: modules that support it report what they would change;
 	// the others are skipped rather than run
 	if task.CheckMode != nil && *task.CheckMode {

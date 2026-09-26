@@ -184,6 +184,9 @@ func (m *TemplateModule) executeLocal(ctx context.Context, host types.Host, args
 		return result, fmt.Errorf("%s", result.Error)
 	}
 
+	if needsUpdate {
+		addDiff(args, &result, dest, diffText(originalContent, len(originalContent) > 0), diffText([]byte(renderedContent), true))
+	}
 	changed := false
 	if needsUpdate && inCheckMode(args) {
 		changed = true
@@ -331,6 +334,9 @@ func (m *TemplateModule) executeRemote(ctx context.Context, host types.Host, cli
 		return result, fmt.Errorf("%s", result.Error)
 	}
 	needsUpdate := !current.Exists || current.SHA256 != newChecksum || force
+	if needsUpdate {
+		addFileDiff(ctx, host, args, &result, dest, current.Exists, []byte(renderedContent))
+	}
 
 	changed := false
 	if needsUpdate && inCheckMode(args) {

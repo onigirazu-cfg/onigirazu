@@ -4,18 +4,18 @@ plays:
     become: true
     tasks:
       - name: A file
-        copy: {content: "hello\n", dest: /root/onigirazu-e2e-sf-file, mode: "0640", owner: root}
+        copy: {content: "hello\n", dest: /root/onigirazu-e2e-stat-file, mode: "0640", owner: root}
       - name: A link
-        file: {src: /root/onigirazu-e2e-sf-file, dest: /root/onigirazu-e2e-sf-link, state: link}
+        file: {src: /root/onigirazu-e2e-stat-file, dest: /root/onigirazu-e2e-stat-link, state: link}
       - name: Stat the file
-        stat: {path: /root/onigirazu-e2e-sf-file}
+        stat: {path: /root/onigirazu-e2e-stat-file}
         register: f
       - name: Stat the link
-        stat: {path: /root/onigirazu-e2e-sf-link, checksum_algorithm: sha256}
+        stat: {path: /root/onigirazu-e2e-stat-link, checksum_algorithm: sha256}
         register: l
       - name: Record
         copy:
-          dest: /root/onigirazu-e2e-sf-out
+          dest: /root/onigirazu-e2e-stat-out
           content: |
             {{ f.stat.mode }} {{ f.stat.pw_name }} {{ f.stat.checksum }} {{ f.stat.isreg }}
             {{ l.stat.islnk }} {{ l.stat.lnk_source }}

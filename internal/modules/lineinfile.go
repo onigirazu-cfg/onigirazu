@@ -118,6 +118,12 @@ func (m *LineinfileModule) Execute(ctx context.Context, host types.Host, args ma
 		}
 	}
 
+	// before, taken now: ensureLine may change lines in place
+	before := strings.Join(lines, "\n")
+	if fileExists && before != "" {
+		before += "\n"
+	}
+
 	// Process based on state
 	var newLines []string
 	changed := false
@@ -128,6 +134,10 @@ func (m *LineinfileModule) Execute(ctx context.Context, host types.Host, args ma
 	} else {
 		// Add or replace line
 		newLines, changed = m.ensureLine(lines, line, regexpPattern, insertafter, insertbefore)
+	}
+
+	if changed {
+		addDiff(args, &result, path, before, strings.Join(newLines, "\n")+"\n")
 	}
 
 	// Back up and write only when something changes; check mode stops here
