@@ -75,6 +75,8 @@ type ExecutionEngine struct {
 	observers []ExecutionObserverI
 	// callback plugins, see callbacks.go
 	callbacks []plugins.CallbackPlugin
+	// handlers and meta state of the play being run, see handlers.go
+	handlers *playHandlers
 
 	// become settings of the play being executed; plays run one at a time
 	playBecome becomeSettings
@@ -485,6 +487,20 @@ func (e *ExecutionEngine) executePlay(ctx context.Context, play *types.Play) (*t
 		playVars = e.mergeVariables(e.variables, renderedPlayVars)
 	}
 	playVars = e.mergeVariables(playVars, e.extraVars)
+	e.startPlayHandlers(hosts, play.Handlers, playVars)
+	defer func() { e.handlers = nil }()
+
+	// As in Ansible: pre_tasks, handlers, roles and tasks, handlers,
+	// post_tasks, handlers
+	if len(play.PreTasks) > 0 {
+		e.logger.Debug("Executing %d pre-tasks for play '%s'", len(play.PreTasks), play.Name)
+		if err := e.executeTaskList(ctx, play.PreTasks, hosts, playVars, result); err != nil {
+			return result, fmt.Errorf("pre-tasks failed: %w", err)
+		}
+	}
+	if err := e.flushHandlers(ctx, hosts, result); err != nil {
+		return result, err
+	}
 
 	// Execute roles (with conditional and dependency support)
 	if len(play.Roles) > 0 || len(play.RoleObjects) > 0 {
@@ -544,14 +560,6 @@ func (e *ExecutionEngine) executePlay(ctx context.Context, play *types.Play) (*t
 		}
 	}
 
-	// Execute pre-tasks
-	if len(play.PreTasks) > 0 {
-		e.logger.Debug("Executing %d pre-tasks for play '%s'", len(play.PreTasks), play.Name)
-		if err := e.executeTaskList(ctx, play.PreTasks, hosts, playVars, result); err != nil {
-			return result, fmt.Errorf("pre-tasks failed: %w", err)
-		}
-	}
-
 	// Execute main tasks
 	if len(play.Tasks) > 0 {
 		e.logger.Debug("Executing %d main tasks for play '%s'", len(play.Tasks), play.Name)
@@ -569,6 +577,13 @@ func (e *ExecutionEngine) executePlay(ctx context.Context, play *types.Play) (*t
 		}
 	}
 
+	if err := e.flushHandlers(ctx, hosts, result); err != nil {
+		result.Success = false
+		if !play.IgnoreErrors {
+			return result, err
+		}
+	}
+
 	// Execute post-tasks
 	if len(play.PostTasks) > 0 {
 		e.logger.Debug("Executing %d post-tasks for play '%s'", len(play.PostTasks), play.Name)
@@ -578,16 +593,11 @@ func (e *ExecutionEngine) executePlay(ctx context.Context, play *types.Play) (*t
 		}
 	}
 
-	// Execute handlers if any were triggered
-	if len(play.Handlers) > 0 {
-		triggeredHandlers := e.collectTriggeredHandlers(result)
-		if len(triggeredHandlers) > 0 {
-			if err := e.executeHandlers(ctx, play.Handlers, triggeredHandlers, hosts, playVars, result); err != nil {
-				e.logger.Error("Handlers failed: %v", err)
-				if !play.IgnoreErrors {
-					result.Success = false
-				}
-			}
+	if err := e.flushHandlers(ctx, hosts, result); err != nil {
+		e.logger.Error("Handlers failed: %v", err)
+		result.Success = false
+		if !play.IgnoreErrors {
+			return result, err
 		}
 	}
 
@@ -651,6 +661,9 @@ func (e *ExecutionEngine) executeTaskList(ctx context.Context, tasks []types.Tas
 // executeTask executes a single task on multiple hosts
 func (e *ExecutionEngine) executeTask(ctx context.Context, task *types.Task, hosts []types.Host,
 	variables map[string]interface{}, playResult *types.PlayResult) error {
+	if task.Module == "meta" && metaAction(task) == "flush_handlers" {
+		return e.flushHandlers(ctx, hosts, playResult)
+	}
 	// run_once inside a block: blocks run per host, so the hosts share a
 	// registry; the first runs the task, the others wait and take its result
 	if task.RunOnce && len(hosts) == 1 {
@@ -774,6 +787,9 @@ func (e *ExecutionEngine) SetSecurityPolicy(cfg security.SecurityConfig) {
 // executeTaskOnHost executes a task on a single host
 func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Task, host *types.Host,
 	variables map[string]interface{}, playResult *types.PlayResult) error {
+	if e.hostEnded(host.Name) {
+		return nil // meta: end_host / end_play
+	}
 	e.logger.TaskStart(task.Name, host.Name)
 
 	// Notify observers of task start
@@ -824,6 +840,10 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 				Output: map[string]interface{}{"skip_reason": "condition is false"},
 			}, playResult)
 		}
+	}
+
+	if task.Module == "meta" {
+		return e.runMeta(task, host, playResult)
 	}
 
 	// Render task arguments with templates
@@ -1000,6 +1020,7 @@ func (e *ExecutionEngine) finishTask(task *types.Task, host *types.Host, result 
 	// only a task that changed something notifies its handlers
 	if result.Success && result.Changed && !result.Skipped && len(task.Notify) > 0 {
 		result.Notify = task.Notify
+		e.notifyHandlers(task.Notify, host.Name)
 	}
 
 	// Update play result
@@ -1520,15 +1541,8 @@ func (e *ExecutionEngine) executeRole(ctx context.Context, role *types.Role, hos
 		}
 	}
 
-	// Execute role handlers if any were triggered
-	if len(role.Handlers) > 0 {
-		triggeredHandlers := e.collectTriggeredHandlers(playResult)
-		if len(triggeredHandlers) > 0 {
-			if err := e.executeHandlers(ctx, role.Handlers, triggeredHandlers, hosts, roleVars, playResult); err != nil {
-				e.logger.Warn("Role handlers failed: %v", err)
-			}
-		}
-	}
+	// role handlers run with the play's, at the next flush
+	e.addHandlers(role.Handlers, roleVars)
 
 	// Execute role post_tasks if defined
 	if len(role.PostTasks) > 0 {
@@ -1744,73 +1758,6 @@ func (e *ExecutionEngine) executeTaskListWithRetry(ctx context.Context, tasks []
 func (e *ExecutionEngine) executeTaskWithRetryLogic(ctx context.Context, task *types.Task, hosts []types.Host,
 	variables map[string]interface{}, playResult *types.PlayResult) error {
 	return e.executeTask(ctx, task, hosts, variables, playResult)
-}
-
-// collectTriggeredHandlers collects all handler names that were triggered by tasks
-func (e *ExecutionEngine) collectTriggeredHandlers(playResult *types.PlayResult) []string {
-	triggered := make(map[string]bool) // Use map to avoid duplicates
-	var result []string
-
-	// Iterate through all hosts and their tasks
-	for _, hostResult := range playResult.Hosts {
-		for _, taskResult := range hostResult.Tasks {
-			// Check if task was successful and has notify directives
-			if taskResult.Success && len(taskResult.Notify) > 0 {
-				for _, notifyName := range taskResult.Notify {
-					if !triggered[notifyName] {
-						triggered[notifyName] = true
-						result = append(result, notifyName)
-					}
-				}
-			}
-		}
-	}
-
-	return result
-}
-
-// executeHandlers executes all handlers that were triggered
-func (e *ExecutionEngine) executeHandlers(ctx context.Context, handlers []types.Task,
-	triggeredNames []string, hosts []types.Host, variables map[string]interface{},
-	playResult *types.PlayResult) error {
-	if len(handlers) == 0 || len(triggeredNames) == 0 {
-		return nil
-	}
-
-	e.logger.Info("Executing %d handlers (triggered: %v)", len(handlers), len(triggeredNames))
-
-	// Create set of triggered handler names for quick lookup
-	triggeredSet := make(map[string]bool)
-	for _, name := range triggeredNames {
-		triggeredSet[name] = true
-	}
-
-	// Find and execute matching handlers
-	for _, handler := range handlers {
-		shouldExecute := false
-
-		// Check if handler matches by name (explicit notify)
-		if triggeredSet[handler.Name] {
-			shouldExecute = true
-		}
-
-		// Check if handler matches by listen directive
-		if handler.Listen != "" && triggeredSet[handler.Listen] {
-			shouldExecute = true
-		}
-
-		if shouldExecute {
-			e.logger.Debug("Executing handler: %s", handler.Name)
-			if err := e.executeTask(ctx, &handler, hosts, variables, playResult); err != nil {
-				e.logger.Error("Handler '%s' failed: %v", handler.Name, err)
-				if !handler.IgnoreErrors {
-					return fmt.Errorf("handler '%s' failed: %w", handler.Name, err)
-				}
-			}
-		}
-	}
-
-	return nil
 }
 
 // GetExecutionSummary returns a comprehensive execution summary

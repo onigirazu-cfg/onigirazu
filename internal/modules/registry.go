@@ -57,6 +57,7 @@ func NewRegistry() *Registry {
 	registry.RegisterModule(NewFailModule())
 	registry.RegisterModule(NewAssertModule())
 	registry.RegisterModule(NewReplaceModule())
+	registry.RegisterModule(NewMetaModule())
 	registry.RegisterModule(NewPauseModule())
 	registry.RegisterModule(NewScriptModule())
 	registry.RegisterModule(NewWaitForModule())

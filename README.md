@@ -807,6 +807,15 @@ and `rescue` runs, where `ansible_failed_task` (name, module) and
 `ansible_failed_result` describe the failure; `always` runs in any case. A
 failure handled by `rescue` does not fail the play.
 
+### Handlers and meta
+
+A task that changed something notifies its handlers (`notify:`, by name or
+`listen:`) for its host. Notified handlers run once, in the order they are
+defined (play handlers and role handlers together), only on the hosts that
+notified them: after `pre_tasks`, after roles and `tasks`, after `post_tasks`,
+and at `meta: flush_handlers`. `meta: end_host` stops a host for the rest of
+the play, `meta: end_play` stops all of them; `meta: noop` does nothing.
+
 ### Check mode
 
 `onigirazu apply site.yml --check` runs every module that supports it in check

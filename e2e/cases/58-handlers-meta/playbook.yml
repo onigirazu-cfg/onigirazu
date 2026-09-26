@@ -1,0 +1,27 @@
+plays:
+  - name: handlers and meta
+    hosts: all
+    become: true
+    pre_tasks:
+      - name: Pre-task notifies
+        copy: {content: "pre\n", dest: /root/onigirazu-e2e-hm-pre}
+        notify: log
+    tasks:
+      - name: The pre-task handler already ran
+        shell: cat /root/onigirazu-e2e-hm-log > /root/onigirazu-e2e-hm-after-pre
+        args: {creates: /root/onigirazu-e2e-hm-after-pre}
+      - name: Change notifies again
+        copy: {content: "task\n", dest: /root/onigirazu-e2e-hm-task}
+        notify: log
+      - name: Flush now
+        meta: flush_handlers
+      - name: Handler output is visible before the play ends
+        shell: cat /root/onigirazu-e2e-hm-log > /root/onigirazu-e2e-hm-after-flush
+        args: {creates: /root/onigirazu-e2e-hm-after-flush}
+      - name: Stop this host
+        meta: end_host
+      - name: Never runs
+        file: {path: /root/onigirazu-e2e-hm-never, state: touch}
+    handlers:
+      - name: log
+        shell: echo run >> /root/onigirazu-e2e-hm-log
