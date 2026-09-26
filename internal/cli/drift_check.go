@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -37,6 +38,9 @@ type DriftItem struct {
 	Detail string `json:"detail,omitempty"`
 	// Diff is what the task would change, as a unified diff (file modules)
 	Diff string `json:"diff,omitempty"`
+	// Since is when the task was first seen drifting in the checks in a row
+	// that led to this one (drift history)
+	Since *time.Time `json:"since,omitempty"`
 }
 
 // DriftReport is the outcome of a drift check
@@ -173,6 +177,9 @@ func writeDriftText(w io.Writer, r *DriftReport) {
 			if it.Detail != "" && it.Diff == "" { // the diff says more than the module message
 				line += ": " + it.Detail
 			}
+			if it.Since != nil {
+				line += "  [" + sinceText(*it.Since, r.CheckedAt) + "]"
+			}
 			fmt.Fprintln(w, line)
 			for _, l := range strings.Split(strings.TrimRight(it.Diff, "\n"), "\n") {
 				if l != "" {
@@ -204,6 +211,9 @@ func runDriftCheck(cmd *cobra.Command, playbook string, o driftCheckOptions) err
 	}
 	report := buildDriftReport(playbook, result)
 	report.Plan = o.plan
+	if !o.plan {
+		recordDriftHistory(playbook, report)
+	}
 
 	if o.fix && len(report.Drift) > 0 && len(report.Errors) == 0 {
 		if _, err := runPlaybook(o.applyArgs(playbook, false)); err != nil {
@@ -293,4 +303,24 @@ func redactURL(url string) string {
 		}
 	}
 	return url
+}
+
+// recordDriftHistory marks how long each task has drifted and keeps the
+// check; history problems are reported, never fatal
+func recordDriftHistory(playbook string, report *DriftReport) {
+	dir, err := driftHistoryDir()
+	if err != nil {
+		return
+	}
+	abs, err := filepath.Abs(playbook)
+	if err != nil {
+		abs = playbook
+	}
+	history, err := loadDriftHistory(dir, abs)
+	if err == nil {
+		annotateSince(report, history)
+	}
+	if err := saveDriftHistory(dir, abs, report); err != nil {
+		fmt.Fprintf(os.Stderr, "drift history: %v\n", err)
+	}
 }

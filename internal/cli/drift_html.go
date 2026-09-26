@@ -86,7 +86,7 @@ pre span{display:block;padding:0 6px}.add{background:var(--add)}.del{background:
 {{if .R.Fixed}}<div class="ok">fixed: the playbook was applied</div>{{end}}
 </div>
 {{range .Hosts}}<section><h2>{{.Name}}</h2>
-{{range .Items}}<div class="task"><strong>{{.Task}}</strong>{{if .Module}} <span class="muted">({{.Module}})</span>{{end}}{{if and .Detail (not .Lines)}} — {{.Detail}}{{end}}
+{{range .Items}}<div class="task"><strong>{{.Task}}</strong>{{if .Module}} <span class="muted">({{.Module}})</span>{{end}}{{if .Since}} <span class="muted">· since {{.Since.Local.Format "2006-01-02 15:04"}}</span>{{end}}{{if and .Detail (not .Lines)}} — {{.Detail}}{{end}}
 {{if .Lines}}<pre>{{range .Lines}}<span class="{{.Class}}">{{.Text}}</span>{{end}}</pre>{{end}}</div>{{end}}
 {{range .Errors}}<div class="task bad"><strong>{{.Task}}</strong>: {{.Detail}}</div>{{end}}
 </section>{{end}}

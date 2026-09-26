@@ -1070,6 +1070,10 @@ web1
 In sync: web2, db1
 ```
 
+Every check is kept in `~/.onigirazu/drift-history` (the newest 500): a
+drifting task shows since when it has drifted (`[since 3h]`, `since` in JSON),
+and `onigirazu drift site.yml --history` lists past checks.
+
 Exit code: 0 in sync, 2 drift, 1 a task could not be checked. `--limit`,
 `--tags`, `-e`, `-b`, `-u` and `--private-key` work as for `apply`, so a cron
 job or a CI schedule can watch a fleet.
