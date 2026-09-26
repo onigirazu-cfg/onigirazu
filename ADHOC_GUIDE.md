@@ -102,9 +102,9 @@ onigirazu run all -m ping -i inventory.yml -o json | sed -n '/^{/,$p' | jq -r '.
 
 Current limitations of `run`:
 
-- `--check`, `--diff`, `--timeout` and `-e` are accepted but have no effect: the module
-  runs for real, without a time limit, and `{{ }}` in arguments is not rendered. For a
-  dry run or variables write a one-task playbook and use `onigirazu apply --check` or `plan`.
+- `{{ }}` in arguments is not rendered; for templated arguments write a one-task
+  playbook. (`--check` runs only modules that support check mode and skips the others,
+  `--diff` shows file changes, `-e` and `--timeout` apply.)
 - There is no become option and the security policy is not applied; use a playbook with
   `become: true` / `apply -b`.
 - Inline inventories (`-i "host1,host2"`) are not supported; put the hosts in a file.
