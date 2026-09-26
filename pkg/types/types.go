@@ -24,11 +24,11 @@ type Host struct {
 
 	// Privilege escalation of the task being run on this host; set per task by
 	// the module registry, never read from inventory
-	Become       bool   `yaml:"-" json:"-"`
-	BecomeUser   string `yaml:"-" json:"-"`
+	Become     bool   `yaml:"-" json:"-"`
+	BecomeUser string `yaml:"-" json:"-"`
 	// Environment of the current task, set by the registry for the executor
-	Environment map[string]string `yaml:"-" json:"-"`
-	BecomeMethod string `yaml:"-" json:"-"`
+	Environment  map[string]string `yaml:"-" json:"-"`
+	BecomeMethod string            `yaml:"-" json:"-"`
 }
 
 // UnmarshalYAML implements custom YAML unmarshaling for Host
