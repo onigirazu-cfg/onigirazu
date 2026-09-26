@@ -1,6 +1,6 @@
 # MongoDB is not packaged for Ubuntu: run the server in Docker and put a
 # mongosh wrapper on PATH. mongo:8 refuses kernels >= 6.19 (SERVER-121912).
-command -v docker >/dev/null || need docker.io  # the image may ship Docker CE
+need_docker
 docker rm -f onigirazu-e2e-mongo >/dev/null 2>&1
 for _ in 1 2 3; do docker pull -q mongo:7 >/dev/null 2>&1 && break; sleep 10; done  # Docker Hub fails now and then
 docker run -d --name onigirazu-e2e-mongo mongo:7 >/dev/null
