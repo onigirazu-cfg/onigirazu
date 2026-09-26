@@ -360,3 +360,18 @@ func TestForceBecome_AppliesToEveryPlay(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, became)
 }
+
+func TestRunOnce_InsideBlockRunsOnceForAllHosts(t *testing.T) {
+	engine, _, calls := perHostEngine(t, types.TaskResult{Success: true, Output: map[string]interface{}{"stdout": "v"}})
+	block := types.Task{Name: "b", Block: []types.Task{
+		{Name: "once", Module: "command", RunOnce: true, Register: "r"},
+		{Name: "every host", Module: "debug"},
+	}}
+	require.NoError(t, engine.executeTaskList(context.Background(), []types.Task{block}, twoHosts(), map[string]interface{}{}, &types.PlayResult{}))
+	assert.Len(t, *calls, 3, "once + every host twice")
+	for _, h := range []string{"h1", "h2"} {
+		r, ok := engine.getHostVar(h, "r").(map[string]interface{})
+		require.True(t, ok, h)
+		assert.Equal(t, "v", r["stdout"])
+	}
+}
