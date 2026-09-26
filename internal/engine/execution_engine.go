@@ -80,6 +80,8 @@ type ExecutionEngine struct {
 
 	// become settings of the play being executed; plays run one at a time
 	playBecome becomeSettings
+	// environment of the play being executed
+	playEnvironment map[string]interface{}
 }
 
 // becomeSettings is the privilege escalation a task runs with
@@ -92,6 +94,9 @@ type becomeSettings struct {
 // effectiveBecome applies the play's become settings to a task that does not
 // set become itself
 func effectiveBecome(task *types.Task, play becomeSettings) becomeSettings {
+	if task.BecomeSet && !task.Become {
+		return becomeSettings{} // become: false wins over the play
+	}
 	if task.Become {
 		return becomeSettings{Become: true, User: task.BecomeUser, Method: task.BecomeMethod}
 	}
@@ -411,6 +416,7 @@ func (e *ExecutionEngine) ExecutePlaybook(ctx context.Context, playbook *types.P
 func (e *ExecutionEngine) executePlay(ctx context.Context, play *types.Play) (*types.PlayResult, error) {
 	e.mutex.Lock()
 	e.playBecome = becomeSettings{Become: play.Become, User: play.BecomeUser, Method: play.BecomeMethod}
+	e.playEnvironment = play.Environment
 	if e.forceBecome {
 		e.playBecome.Become = true
 		if e.forceBecomeUser != "" {
@@ -421,6 +427,7 @@ func (e *ExecutionEngine) executePlay(ctx context.Context, play *types.Play) (*t
 	defer func() {
 		e.mutex.Lock()
 		e.playBecome = becomeSettings{}
+		e.playEnvironment = nil
 		e.mutex.Unlock()
 	}()
 
@@ -878,9 +885,12 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 
 	// environment: rendered with the task's variables
 	var environment map[string]interface{}
-	if len(task.Environment) > 0 {
-		environment = make(map[string]interface{}, len(task.Environment))
-		for k, v := range task.Environment {
+	e.mutex.RLock()
+	merged := mergeMaps(e.playEnvironment, task.Environment)
+	e.mutex.RUnlock()
+	if len(merged) > 0 {
+		environment = make(map[string]interface{}, len(merged))
+		for k, v := range merged {
 			rendered, err := e.templateEngine.Render(ctx, fmt.Sprint(v), taskVars)
 			if err != nil {
 				return failed(fmt.Errorf("environment %s: %w", k, err))
@@ -1988,9 +1998,14 @@ func inheritBlock(block *types.Task, tasks []types.Task, rescuable bool) []types
 			}
 		}
 		t.Tags = append(append([]string{}, block.Tags...), t.Tags...)
-		if block.Become && !t.Become {
+		if block.BecomeSet && !t.BecomeSet {
+			t.Become, t.BecomeSet, t.BecomeUser, t.BecomeMethod = block.Become, true, block.BecomeUser, block.BecomeMethod
+		} else if block.Become && !t.Become && !t.BecomeSet {
 			t.Become, t.BecomeUser, t.BecomeMethod = true, block.BecomeUser, block.BecomeMethod
 		}
+		// environment and vars of the block, overridden by the task's own
+		t.Environment = mergeMaps(block.Environment, t.Environment)
+		t.Vars = mergeMaps(block.Vars, t.Vars)
 		if block.IgnoreErrors {
 			t.IgnoreErrors = true
 		}
@@ -2060,4 +2075,19 @@ type runOnceEntry struct {
 	host string
 	done chan struct{}
 	err  error
+}
+
+// mergeMaps returns a new map with b's entries over a's; nil when both are empty
+func mergeMaps(a, b map[string]interface{}) map[string]interface{} {
+	if len(a) == 0 && len(b) == 0 {
+		return b
+	}
+	out := make(map[string]interface{})
+	for k, v := range a {
+		out[k] = v
+	}
+	for k, v := range b {
+		out[k] = v
+	}
+	return out
 }

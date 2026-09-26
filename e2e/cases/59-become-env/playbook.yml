@@ -1,0 +1,32 @@
+plays:
+  - name: become false, play and block environment
+    hosts: all
+    become: yes
+    environment:
+      E2E_PLAY: play
+    tasks:
+      - name: Without escalation
+        command: id -un
+        become: no
+        register: plain
+        changed_when: false
+      - name: With the play's escalation
+        command: id -un
+        register: root
+        changed_when: false
+      - name: Play environment
+        shell: echo "$E2E_PLAY" > /root/onigirazu-e2e-be-play
+        changed_when: false
+      - block:
+          - name: Block environment over the play's
+            shell: echo "$E2E_PLAY $E2E_BLOCK $E2E_VAR" > /root/onigirazu-e2e-be-block
+            changed_when: false
+        environment:
+          E2E_BLOCK: block
+          E2E_VAR: "{{ block_var }}"
+        vars:
+          block_var: from-block-vars
+      - name: Record users
+        copy:
+          content: "{{ plain.stdout }}|{{ root.stdout }}\n"
+          dest: /root/onigirazu-e2e-be-users
