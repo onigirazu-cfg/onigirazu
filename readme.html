@@ -859,6 +859,9 @@ task only), <code>no_log: true</code> (output and errors hidden from logs, state
 <code>-o json</code>; <code>register</code> still gets them), <code>loop_control</code> (<code>loop_var</code>,
 <code>index_var</code>) and the older <code>with_items</code>. <code>command</code> and <code>shell</code> honour
 <code>creates</code> and <code>removes</code>.</p>
+<p><code>environment</code> also works on a play and a block, <code>vars</code> on a block; the task's
+own values win. <code>become: false</code> on a task or block runs it without escalation
+in a play with <code>become: true</code>. Boolean keywords take <code>yes</code>/<code>no</code> as well.</p>
 <h3>Machine-readable output</h3>
 <p><code>onigirazu apply site.yml -o json</code> (or <code>-o yaml</code>) writes one document to
 stdout: status (<code>success</code>, <code>partial_success</code>, <code>failed</code>), totals, and every task
