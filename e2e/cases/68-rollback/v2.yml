@@ -1,0 +1,13 @@
+plays:
+  - name: version 2
+    hosts: all
+    become: true
+    tasks:
+      - name: Config v2
+        copy: {content: "version=2\n", dest: /root/onigirazu-e2e-rb-conf, mode: "0600"}
+      - name: A line
+        lineinfile: {path: /root/onigirazu-e2e-rb-conf, line: "extra=1"}
+      - name: A new file
+        copy: {content: "new\n", dest: /root/onigirazu-e2e-rb-new}
+      - name: Directory mode
+        file: {path: /root/onigirazu-e2e-rb-dir, state: directory, mode: "0700"}

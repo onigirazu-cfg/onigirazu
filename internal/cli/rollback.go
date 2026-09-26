@@ -13,6 +13,7 @@ import (
 	"github.com/onigirazu-cfg/onigirazu/internal/logger"
 	"github.com/onigirazu-cfg/onigirazu/internal/modules"
 	"github.com/onigirazu-cfg/onigirazu/internal/rollback"
+	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
 var (
@@ -23,6 +24,7 @@ var (
 	rollbackCleanup    bool
 	rollbackMaxAge     string
 	rollbackParallel   int
+	rollbackLast       bool
 )
 
 var rollbackCmd = &cobra.Command{
@@ -60,6 +62,7 @@ func init() {
 	rollbackCmd.Flags().BoolVar(&rollbackCleanup, "cleanup", false, "Cleanup old snapshots")
 	rollbackCmd.Flags().StringVar(&rollbackMaxAge, "max-age", "30d", "Maximum age for snapshots (e.g., 7d, 24h)")
 	rollbackCmd.Flags().IntVarP(&rollbackParallel, "parallel", "f", 10, "Number of parallel executions")
+	rollbackCmd.Flags().BoolVar(&rollbackLast, "last", false, "Roll back the newest snapshot")
 }
 
 func runRollback(cmd *cobra.Command, args []string) error {
@@ -98,13 +101,42 @@ func runRollback(cmd *cobra.Command, args []string) error {
 		return cleanupSnapshots(sm, rollbackMaxAge)
 	}
 
+	if rollbackLast && rollbackSnapshotID == "" {
+		snapshots, err := sm.ListSnapshots()
+		if err != nil || len(snapshots) == 0 {
+			return fmt.Errorf("no snapshot to roll back")
+		}
+		newest := snapshots[0]
+		for _, s := range snapshots[1:] {
+			if s.Timestamp.After(newest.Timestamp) {
+				newest = s
+			}
+		}
+		rollbackSnapshotID = newest.ID
+	}
 	if rollbackSnapshotID == "" {
-		return fmt.Errorf("--snapshot is required (use --list to see available snapshots)")
+		return fmt.Errorf("--snapshot or --last is required (use --list to see available snapshots)")
 	}
 
 	if rollbackDryRun {
 		return dryRunRollback(executor, rollbackSnapshotID)
 	}
+
+	// the hosts of the snapshot are reached as the inventory says
+	if len(inventoryPaths) == 0 {
+		return fmt.Errorf("rollback needs the inventory (-i) to reach the hosts")
+	}
+	invManager, err := loadInventory(context.Background(), log)
+	if err != nil {
+		return err
+	}
+	executor.WithHosts(func(name string) (types.Host, error) {
+		hosts, err := invManager.GetHosts(name)
+		if err != nil || len(hosts) == 0 {
+			return types.Host{}, fmt.Errorf("not in the inventory")
+		}
+		return hosts[0], nil
+	})
 
 	return performRollback(executor, rollbackSnapshotID)
 }

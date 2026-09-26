@@ -1,0 +1,11 @@
+plays:
+  - name: version 1
+    hosts: all
+    become: true
+    tasks:
+      - name: Config v1
+        copy: {content: "version=1\n", dest: /root/onigirazu-e2e-rb-conf, mode: "0644"}
+      - name: Directory v1
+        file: {path: /root/onigirazu-e2e-rb-dir, state: directory, mode: "0755"}
+      - name: No file of v2
+        file: {path: /root/onigirazu-e2e-rb-new, state: absent}

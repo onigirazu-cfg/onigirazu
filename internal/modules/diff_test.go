@@ -68,3 +68,19 @@ func TestDiffText(t *testing.T) {
 	assert.Equal(t, "", diffText([]byte("x"), false))
 	assert.Equal(t, "(binary, 3 bytes)\n", diffText([]byte{1, 0, 2}, true))
 }
+
+func TestCaptureBefore(t *testing.T) {
+	dir := t.TempDir()
+	host := types.Host{Name: "localhost", Address: "127.0.0.1"}
+	p := filepath.Join(dir, "conf")
+	require.NoError(t, os.WriteFile(p, []byte("v1\n"), 0o640))
+	before := captureBefore(context.Background(), host, "copy", map[string]interface{}{"dest": p, "_become": false})
+	assert.Equal(t, "file", before["kind"])
+	assert.Equal(t, "v1\n", before["content"])
+	assert.Equal(t, "0640", before["mode"])
+	assert.Equal(t, false, before["_become"])
+
+	absent := captureBefore(context.Background(), host, "file", map[string]interface{}{"path": filepath.Join(dir, "none")})
+	assert.Equal(t, "absent", absent["kind"])
+	assert.Nil(t, captureBefore(context.Background(), host, "apt", map[string]interface{}{"name": "x"}))
+}

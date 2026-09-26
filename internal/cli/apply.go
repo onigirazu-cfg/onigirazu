@@ -18,6 +18,7 @@ import (
 	"github.com/onigirazu-cfg/onigirazu/internal/config"
 	"github.com/onigirazu-cfg/onigirazu/internal/engine"
 	"github.com/onigirazu-cfg/onigirazu/internal/execution"
+	"github.com/onigirazu-cfg/onigirazu/internal/interfaces"
 	"github.com/onigirazu-cfg/onigirazu/internal/inventory"
 	"github.com/onigirazu-cfg/onigirazu/internal/logger"
 	"github.com/onigirazu-cfg/onigirazu/internal/metrics"
@@ -982,6 +983,10 @@ Examples:
 					}
 				}
 
+				// what the failed run changed can be rolled back too
+				if homeDir != "" && !cfg.IsCheckMode() {
+					saveRunSnapshot(homeDir, playbookPath, result, log)
+				}
 				return fmt.Errorf("playbook execution failed")
 			}
 
@@ -989,64 +994,9 @@ Examples:
 			// Print formatted execution end
 			log.PrintExecutionEnd(summary)
 
-			// Create snapshot for rollback capability (check mode changed nothing)
+			// Snapshot for rollback (check mode changed nothing)
 			if homeDir != "" && !cfg.IsCheckMode() {
-				snapshotDir := filepath.Join(homeDir, ".onigirazu", "snapshots")
-				snapshotMgr := rollback.NewSnapshotManager(snapshotDir)
-
-				// Create snapshot
-				snapshot, err := snapshotMgr.CreateSnapshot(playbook.Name, "Auto-created snapshot after playbook execution")
-				if err == nil {
-					// Add task results as resource snapshots
-					for _, play := range result.Plays {
-						for _, task := range play.Tasks {
-							if task.Changed {
-								// Add resource snapshot for each changed task
-								resourceSnapshot := rollback.ResourceSnapshot{
-									Type:       task.Module,
-									TaskName:   task.TaskName,
-									Host:       task.Host,
-									State:      make(map[string]interface{}),
-									Action:     "modified",
-									Module:     task.Module,
-									Reversible: isModuleReversible(task.Module),
-								}
-
-								// Try to extract resource identifier from output
-								if task.Output != nil {
-									// Copy output as state
-									resourceSnapshot.State = task.Output
-
-									// Extract resource identifier
-									if name, ok := task.Output["name"]; ok {
-										resourceSnapshot.Identifier = fmt.Sprintf("%v", name)
-									} else if path, ok := task.Output["path"]; ok {
-										resourceSnapshot.Identifier = fmt.Sprintf("%v", path)
-									} else if pkg, ok := task.Output["package"]; ok {
-										resourceSnapshot.Identifier = fmt.Sprintf("%v", pkg)
-									} else if dest, ok := task.Output["dest"]; ok {
-										resourceSnapshot.Identifier = fmt.Sprintf("%v", dest)
-									}
-								}
-
-								snapshotMgr.AddResourceSnapshot(snapshot, resourceSnapshot)
-							}
-						}
-					}
-
-					// Save snapshot
-					if err := snapshotMgr.SaveSnapshot(snapshot); err != nil {
-						log.Warn("Failed to save snapshot: %v", err)
-					} else {
-						log.Info("Snapshot created successfully: %s", snapshot.ID)
-					}
-					// one snapshot per run: keep the recent ones only
-					if err := snapshotMgr.KeepNewest(100); err != nil {
-						log.Warn("Failed to prune old snapshots: %v", err)
-					}
-				} else {
-					log.Warn("Failed to create snapshot: %v", err)
-				}
+				saveRunSnapshot(homeDir, playbookPath, result, log)
 			}
 
 			// Save final state with playbook results
@@ -1131,28 +1081,6 @@ Examples:
 	cmd.Flags().BoolVar(&profileTrace, "profile-trace", false, "Generate execution trace (disables CPU profiling)")
 
 	return cmd
-}
-
-// isModuleReversible checks if a module's changes can be reversed
-func isModuleReversible(module string) bool {
-	reversibleModules := map[string]bool{
-		"file":       true,
-		"copy":       true,
-		"template":   true,
-		"lineinfile": true,
-		"package":    true,
-		"service":    true,
-		"user":       true,
-		"group":      true,
-		"git":        true,
-		"systemd":    true,
-		"cron":       true,
-		"command":    false, // shell commands can't be automatically reversed
-		"shell":      false,
-		"debug":      false,
-	}
-
-	return reversibleModules[module]
 }
 
 // recordAuditResults records playbook execution results in the audit log
@@ -1259,4 +1187,43 @@ func writeRunResult(w io.Writer, format string, result *types.PlaybookResult, pl
 		return
 	}
 	fmt.Fprintln(w, string(data))
+}
+
+// saveRunSnapshot keeps, for rollback, what the file modules of a run found
+// before they changed something
+func saveRunSnapshot(homeDir, playbookPath string, result *types.PlaybookResult, log interfaces.Logger) {
+	snapshotMgr := rollback.NewSnapshotManager(filepath.Join(homeDir, ".onigirazu", "snapshots"))
+	snapshot, err := snapshotMgr.CreateSnapshot(playbookPath, "Changes of a playbook run")
+	if err != nil {
+		log.Warn("Failed to create snapshot: %v", err)
+		return
+	}
+	seq := 0
+	for _, play := range result.Plays {
+		for _, host := range play.Hosts {
+			for _, task := range host.Tasks {
+				seq++
+				if !task.Changed {
+					continue
+				}
+				if r, ok := rollback.ResourceFromResult(task, host.Host, seq); ok {
+					snapshotMgr.AddResourceSnapshot(snapshot, r)
+				} else {
+					snapshotMgr.AddResourceSnapshot(snapshot, rollback.ResourceSnapshot{
+						Type: task.Module, Host: host.Host, Module: task.Module, TaskName: task.TaskName,
+						Action: "modified", State: map[string]interface{}{"reason": "the module keeps no previous state"},
+					})
+				}
+			}
+		}
+	}
+	if err := snapshotMgr.SaveSnapshot(snapshot); err != nil {
+		log.Warn("Failed to save snapshot: %v", err)
+		return
+	}
+	log.Info("Snapshot created: %s (%d change(s), rollback: onigirazu rollback --snapshot %s)", snapshot.ID, len(snapshot.Resources), snapshot.ID)
+	// one snapshot per run: keep the recent ones only
+	if err := snapshotMgr.KeepNewest(100); err != nil {
+		log.Warn("Failed to prune old snapshots: %v", err)
+	}
 }

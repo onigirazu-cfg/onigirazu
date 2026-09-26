@@ -16,6 +16,14 @@ type RollbackExecutor struct {
 	moduleRegistry  interfaces.ModuleRegistry
 	logger          interfaces.Logger
 	maxConcurrency  int
+	// hosts resolves a host name of the snapshot to how to reach it
+	hosts func(name string) (types.Host, error)
+}
+
+// WithHosts sets how host names are resolved (from the inventory)
+func (re *RollbackExecutor) WithHosts(resolve func(name string) (types.Host, error)) *RollbackExecutor {
+	re.hosts = resolve
+	return re
 }
 
 // NewRollbackExecutor creates a new rollback executor
@@ -130,20 +138,32 @@ func (re *RollbackExecutor) executeRollbackOperation(ctx context.Context, resour
 		return fmt.Errorf("failed to get module %s: %w", resource.RollbackOp.Module, err)
 	}
 
-	// Create a host object
-	host := types.Host{
-		Name: resource.Host,
-		// Note: In a real implementation, we would need to get full host details
-		// from inventory. For now, we assume the host name is sufficient.
+	host := types.Host{Name: resource.Host}
+	if re.hosts != nil {
+		var err error
+		if host, err = re.hosts(resource.Host); err != nil {
+			return fmt.Errorf("host %s: %w", resource.Host, err)
+		}
+	}
+	// the escalation the task had, for modules that take it from the host
+	if become, _ := resource.RollbackOp.Args["_become"].(bool); become {
+		host.Become = true
+		host.BecomeUser, _ = resource.RollbackOp.Args["_become_user"].(string)
+		host.BecomeMethod, _ = resource.RollbackOp.Args["_become_method"].(string)
+	}
+	// modules may add keys; the snapshot keeps its own copy
+	args := make(map[string]interface{}, len(resource.RollbackOp.Args))
+	for k, v := range resource.RollbackOp.Args {
+		args[k] = v
 	}
 
 	// Validate arguments
-	if err := module.Validate(resource.RollbackOp.Args); err != nil {
+	if err := module.Validate(args); err != nil {
 		return fmt.Errorf("invalid rollback arguments: %w", err)
 	}
 
 	// Execute the rollback operation
-	taskResult, err := module.Execute(ctx, host, resource.RollbackOp.Args)
+	taskResult, err := module.Execute(ctx, host, args)
 	if err != nil {
 		return fmt.Errorf("rollback execution failed: %w", err)
 	}
@@ -199,10 +219,11 @@ func (re *RollbackExecutor) DryRunRollback(ctx context.Context, snapshotID strin
 		}
 
 		if resource.RollbackOp != nil {
-			op.Details = fmt.Sprintf("Execute %s with args: %v",
-				resource.RollbackOp.Module, resource.RollbackOp.Args)
+			op.Details = describeOperation(resource.RollbackOp)
+		} else if reason, ok := resource.State["reason"].(string); ok {
+			op.Details = "skipped: " + reason
 		} else {
-			op.Details = "Non-reversible - will be skipped"
+			op.Details = "skipped: not reversible"
 		}
 
 		plan.Operations = append(plan.Operations, op)
@@ -313,4 +334,25 @@ func (re *RollbackExecutor) ListSnapshots() ([]SnapshotInfo, error) {
 	}
 
 	return infos, nil
+}
+
+// describeOperation says in a few words what a rollback operation does
+func describeOperation(op *RollbackOperation) string {
+	a := op.Args
+	attrs := ""
+	for _, k := range []string{"mode", "owner", "group"} {
+		if v, ok := a[k]; ok {
+			attrs += fmt.Sprintf(" %s=%v", k, v)
+		}
+	}
+	switch {
+	case op.Module == "file" && a["state"] == "absent":
+		return "remove (did not exist before)"
+	case op.Module == "file" && a["state"] == "directory":
+		return "restore directory" + attrs
+	case op.Module == "copy":
+		content, _ := a["content"].(string)
+		return fmt.Sprintf("restore content (%d bytes)%s", len(content), attrs)
+	}
+	return "run " + op.Module
 }
