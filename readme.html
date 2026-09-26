@@ -867,6 +867,13 @@ non-zero when the run failed.</p>
 and <code>rescue</code> runs, where <code>ansible_failed_task</code> (name, module) and
 <code>ansible_failed_result</code> describe the failure; <code>always</code> runs in any case. A
 failure handled by <code>rescue</code> does not fail the play.</p>
+<h3>Handlers and meta</h3>
+<p>A task that changed something notifies its handlers (<code>notify:</code>, by name or
+<code>listen:</code>) for its host. Notified handlers run once, in the order they are
+defined (play handlers and role handlers together), only on the hosts that
+notified them: after <code>pre_tasks</code>, after roles and <code>tasks</code>, after <code>post_tasks</code>,
+and at <code>meta: flush_handlers</code>. <code>meta: end_host</code> stops a host for the rest of
+the play, <code>meta: end_play</code> stops all of them; <code>meta: noop</code> does nothing.</p>
 <h3>Check mode</h3>
 <p><code>onigirazu apply site.yml --check</code> runs every module that supports it in check
 mode: it reports what would change and changes nothing. Supported: <code>copy</code>,
