@@ -190,7 +190,10 @@ type Task struct {
 	Become       bool                   `yaml:"become,omitempty"`
 	// BecomeSet tells become: false (run without escalation even in a play
 	// with become: true) from no become at all
-	BecomeSet    bool   `yaml:"-" json:"-"`
+	BecomeSet bool `yaml:"-" json:"-"`
+	// IncludedRole is the role of an include_role/import_role task, loaded
+	// by the parser
+	IncludedRole *Role  `yaml:"-" json:"-"`
 	BecomeUser   string `yaml:"become_user,omitempty"`
 	BecomeMethod string `yaml:"become_method,omitempty"`
 	RunOnce      bool   `yaml:"run_once,omitempty"`

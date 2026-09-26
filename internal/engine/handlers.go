@@ -176,3 +176,29 @@ func (e *ExecutionEngine) runMeta(task *types.Task, host *types.Host, playResult
 	}
 	return e.finishTask(task, host, result, playResult)
 }
+
+// runIncludedRole runs the role of an include_role/import_role task on the
+// hosts where its when holds, with the task's vars as role parameters
+func (e *ExecutionEngine) runIncludedRole(ctx context.Context, task *types.Task, hosts []types.Host,
+	variables map[string]interface{}, playResult *types.PlayResult) error {
+	targets := hosts
+	if task.When != "" {
+		targets = nil
+		for i := range hosts {
+			vars := e.mergeVariables(e.hostVariables(&hosts[i], variables), task.Vars)
+			holds, err := e.conditionHolds(ctx, task.When, vars)
+			if err != nil {
+				return fmt.Errorf("%s: %w", task.Name, err)
+			}
+			if holds {
+				targets = append(targets, hosts[i])
+			}
+		}
+	}
+	if len(targets) == 0 {
+		return nil
+	}
+	role := *task.IncludedRole
+	role.Params = e.mergeVariables(role.Params, task.Vars)
+	return e.executeRoleWithDependencies(ctx, &role, targets, variables, playResult)
+}

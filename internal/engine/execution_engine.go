@@ -676,6 +676,9 @@ func (e *ExecutionEngine) executeTask(ctx context.Context, task *types.Task, hos
 	if task.Module == "meta" && metaAction(task) == "flush_handlers" {
 		return e.flushHandlers(ctx, hosts, playResult)
 	}
+	if task.IncludedRole != nil {
+		return e.runIncludedRole(ctx, task, hosts, variables, playResult)
+	}
 	// run_once inside a block: blocks run per host, so the hosts share a
 	// registry; the first runs the task, the others wait and take its result
 	if task.RunOnce && len(hosts) == 1 {

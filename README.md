@@ -791,6 +791,18 @@ roles:
     web_port: 9090
 ```
 
+`include_role` / `import_role` run a role as a task (`name`, `tasks_from`),
+on the hosts where its `when` holds; the task's `vars` are role parameters:
+
+```yaml
+- include_role:
+    name: web
+    tasks_from: upgrade
+  vars:
+    web_port: 9090
+  when: upgrade | bool
+```
+
 ### Extra variables and limits
 
 `-e` sets variables that override all others: `-e env=prod -e version=1.2`,

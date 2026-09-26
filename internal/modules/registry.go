@@ -58,6 +58,8 @@ func NewRegistry() *Registry {
 	registry.RegisterModule(NewAssertModule())
 	registry.RegisterModule(NewReplaceModule())
 	registry.RegisterModule(NewMetaModule())
+	registry.RegisterModule(NewIncludeRoleModule("include_role"))
+	registry.RegisterModule(NewIncludeRoleModule("import_role"))
 	registry.RegisterModule(NewPauseModule())
 	registry.RegisterModule(NewScriptModule())
 	registry.RegisterModule(NewWaitForModule())

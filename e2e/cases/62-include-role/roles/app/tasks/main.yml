@@ -1,0 +1,2 @@
+- name: Main tasks of the role
+  template: {src: app.conf.j2, dest: /root/onigirazu-e2e-ir-main}
