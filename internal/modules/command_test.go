@@ -2,11 +2,15 @@ package modules
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCommandModuleCreation(t *testing.T) {
@@ -152,9 +156,9 @@ func TestCommandModuleExecuteFailure(t *testing.T) {
 	ctx := context.Background()
 	result, err := module.Execute(ctx, host, args)
 
-	// The module should return an error for failed commands
-	if err == nil {
-		t.Error("Expected error from Execute for nonexistent command")
+	// A failed command is a failed result, not an execution error
+	if err != nil {
+		t.Errorf("Expected a failed result, got error %v", err)
 	}
 
 	if result.Success {
@@ -559,8 +563,8 @@ func TestCommandModule_ExecuteWithShellFailure(t *testing.T) {
 	ctx := context.Background()
 	result, err := module.Execute(ctx, host, args)
 
-	if err == nil {
-		t.Error("Expected error from Execute for nonexistent command with shell")
+	if err != nil {
+		t.Errorf("Expected a failed result, got error %v", err)
 	}
 
 	if result.Success {
@@ -588,11 +592,38 @@ func TestShellModule_ExecuteFailure(t *testing.T) {
 	ctx := context.Background()
 	result, err := module.Execute(ctx, host, args)
 
-	if err == nil {
-		t.Error("Expected error from Execute for failing command")
+	if err != nil {
+		t.Errorf("Expected a failed result, got error %v", err)
 	}
 
 	if result.Success {
 		t.Error("Expected failure for command that exits with error")
 	}
+}
+
+func TestCommand_ResultLikeAnsible(t *testing.T) {
+	host := types.Host{Name: "localhost", Address: "127.0.0.1"}
+	dir := t.TempDir()
+
+	r, err := NewCommandModule().Execute(context.Background(), host, map[string]interface{}{"command": "pwd", "chdir": dir})
+	require.NoError(t, err)
+	assert.True(t, r.Success)
+	real, _ := filepath.EvalSymlinks(dir)
+	assert.Contains(t, []string{dir, real}, r.Output["stdout"], "chdir, no trailing newline")
+	assert.Equal(t, 0, r.Output["rc"])
+
+	r, err = NewShellModule().Execute(context.Background(), host, map[string]interface{}{"cmd": "echo out; echo err >&2; exit 3"})
+	require.NoError(t, err)
+	assert.True(t, r.Failed)
+	assert.Equal(t, 3, r.Output["rc"])
+	assert.Equal(t, "out", r.Output["stdout"])
+	assert.Equal(t, "err", r.Output["stderr"])
+	assert.Contains(t, r.Error, "non-zero return code 3: err")
+
+	// no shell: metacharacters are plain arguments
+	r, err = NewCommandModule().Execute(context.Background(), host, map[string]interface{}{"command": "echo a; touch " + filepath.Join(dir, "x")})
+	require.NoError(t, err)
+	assert.Equal(t, "a; touch "+filepath.Join(dir, "x"), r.Output["stdout"])
+	_, statErr := os.Stat(filepath.Join(dir, "x"))
+	assert.True(t, os.IsNotExist(statErr))
 }
