@@ -924,6 +924,22 @@ server {{ b.name }} {{ b.ip }}:{{ b.port | default(80) }}
 {% endfor %}
 </code></pre>
 
+<h3>Plugins</h3>
+<p><code>--plugins-config plugins.yml</code> (or a <code>plugins.yml</code> next to the playbook) loads
+Go plugins (<code>go build -buildmode=plugin</code>, exporting <code>NewPlugin() plugins.Plugin</code>):</p>
+<pre class="codehilite"><code class="language-yaml">plugins_dir: ./plugins
+plugins:
+  - name: notify
+    type: callback     # module, callback or filter
+    path: notify.so
+    enabled: true
+    config: {}
+</code></pre>
+
+<p>Module plugins are used like built-in modules and cannot replace one. Callback
+plugins get playbook, play and per-host task start/end events; task events
+come from parallel host workers, and a callback error is only logged. Filter
+plugins add template filters.</p>
 <h3>Error Handling</h3>
 <p>Control error behavior:</p>
 <pre class="codehilite"><code class="language-yaml">- name: &quot;Task that might fail&quot;
