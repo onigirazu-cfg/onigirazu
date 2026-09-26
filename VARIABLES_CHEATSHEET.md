@@ -4,13 +4,14 @@ Quick reference for the most commonly used Onigirazu variables.
 
 ## 🚀 Quick Start
 
-Enable fact gathering in your play:
+Facts are gathered at the start of every play, as in Ansible. Skip it when a
+play does not need them:
 
 ```yaml
 plays:
   - name: My Play
     hosts: all
-    gather_facts: true  # ← Enable this!
+    gather_facts: false  # no facts, a faster start
     tasks:
       # Your tasks here
 ```
@@ -257,31 +258,11 @@ tasks:
 
 ## ⚠️ Common Pitfalls
 
-### 1. Forgot to Enable Facts
+### 1. Turned Facts Off
 
-❌ **Wrong:**
-
-```yaml
-plays:
-  - name: My Play
-    hosts: all
-    # gather_facts not set!
-    tasks:
-      - debug:
-          msg: "{{ onigirazu_os_family }}"  # Will fail!
-```
-
-✅ **Correct:**
-
-```yaml
-plays:
-  - name: My Play
-    hosts: all
-    gather_facts: true  # ← Add this!
-    tasks:
-      - debug:
-          msg: "{{ onigirazu_os_family }}"  # Works!
-```
+With `gather_facts: false` the `onigirazu_*` and `ansible_*` facts are
+undefined; remove it (facts are gathered by default) or guard with
+`is defined`.
 
 ### 2. Using Variables Before Facts Are Gathered
 
