@@ -60,6 +60,7 @@ func NewRegistry() *Registry {
 	registry.RegisterModule(NewMetaModule())
 	registry.RegisterModule(NewIncludeRoleModule("include_role"))
 	registry.RegisterModule(NewIncludeRoleModule("import_role"))
+	registry.RegisterModule(NewIncludeVarsModule())
 	registry.RegisterModule(NewPauseModule())
 	registry.RegisterModule(NewScriptModule())
 	registry.RegisterModule(NewWaitForModule())
@@ -236,7 +237,7 @@ func (r *Registry) ExecuteTask(ctx context.Context, task *types.Task, host types
 var checkModeModules = map[string]bool{
 	// read only
 	"ping": true, "debug": true, "set_fact": true, "stat": true, "find": true,
-	"fail": true, "wait_for": true, "assert": true,
+	"fail": true, "wait_for": true, "assert": true, "include_vars": true,
 	// compare, then change
 	"file": true, "copy": true, "template": true, "lineinfile": true, "blockinfile": true,
 	"apt": true, "yum": true, "package": true, "service": true, "user": true, "group": true,
@@ -246,7 +247,7 @@ var checkModeModules = map[string]bool{
 
 // dataArgModules take their arguments as data whose types are kept:
 // set_fact stores them, config writes them into JSON/YAML/TOML files
-var dataArgModules = map[string]bool{"set_fact": true, "config": true, "debug": true, "assert": true}
+var dataArgModules = map[string]bool{"set_fact": true, "config": true, "debug": true, "assert": true, "include_vars": true}
 
 // normalizeArgs turns top-level YAML numbers into strings: modules read
 // text arguments as strings (cron "minute: 0" became "*") and numeric ones

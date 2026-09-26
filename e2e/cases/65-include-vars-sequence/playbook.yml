@@ -1,0 +1,17 @@
+plays:
+  - name: include_vars and with_sequence
+    hosts: all
+    become: true
+    roles: [app]
+    tasks:
+      - name: Free form
+        include_vars: vars/extra.yml
+      - name: Under a name
+        include_vars: {file: vars/named.yml, name: named}
+      - name: Sequence
+        copy: {content: "{{ item }}\n", dest: "/root/onigirazu-e2e-iv-{{ item }}"}
+        with_sequence: count=2 format=s%02d
+      - name: Record
+        copy:
+          dest: /root/onigirazu-e2e-iv-vars
+          content: "{{ from_file }} {{ named.a + named.b }} {{ role_value }}\n"

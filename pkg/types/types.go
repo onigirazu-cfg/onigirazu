@@ -263,6 +263,7 @@ func (t *Task) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		"with_items":    true,
 		"with_list":     true,
 		"with_dict":     true,
+		"with_sequence": true,
 	}
 
 	if env, ok := taskMap["environment"].(map[string]interface{}); ok {
@@ -282,6 +283,14 @@ func (t *Task) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		case string:
 			t.Loop = &Loop{Expr: items}
 		}
+	}
+	// with_sequence: start=1 end=5 stride=1 format=web%02d, or count=3
+	if seq, ok := taskMap["with_sequence"].(string); ok {
+		items, err := sequenceItems(seq)
+		if err != nil {
+			return fmt.Errorf("with_sequence: %w", err)
+		}
+		t.Loop = &Loop{Items: items}
 	}
 	// with_dict: loop over {key, value} items of a dictionary
 	switch d := taskMap["with_dict"].(type) {
@@ -1352,4 +1361,50 @@ func yamlBool(v interface{}) (bool, bool) {
 		}
 	}
 	return false, false
+}
+
+// sequenceItems expands a with_sequence spec into its items (strings, as
+// Ansible gives them)
+func sequenceItems(spec string) ([]interface{}, error) {
+	if strings.Contains(spec, "{{") {
+		return nil, fmt.Errorf("templated bounds are not supported; use loop: \"{{ range(a, b) | list }}\"")
+	}
+	start, end, stride, count, format := 1, 0, 1, -1, "%d"
+	for _, word := range strings.Fields(spec) {
+		k, v, ok := strings.Cut(word, "=")
+		if !ok {
+			return nil, fmt.Errorf("expected key=value, got %q", word)
+		}
+		if k == "format" {
+			format = v
+			continue
+		}
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", k, err)
+		}
+		switch k {
+		case "start":
+			start = n
+		case "end":
+			end = n
+		case "stride":
+			stride = n
+		case "count":
+			count = n
+		default:
+			return nil, fmt.Errorf("unknown key %q", k)
+		}
+	}
+	if count >= 0 {
+		end = start + (count-1)*stride
+	}
+	if stride == 0 {
+		return nil, fmt.Errorf("stride is 0")
+	}
+	var items []interface{}
+	for i := start; (stride > 0 && i <= end) || (stride < 0 && i >= end); i += stride {
+		items = append(items, fmt.Sprintf(format, i))
+	}
+	return items, nil
 }

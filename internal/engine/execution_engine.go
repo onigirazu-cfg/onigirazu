@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -1104,7 +1105,7 @@ func (e *ExecutionEngine) finishTask(task *types.Task, host *types.Host, result 
 			e.setHostVar(host.Name, prefix+"_failed_result", failedResult)
 		}
 	}
-	if task.Module == "set_fact" && !real.Failed {
+	if (task.Module == "set_fact" || task.Module == "include_vars") && !real.Failed {
 		if facts, ok := real.Output["onigirazu_facts"].(map[string]interface{}); ok {
 			for key, value := range facts {
 				e.setHostVar(host.Name, key, value)
@@ -2034,6 +2035,17 @@ func censored(result types.TaskResult) types.TaskResult {
 		result.Error = noLogMessage
 	}
 	return result
+}
+
+// SetPlaybookDir sets playbook_dir, the directory relative paths of the
+// control machine (include_vars, lookup) start from
+func (e *ExecutionEngine) SetPlaybookDir(dir string) {
+	if abs, err := filepath.Abs(dir); err == nil {
+		dir = abs
+	}
+	e.mutex.Lock()
+	e.variables["playbook_dir"] = dir
+	e.mutex.Unlock()
 }
 
 // SetRolesPath sets where roles and their dependencies are looked up: the

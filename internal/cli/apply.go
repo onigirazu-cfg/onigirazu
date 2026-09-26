@@ -392,6 +392,7 @@ Examples:
 			)
 			executionEngine.SetCallbacks(callbacks)
 			executionEngine.SetRolesPath(filepath.Join(filepath.Dir(playbookPath), "roles"))
+			executionEngine.SetPlaybookDir(filepath.Dir(playbookPath))
 
 			policy, policySource, err := security.LoadPolicy(securityPolicyPath)
 			if err != nil {

@@ -1,0 +1,2 @@
+- name: include_vars inside a role reads the role's vars/
+  include_vars: other.yml
