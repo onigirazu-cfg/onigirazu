@@ -781,7 +781,8 @@ or `loop: "{{ d | dict2items }}"`; `items2dict` turns them back.
 `roles:` in a play runs `roles/<name>` next to the playbook: `tasks/`,
 `handlers/`, `defaults/` and `vars/` (`main.yml`). A role's `template`, `copy`,
 `script` and `unarchive` tasks find a relative `src` in the role's
-`templates/` or `files/`. Variables given with the role win over its own:
+`templates/` or `files/`. `meta/main.yml` dependencies (a name, or `role:`
+with variables) run first. Variables given with the role win over its own:
 
 ```yaml
 roles:

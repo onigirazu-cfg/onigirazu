@@ -391,6 +391,7 @@ Examples:
 				cacheManager,
 			)
 			executionEngine.SetCallbacks(callbacks)
+			executionEngine.SetRolesPath(filepath.Join(filepath.Dir(playbookPath), "roles"))
 
 			policy, policySource, err := security.LoadPolicy(securityPolicyPath)
 			if err != nil {

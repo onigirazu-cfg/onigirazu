@@ -1155,6 +1155,17 @@ func (r *RoleReference) UnmarshalYAML(value *yaml.Node) error {
 	return nil
 }
 
+// UnmarshalYAML accepts a dependency in meta/main.yml the ways Ansible does:
+// a bare role name, "role:" or "name:", and role variables next to it
+func (d *RoleDependency) UnmarshalYAML(value *yaml.Node) error {
+	var ref RoleReference
+	if err := ref.UnmarshalYAML(value); err != nil {
+		return err
+	}
+	d.Name, d.Vars = ref.Name, ref.Vars
+	return nil
+}
+
 // ConditionalRequirement specifies when a parameter is required
 type ConditionalRequirement struct {
 	Condition   string `yaml:"condition"`             // Condition expression (e.g., "enable_auth=true")

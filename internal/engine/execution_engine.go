@@ -2033,6 +2033,12 @@ func censored(result types.TaskResult) types.TaskResult {
 	return result
 }
 
+// SetRolesPath sets where roles and their dependencies are looked up: the
+// roles directory next to the playbook
+func (e *ExecutionEngine) SetRolesPath(dir string) {
+	e.roleLoader = parser.NewRoleLoader(e.logger, dir)
+}
+
 // SetForceBecome turns become on for every play (-b), optionally as user
 func (e *ExecutionEngine) SetForceBecome(become bool, user string) {
 	e.forceBecome, e.forceBecomeUser = become, user
