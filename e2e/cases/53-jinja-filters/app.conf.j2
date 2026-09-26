@@ -1,0 +1,10 @@
+admins={{ users | selectattr('admin') | map(attribute='name') | join(',') }}
+names={{ users | map(attribute='name') | map('upper') | sort | join(' ') }}
+json={{ settings | to_json }}
+mode={{ 'debug' if settings.port > 8000 else 'prod' }}
+file={{ '/etc/app/app.conf' | basename }}
+b64={{ 'hi' | b64encode }}
+id={{ inventory_hostname ~ '-' ~ settings.port }}
+{% for k in settings.keys() %}
+key={{ k }}
+{% endfor %}

@@ -835,8 +835,8 @@ evaluated per host with that host's facts and registered results:
 
 Supported: `==`, `!=`, `<`, `>`, `and`, `or`, `not`, `in` (list item, dictionary
 key or substring), `is defined`,
-`is not defined`, filters `| length`, `| lower`, `| upper`, `| int`,
-`| trim`. A list under `when` means all items must hold; `{{ }}` around
+`is not defined`, `a if cond else b`, `~` and the filters listed under
+Templates. A list under `when` means all items must hold; `{{ }}` around
 the expression is optional. A condition that cannot be evaluated fails the task.
 
 ### Variables
@@ -880,6 +880,17 @@ As in Ansible, the newline after a block tag is dropped:
 server {{ b.name }} {{ b.ip }}:{{ b.port | default(80) }}
 {% endfor %}
 ```
+
+Filters: `default`, `length`/`count`, `lower`, `upper`, `capitalize`, `title`,
+`trim`, `replace`, `split`, `join`, `int`, `float`, `string`, `bool`, `first`,
+`last`, `sort`, `unique`, `reverse`, `flatten`, `sum`, `min`, `max`, `abs`,
+`round`, `list`, `keys`/`values` (sorted), `dict2items`, `items2dict`,
+`combine`, `map('filter')`, `map(attribute='x')`, `select`/`reject`,
+`selectattr`/`rejectattr` (tests `defined`, `equalto`, `match`, `search`,
+`in`, `>`, ...), `regex_replace`, `regex_search`, `regex_findall`, `to_json`,
+`to_nice_json`, `to_yaml`, `from_json`, `from_yaml`, `b64encode`,
+`b64decode`, `basename`, `dirname`, `quote`, `ternary`, `mandatory`, and
+`range()`.
 
 ### Plugins
 

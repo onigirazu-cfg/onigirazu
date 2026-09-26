@@ -119,3 +119,43 @@ func TestDict2Items(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, vars["d"], back)
 }
+
+func TestJinjaFilters(t *testing.T) {
+	vars := map[string]interface{}{
+		"pkgs":  []interface{}{"jq", "curl", "jq"},
+		"users": []interface{}{map[string]interface{}{"name": "a", "admin": true}, map[string]interface{}{"name": "b", "admin": false}},
+		"d":     map[string]interface{}{"x": 1},
+		"e":     map[string]interface{}{"c": 3, "a": 1, "b": 2},
+		"s":     "Hello World",
+	}
+	cases := map[string]interface{}{
+		`pkgs | unique | sort | join(",")`:                    "curl,jq",
+		`d | to_json`:                                         `{"x":1}`,
+		`'{"a": [1]}' | from_json`:                            map[string]interface{}{"a": []interface{}{1.0}},
+		`s | regex_replace("(\\w+) (\\w+)", "\\2 \\1")`:       "World Hello",
+		`s | regex_search("W\\w+")`:                           "World",
+		`s | lower | capitalize`:                              "Hello world",
+		`users | map(attribute='name') | list`:                []interface{}{"a", "b"},
+		`users | selectattr('admin') | map(attribute='name')`: []interface{}{"a"},
+		`users | rejectattr('name', 'equalto', 'a') | length`: 1,
+		`pkgs | map('upper') | first`:                         "JQ",
+		`pkgs | select('match', '^c') | list`:                 []interface{}{"curl"},
+		`'/etc/app/app.conf' | basename`:                      "app.conf",
+		`'x' ~ 1 ~ 'y'`:                                       "x1y",
+		`'yes' if pkgs | length > 2 else 'no'`:                "yes",
+		`'yes' if missing is defined else 'no'`:               "no",
+		`d | combine({'y': 2})`:                               map[string]interface{}{"x": 1, "y": 2},
+		`d.keys() | list`:                                     []interface{}{"x"},
+		`e.keys() | join(',')`:                                "a,b,c",
+		`e | values`:                                          []interface{}{1, 2, 3},
+		`range(1, 4) | sum`:                                   6,
+		`true | ternary('on', 'off')`:                         "on",
+		`'a b' | quote`:                                       "'a b'",
+		`'aGk=' | b64decode`:                                  "hi",
+	}
+	for e, want := range cases {
+		got, err := Eval(e, vars)
+		require.NoError(t, err, e)
+		assert.Equal(t, want, got, e)
+	}
+}
