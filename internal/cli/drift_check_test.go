@@ -2,6 +2,9 @@ package cli
 
 import (
 	"bytes"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -48,4 +51,17 @@ func TestPlanWording(t *testing.T) {
 	out.Reset()
 	writeDriftText(&out, &DriftReport{Playbook: "site.yml", Hosts: 2, Plan: true})
 	assert.Contains(t, out.String(), "No changes: 2 host(s) already match site.yml")
+}
+
+func TestNotifyWebhook(t *testing.T) {
+	var got map[string]interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&got)
+	}))
+	defer srv.Close()
+	r := &DriftReport{Playbook: "site.yml", Hosts: 1, Drift: map[string][]DriftItem{"web1": {{Task: "conf"}}}, DriftTasks: 1}
+	assert.NoError(t, notifyWebhook(srv.URL+"/hooks/secret", r))
+	assert.Contains(t, got["text"], "Drift: 1 task(s) on 1 of 1 host(s)")
+	assert.NotNil(t, got["report"])
+	assert.Equal(t, "https://chat.example/…", redactURL("https://chat.example/hooks/abc123"))
 }

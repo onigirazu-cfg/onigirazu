@@ -1,9 +1,11 @@
 package cli
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"sort"
 	"strings"
@@ -63,6 +65,8 @@ type driftCheckOptions struct {
 	becomeUser string
 	user       string
 	privateKey string
+	notify     []string // webhooks told about drift and errors
+	notifyOK   bool     // tell them about a clean check too
 }
 
 // applyArgs are the apply arguments of a drift check (or of --fix)
@@ -208,6 +212,14 @@ func runDriftCheck(cmd *cobra.Command, playbook string, o driftCheckOptions) err
 		report.Fixed = true
 	}
 
+	if len(report.Drift) > 0 || len(report.Errors) > 0 || o.notifyOK {
+		for _, url := range o.notify {
+			if err := notifyWebhook(url, report); err != nil {
+				fmt.Fprintf(os.Stderr, "notify %s: %v\n", redactURL(url), err)
+			}
+		}
+	}
+
 	out := io.Writer(os.Stdout)
 	if o.output != "" {
 		f, err := os.Create(o.output)
@@ -237,4 +249,44 @@ func runDriftCheck(cmd *cobra.Command, playbook string, o driftCheckOptions) err
 		return &ExitError{Code: 2}
 	}
 	return nil
+}
+
+// notifyWebhook posts the report summary as {"text": ...}, which Slack,
+// Mattermost and most chat webhooks accept; the full report is under
+// "report"
+func notifyWebhook(url string, r *DriftReport) error {
+	var text strings.Builder
+	writeDriftText(&text, r)
+	msg := text.String()
+	if len(msg) > 3500 {
+		msg = msg[:3500] + "\n…"
+	}
+	host, _ := os.Hostname()
+	body, err := json.Marshal(map[string]interface{}{
+		"text":   fmt.Sprintf("onigirazu on %s:\n```\n%s```", host, msg),
+		"report": r,
+	})
+	if err != nil {
+		return err
+	}
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Post(url, "application/json", bytes.NewReader(body)) // #nosec G107 -- the user names the webhook
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		return fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+	return nil
+}
+
+// redactURL keeps a webhook's secret path out of messages
+func redactURL(url string) string {
+	if i := strings.Index(url, "://"); i >= 0 {
+		if j := strings.Index(url[i+3:], "/"); j >= 0 {
+			return url[:i+3+j] + "/…"
+		}
+	}
+	return url
 }
