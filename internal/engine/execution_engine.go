@@ -430,8 +430,8 @@ func (e *ExecutionEngine) executePlay(ctx context.Context, play *types.Play) (*t
 			}
 			rendered.Hosts = strings.TrimSpace(out)
 		}
-		if isTemplate(play.Serial) {
-			out, err := e.templateEngine.Render(ctx, play.Serial.(string), vars)
+		if serial, ok := play.Serial.(string); ok && strings.Contains(serial, "{{") {
+			out, err := e.templateEngine.Render(ctx, serial, vars)
 			if err != nil {
 				return nil, fmt.Errorf("play '%s': serial: %w", play.Name, err)
 			}
