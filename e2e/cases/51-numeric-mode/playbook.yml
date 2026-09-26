@@ -1,0 +1,21 @@
+plays:
+  - name: unquoted octal modes and numeric owners
+    hosts: all
+    become: true
+    tasks:
+      - name: copy with mode 0600
+        copy:
+          content: "secret\n"
+          dest: /root/onigirazu-e2e-mode-copy
+          mode: 0600
+      - name: file with mode 0750
+        file:
+          path: /root/onigirazu-e2e-mode-dir
+          state: directory
+          mode: 0750
+          owner: 0
+      - name: template with mode 0640
+        template:
+          src: t.j2
+          dest: /root/onigirazu-e2e-mode-tpl
+          mode: 0640

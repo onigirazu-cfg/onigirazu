@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
+	"github.com/stretchr/testify/assert"
 )
 
 // MockModule is a simple mock module for testing
@@ -491,4 +492,15 @@ func TestRegistry_ExecuteTask_SuccessFalseIsFailure(t *testing.T) {
 	if result.Error != "apt-get failed" {
 		t.Errorf("module error should be kept, got %q", result.Error)
 	}
+}
+
+func TestNormalizeArgs_YAMLNumbers(t *testing.T) {
+	args := map[string]interface{}{"mode": 420, "owner": 1000, "group": "staff"}
+	normalizeArgs(args)
+	assert.Equal(t, "0644", args["mode"])
+	assert.Equal(t, "1000", args["owner"])
+	assert.Equal(t, "staff", args["group"])
+	quoted := map[string]interface{}{"mode": "u=rw"}
+	normalizeArgs(quoted)
+	assert.Equal(t, "u=rw", quoted["mode"])
 }

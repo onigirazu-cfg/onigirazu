@@ -3,6 +3,7 @@ package modules
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/onigirazu-cfg/onigirazu/internal/interfaces"
@@ -163,6 +164,7 @@ func (r *Registry) ExecuteTask(ctx context.Context, task *types.Task, host types
 	for key, value := range task.Args {
 		args[key] = value
 	}
+	normalizeArgs(args)
 
 	// The task name travels separately: "name" belongs to the module
 	// (user name, package name, ...) and must not be filled from the task title
@@ -232,4 +234,22 @@ var checkModeModules = map[string]bool{
 	"apt": true, "yum": true, "package": true, "service": true, "user": true, "group": true,
 	"cron": true, "sysctl": true, "get_url": true, "git": true, "systemd": true,
 	"mount": true, "config": true, "docker_container": true, "podman": true, "docker_image": true,
+}
+
+// normalizeArgs turns YAML numbers into the strings modules expect:
+// "mode: 0644" is the integer 420 in YAML (octal, as in Ansible) and
+// "owner: 1000" a uid
+func normalizeArgs(args map[string]interface{}) {
+	if mode, ok := toInt(args["mode"]); ok {
+		if _, isString := args["mode"].(string); !isString {
+			args["mode"] = fmt.Sprintf("%04o", mode)
+		}
+	}
+	for _, key := range []string{"owner", "group"} {
+		if n, ok := toInt(args[key]); ok {
+			if _, isString := args[key].(string); !isString {
+				args[key] = strconv.Itoa(n)
+			}
+		}
+	}
 }
