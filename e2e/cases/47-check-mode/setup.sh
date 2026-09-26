@@ -3,5 +3,6 @@ userdel onigirazu-e2e-check 2>/dev/null; groupdel onigirazu-e2e-check 2>/dev/nul
 dpkg -s cowsay >/dev/null 2>&1 && DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=600 remove -y -qq cowsay >/dev/null 2>&1
 systemctl start cron 2>/dev/null
 rm -f /etc/cron.d/onigirazu-e2e-check
+rm -rf /opt/onigirazu-e2e-check-clone
 sysctl -w vm.swappiness=60 >/dev/null 2>&1
 true
