@@ -88,6 +88,8 @@ func (msl *MultiSourceLoader) LoadFromMultipleSources(
 	msl.logger.Info("Loading inventory from %d source(s) with last-occurrence-wins merge strategy",
 		len(inventoryPaths))
 
+	inventoryPaths = expandSources(inventoryPaths)
+
 	// Process each inventory source in order (later sources override earlier ones)
 	for i, path := range inventoryPaths {
 		msl.logger.Debug("Loading inventory source %d/%d: %s", i+1, len(inventoryPaths), path)
@@ -131,6 +133,15 @@ func (msl *MultiSourceLoader) loadSingleSource(ctx context.Context, path string)
 	// Check if path exists
 	info, err := os.Stat(absPath)
 	if err != nil {
+		if os.IsNotExist(err) && strings.Contains(path, ",") {
+			// A host list: host1,user@host2:2222 or host1,
+			inv, err := msl.parser.ParseInventory(ctx, path)
+			if err != nil {
+				return err
+			}
+			msl.mergeInventory(inv)
+			return nil
+		}
 		if os.IsNotExist(err) {
 			return fmt.Errorf("inventory source not found: %s", absPath)
 		}
@@ -306,7 +317,7 @@ func (msl *MultiSourceLoader) executeDynamicInventoryScript(
 	exCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(exCtx, scriptPath)
+	cmd := exec.CommandContext(exCtx, scriptPath, "--list") // #nosec G204 -- the inventory script given by the user
 	cmd.Stderr = os.Stderr
 
 	// Execute the script
@@ -494,4 +505,35 @@ func (msl *MultiSourceLoader) SetCacheTTL(ttl time.Duration) {
 		msl.dynamicTTL = ttl
 		msl.logger.Debug("Set dynamic inventory cache TTL to %v", ttl)
 	}
+}
+
+// expandSources splits a comma-separated -i value into its paths when every
+// part exists (a.yml,b.yml); any other value with a comma is a host list
+func expandSources(sources []string) []string {
+	var out []string
+	for _, source := range sources {
+		if _, err := os.Stat(source); err == nil || !strings.Contains(source, ",") {
+			out = append(out, source)
+			continue
+		}
+		var parts []string
+		for _, part := range strings.Split(source, ",") {
+			if part = strings.TrimSpace(part); part != "" {
+				parts = append(parts, part)
+			}
+		}
+		allExist := len(parts) > 0
+		for _, part := range parts {
+			if _, err := os.Stat(part); err != nil {
+				allExist = false
+				break
+			}
+		}
+		if allExist {
+			out = append(out, parts...)
+		} else {
+			out = append(out, source)
+		}
+	}
+	return out
 }

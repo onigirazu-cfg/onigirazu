@@ -1,0 +1,8 @@
+plays:
+  - name: markers left through the host list and the inventory script
+    hosts: all
+    tasks:
+      - name: Host list marker
+        copy: {content: "\n", dest: /tmp/onigirazu-e2e-inv-list}
+      - name: Script marker
+        copy: {content: "dyn\n", dest: /tmp/onigirazu-e2e-inv-script}

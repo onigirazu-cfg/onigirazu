@@ -1,0 +1,6 @@
+plays:
+  - name: the host is reachable through the regular inventory
+    hosts: all
+    tasks:
+      - name: Ping
+        ping:

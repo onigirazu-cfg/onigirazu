@@ -51,7 +51,7 @@ across your infrastructure with a focus on simplicity and reliability.`,
 
 	// Global flags
 	rootCmd.PersistentFlags().StringVarP(&configPath, "config", "c", "", "Path to configuration file")
-	rootCmd.PersistentFlags().StringSliceVarP(&inventoryPaths, "inventory", "i", []string{}, "Path to inventory file or directory (can be specified multiple times)")
+	rootCmd.PersistentFlags().StringArrayVarP(&inventoryPaths, "inventory", "i", []string{}, "Inventory file, directory or script, or a host list such as host1,user@host2:2222 (repeatable)")
 	rootCmd.PersistentFlags().StringVarP(&statePath, "state", "s", ".onigirazu-state", "Path to state file")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Verbose output")
 	rootCmd.PersistentFlags().BoolVar(&noColor, "no-color", false, "Disable colored output")

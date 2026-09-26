@@ -1,0 +1,6 @@
+plays:
+  - name: leave a marker naming the groups of the host
+    hosts: all
+    tasks:
+      - name: Marker
+        copy: {content: "{{ group_names | sort | join(',') }}\n", dest: "/tmp/onigirazu-e2e-inv-list"}
