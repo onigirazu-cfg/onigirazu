@@ -2034,6 +2034,7 @@ const noLogMessage = "the output has been hidden due to no_log: true"
 // censored is a task result without anything the task could have leaked
 func censored(result types.TaskResult) types.TaskResult {
 	result.Output = map[string]interface{}{"censored": noLogMessage}
+	result.Before = nil // no content of a no_log task goes into a snapshot
 	if result.Error != "" {
 		result.Error = noLogMessage
 	}

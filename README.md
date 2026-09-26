@@ -1015,24 +1015,29 @@ Control error behavior:
 
 ## 🔄 State Management & Rollback
 
-Automatic snapshots and one-command rollback for safe infrastructure changes:
+Every `apply` (also a failed one) keeps a snapshot in `~/.onigirazu/snapshots`
+of what its file modules found before they changed something: `copy`,
+`template`, `lineinfile`, `blockinfile`, `replace` and `file` record the old
+content (text up to 1 MiB), mode, owner and group, or that the path did not
+exist. `rollback` puts that back, the latest change of a run first:
 
 ```bash
-# Show current state
-onigirazu state show
-
-# List available snapshots
 onigirazu rollback --list
-
-# Preview rollback
-onigirazu rollback --dry-run --snapshot <id>
-
-# Perform rollback
-onigirazu rollback --snapshot <id>
-
-# Cleanup old snapshots
+onigirazu rollback --last --dry-run                 # what would be restored
+onigirazu rollback --snapshot <id> -i hosts.yml     # restore
 onigirazu rollback --cleanup --max-age 30d
 ```
+
+```
+ORDER  HOST   RESOURCE        DETAILS
+1      web1   /etc/app.d      restore directory mode=0755 owner=root group=root
+2      web1   /etc/app.conf   restore content (812 bytes) mode=0644 owner=root group=root
+3      web1   /etc/app.new    remove (did not exist before)
+```
+
+Packages, services, users and other modules are listed as not reversible;
+binary or larger files too. Snapshots hold file contents (0600 files in your
+home); `no_log` tasks keep none.
 
 ## 🎯 Drift Detection
 

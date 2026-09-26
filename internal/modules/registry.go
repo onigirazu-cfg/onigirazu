@@ -221,7 +221,16 @@ func (r *Registry) ExecuteTask(ctx context.Context, task *types.Task, host types
 	host.BecomeUser = task.BecomeUser
 	host.BecomeMethod = task.BecomeMethod
 
+	// the target file of a file module as it was, for rollback
+	var before map[string]interface{}
+	if !inCheckMode(args) {
+		before = captureBefore(ctx, host, task.Module, args)
+	}
+
 	result, err := module.Execute(ctx, host, args)
+	if result.Changed && before != nil && before["error"] == nil {
+		result.Before = before
+	}
 	if result.TaskName == "" {
 		result.TaskName = task.Name
 	}
