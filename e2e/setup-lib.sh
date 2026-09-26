@@ -17,3 +17,20 @@ need() {
     out="$(DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=600 install -y -qq "$@" 2>&1)"
   } || { echo "setup: cannot install $*: $(echo "$out" | tail -2 | paste -sd' ' -)" >&2; exit 1; }
 }
+
+# need_docker: Docker, pulling Docker Hub images through Google's mirror
+# (Docker Hub limits anonymous pulls per IP, and every e2e VM shares one)
+need_docker() {
+  command -v docker >/dev/null || need docker.io  # the image may ship Docker CE
+  local f=/etc/docker/daemon.json
+  grep -q mirror.gcr.io "$f" 2>/dev/null && return 0
+  mkdir -p /etc/docker
+  python3 - "$f" <<'PY'
+import json, os, sys
+path = sys.argv[1]
+conf = json.load(open(path)) if os.path.exists(path) and os.path.getsize(path) else {}
+conf.setdefault("registry-mirrors", []).append("https://mirror.gcr.io")
+json.dump(conf, open(path, "w"), indent=2)
+PY
+  systemctl restart docker
+}
