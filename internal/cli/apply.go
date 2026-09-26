@@ -51,6 +51,8 @@ func NewApplyCommand() *cobra.Command {
 		logLevel       string
 		logFormat      string
 		outputFormat   string
+		extraVars      []string
+		limit          string
 		parallel       int
 		timeout        time.Duration
 		interactive    bool
@@ -373,6 +375,16 @@ Examples:
 				return err
 			}
 			executionEngine.SetSecurityPolicy(policy)
+
+			// -e / --extra-vars and --limit
+			if len(extraVars) > 0 {
+				vars, err := parseExtraVars(extraVars)
+				if err != nil {
+					return err
+				}
+				executionEngine.SetExtraVars(vars)
+			}
+			executionEngine.SetLimit(limit)
 			if policySource != "" {
 				log.Info("Security policy loaded from %s", policySource)
 			} else {
@@ -1038,6 +1050,8 @@ Examples:
 	cmd.Flags().StringVarP(&logLevel, "log-level", "l", "info", "Log level (debug, info, warn, error)")
 	cmd.Flags().StringVar(&logFormat, "log-format", "text", "Log format (text, json)")
 	cmd.Flags().StringVarP(&outputFormat, "output", "o", "text", "Output format (text, json, yaml)")
+	cmd.Flags().StringArrayVarP(&extraVars, "extra-vars", "e", nil, "Variables that override all others: key=value ..., JSON/YAML, or @file (repeatable)")
+	cmd.Flags().StringVar(&limit, "limit", "", "Run only on hosts matching this pattern (e.g. web1, web:!web3)")
 	cmd.Flags().IntVarP(&parallel, "parallel", "f", 10, "Number of parallel executions")
 	cmd.Flags().DurationVarP(&timeout, "timeout", "t", 30*time.Minute, "Execution timeout")
 	cmd.Flags().BoolVar(&interactive, "interactive", false, "Interactive mode with beautiful TUI")
