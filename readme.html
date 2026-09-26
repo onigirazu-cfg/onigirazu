@@ -376,6 +376,7 @@ plays:
   args: {chdir: /src}
 - file: path=/etc/app state=directory mode=0750
 - ping:
+- local_action: command make package   # delegate_to: localhost
 </code></pre>
 
 <p>📚 <strong>For detailed examples, see <a href="docs/examples/README.md">docs/examples/README.md</a></strong></p>
