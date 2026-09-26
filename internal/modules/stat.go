@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/onigirazu-cfg/onigirazu/internal/executor"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
@@ -44,134 +43,87 @@ func (m *StatModule) Execute(ctx context.Context, host types.Host, args map[stri
 		return result, err
 	}
 
-	// Initialize executor for this execution
-	exec, err := executor.NewCommandExecutor(host)
-	if err != nil {
-		result.Success = false
-		result.Error = fmt.Sprintf("failed to create executor: %v", err)
-		result.Duration = time.Since(startTime)
-		return result, err
-	}
-	defer exec.Close()
-
 	path, _ := args["path"].(string)
-
-	// Get file info using remote stat command
-	statOutput, err := m.getRemoteFileStat(exec, path)
-
+	stat, err := statOnHost(ctx, host, args, path)
 	if err != nil {
-		// Check if file doesn't exist
-		if strings.Contains(err.Error(), "no such file") || strings.Contains(err.Error(), "cannot stat") {
-			// File doesn't exist
-			statOutput = make(map[string]interface{})
-			statOutput["exists"] = false
-			statOutput["path"] = path
-			statOutput["stat"] = map[string]interface{}{
-				"exists": false,
-				"path":   path,
-			}
-			result.Success = true
-			result.Changed = false
-			result.Output = statOutput
-			result.Duration = time.Since(startTime)
-			return result, nil
-		}
-		// Other error
 		result.Success = false
-		result.Error = fmt.Sprintf("failed to stat file: %v", err)
+		result.Error = fmt.Sprintf("failed to stat %s: %v", path, err)
 		result.Duration = time.Since(startTime)
-		return result, err
+		return result, nil
 	}
-
+	// the fields also at the top level, as before
+	output := map[string]interface{}{"stat": stat}
+	for k, v := range stat {
+		output[k] = v
+	}
 	result.Success = true
 	result.Changed = false // stat never changes anything
-	result.Output = statOutput
+	result.Output = output
 	result.Duration = time.Since(startTime)
-
 	return result, nil
 }
 
-// getRemoteFileStat retrieves file information from remote host using stat command
-func (m *StatModule) getRemoteFileStat(exec *executor.CommandExecutor, path string) (map[string]interface{}, error) {
-	// Use stat command with JSON-like output format
-	// Format: exists|type|size|mode|mtime
-	// Build command with proper escaping - escape pipes in echo to avoid shell interpretation
-	cmd := fmt.Sprintf(`if [ -e %[1]s ]; then if [ -d %[1]s ]; then TYPE=directory; elif [ -L %[1]s ]; then TYPE=link; elif [ -f %[1]s ]; then TYPE=file; else TYPE=other; fi; SIZE=$(stat -c %%s %[1]s 2>/dev/null || stat -f %%z %[1]s 2>/dev/null); MODE=$(stat -c %%a %[1]s 2>/dev/null || stat -f %%A %[1]s 2>/dev/null); MTIME=$(stat -c %%Y %[1]s 2>/dev/null || stat -f %%m %[1]s 2>/dev/null); echo "exists=true|type=$TYPE|size=$SIZE|mode=$MODE|mtime=$MTIME"; else echo "exists=false"; fi`,
-		shellQuote(path))
+// statScript prints key=value lines about a path: GNU stat and sha*sum
+// first, BSD stat and shasum as fallbacks. A link is reported as a link
+// (follow: false, as in Ansible).
+const statScript = `p=%s; algo=%s
+if [ ! -e "$p" ] && [ ! -L "$p" ]; then echo exists=false; exit 0; fi
+echo exists=true
+if [ -L "$p" ]; then echo type=link; echo lnk_source="$(readlink -f "$p" 2>/dev/null || readlink "$p")"; echo lnk_target="$(readlink "$p")"
+elif [ -d "$p" ]; then echo type=directory; elif [ -f "$p" ]; then echo type=file; else echo type=other; fi
+stat --printf 'size=%%s\nmode=%%a\nmtime=%%Y\natime=%%X\nctime=%%Z\nuid=%%u\ngid=%%g\npw_name=%%U\ngr_name=%%G\ninode=%%i\nnlink=%%h\n' "$p" 2>/dev/null ||
+  stat -f 'size=%%z%%nmode=%%Lp%%nmtime=%%m%%natime=%%a%%nctime=%%c%%nuid=%%u%%ngid=%%g%%npw_name=%%Su%%ngr_name=%%Sg%%ninode=%%i%%nnlink=%%l' "$p"
+if [ -n "$algo" ] && [ -f "$p" ] && [ ! -L "$p" ]; then
+  s=$( ("${algo}sum" "$p" 2>/dev/null || shasum -a "${algo#sha}" "$p" 2>/dev/null || md5 -q "$p") | cut -d' ' -f1)
+  echo checksum="$s"
+fi`
 
-	output, err := exec.Execute(cmd)
+// statOnHost reads what Ansible's stat returns about path on the host
+func statOnHost(ctx context.Context, host types.Host, args map[string]interface{}, path string) (map[string]interface{}, error) {
+	algo := ""
+	if getBoolArg(args, "get_checksum", true) {
+		algo = getStringArg(args, "checksum_algorithm", "sha1")
+		switch algo {
+		case "md5", "sha1", "sha224", "sha256", "sha384", "sha512":
+		default:
+			return nil, fmt.Errorf("unsupported checksum_algorithm %q", algo)
+		}
+	}
+	out, err := runShellOnHost(ctx, host, args, fmt.Sprintf(statScript, shellQuote(path), shellQuote(algo)))
 	if err != nil {
-		return nil, fmt.Errorf("stat command failed: %v, output: %s", err, output)
+		return nil, err
 	}
-
-	output = strings.TrimSpace(output)
-	statOutput := make(map[string]interface{})
-
-	// Parse output
-	if strings.HasPrefix(output, "exists=false") {
-		return nil, fmt.Errorf("no such file or directory")
-	}
-
-	// Parse key=value pairs
-	pairs := strings.Split(output, "|")
-	data := make(map[string]string)
-	for _, pair := range pairs {
-		kv := strings.SplitN(pair, "=", 2)
-		if len(kv) == 2 {
-			data[kv[0]] = kv[1]
+	data := map[string]string{}
+	for _, line := range strings.Split(out, "\n") {
+		if k, v, ok := strings.Cut(strings.TrimSpace(line), "="); ok {
+			data[k] = v
 		}
 	}
-
-	// Build output structure
-	exists := data["exists"] == "true"
-	statOutput["exists"] = exists
-	statOutput["path"] = path
-
-	if exists {
-		fileType := data["type"]
-		statOutput["isdir"] = fileType == "directory"
-		statOutput["isreg"] = fileType == "file"
-		statOutput["islnk"] = fileType == "link"
-
-		if size, err := strconv.ParseInt(data["size"], 10, 64); err == nil {
-			statOutput["size"] = size
-		} else {
-			statOutput["size"] = 0
-		}
-
-		mode := data["mode"]
-		statOutput["mode"] = mode
-
-		if mtime, err := strconv.ParseInt(data["mtime"], 10, 64); err == nil {
-			statOutput["mtime"] = mtime
-			statOutput["atime"] = mtime // Simplified
-			statOutput["ctime"] = mtime // Simplified
-		}
-
-		// Parse mode for permissions
-		if modeInt, err := strconv.ParseInt(mode, 8, 32); err == nil {
-			statOutput["readable"] = (modeInt & 0400) != 0
-			statOutput["writable"] = (modeInt & 0200) != 0
-			statOutput["executable"] = (modeInt & 0100) != 0
-		}
-
-		// For Ansible compatibility
-		statOutput["stat"] = map[string]interface{}{
-			"exists":     exists,
-			"path":       path,
-			"isdir":      statOutput["isdir"],
-			"isreg":      statOutput["isreg"],
-			"islnk":      statOutput["islnk"],
-			"size":       statOutput["size"],
-			"mode":       mode,
-			"mtime":      statOutput["mtime"],
-			"readable":   statOutput["readable"],
-			"writable":   statOutput["writable"],
-			"executable": statOutput["executable"],
+	if data["exists"] != "true" {
+		return map[string]interface{}{"exists": false, "path": path}, nil
+	}
+	stat := map[string]interface{}{
+		"exists": true, "path": path,
+		"isdir": data["type"] == "directory", "isreg": data["type"] == "file", "islnk": data["type"] == "link",
+		"pw_name": data["pw_name"], "gr_name": data["gr_name"],
+	}
+	for _, k := range []string{"size", "mtime", "atime", "ctime", "uid", "gid", "inode", "nlink"} {
+		if n, err := strconv.ParseInt(data[k], 10, 64); err == nil {
+			stat[k] = n
 		}
 	}
-
-	return statOutput, nil
+	if m, err := strconv.ParseUint(data["mode"], 8, 32); err == nil {
+		stat["mode"] = fmt.Sprintf("%04o", m)
+		stat["readable"] = m&0o400 != 0
+		stat["writable"] = m&0o200 != 0
+		stat["executable"] = m&0o100 != 0
+	}
+	for _, k := range []string{"checksum", "lnk_source", "lnk_target"} {
+		if v, ok := data[k]; ok {
+			stat[k] = v
+		}
+	}
+	return stat, nil
 }
 
 func (m *StatModule) Validate(args map[string]interface{}) error {
