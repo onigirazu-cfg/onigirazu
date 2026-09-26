@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/onigirazu-cfg/onigirazu/internal/executor"
@@ -148,7 +147,7 @@ func (m *DockerContainerModule) Execute(ctx context.Context, host types.Host, ar
 }
 
 func (m *DockerContainerModule) getContainerState(ctx context.Context, exec *executor.CommandExecutor, name string) (*ContainerState, bool, error) {
-	cmd := fmt.Sprintf("docker inspect %s 2>/dev/null", name)
+	cmd := shellJoin("docker", "inspect", name) + " 2>/dev/null"
 	stdout, err := exec.Execute(cmd)
 	if err != nil {
 		return nil, false, nil
@@ -191,7 +190,7 @@ func (m *DockerContainerModule) createContainer(ctx context.Context, exec *execu
 		return fmt.Errorf("image is required to create container")
 	}
 
-	cmdParts := []string{"docker run -d --name", name}
+	cmdParts := []string{"docker", "run", "-d", "--name", name}
 
 	if ports, ok := args["ports"].([]interface{}); ok {
 		for _, port := range ports {
@@ -221,13 +220,17 @@ func (m *DockerContainerModule) createContainer(ctx context.Context, exec *execu
 		cmdParts = append(cmdParts, "--restart", restart)
 	}
 
-	if command, ok := args["command"].(string); ok {
-		cmdParts = append(cmdParts, image, command)
-	} else {
-		cmdParts = append(cmdParts, image)
+	cmdParts = append(cmdParts, image)
+	// the command is split into words like a shell would, then each is quoted
+	if command, ok := args["command"].(string); ok && command != "" {
+		words, err := splitCommandLine(command)
+		if err != nil {
+			return fmt.Errorf("invalid command: %w", err)
+		}
+		cmdParts = append(cmdParts, words...)
 	}
 
-	cmd := strings.Join(cmdParts, " ")
+	cmd := shellJoin(cmdParts...)
 	_, err := exec.Execute(cmd)
 	if err != nil {
 		return fmt.Errorf("failed to create container: %s", err.Error())
@@ -237,7 +240,7 @@ func (m *DockerContainerModule) createContainer(ctx context.Context, exec *execu
 }
 
 func (m *DockerContainerModule) startContainer(ctx context.Context, exec *executor.CommandExecutor, name string) error {
-	cmd := fmt.Sprintf("docker start %s", name)
+	cmd := shellJoin("docker", "start", name)
 	_, err := exec.Execute(cmd)
 	if err != nil {
 		return fmt.Errorf("failed to start container: %s", err.Error())
@@ -246,7 +249,7 @@ func (m *DockerContainerModule) startContainer(ctx context.Context, exec *execut
 }
 
 func (m *DockerContainerModule) stopContainer(ctx context.Context, exec *executor.CommandExecutor, name string) error {
-	cmd := fmt.Sprintf("docker stop %s", name)
+	cmd := shellJoin("docker", "stop", name)
 	_, err := exec.Execute(cmd)
 	if err != nil {
 		return fmt.Errorf("failed to stop container: %s", err.Error())
@@ -255,7 +258,7 @@ func (m *DockerContainerModule) stopContainer(ctx context.Context, exec *executo
 }
 
 func (m *DockerContainerModule) restartContainer(ctx context.Context, exec *executor.CommandExecutor, name string) error {
-	cmd := fmt.Sprintf("docker restart %s", name)
+	cmd := shellJoin("docker", "restart", name)
 	_, err := exec.Execute(cmd)
 	if err != nil {
 		return fmt.Errorf("failed to restart container: %s", err.Error())
@@ -265,13 +268,13 @@ func (m *DockerContainerModule) restartContainer(ctx context.Context, exec *exec
 
 func (m *DockerContainerModule) removeContainer(ctx context.Context, exec *executor.CommandExecutor, name string, args map[string]interface{}) error {
 	force, _ := args["force"].(bool)
-	cmdParts := []string{"docker rm"}
+	cmdParts := []string{"docker", "rm"}
 	if force {
 		cmdParts = append(cmdParts, "-f")
 	}
 	cmdParts = append(cmdParts, name)
 
-	cmd := strings.Join(cmdParts, " ")
+	cmd := shellJoin(cmdParts...)
 	_, err := exec.Execute(cmd)
 	if err != nil {
 		return fmt.Errorf("failed to remove container: %s", err.Error())
