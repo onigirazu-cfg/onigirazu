@@ -1,0 +1,13 @@
+plays:
+  - name: the state to return to
+    hosts: all
+    become: true
+    tasks:
+      - name: No tree
+        apt: {name: tree, state: absent}
+      - name: No user
+        user: {name: onigirazu-e2e-rbu, state: absent}
+      - name: No group
+        group: {name: onigirazu-e2e-rbg, state: absent}
+      - name: cron runs
+        service: {name: cron, state: started, enabled: true}

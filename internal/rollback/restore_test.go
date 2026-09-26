@@ -31,3 +31,20 @@ func TestResourceFromResult(t *testing.T) {
 	_, ok = ResourceFromResult(types.TaskResult{Module: "apt"}, "web1", 1)
 	assert.False(t, ok)
 }
+
+func TestSystemResources(t *testing.T) {
+	pkg, _ := ResourceFromResult(types.TaskResult{Module: "apt", Before: map[string]interface{}{
+		"kind": "packages", "names": []interface{}{"tree", "jq"}, "installed": []interface{}{"jq"}, "state": "present"}}, "h", 1)
+	assert.Equal(t, "package", pkg.RollbackOp.Module)
+	assert.Equal(t, []interface{}{"tree"}, pkg.RollbackOp.Args["name"])
+	assert.Equal(t, "absent", pkg.RollbackOp.Args["state"])
+
+	svc, _ := ResourceFromResult(types.TaskResult{Module: "service", Before: map[string]interface{}{
+		"kind": "service", "name": "cron", "active": "active", "enabled": "enabled"}}, "h", 1)
+	assert.Equal(t, map[string]interface{}{"name": "cron", "state": "started", "enabled": true}, svc.RollbackOp.Args)
+
+	user, _ := ResourceFromResult(types.TaskResult{Module: "user", Before: map[string]interface{}{"kind": "user", "name": "u", "exists": false}}, "h", 1)
+	assert.Equal(t, "absent", user.RollbackOp.Args["state"])
+	existing, _ := ResourceFromResult(types.TaskResult{Module: "user", Before: map[string]interface{}{"kind": "user", "name": "u", "exists": true}}, "h", 1)
+	assert.False(t, existing.Reversible)
+}

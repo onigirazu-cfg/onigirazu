@@ -350,6 +350,12 @@ func describeOperation(op *RollbackOperation) string {
 		return "remove (did not exist before)"
 	case op.Module == "file" && a["state"] == "directory":
 		return "restore directory" + attrs
+	case op.Module == "package":
+		return fmt.Sprintf("%s packages %v", map[bool]string{true: "remove", false: "install"}[a["state"] == "absent"], a["name"])
+	case op.Module == "service":
+		return fmt.Sprintf("service %v %v, enabled=%v", a["name"], a["state"], a["enabled"])
+	case (op.Module == "user" || op.Module == "group") && a["state"] == "absent":
+		return fmt.Sprintf("remove %s %v (created by the run)", op.Module, a["name"])
 	case op.Module == "copy":
 		content, _ := a["content"].(string)
 		return fmt.Sprintf("restore content (%d bytes)%s", len(content), attrs)

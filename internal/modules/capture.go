@@ -28,6 +28,14 @@ var captureModules = map[string][]string{
 // captureBefore describes the target of a file module on the host before the
 // task runs; nil when the module is not captured or the target is unknown
 func captureBefore(ctx context.Context, host types.Host, module string, args map[string]interface{}) map[string]interface{} {
+	switch module {
+	case "apt", "yum", "dnf", "package":
+		return capturePackages(ctx, host, args)
+	case "service", "systemd":
+		return captureService(ctx, host, args)
+	case "user", "group":
+		return captureAccount(ctx, host, module, args)
+	}
 	keys, ok := captureModules[module]
 	if !ok {
 		return nil
@@ -80,4 +88,82 @@ func withBecome(before, args map[string]interface{}) map[string]interface{} {
 		}
 	}
 	return before
+}
+
+// packageNames reads name as a list, a comma separated string or one name
+func packageNames(args map[string]interface{}) []string {
+	var names []string
+	switch v := args["name"].(type) {
+	case string:
+		for _, n := range strings.Split(v, ",") {
+			if n = strings.TrimSpace(n); n != "" {
+				names = append(names, n)
+			}
+		}
+	case []interface{}:
+		for _, n := range v {
+			names = append(names, fmt.Sprint(n))
+		}
+	}
+	return names
+}
+
+// capturePackages records which of the task's packages were installed
+func capturePackages(ctx context.Context, host types.Host, args map[string]interface{}) map[string]interface{} {
+	names := packageNames(args)
+	if len(names) == 0 {
+		return nil
+	}
+	var installed []interface{}
+	for _, n := range names {
+		q := shellQuote(n)
+		out, err := runShellOnHost(ctx, host, args, fmt.Sprintf(
+			"(dpkg-query -W -f='${Status}' %s 2>/dev/null | grep -q 'install ok installed' || rpm -q %s >/dev/null 2>&1) && echo yes || echo no", q, q))
+		if err != nil {
+			return map[string]interface{}{"error": err.Error()}
+		}
+		if strings.TrimSpace(out) == "yes" {
+			installed = append(installed, n)
+		}
+	}
+	all := make([]interface{}, len(names))
+	for i, n := range names {
+		all[i] = n
+	}
+	return withBecome(map[string]interface{}{
+		"kind": "packages", "names": all, "installed": installed, "state": getStringArg(args, "state", "present"),
+	}, args)
+}
+
+// captureService records whether a service was running and enabled
+func captureService(ctx context.Context, host types.Host, args map[string]interface{}) map[string]interface{} {
+	name := getStringArg(args, "name", "")
+	if name == "" {
+		return nil
+	}
+	q := shellQuote(name)
+	out, err := runShellOnHost(ctx, host, args, fmt.Sprintf(
+		"command -v systemctl >/dev/null || exit 3; echo $(systemctl is-active %s 2>/dev/null) $(systemctl is-enabled %s 2>/dev/null)", q, q))
+	if err != nil {
+		return map[string]interface{}{"error": "no systemctl"}
+	}
+	f := strings.Fields(out)
+	for len(f) < 2 {
+		f = append(f, "unknown")
+	}
+	return withBecome(map[string]interface{}{"kind": "service", "name": name, "active": f[0], "enabled": f[1]}, args)
+}
+
+// captureAccount records whether a user or group existed
+func captureAccount(ctx context.Context, host types.Host, module string, args map[string]interface{}) map[string]interface{} {
+	name := getStringArg(args, "name", "")
+	if name == "" {
+		return nil
+	}
+	db := "passwd"
+	if module == "group" {
+		db = "group"
+	}
+	_, err := runOnHost(ctx, host, args, "getent", db, name)
+	return withBecome(map[string]interface{}{"kind": module, "name": name, "exists": err == nil}, args)
 }

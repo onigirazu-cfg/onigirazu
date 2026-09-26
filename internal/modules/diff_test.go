@@ -82,5 +82,8 @@ func TestCaptureBefore(t *testing.T) {
 
 	absent := captureBefore(context.Background(), host, "file", map[string]interface{}{"path": filepath.Join(dir, "none")})
 	assert.Equal(t, "absent", absent["kind"])
-	assert.Nil(t, captureBefore(context.Background(), host, "apt", map[string]interface{}{"name": "x"}))
+	pkgs := captureBefore(context.Background(), host, "apt", map[string]interface{}{"name": "onigirazu-no-such-package"})
+	assert.Equal(t, "packages", pkgs["kind"])
+	assert.Empty(t, pkgs["installed"])
+	assert.Nil(t, captureBefore(context.Background(), host, "debug", map[string]interface{}{"msg": "x"}))
 }
