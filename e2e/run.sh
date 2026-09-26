@@ -231,7 +231,7 @@ for c in $cases; do
     if [ -f "$dir/verify.sh" ] && ! out="$(on_host "$h" 'sudo -n bash -s' < "$dir/verify.sh" 2>&1)"; then
       record "$c" "$h" FAIL "verify: $(echo "$out" | tail -1)"; continue
     fi
-    if [ -f "$dir/verify-local.sh" ] && ! out="$(cd "$dir" && HOST="$h" bash verify-local.sh 2>&1)"; then
+    if [ -f "$dir/verify-local.sh" ] && ! out="$(cd "$dir" && HOST="$h" BIN="$BIN" INVENTORY="$INVENTORY" bash verify-local.sh 2>&1)"; then
       record "$c" "$h" FAIL "verify-local: $(echo "$out" | tail -1)"; continue
     fi
     record "$c" "$h" PASS "apply+verify"

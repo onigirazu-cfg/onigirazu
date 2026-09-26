@@ -1,0 +1,9 @@
+plays:
+  - name: drift
+    hosts: all
+    become: true
+    tasks:
+      - name: Managed file
+        copy: {content: "managed\n", dest: /root/onigirazu-e2e-drift, mode: "0644"}
+      - name: Managed directory
+        file: {path: /root/onigirazu-e2e-drift-dir, state: directory, mode: "0750"}
