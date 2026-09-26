@@ -81,7 +81,7 @@ tasks:
 
 A handler runs if a notification matches its `name` or its `listen` value.
 
-**Current limitation**: `listen` takes a single string; a list is ignored.
+`listen` takes one topic or a list of topics (`listen: [restart web, reload config]`).
 
 ## Advanced Patterns
 
@@ -337,7 +337,6 @@ Check:
 2. Does the `notify` value match the handler `name` or `listen` exactly (case-sensitive)? Unmatched names are ignored silently.
 3. Did an earlier task failure stop the play before the flush?
 4. Did `meta: end_host` / `end_play` stop the host?
-5. Is `listen` a list? Only a single string is supported.
 
 ### Handler Runs More Than Once
 

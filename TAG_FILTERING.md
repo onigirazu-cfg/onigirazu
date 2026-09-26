@@ -41,7 +41,7 @@ Tags select which tasks run. The `--tags` and `--skip-tags` flags let you:
       tags: [never]      # never runs
 ```
 
-**Current limitation**: `tags` must be a list. A plain string (`tags: setup`) is ignored and the task counts as untagged.
+`tags` is a list or a string; a string is split on commas (`tags: setup, config`).
 
 ### Tag Inheritance
 
@@ -250,11 +250,10 @@ onigirazu drift playbook.yml --tags setup
 ### Task not running
 
 1. Does it have the `never` tag? It never runs; remove the tag.
-2. Is `tags` a string instead of a list? It is ignored.
-3. Are its tags set on the play or on a `roles:` entry? Those are ignored.
-4. Does `--tags untagged` apply while the task has tags?
-5. Is one of its tags in `--skip-tags`?
-6. With `--tags`, does at least one of its tags match?
+2. Are its tags set on the play or on a `roles:` entry? Those are ignored.
+3. Does `--tags untagged` apply while the task has tags?
+4. Is one of its tags in `--skip-tags`?
+5. With `--tags`, does at least one of its tags match?
 
 ### Task running when it shouldn't
 

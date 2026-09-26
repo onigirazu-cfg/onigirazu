@@ -415,7 +415,7 @@ The `firewall` module reports `changed` only when the rule set actually changed,
 
 ## Tips for Writing Effective Handlers
 
-1. **Use `listen` for semantic grouping** (a single string; lists are not supported)
+1. **Use `listen` for semantic grouping** (one topic or a list)
 2. **Notify only from tasks that can report `changed`**; `debug` never does
 3. **Order handlers deliberately**: definition order is execution order
 4. **Use `ignore_errors` only for non-critical handlers**
