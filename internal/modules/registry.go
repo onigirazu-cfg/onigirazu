@@ -165,7 +165,9 @@ func (r *Registry) ExecuteTask(ctx context.Context, task *types.Task, host types
 	for key, value := range task.Args {
 		args[key] = value
 	}
-	normalizeArgs(args)
+	if !dataArgModules[task.Module] {
+		normalizeArgs(args)
+	}
 
 	// The task name travels separately: "name" belongs to the module
 	// (user name, package name, ...) and must not be filled from the task title
@@ -236,6 +238,10 @@ var checkModeModules = map[string]bool{
 	"cron": true, "sysctl": true, "get_url": true, "git": true, "systemd": true,
 	"mount": true, "config": true, "docker_container": true, "podman": true, "docker_image": true,
 }
+
+// dataArgModules take their arguments as data whose types are kept:
+// set_fact stores them, config writes them into JSON/YAML/TOML files
+var dataArgModules = map[string]bool{"set_fact": true, "config": true, "debug": true, "assert": true}
 
 // normalizeArgs turns top-level YAML numbers into strings: modules read
 // text arguments as strings (cron "minute: 0" became "*") and numeric ones

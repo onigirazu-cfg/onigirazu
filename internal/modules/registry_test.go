@@ -509,3 +509,21 @@ func TestNormalizeArgs_YAMLNumbers(t *testing.T) {
 	normalizeArgs(quoted)
 	assert.Equal(t, "u=rw", quoted["mode"])
 }
+
+func TestExecuteTask_DataModulesKeepNumbers(t *testing.T) {
+	registry := NewRegistry()
+	seen := map[string]interface{}{}
+	for _, name := range []string{"set_fact", "cron"} {
+		name := name
+		mock := NewMockModule(name)
+		mock.executeFunc = func(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
+			seen[name] = args["n"]
+			return types.TaskResult{Success: true}, nil
+		}
+		registry.RegisterModule(mock)
+		_, err := registry.ExecuteTask(context.Background(), &types.Task{Module: name, Args: map[string]interface{}{"n": 3}}, types.Host{Name: "h"}, nil)
+		assert.NoError(t, err)
+	}
+	assert.Equal(t, 3, seen["set_fact"])
+	assert.Equal(t, "3", seen["cron"])
+}
