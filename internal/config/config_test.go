@@ -780,3 +780,14 @@ func TestLoadConfigWithEnvironmentVariables(t *testing.T) {
 		t.Errorf("Expected LogLevel from env to be debug, got %s", cfg.LogLevel)
 	}
 }
+
+func TestCheckModeAndDryRunMeanTheSame(t *testing.T) {
+	for _, c := range []*Config{{CheckMode: true}, {DryRun: true}} {
+		if !c.GetDryRun() || !c.IsCheckMode() || !c.IsDryRun() || !c.GetCheckMode() {
+			t.Errorf("%+v: every getter must report check mode", c)
+		}
+	}
+	if (&Config{}).GetDryRun() {
+		t.Error("no check mode by default")
+	}
+}

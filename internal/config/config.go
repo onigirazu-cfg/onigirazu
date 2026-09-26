@@ -320,19 +320,19 @@ func (c *Config) IsChecksumEnabled() bool {
 }
 
 func (c *Config) IsDryRun() bool {
-	return c.DryRun
+	return c.checking()
 }
 
 func (c *Config) IsCheckMode() bool {
-	return c.CheckMode
+	return c.checking()
 }
 
 func (c *Config) GetDryRun() bool {
-	return c.DryRun
+	return c.checking()
 }
 
 func (c *Config) GetCheckMode() bool {
-	return c.CheckMode
+	return c.checking()
 }
 
 // New getter methods for extended configuration
@@ -442,4 +442,12 @@ func (c *Config) GetSSHKnownHostsFile() string {
 
 func (c *Config) GetDefaultInsecureIgnoreHostKey() bool {
 	return c.DefaultInsecureIgnoreHostKey
+}
+
+// checking is check mode: dry_run and check_mode (file, environment or
+// --check) mean the same, and every part of the run must see it; the engine
+// used to read only dry_run, so check_mode: true in the config changed hosts
+// while the output said it would not
+func (c *Config) checking() bool {
+	return c.DryRun || c.CheckMode
 }
