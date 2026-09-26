@@ -46,7 +46,18 @@ plays:
         get_url: {url: "https://raw.githubusercontent.com/onigirazu-cfg/onigirazu/main/README.md", dest: /root/onigirazu-e2e-check-readme}
         check_mode: true
         register: gu
+      - name: Checked unit file
+        systemd:
+          operation: unit
+          name: onigirazu-e2e-check.service
+          content: "[Service]\nExecStart=/bin/true\n"
+        check_mode: true
+        register: su
+      - name: Checked systemd stop
+        systemd: {operation: service, name: cron, state: stopped}
+        check_mode: true
+        register: ss
       - name: Record what check mode reported
         copy:
-          content: "{{ checked.changed }} {{ u.changed }} {{ g.changed }} {{ s.changed }} {{ k.changed }} {{ c.changed }} {{ gc.changed }} {{ gu.changed }}\n"
+          content: "{{ checked.changed }} {{ u.changed }} {{ g.changed }} {{ s.changed }} {{ k.changed }} {{ c.changed }} {{ gc.changed }} {{ gu.changed }} {{ su.changed }} {{ ss.changed }}\n"
           dest: /root/onigirazu-e2e-check-report

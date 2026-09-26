@@ -230,5 +230,5 @@ var checkModeModules = map[string]bool{
 	// compare, then change
 	"file": true, "copy": true, "template": true, "lineinfile": true, "blockinfile": true,
 	"apt": true, "yum": true, "package": true, "service": true, "user": true, "group": true,
-	"cron": true, "sysctl": true, "get_url": true, "git": true,
+	"cron": true, "sysctl": true, "get_url": true, "git": true, "systemd": true,
 }
