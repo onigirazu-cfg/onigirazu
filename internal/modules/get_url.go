@@ -171,19 +171,22 @@ func (m *GetURLModule) Execute(ctx context.Context, host types.Host, args map[st
 	if headerFile != "" {
 		curlConfig = " -K " + shellQuote(headerFile)
 	}
+	// values reach the script only as quoted variable assignments
 	script := fmt.Sprintf(`set -e
 t=$(mktemp)
-trap 'rm -f "$t" %[1]s' EXIT
+h=%[1]s
+trap 'rm -f "$t" ${h:+"$h"}' EXIT
 if command -v curl >/dev/null 2>&1; then
   curl -fsSL --max-time %[2]d%[3]s -o "$t" %[4]s
 else
   wget -q -T %[2]d -O "$t" %[4]s
 fi
-`, map[bool]string{true: shellQuote(headerFile), false: ""}[headerFile != ""], timeout, curlConfig, shellQuote(url))
+`, shellQuote(headerFile), timeout, curlConfig, shellQuote(url))
 	if hashCmd != "" {
-		script += fmt.Sprintf(`got=$(%s "$t" | cut -d' ' -f1)
-[ "$got" = %s ] || { echo "checksum mismatch: expected %s, got $got" >&2; exit 3; }
-`, hashCmd, shellQuote(strings.ToLower(want)), strings.ToLower(want))
+		script += fmt.Sprintf(`want=%s
+got=$(%s "$t" | cut -d' ' -f1)
+[ "$got" = "$want" ] || { printf 'checksum mismatch: expected %%s, got %%s\n' "$want" "$got" >&2; exit 3; }
+`, shellQuote(strings.ToLower(want)), hashCmd)
 	}
 	// unchanged content: report it and keep the file as it is
 	script += fmt.Sprintf(`if [ -f %[1]s ] && cmp -s "$t" %[1]s; then echo unchanged; exit 0; fi
