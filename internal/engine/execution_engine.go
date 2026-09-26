@@ -15,6 +15,7 @@ import (
 	"github.com/onigirazu-cfg/onigirazu/internal/interfaces"
 	"github.com/onigirazu-cfg/onigirazu/internal/metrics"
 	"github.com/onigirazu-cfg/onigirazu/internal/parser"
+	"github.com/onigirazu-cfg/onigirazu/internal/plugins"
 	"github.com/onigirazu-cfg/onigirazu/internal/security"
 	"github.com/onigirazu-cfg/onigirazu/internal/tagfilter"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
@@ -72,6 +73,8 @@ type ExecutionEngine struct {
 
 	// Observers for execution events
 	observers []ExecutionObserverI
+	// callback plugins, see callbacks.go
+	callbacks []plugins.CallbackPlugin
 
 	// become settings of the play being executed; plays run one at a time
 	playBecome becomeSettings
@@ -270,6 +273,7 @@ func (e *ExecutionEngine) ExecutePlaybook(ctx context.Context, playbook *types.P
 
 	// Notify observers of execution start
 	e.notifyExecutionStart(playbook.Name, len(playbook.Plays), totalTaskCount)
+	e.callbackPlaybookStart(ctx, playbook)
 
 	// Execute each play
 	contextCancelled := false
@@ -294,6 +298,7 @@ func (e *ExecutionEngine) ExecutePlaybook(ctx context.Context, playbook *types.P
 
 		// Notify observers of play start
 		e.notifyPlayStart(play.Name, i+1, len(playbook.Plays))
+		e.callbackPlayStart(ctx, &play)
 
 		// Record play execution start
 		e.metricsManager.IncrementPlaysExecuted()
@@ -305,6 +310,7 @@ func (e *ExecutionEngine) ExecutePlaybook(ctx context.Context, playbook *types.P
 			result.Plays = append(result.Plays, *playResult)
 		}
 		if err != nil {
+			e.callbackPlayEnd(ctx, &play, false, time.Since(playStartTime))
 			e.logger.Error("Play '%s' failed: %v", play.Name, err)
 			result.Failed = true
 			result.Error = err.Error()
@@ -320,6 +326,7 @@ func (e *ExecutionEngine) ExecutePlaybook(ctx context.Context, playbook *types.P
 			if !play.IgnoreErrors {
 				break
 			}
+			continue // the failed play is already in result.Plays
 		} else if playResult.Success {
 			e.metricsManager.IncrementTasksSucceeded()
 		} else {
@@ -335,6 +342,7 @@ func (e *ExecutionEngine) ExecutePlaybook(ctx context.Context, playbook *types.P
 
 		// Notify observers of play end
 		e.notifyPlayEnd(play.Name, i+1, playResult.Success, time.Since(playStartTime))
+		e.callbackPlayEnd(ctx, &play, playResult.Success, time.Since(playStartTime))
 
 		e.logger.PlayEnd(play.Name, "", playResult.Success, time.Since(playStartTime))
 	}
@@ -384,6 +392,7 @@ func (e *ExecutionEngine) ExecutePlaybook(ctx context.Context, playbook *types.P
 
 	// Notify observers of execution end
 	e.notifyExecutionEnd(result, result.Duration)
+	e.callbackPlaybookEnd(ctx, playbook, !result.Failed, result.Duration)
 
 	e.logger.Info("Playbook execution completed: %s (duration: %v, success: %t)",
 		playbook.Name, result.Duration, !result.Failed)
@@ -767,6 +776,7 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 
 	// Notify observers of task start
 	e.notifyTaskStart(task.Name, host.Name)
+	e.callbackTaskStart(ctx, task, *host)
 
 	taskVars := e.hostVariables(host, variables)
 	// task vars come last; string values may use other variables
@@ -1054,6 +1064,7 @@ func (e *ExecutionEngine) finishTask(task *types.Task, host *types.Host, result 
 
 	// Notify observers of task completion
 	e.notifyTaskEnd(&result)
+	e.callbackTaskEnd(context.Background(), task, *host, result)
 
 	if result.Failed && !task.IgnoreErrors {
 		e.notifyError(task.Name, host.Name, result.Error)
