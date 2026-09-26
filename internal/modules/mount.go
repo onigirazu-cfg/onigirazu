@@ -105,6 +105,13 @@ func (m *MountModule) handleMounted(ctx context.Context, exec *executor.CommandE
 	if err != nil {
 		return m.failResult(result, err.Error())
 	}
+	if inCheckMode(args) {
+		result.Changed = changed || !m.isMounted(ctx, host, args, path)
+		result.Output["path"] = path
+		result.Output["msg"] = fmt.Sprintf("Mount point %s would be mounted", path)
+		result.Duration = time.Since(result.Timestamp)
+		return result, nil
+	}
 	if _, err := runOnHost(ctx, host, args, "mkdir", "-p", path); err != nil {
 		return m.failResult(result, fmt.Sprintf("failed to create mount point %s: %v", path, err))
 	}
@@ -178,6 +185,9 @@ func (m *MountModule) unmount(ctx context.Context, host types.Host, args map[str
 	if !m.isMounted(ctx, host, args, path) {
 		return false, nil
 	}
+	if inCheckMode(args) {
+		return true, nil
+	}
 	if _, err := runOnHost(ctx, host, args, "umount", path); err != nil {
 		return false, fmt.Errorf("failed to unmount %s: %v", path, err)
 	}
@@ -238,6 +248,9 @@ func (m *MountModule) readFstab(ctx context.Context, host types.Host, args map[s
 }
 
 func (m *MountModule) writeFstab(ctx context.Context, host types.Host, args map[string]interface{}, lines []string) error {
+	if inCheckMode(args) {
+		return nil
+	}
 	script := "printf '%s' " + shellQuote(strings.Join(lines, "\n")+"\n") + " > /etc/fstab"
 	if getBoolArg(args, "backup", true) {
 		script = "cp -p /etc/fstab /etc/fstab.bak && " + script

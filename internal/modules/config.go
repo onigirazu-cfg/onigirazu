@@ -105,10 +105,16 @@ func (m *ConfigModule) execute(ctx context.Context, host types.Host, args map[st
 		return m.executeDelete(ctx, result, path, args)
 	case ConfigActionMerge:
 		return m.executeMerge(ctx, result, path, format, args)
-	case ConfigActionBackup:
+	case ConfigActionBackup, ConfigActionRestore:
+		if inCheckMode(args) {
+			result.Changed = true
+			result.Duration = time.Since(result.Timestamp)
+			return result, nil
+		}
+		if action == ConfigActionRestore {
+			return m.executeRestore(ctx, result, path, args)
+		}
 		return m.executeBackup(ctx, result, path, args)
-	case ConfigActionRestore:
-		return m.executeRestore(ctx, result, path, args)
 	case ConfigActionValidate:
 		return m.executeValidate(ctx, result, path, format, args)
 	default:
@@ -151,7 +157,7 @@ func (m *ConfigModule) executeSet(ctx context.Context, result types.TaskResult, 
 
 	// Write (and back up) only when something changed
 	result.Changed = !sameConfig(originalConfig, config)
-	if result.Changed {
+	if result.Changed && !inCheckMode(args) {
 		if getBoolArg(args, "backup", false) && m.checkFileExists(path) {
 			backupPath, err := m.createBackup(path)
 			if err != nil {
@@ -220,6 +226,11 @@ func (m *ConfigModule) executeDelete(ctx context.Context, result types.TaskResul
 		}
 		if m.deleteNestedKey(config, keyStr) {
 			result.Changed = true
+			if inCheckMode(args) {
+				result.Output["deleted_key"] = keyStr
+				result.Duration = time.Since(result.Timestamp)
+				return result, nil
+			}
 			if err := m.saveConfig(path, format, config); err != nil {
 				return m.failResult(result, fmt.Sprintf("failed to save config: %v", err))
 			}
@@ -227,7 +238,17 @@ func (m *ConfigModule) executeDelete(ctx context.Context, result types.TaskResul
 
 		result.Output["deleted_key"] = keyStr
 	} else {
-		// Delete entire file
+		// Delete entire file (a missing file is no change)
+		if !m.checkFileExists(path) {
+			result.Duration = time.Since(result.Timestamp)
+			return result, nil
+		}
+		if inCheckMode(args) {
+			result.Changed = true
+			result.Output["deleted_file"] = path
+			result.Duration = time.Since(result.Timestamp)
+			return result, nil
+		}
 		if getBoolArg(args, "backup", false) {
 			backupPath, err := m.createBackup(path)
 			if err != nil {
@@ -265,8 +286,11 @@ func (m *ConfigModule) executeMerge(ctx context.Context, result types.TaskResult
 	originalConfig := m.deepCopy(config)
 	m.mergeConfig(config, values)
 
-	if !reflect.DeepEqual(originalConfig, config) {
+	// by JSON form: 8080 from YAML and 8080.0 from JSON are the same value
+	if !sameConfig(originalConfig, config) {
 		result.Changed = true
+	}
+	if result.Changed && !inCheckMode(args) {
 		if err := m.saveConfig(path, format, config); err != nil {
 			return m.failResult(result, fmt.Sprintf("failed to save config: %v", err))
 		}
