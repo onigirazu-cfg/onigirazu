@@ -847,7 +847,7 @@ non-zero when the run failed.</p>
 <p><code>onigirazu apply site.yml --check</code> runs every module that supports it in check
 mode: it reports what would change and changes nothing. Supported: <code>copy</code>,
 <code>template</code>, <code>file</code>, <code>lineinfile</code>, <code>blockinfile</code>, <code>apt</code>, <code>yum</code>, <code>package</code>,
-<code>service</code>, <code>user</code>, <code>group</code>, <code>cron</code>, <code>sysctl</code>, <code>git</code>, <code>get_url</code> and the read-only modules
+<code>service</code>, <code>user</code>, <code>group</code>, <code>cron</code>, <code>sysctl</code>, <code>systemd</code>, <code>git</code>, <code>get_url</code> and the read-only modules
 (<code>stat</code>, <code>find</code>, <code>debug</code>, <code>set_fact</code>, <code>ping</code>, <code>fail</code>, <code>wait_for</code>); other
 modules are skipped with a note. <code>check_mode: false</code> on a task runs it for real
 in a check run (e.g. a probe whose result later tasks use); <code>check_mode: true</code>
