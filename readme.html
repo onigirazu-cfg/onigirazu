@@ -183,9 +183,10 @@ make install  # optional
 
 <p>Variables can also live next to the inventory, as in Ansible:
 <code>group_vars/&lt;group&gt;.yml</code> (or a <code>group_vars/&lt;group&gt;/</code> directory of files, merged in
-name order; <code>all</code> applies to every host) and <code>host_vars/&lt;host&gt;.yml</code>. A host gets,
-lowest first: <code>all</code>, parent groups, child groups, its own inventory variables,
-then <code>host_vars</code>.</p>
+name order; <code>all</code> applies to every host) and <code>host_vars/&lt;host&gt;.yml</code>. The same
+directories next to the playbook are read too and override the inventory's. A
+host gets, lowest first: <code>all</code>, parent groups, child groups, its own inventory
+variables, then <code>host_vars</code>.</p>
 <p>Or use inline inventory directly (no file needed):</p>
 <pre class="codehilite"><code class="language-bash">onigirazu apply playbook.yml -i &quot;ubuntu@web1,ubuntu@web2&quot;
 </code></pre>
