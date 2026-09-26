@@ -238,8 +238,12 @@ func runDriftCheck(cmd *cobra.Command, playbook string, o driftCheckOptions) err
 		}
 	case "text", "":
 		writeDriftText(out, report)
+	case "html":
+		if err := writeDriftHTML(out, report); err != nil {
+			return err
+		}
 	default:
-		return fmt.Errorf("unknown format %q (text, json)", o.format)
+		return fmt.Errorf("unknown format %q (text, json, html)", o.format)
 	}
 
 	switch {

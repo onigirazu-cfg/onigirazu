@@ -1051,6 +1051,7 @@ unless `--fix` is given.
 ```bash
 onigirazu drift site.yml -i hosts.yml                  # report
 onigirazu drift site.yml -i hosts.yml --format json    # for scripts
+onigirazu drift site.yml -i hosts.yml --format html --output drift.html   # one page to share
 onigirazu drift site.yml -i hosts.yml --fix            # apply when drift is found
 ```
 

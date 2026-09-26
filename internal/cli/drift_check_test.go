@@ -65,3 +65,18 @@ func TestNotifyWebhook(t *testing.T) {
 	assert.NotNil(t, got["report"])
 	assert.Equal(t, "https://chat.example/…", redactURL("https://chat.example/hooks/abc123"))
 }
+
+func TestWriteDriftHTML(t *testing.T) {
+	r := &DriftReport{Playbook: "site.yml", Hosts: 2, InSync: []string{"db1"}, DriftTasks: 1,
+		Drift:  map[string][]DriftItem{"web1": {{Task: "conf <x>", Module: "copy", Diff: "--- before: /a\n+++ after: /a\n-old\n+new\n"}}},
+		Errors: map[string][]DriftItem{"web2": {{Task: "probe", Detail: "unreachable"}}}}
+	var out bytes.Buffer
+	assert.NoError(t, writeDriftHTML(&out, r))
+	html := out.String()
+	assert.Contains(t, html, "<title>Drift: site.yml</title>")
+	assert.Contains(t, html, `<span class="add">&#43;new</span>`)
+	assert.Contains(t, html, `<span class="del">-old</span>`)
+	assert.Contains(t, html, "conf &lt;x&gt;", "task names are escaped")
+	assert.Contains(t, html, "unreachable")
+	assert.Contains(t, html, "In sync: db1")
+}
