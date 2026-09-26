@@ -149,7 +149,7 @@ func (m *GroupModuleFixed) Execute(ctx context.Context, host types.Host, args ma
 	}
 
 	groupname, _ := args["name"].(string)
-	state, _ := args["state"].(string)
+	state := getStringArg(args, "state", "present")
 
 	switch state {
 	case "present":
@@ -180,7 +180,7 @@ func (m *GroupModuleFixed) Validate(args map[string]interface{}) error {
 
 	state, exists := args["state"]
 	if !exists {
-		return fmt.Errorf("argument 'state' is required")
+		state = "present" // Ansible's default
 	}
 
 	if stateStr, ok := state.(string); !ok {

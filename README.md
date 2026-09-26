@@ -683,8 +683,10 @@ Onigirazu includes 22+ built-in modules for common automation tasks:
   mode/owner/group of an existing path; `recurse: true` for directories; `dest`/`name` alias `path`
 - **package**: Package management
 - **service**: Service management
-- **user**: User management
-- **group**: Group management
+- **user**: creates a user or brings an existing one to the given `shell`, `home`, `uid`,
+  `group`, `groups` (list or comma separated; `append: true` only adds), `comment` and
+  `password` (hash); `state: absent` removes the home only with `remove: true`
+- **group**: `state` defaults to `present`
 - **command**: run a program without a shell (`chdir`, `creates`, `removes`); the result has
   `rc`, `stdout`, `stderr` (trailing newline removed) and `*_lines`; a non-zero `rc` fails the task
 - **shell**: the same through `sh -c` (or `executable`)
