@@ -33,7 +33,9 @@ onigirazu run all -m shell cmd="df -h | grep /dev" -i inventory.yml
 onigirazu run all -m file path=/tmp/test mode=0644 state=touch -i inventory.yml
 ```
 
-Each argument after the pattern is one `key=value`; `-a key=value` does the same.
+Each argument after the pattern is one `key=value` (quote values with spaces:
+`msg="hello world"`). `-a` works as in Ansible: `-a "name=nginx state=present"`, or the
+command of `command`, `shell`, `raw` and `script`: `-m shell -a "df -h | head chdir=/tmp"`.
 
 ### Plain commands
 
@@ -79,11 +81,10 @@ string a plain command.
 `status` is `success`, `failed` or `skipped`; `message` is the command's stdout, or the
 module's `msg`; failed hosts carry `error`. YAML has the same fields.
 
-Current limitation: log lines are printed to stdout before the result. Strip them before
-parsing:
+Log lines go to stderr, so stdout parses as is:
 
 ```bash
-onigirazu run all -m ping -i inventory.yml -o json | sed -n '/^{/,$p' | jq -r '.results[] | select(.status=="success") | .host'
+onigirazu run all -m ping -i inventory.yml -o json | jq -r '.results[] | select(.status=="success") | .host'
 ```
 
 ## Flags
@@ -91,7 +92,7 @@ onigirazu run all -m ping -i inventory.yml -o json | sed -n '/^{/,$p' | jq -r '.
 | Flag | Meaning |
 |------|---------|
 | `-m, --module` | module name |
-| `-a, --args key=value` | module argument (repeatable) |
+| `-a, --args` | module arguments, as in Ansible (repeatable) |
 | `-f, --parallel N` | hosts in parallel, default 10 (0 or less means 5) |
 | `-o, --output` | `text`, `json`, `yaml`, `table` |
 | `-u, --user` | SSH user for all hosts |
@@ -107,7 +108,6 @@ Current limitations of `run`:
   `--diff` shows file changes, `-e` and `--timeout` apply.)
 - There is no become option and the security policy is not applied; use a playbook with
   `become: true` / `apply -b`.
-- Inline inventories (`-i "host1,host2"`) are not supported; put the hosts in a file.
 
 ## Compared with Ansible
 
@@ -115,7 +115,7 @@ Current limitations of `run`:
 |---------|-----------|
 | `ansible all -i inv -m ping` | `onigirazu run all -i inv -m ping` |
 | `ansible all -i inv -a "uptime"` | `onigirazu run all -i inv "uptime"` |
-| `ansible all -i inv -m shell -a "df -h \| head"` | `onigirazu run all -i inv -m shell cmd="df -h \| head"` |
+| `ansible all -i inv -m shell -a "df -h \| head"` | `onigirazu run all -i inv -m shell -a "df -h \| head"` |
+| `ansible all -i web1,web2 -m ping` | `onigirazu run all -i web1,web2 -m ping` |
 | `ansible all -i inv -m package -a "name=nginx state=present" -b` | playbook + `onigirazu apply -b` (no become in `run`) |
 
-In Onigirazu `-a` takes one `key=value` per flag, not a free-form string.

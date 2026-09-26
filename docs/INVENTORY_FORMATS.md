@@ -1,8 +1,8 @@
 # Inventory Formats
 
 An inventory lists the hosts and groups a playbook or ad-hoc command runs on. Pass it
-with `-i`; `-i` can be repeated and can point to a file, a directory or an executable
-script.
+with `-i`; `-i` can be repeated and can point to a file, a directory, an executable
+script or a list of hosts.
 
 | Format | How it is recognised |
 |--------|----------------------|
@@ -10,7 +10,8 @@ script.
 | JSON | `.json` |
 | TOML | `.toml` |
 | INI (Ansible style) | `.ini` |
-| Plain host list | other files whose lines contain no `:`, `=` or `[` |
+| Plain host list | other files whose lines are `[user@]host[:port]` |
+| Host list on the command line | `-i host1,user@host2:2222` or `-i host1,` (a comma, not a file) |
 | Dynamic inventory | executable file |
 
 A file with another or no extension is detected from its content: executable script,
@@ -106,21 +107,36 @@ environment=production
 
 ## Plain host list
 
-One address or host name per line; `#` starts a comment. Hosts get port 22 and user
-`root` and belong to the group `all`.
+One `[user@]host[:port]` per line; `#` starts a comment. Hosts get port 22 and user
+`root` unless given and belong to the group `all`. A host with a user is named
+`user@host`.
 
 ```
 192.168.1.1
-192.168.1.2
+deploy@192.168.1.2:2222
 web3.example.com
 ```
 
-Current limitation: `user@host` and `host:port` lines are not parsed (the file fails with
-"inventory must contain at least one group"). Use an INI file for per-host users and ports.
+## Host list on the command line
+
+As in Ansible, a `-i` value with a comma that is not a file is a list of hosts in the
+same `[user@]host[:port]` form: `-i web1,web2`, `-i deploy@10.0.0.5:2222,` (a single host
+needs the trailing comma). `-i a.yml,b.yml` loads both files when both exist.
 
 ## Dynamic inventory
 
-An executable file (`chmod +x`) that prints a JSON inventory (format as above) on stdout.
+An executable file (`chmod +x`), run with `--list` (30 s timeout, output cached for 10
+minutes). It prints either an Ansible inventory script's JSON:
+
+```json
+{
+  "web": {"hosts": ["web1", "web2"], "vars": {"tier": "front"}, "children": []},
+  "db": ["db1"],
+  "_meta": {"hostvars": {"web1": {"ansible_host": "192.168.1.1", "ansible_user": "admin"}}}
+}
+```
+
+or Onigirazu's own JSON inventory:
 
 ```bash
 #!/bin/bash
@@ -132,9 +148,8 @@ cat <<'EOF'
 EOF
 ```
 
-`apply`, `plan`, `drift` and `run` execute the script without arguments (30 s timeout,
-output cached for 10 minutes); `onigirazu inventory` runs it with `--list`. Print the
-inventory in both cases.
+Existing Ansible inventory scripts work unchanged. As in Ansible, a host that is only in
+`_meta.hostvars` is not added.
 
 ## Host variables
 
@@ -159,7 +174,8 @@ so they win). They override variables written in the inventory itself.
 
 ## Several sources and directories
 
-- `-i a.yml -i b.ini`: sources are merged; for the same host or group the later source wins.
+- `-i a.yml -i b.ini` (or `-i a.yml,b.ini`): sources are merged; for the same host or
+  group the later source wins.
 - `-i inventory/`: every `.yml`, `.yaml`, `.json`, `.ini` and `.toml` file (alphabetically)
   and then every executable in the directory tree is loaded. Other files, hidden
   directories and `group_vars/`/`host_vars/` are skipped.
@@ -173,11 +189,7 @@ then in `/etc/onigirazu/` for `inventory.yml`, `hosts.yml`, `inventory`.
 
 ## Limitations
 
-- Inline inventories (`-i "192.168.1.1,192.168.1.2"`, `-i host,`) do not work with
-  `apply`, `plan`, `drift` and `run`: `-i` values are split on commas and each part is
-  opened as a file. Put the hosts in a file.
-- `onigirazu inventory` takes a single `-i`, and a relative path without `/` or extension
-  is taken as a host name; write `./hosts`.
+- `onigirazu inventory` takes a single `-i`.
 
 ## Inspecting an inventory
 

@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
 // Parser handles parsing of ad-hoc commands in multiple formats
@@ -78,10 +80,23 @@ func (p *Parser) parseAnsibleLike(moduleName string, args []string) (*Command, e
 		Raw:    fmt.Sprintf("-m %s %s", moduleName, strings.Join(args, " ")),
 	}
 
-	// Parse key=value pairs
 	for _, arg := range args {
-		if err := p.parseKeyValue(arg, cmd.Args); err != nil {
+		// One key=value (the shell has removed its quotes, so the value may
+		// hold spaces): cmd="df -h", msg="hello world"
+		if singlePair(moduleName, arg) {
+			if err := p.parseKeyValue(arg, cmd.Args); err != nil {
+				return nil, fmt.Errorf("failed to parse argument %q: %w", arg, err)
+			}
+			continue
+		}
+		// As ansible -a: key=value pairs separated by spaces, or the command
+		// of a free-form module (command, shell, raw, script)
+		parsed, err := types.ShortFormArgs(moduleName, arg)
+		if err != nil {
 			return nil, fmt.Errorf("failed to parse argument %q: %w", arg, err)
+		}
+		for k, v := range parsed {
+			cmd.Args[k] = v
 		}
 	}
 
@@ -339,4 +354,23 @@ func (p *Parser) parseKeyValue(pair string, args map[string]interface{}) error {
 	// Store as string (module will handle type conversion)
 	args[key] = value
 	return nil
+}
+
+var (
+	pairStart     = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*=`)
+	laterPair     = regexp.MustCompile(`\s[A-Za-z_][A-Za-z0-9_]*=`)
+	freeFormStart = regexp.MustCompile(`^(cmd|argv|chdir|creates|removes|executable|stdin|script|free_form|file)=`)
+)
+
+// singlePair tells an argument that is one key=value from a key=value list
+// or a free-form command such as "echo a=b"
+func singlePair(module, arg string) bool {
+	if laterPair.MatchString(arg) {
+		return false
+	}
+	switch module {
+	case "command", "shell", "raw", "script":
+		return freeFormStart.MatchString(arg)
+	}
+	return pairStart.MatchString(arg)
 }

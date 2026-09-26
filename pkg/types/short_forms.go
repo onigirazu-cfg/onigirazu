@@ -69,6 +69,12 @@ func (t *Task) applyShortForm(taskMap map[string]interface{}, reserved map[strin
 	return nil
 }
 
+// ShortFormArgs parses module arguments written as in a task's short form:
+// the command of a free-form module, or key=value pairs
+func ShortFormArgs(module, s string) (map[string]interface{}, error) {
+	return shortFormArgs(module, s)
+}
+
 func shortFormArgs(module, s string) (map[string]interface{}, error) {
 	args := map[string]interface{}{}
 	if main, ok := freeFormModules[module]; ok {

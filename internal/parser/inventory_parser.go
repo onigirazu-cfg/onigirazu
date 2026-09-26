@@ -134,6 +134,7 @@ func (p *InventoryParser) isSimpleList(content string) bool {
 	lines := strings.Split(content, "\n")
 
 	// Check if most lines look like addresses (no YAML/TOML syntax)
+	detector := NewInlineInventoryDetector(p.logger)
 	simpleLines := 0
 	totalLines := 0
 
@@ -144,6 +145,12 @@ func (p *InventoryParser) isSimpleList(content string) bool {
 		}
 
 		totalLines++
+
+		// [user@]host[:port]
+		if detector.isValidHostSpecification(line) {
+			simpleLines++
+			continue
+		}
 
 		// If line contains YAML/TOML markers, it's not a simple list
 		if strings.Contains(line, ":") && !strings.Contains(line, "://") {
@@ -329,7 +336,11 @@ func (p *InventoryParser) parseAnsibleYamlInventory(data []byte) (*types.Invento
 	if err := yaml.Unmarshal(data, &ansibleInv); err != nil {
 		return nil, fmt.Errorf("error parsing Ansible YAML inventory: %w", err)
 	}
+	return p.parseAnsibleTree(ansibleInv.All)
+}
 
+// parseAnsibleTree builds an inventory from the Ansible tree under "all"
+func (p *InventoryParser) parseAnsibleTree(all map[string]interface{}) (*types.Inventory, error) {
 	inventory := &types.Inventory{
 		Groups: make(map[string]*types.Group),
 		Hosts:  make([]types.Host, 0),
@@ -338,9 +349,9 @@ func (p *InventoryParser) parseAnsibleYamlInventory(data []byte) (*types.Invento
 	// The tree under "all": hosts may be defined in any group, groups nest
 	// through children (as a map of groups or a list of names), and every
 	// host belongs to "all"
-	if ansibleInv.All != nil {
+	if all != nil {
 		w := &ansibleWalk{inventory: inventory, raw: map[string]map[string]interface{}{}, members: map[string][]string{}}
-		w.group("all", ansibleInv.All, 0)
+		w.group("all", all, 0)
 		// a host may be listed in several groups: its settings from all of
 		// them are merged, then it is parsed once
 		hosts := map[string]*types.Host{}
@@ -535,6 +546,11 @@ func (p *InventoryParser) parseTomlInventory(data []byte) (*types.Inventory, err
 
 // parseJsonInventory parses JSON format inventory
 func (p *InventoryParser) parseJsonInventory(data []byte) (*types.Inventory, error) {
+	var raw map[string]interface{}
+	if err := json.Unmarshal(data, &raw); err == nil && isAnsibleScriptOutput(raw) {
+		return p.parseAnsibleTree(ansibleScriptTree(raw))
+	}
+
 	var inventory types.Inventory
 	if err := json.Unmarshal(data, &inventory); err != nil {
 		return nil, fmt.Errorf("error parsing JSON inventory: %w", err)
@@ -753,8 +769,8 @@ func (p *InventoryParser) parseDynamicInventory(scriptPath string) (*types.Inven
 func (p *InventoryParser) ParseInventoryOrInline(ctx context.Context, inventoryPath string) (*types.Inventory, error) {
 	detector := NewInlineInventoryDetector(p.logger)
 
-	// Check if this looks like inline inventory
-	if detector.IsInlineInventory(inventoryPath) {
+	// An existing file wins over a name that also looks like a host
+	if _, err := os.Stat(inventoryPath); err != nil && detector.IsInlineInventory(inventoryPath) {
 		p.logger.Debug("Detected inline inventory specification: %s", inventoryPath)
 		return detector.ParseInlineInventory(inventoryPath)
 	}
@@ -835,4 +851,81 @@ func appendUnique(list []string, s string) []string {
 		}
 	}
 	return append(list, s)
+}
+
+// isAnsibleScriptOutput tells the JSON of an Ansible inventory script
+// ({"web": {"hosts": [...]}, "_meta": {"hostvars": {...}}}) from onigirazu's
+// own JSON inventory ({"hosts": [...], "groups": {...}})
+func isAnsibleScriptOutput(raw map[string]interface{}) bool {
+	if _, ok := raw["_meta"]; ok {
+		return true
+	}
+	if _, ok := raw["all"]; ok {
+		return true
+	}
+	_, hosts := raw["hosts"]
+	_, groups := raw["groups"]
+	return len(raw) > 0 && !hosts && !groups
+}
+
+// ansibleScriptTree turns Ansible script output into the tree under "all"
+// that an Ansible YAML inventory has
+func ansibleScriptTree(raw map[string]interface{}) map[string]interface{} {
+	hostvars := map[string]interface{}{}
+	if meta, ok := raw["_meta"].(map[string]interface{}); ok {
+		if hv, ok := meta["hostvars"].(map[string]interface{}); ok {
+			hostvars = hv
+		}
+	}
+	hostMap := func(list interface{}) map[string]interface{} {
+		hosts := map[string]interface{}{}
+		items, _ := list.([]interface{})
+		for _, item := range items {
+			if name, ok := item.(string); ok {
+				hosts[name] = hostvars[name]
+			}
+		}
+		return hosts
+	}
+	group := func(data interface{}) map[string]interface{} {
+		out := map[string]interface{}{}
+		switch g := data.(type) {
+		case []interface{}: // a bare list of hosts
+			out["hosts"] = hostMap(g)
+		case map[string]interface{}:
+			out["hosts"] = hostMap(g["hosts"])
+			if vars, ok := g["vars"]; ok {
+				out["vars"] = vars
+			}
+			if children, ok := g["children"]; ok {
+				out["children"] = children
+			}
+		}
+		return out
+	}
+
+	all := map[string]interface{}{}
+	children := map[string]interface{}{}
+	for name, data := range raw {
+		switch name {
+		case "_meta":
+		case "all":
+			for k, v := range group(data) {
+				all[k] = v
+			}
+		default:
+			children[name] = group(data)
+		}
+	}
+	if existing, ok := all["children"].([]interface{}); ok {
+		for _, c := range existing {
+			if name, ok := c.(string); ok {
+				if _, defined := children[name]; !defined {
+					children[name] = nil
+				}
+			}
+		}
+	}
+	all["children"] = children
+	return all
 }
