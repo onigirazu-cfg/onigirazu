@@ -1,0 +1,21 @@
+plays:
+  - name: task keywords in their string, list and template forms
+    hosts: all
+    become: true
+    vars:
+      tries: 4
+      pause: 0
+    tasks:
+      - name: Succeeds on the third attempt
+        shell: c=$(cat /root/onigirazu-e2e-kw-count 2>/dev/null || echo 0); c=$((c+1)); echo $c > /root/onigirazu-e2e-kw-count; echo $c
+        register: counter
+        until: counter.stdout == "3"
+        retries: "{{ tries }}"
+        delay: "{{ pause }}"
+      - name: Notify a topic
+        copy: {content: "x\n", dest: /root/onigirazu-e2e-kw-notify}
+        notify: kw-second
+    handlers:
+      - name: Listens to two topics
+        copy: {content: "fired\n", dest: /root/onigirazu-e2e-kw-handler}
+        listen: [kw-first, kw-second]

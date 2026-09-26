@@ -56,7 +56,7 @@ Every task accepts these keywords next to its module:
 | `check_mode` | `false` runs the task for real in a check run |
 | `environment`, `vars`, `tags`, `no_log`, `timeout` | Task environment, variables, tags, hidden output, time limit |
 
-`retries` must be a number and `delay`/`timeout` a number of seconds or a duration such as `10s`. Current limitation: a template such as `retries: "{{ n }}"` is not rendered and counts as 0.
+`retries` must be a number and `delay`/`timeout` a number of seconds or a duration such as `10s`. `retries` and `delay` can also be templates (`retries: "{{ n }}"`), rendered per host.
 
 ### Short Forms
 

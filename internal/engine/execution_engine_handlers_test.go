@@ -82,3 +82,11 @@ func TestHandlerListenFieldParsing(t *testing.T) {
 
 	assert.Equal(t, "restart application", handler.Listen, "Handler should have correct listen directive")
 }
+
+func TestListensTo(t *testing.T) {
+	notified := map[string]map[string]bool{"db": {"host1": true}}
+	assert.True(t, listensTo(&types.Task{Listens: []string{"web", "db"}}, notified, "host1"))
+	assert.False(t, listensTo(&types.Task{Listens: []string{"web", "db"}}, notified, "host2"))
+	assert.True(t, listensTo(&types.Task{Listen: "db"}, notified, "host1"))
+	assert.False(t, listensTo(&types.Task{}, notified, "host1"))
+}

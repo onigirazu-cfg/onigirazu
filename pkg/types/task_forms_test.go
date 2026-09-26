@@ -139,3 +139,28 @@ func TestTask_WithSequence(t *testing.T) {
 		assert.Equal(t, want, task.Loop.Items, spec)
 	}
 }
+
+func TestTask_KeywordForms(t *testing.T) {
+	var task Task
+	require.NoError(t, yaml.Unmarshal([]byte(`
+name: wait
+command: /bin/true
+tags: setup, config
+retries: "{{ n }}"
+delay: "{{ d }}"
+until: result.rc == 0
+`), &task))
+	assert.Equal(t, []string{"setup", "config"}, task.Tags)
+	assert.Equal(t, "{{ n }}", task.RetriesExpr)
+	assert.Equal(t, "{{ d }}", task.DelayExpr)
+
+	var numeric Task
+	require.NoError(t, yaml.Unmarshal([]byte("name: a\ncommand: /bin/true\nretries: \"5\"\ntags: one\n"), &numeric))
+	assert.Equal(t, 5, numeric.Retries)
+	assert.Equal(t, []string{"one"}, numeric.Tags)
+
+	var handler Task
+	require.NoError(t, yaml.Unmarshal([]byte("name: h\ncommand: /bin/true\nlisten: [web, db]\n"), &handler))
+	assert.Equal(t, []string{"web", "db"}, handler.Listens)
+	assert.Equal(t, "web", handler.Listen)
+}

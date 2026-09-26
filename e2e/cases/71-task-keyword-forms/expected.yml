@@ -1,0 +1,9 @@
+plays:
+  - name: only the tagged task ran
+    hosts: all
+    become: true
+    tasks:
+      - name: Tagged
+        copy: {content: "tagged\n", dest: /root/onigirazu-e2e-kw-tagged}
+      - name: Untagged
+        file: {path: /root/onigirazu-e2e-kw-untagged, state: absent}

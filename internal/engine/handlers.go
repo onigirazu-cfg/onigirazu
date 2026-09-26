@@ -100,7 +100,7 @@ func (h *playHandlers) takeNotified(hosts []types.Host) [][]types.Host {
 			if h.ended[host.Name] {
 				continue
 			}
-			if h.notified[entry.task.Name][host.Name] || (entry.task.Listen != "" && h.notified[entry.task.Listen][host.Name]) {
+			if h.notified[entry.task.Name][host.Name] || listensTo(&entry.task, h.notified, host.Name) {
 				out[i] = append(out[i], host)
 			}
 		}
@@ -201,4 +201,18 @@ func (e *ExecutionEngine) runIncludedRole(ctx context.Context, task *types.Task,
 	role := *task.IncludedRole
 	role.Params = e.mergeVariables(role.Params, task.Vars)
 	return e.executeRoleWithDependencies(ctx, &role, targets, variables, playResult)
+}
+
+// listensTo tells whether host notified one of the handler's listen topics
+func listensTo(t *types.Task, notified map[string]map[string]bool, host string) bool {
+	topics := t.Listens
+	if len(topics) == 0 && t.Listen != "" {
+		topics = []string{t.Listen}
+	}
+	for _, topic := range topics {
+		if notified[topic][host] {
+			return true
+		}
+	}
+	return false
 }

@@ -1,0 +1,10 @@
+plays:
+  - name: tags given as a string
+    hosts: all
+    become: true
+    tasks:
+      - name: Tagged
+        copy: {content: "tagged\n", dest: /root/onigirazu-e2e-kw-tagged}
+        tags: kw-setup, kw-other
+      - name: Untagged
+        copy: {content: "untagged\n", dest: /root/onigirazu-e2e-kw-untagged}
