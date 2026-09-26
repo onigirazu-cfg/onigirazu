@@ -1,0 +1,19 @@
+plays:
+  - name: check mode per task
+    hosts: all
+    become: true
+    tasks:
+      - name: Checked copy reports the change and writes nothing
+        copy:
+          content: "would be\n"
+          dest: /root/onigirazu-e2e-check-copy
+        check_mode: true
+        register: checked
+      - name: Checked command is skipped
+        command:
+          cmd: "touch /root/onigirazu-e2e-check-command"
+        check_mode: true
+      - name: Record what check mode reported
+        copy:
+          content: "{{ checked.changed }}\n"
+          dest: /root/onigirazu-e2e-check-report

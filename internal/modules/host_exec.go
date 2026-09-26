@@ -68,6 +68,9 @@ func ensureOwnership(ctx context.Context, host types.Host, args map[string]inter
 	// GNU stat first, BSD stat as a fallback
 	current, err := runShellOnHost(ctx, host, args, fmt.Sprintf("stat -c '%%U:%%G' %s 2>/dev/null || stat -f '%%Su:%%Sg' %s", qPath, qPath))
 	if err != nil {
+		if inCheckMode(args) {
+			return true, nil // the file does not exist yet; its ownership would be set
+		}
 		return false, fmt.Errorf("failed to read ownership of %s: %w", path, err)
 	}
 	currentOwner, currentGroup, _ := strings.Cut(strings.TrimSpace(current), ":")
@@ -81,6 +84,9 @@ func ensureOwnership(ctx context.Context, host types.Host, args map[string]inter
 	}
 	if wantOwner == currentOwner && wantGroup == currentGroup {
 		return false, nil
+	}
+	if inCheckMode(args) {
+		return true, nil
 	}
 
 	if _, err := runOnHost(ctx, host, args, "chown", wantOwner+":"+wantGroup, path); err != nil {
@@ -103,7 +109,9 @@ type remoteFile struct {
 func statRemoteFile(ctx context.Context, host types.Host, args map[string]interface{}, path string) (remoteFile, error) {
 	q := shellQuote(path)
 	out, err := runShellOnHost(ctx, host, args, fmt.Sprintf(
-		"if [ -e %s ]; then stat -c '%%a %%U %%G' %s && sha256sum %s | cut -d' ' -f1; else echo absent; fi", q, q, q))
+		// GNU stat/sha256sum, with BSD fallbacks (a local macOS host)
+		"if [ -e %s ]; then (stat -c '%%a %%U %%G' %s 2>/dev/null || stat -f '%%Lp %%Su %%Sg' %s) && "+
+			"(sha256sum %s 2>/dev/null || shasum -a 256 %s) | cut -d' ' -f1; else echo absent; fi", q, q, q, q, q))
 	if err != nil {
 		return remoteFile{}, fmt.Errorf("failed to stat %s: %w", path, err)
 	}
@@ -128,7 +136,12 @@ func statRemoteFile(ctx context.Context, host types.Host, args map[string]interf
 func installRemoteFile(ctx context.Context, host types.Host, args map[string]interface{}, client *sshpkg.Client,
 	path string, data []byte, mode os.FileMode, existing remoteFile) error {
 	tmp := fmt.Sprintf("/tmp/.onigirazu-%d-%s", time.Now().UnixNano(), filepath.Base(path))
-	if err := client.WriteFile(tmp, data, 0600); err != nil {
+	// a local host has no SSH client: the temporary file is written directly
+	if client == nil {
+		if err := os.WriteFile(tmp, data, 0600); err != nil {
+			return fmt.Errorf("failed to write %s: %w", tmp, err)
+		}
+	} else if err := client.WriteFile(tmp, data, 0600); err != nil {
 		return fmt.Errorf("failed to upload %s: %w", path, err)
 	}
 	owner := ""
@@ -199,4 +212,11 @@ func modeString(mode os.FileMode) string {
 		return ""
 	}
 	return fmt.Sprintf("%04o", mode.Perm())
+}
+
+// inCheckMode reports whether the task runs in check mode: the module
+// reports what it would change and changes nothing
+func inCheckMode(args map[string]interface{}) bool {
+	check, _ := args["_check_mode"].(bool)
+	return check
 }

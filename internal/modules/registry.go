@@ -3,6 +3,7 @@ package modules
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/onigirazu-cfg/onigirazu/internal/interfaces"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
@@ -180,6 +181,19 @@ func (r *Registry) ExecuteTask(ctx context.Context, task *types.Task, host types
 		args["_become_method"] = task.BecomeMethod
 	}
 
+	// Check mode: modules that support it report what they would change;
+	// the others are skipped rather than run
+	if task.CheckMode != nil && *task.CheckMode {
+		if !checkModeModules[task.Module] {
+			return types.TaskResult{
+				TaskName: task.Name, Host: host.Name, Module: task.Module,
+				Success: true, Skipped: true, Timestamp: time.Now(),
+				Output: map[string]interface{}{"msg": fmt.Sprintf("skipped: check mode is not supported by %s", task.Module)},
+			}, nil
+		}
+		args["_check_mode"] = true
+	}
+
 	// Every executor a module creates for this host picks the settings up
 	host.Become = task.Become
 	host.BecomeUser = task.BecomeUser
@@ -198,4 +212,14 @@ func (r *Registry) ExecuteTask(ctx context.Context, task *types.Task, host types
 		}
 	}
 	return result, err
+}
+
+// checkModeModules support check mode: they read, or they compare and stop
+// before changing anything. Every other module is skipped in check mode.
+var checkModeModules = map[string]bool{
+	// read only
+	"ping": true, "debug": true, "set_fact": true, "stat": true, "find": true,
+	"fail": true, "wait_for": true,
+	// compare, then change
+	"file": true, "copy": true, "template": true, "lineinfile": true, "blockinfile": true,
 }

@@ -192,8 +192,8 @@ func (m *BlockinfileModule) Execute(ctx context.Context, host types.Host, args m
 
 	result.Changed = newContent != fileContent
 
-	// Write on the target host only if something changed
-	if result.Changed {
+	// Write on the target host only if something changed; check mode stops here
+	if result.Changed && !inCheckMode(args) {
 		if backup && fileExists {
 			backupPath := filePath + ".bak"
 			if err := writeHostFile(ctx, host, args, backupPath, data, 0); err != nil {

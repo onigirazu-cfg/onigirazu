@@ -62,11 +62,11 @@ func (m *FileModule) Execute(ctx context.Context, host types.Host, args map[stri
 	case "present":
 		result, err = m.ensureFilePresent(exec, path, result, startTime, args)
 	case "absent":
-		return m.ensureFileAbsent(exec, path, result, startTime)
+		return m.ensureFileAbsent(exec, path, result, startTime, inCheckMode(args))
 	case "directory":
-		result, err = m.ensureDirectory(exec, path, result, startTime)
+		result, err = m.ensureDirectory(exec, path, result, startTime, inCheckMode(args))
 	case "touch":
-		result, err = m.touchFile(exec, path, result, startTime)
+		result, err = m.touchFile(exec, path, result, startTime, inCheckMode(args))
 	default:
 		result.Success = false
 		result.Error = fmt.Sprintf("unsupported state: %s", state)
@@ -94,11 +94,15 @@ func (m *FileModule) applyAttributes(ctx context.Context, host types.Host, args 
 			return fail(fmt.Sprintf("invalid mode %q", mode))
 		}
 		out, err := runOnHost(ctx, host, args, "stat", "-c", "%a", path)
-		if err != nil {
+		if err != nil && inCheckMode(args) {
+			out = "" // the path does not exist yet; its mode would be set
+		} else if err != nil {
 			return fail(fmt.Sprintf("failed to read mode of %s: %v", path, err))
 		}
 		have, _ := strconv.ParseUint(strings.TrimSpace(out), 8, 32)
-		if have != want {
+		if have != want && inCheckMode(args) {
+			result.Changed = true
+		} else if have != want {
 			if _, err := runOnHost(ctx, host, args, "chmod", fmt.Sprintf("%04o", want), path); err != nil {
 				return fail(fmt.Sprintf("failed to set mode of %s: %v", path, err))
 			}
@@ -174,6 +178,9 @@ func (m *FileModule) ensureFilePresent(exec *executor.CommandExecutor, path stri
 
 	needsUpdate := !fileExists || (content != "" && currentContent != content)
 
+	if needsUpdate && inCheckMode(args) {
+		return wouldChange(result, startTime, fmt.Sprintf("%s would be written", path))
+	}
 	if needsUpdate {
 		// Create directory if needed
 		dir := filepath.Dir(path)
@@ -218,7 +225,7 @@ func (m *FileModule) ensureFilePresent(exec *executor.CommandExecutor, path stri
 	return result, nil
 }
 
-func (m *FileModule) ensureFileAbsent(exec *executor.CommandExecutor, path string, result types.TaskResult, startTime time.Time) (types.TaskResult, error) {
+func (m *FileModule) ensureFileAbsent(exec *executor.CommandExecutor, path string, result types.TaskResult, startTime time.Time, check bool) (types.TaskResult, error) {
 	// Check if file exists
 	checkCmd := fmt.Sprintf(`test -e %s && echo exists || echo notexists`, shellQuote(path))
 	output, err := exec.Execute(checkCmd)
@@ -231,6 +238,10 @@ func (m *FileModule) ensureFileAbsent(exec *executor.CommandExecutor, path strin
 		}
 		result.Duration = time.Since(startTime)
 		return result, nil
+	}
+
+	if check {
+		return wouldChange(result, startTime, fmt.Sprintf("%s would be removed", path))
 	}
 
 	// Remove file
@@ -252,7 +263,7 @@ func (m *FileModule) ensureFileAbsent(exec *executor.CommandExecutor, path strin
 	return result, nil
 }
 
-func (m *FileModule) ensureDirectory(exec *executor.CommandExecutor, path string, result types.TaskResult, startTime time.Time) (types.TaskResult, error) {
+func (m *FileModule) ensureDirectory(exec *executor.CommandExecutor, path string, result types.TaskResult, startTime time.Time, check bool) (types.TaskResult, error) {
 	// Check if directory exists
 	checkCmd := fmt.Sprintf(`test -d %s && echo exists || echo notexists`, shellQuote(path))
 	output, err := exec.Execute(checkCmd)
@@ -265,6 +276,10 @@ func (m *FileModule) ensureDirectory(exec *executor.CommandExecutor, path string
 		}
 		result.Duration = time.Since(startTime)
 		return result, nil
+	}
+
+	if check {
+		return wouldChange(result, startTime, fmt.Sprintf("directory %s would be created", path))
 	}
 
 	// Create directory
@@ -286,12 +301,16 @@ func (m *FileModule) ensureDirectory(exec *executor.CommandExecutor, path string
 	return result, nil
 }
 
-func (m *FileModule) touchFile(exec *executor.CommandExecutor, path string, result types.TaskResult, startTime time.Time) (types.TaskResult, error) {
+func (m *FileModule) touchFile(exec *executor.CommandExecutor, path string, result types.TaskResult, startTime time.Time, check bool) (types.TaskResult, error) {
 	// Check if file exists
 	// Note: executor.Execute will automatically use shell if needed
 	checkCmd := fmt.Sprintf(`test -e %s && echo exists || echo notexists`, shellQuote(path))
 	output, err := exec.Execute(checkCmd)
 	fileExists := (err == nil && strings.TrimSpace(output) == "exists")
+
+	if check {
+		return wouldChange(result, startTime, fmt.Sprintf("%s would be touched", path))
+	}
 
 	if !fileExists {
 		// Create the file
@@ -327,6 +346,18 @@ func (m *FileModule) touchFile(exec *executor.CommandExecutor, path string, resu
 		}
 	}
 
+	result.Duration = time.Since(startTime)
+	return result, nil
+}
+
+// wouldChange is the check mode result of a change that was not made
+func wouldChange(result types.TaskResult, startTime time.Time, msg string) (types.TaskResult, error) {
+	result.Success = true
+	result.Changed = true
+	if result.Output == nil {
+		result.Output = map[string]interface{}{}
+	}
+	result.Output["msg"] = msg
 	result.Duration = time.Since(startTime)
 	return result, nil
 }

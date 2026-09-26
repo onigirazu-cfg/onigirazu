@@ -109,7 +109,8 @@ func (m *CopyModule) Execute(ctx context.Context, host types.Host, args map[stri
 	// Check if we're working with a local or remote host
 	isLocal := sshpkg.IsLocal(host)
 
-	if isLocal {
+	// check mode takes the executor path, which only reads before its check
+	if isLocal && !inCheckMode(args) {
 		return m.applyOwnership(ctx, host, args, dest, owner, group)(m.executeLocal(dest, sourceData, backup, force, mode, owner, group, sourceChecksum, result))
 	} else {
 		return m.applyOwnership(ctx, host, args, dest, owner, group)(m.executeRemote(ctx, host, args, dest, sourceData, backup, force, remoteSrc, mode, "", sourceChecksum, result))
@@ -216,16 +217,26 @@ func (m *CopyModule) executeRemote(ctx context.Context, host types.Host, args ma
 		return result, err
 	}
 
-	pool := sshpkg.GetGlobalPool()
-	sshClient, err := pool.GetConnection(host)
-	if err != nil {
-		return fail(fmt.Sprintf("failed to get SSH connection: %v", err), err)
+	// The SFTP connection is for writing and for remote_src; a local host
+	// reaches this path only in check mode, which does neither over SSH
+	var sshClient *sshpkg.Client
+	var err error
+	if !sshpkg.IsLocal(host) {
+		pool := sshpkg.GetGlobalPool()
+		sshClient, err = pool.GetConnection(host)
+		if err != nil {
+			return fail(fmt.Sprintf("failed to get SSH connection: %v", err), err)
+		}
+		defer pool.ReleaseConnection(host)
 	}
-	defer pool.ReleaseConnection(host)
 
 	// If remote_src is true, read source file from remote host
 	if remoteSrc && sourceData == nil && srcPath != "" {
-		sourceData, err = sshClient.ReadFile(srcPath)
+		if sshClient == nil {
+			sourceData, err = os.ReadFile(srcPath) // #nosec G304 -- remote_src on the local host
+		} else {
+			sourceData, err = sshClient.ReadFile(srcPath)
+		}
 		if err != nil {
 			return fail(fmt.Sprintf("failed to read remote source file %s: %v", srcPath, err), err)
 		}
@@ -255,12 +266,25 @@ func (m *CopyModule) executeRemote(ctx context.Context, host types.Host, args ma
 		result.Success = true
 		result.Output["msg"] = "file already exists with correct content"
 		if mode != "" && current.Mode.Perm() != fileMode.Perm() {
+			if inCheckMode(args) {
+				result.Changed = true
+				result.Output["msg"] = "mode would be updated"
+				return result, nil
+			}
 			if _, err := runOnHost(ctx, host, args, "chmod", fmt.Sprintf("%04o", fileMode.Perm()), dest); err != nil {
 				return fail(fmt.Sprintf("failed to set mode on %s: %v", dest, err), err)
 			}
 			result.Changed = true
 			result.Output["msg"] = "mode updated"
 		}
+		return result, nil
+	}
+
+	if inCheckMode(args) {
+		result.Changed = true
+		result.Success = true
+		result.Output["dest"] = dest
+		result.Output["msg"] = map[bool]string{true: "file would be updated", false: "file would be created"}[current.Exists]
 		return result, nil
 	}
 
