@@ -831,7 +831,10 @@ onigirazu run all -m ping -i inventory.yml -o table
 <p><code>-e</code> sets variables that override all others: <code>-e env=prod -e version=1.2</code>,
 <code>-e '{"replicas": 3}'</code> or <code>-e @vars.yml</code> (repeatable, later ones win).
 <code>--limit web1,db1</code> (or <code>--limit 'web:!web3'</code>) runs every play only on the
-matching hosts.</p>
+matching hosts.
+<code>-b</code> (<code>--become</code>, <code>--become-user</code>) turns on privilege escalation in every play,
+<code>-u</code>/<code>--private-key</code> set the SSH user and key for every host, and
+<code>--start-at-task NAME</code> skips everything before that task.</p>
 <h3>Task options</h3>
 <p>Besides <code>when</code>, <code>loop</code>, <code>register</code> and friends, a task takes <code>environment</code>
 (variables for its commands, also under <code>become</code>), <code>vars</code> (variables of this
