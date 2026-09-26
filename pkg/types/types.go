@@ -195,11 +195,17 @@ type Task struct {
 	// by the parser
 	IncludedRole *Role `yaml:"-" json:"-"`
 	// Diff asks modules for the before/after of what they change (--diff)
-	Diff         bool   `yaml:"-" json:"-"`
-	BecomeUser   string `yaml:"become_user,omitempty"`
-	BecomeMethod string `yaml:"become_method,omitempty"`
-	RunOnce      bool   `yaml:"run_once,omitempty"`
-	DelegateTo   string `yaml:"delegate_to,omitempty"`
+	Diff bool `yaml:"-" json:"-"`
+	// RetriesExpr and DelayExpr are retries/delay given as templates,
+	// rendered per host
+	RetriesExpr string `yaml:"-" json:"-"`
+	DelayExpr   string `yaml:"-" json:"-"`
+	// Listens are all the topics of a handler's listen (a string or a list)
+	Listens      []string `yaml:"-" json:"-"`
+	BecomeUser   string   `yaml:"become_user,omitempty"`
+	BecomeMethod string   `yaml:"become_method,omitempty"`
+	RunOnce      bool     `yaml:"run_once,omitempty"`
+	DelegateTo   string   `yaml:"delegate_to,omitempty"`
 	// block / rescue / always (a task with a block has no module)
 	Block  []Task `yaml:"block,omitempty"`
 	Rescue []Task `yaml:"rescue,omitempty"`
@@ -360,8 +366,15 @@ func (t *Task) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	if serial, ok := yamlBool(taskMap["serial"]); ok {
 		t.Serial = serial
 	}
-	if retries, ok := taskMap["retries"].(int); ok {
-		t.Retries = retries
+	switch r := taskMap["retries"].(type) {
+	case int:
+		t.Retries = r
+	case string: // a number, or a template rendered per host
+		if n, err := strconv.Atoi(strings.TrimSpace(r)); err == nil {
+			t.Retries = n
+		} else if strings.Contains(r, "{{") {
+			t.RetriesExpr = r
+		}
 	}
 	if become, ok := yamlBool(taskMap["become"]); ok {
 		t.Become, t.BecomeSet = become, true
@@ -379,7 +392,14 @@ func (t *Task) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		t.DelegateTo = delegateTo
 	}
 
-	// Handle tags
+	// Handle tags: a list, or one string ("setup" or "setup, config")
+	if str, ok := taskMap["tags"].(string); ok {
+		for _, tag := range strings.Split(str, ",") {
+			if tag = strings.TrimSpace(tag); tag != "" {
+				t.Tags = append(t.Tags, tag)
+			}
+		}
+	}
 	if tags, ok := taskMap["tags"]; ok {
 		if tagSlice, ok := tags.([]interface{}); ok {
 			t.Tags = make([]string, len(tagSlice))
@@ -404,9 +424,19 @@ func (t *Task) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		}
 	}
 
-	// Handle listen
-	if listen, ok := taskMap["listen"].(string); ok {
-		t.Listen = listen
+	// Handle listen: one topic or a list of them
+	switch l := taskMap["listen"].(type) {
+	case string:
+		t.Listen, t.Listens = l, []string{l}
+	case []interface{}:
+		for _, v := range l {
+			if topic, ok := v.(string); ok {
+				t.Listens = append(t.Listens, topic)
+			}
+		}
+		if len(t.Listens) > 0 {
+			t.Listen = t.Listens[0]
+		}
 	}
 
 	// Handle duration fields
@@ -415,6 +445,8 @@ func (t *Task) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	}
 	if d, ok := durationValue(taskMap["delay"]); ok {
 		t.Delay = d
+	} else if str, ok := taskMap["delay"].(string); ok && strings.Contains(str, "{{") {
+		t.DelayExpr = str
 	}
 	if d, ok := durationValue(taskMap["retry_delay"]); ok {
 		t.RetryDelay = d

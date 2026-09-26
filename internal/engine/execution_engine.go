@@ -912,8 +912,29 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 	// Execute with retry logic: retries count extra attempts; with until the
 	// task repeats until the condition holds (3 attempts unless retries is set)
 	var result types.TaskResult
-	maxAttempts := task.Retries + 1
-	if task.Until != "" && task.Retries <= 0 {
+	retries, retryDelay := task.Retries, task.Delay
+	if task.RetriesExpr != "" {
+		rendered, err := e.templateEngine.Render(ctx, task.RetriesExpr, taskVars)
+		n, convErr := strconv.Atoi(strings.TrimSpace(rendered))
+		if err != nil || convErr != nil {
+			return failed(fmt.Errorf("retries %q is not a number", task.RetriesExpr))
+		}
+		retries = n
+	}
+	if task.DelayExpr != "" {
+		rendered, err := e.templateEngine.Render(ctx, task.DelayExpr, taskVars)
+		d, parseErr := time.ParseDuration(strings.TrimSpace(rendered))
+		if parseErr != nil {
+			secs, numErr := strconv.ParseFloat(strings.TrimSpace(rendered), 64)
+			if err != nil || numErr != nil {
+				return failed(fmt.Errorf("delay %q is not a duration", task.DelayExpr))
+			}
+			d = time.Duration(secs * float64(time.Second))
+		}
+		retryDelay = d
+	}
+	maxAttempts := retries + 1
+	if task.Until != "" && retries <= 0 {
 		maxAttempts = 3
 	}
 
@@ -975,7 +996,7 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 		if attempt < maxAttempts {
 			delay := task.RetryDelay
 			if delay <= 0 {
-				delay = task.Delay
+				delay = retryDelay
 			}
 			if delay <= 0 {
 				delay = 1 * time.Second
