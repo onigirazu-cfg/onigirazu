@@ -537,6 +537,20 @@ func (m *UnifiedPackageModule) execute(ctx context.Context, host types.Host, arg
 		result.Duration = time.Since(startTime)
 		return result, nil
 	}
+	if inCheckMode(args) {
+		result.Success = true
+		result.Changed = true
+		if result.Output == nil {
+			result.Output = map[string]interface{}{}
+		}
+		if err == nil {
+			result.Output["msg"] = "would change: " + preCheck.Reason
+		} else {
+			result.Output["msg"] = "would change"
+		}
+		result.Duration = time.Since(startTime)
+		return result, nil
+	}
 
 	// Create executor for this host
 	exec, err := executor.NewCommandExecutor(host)

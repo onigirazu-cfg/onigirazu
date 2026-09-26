@@ -759,7 +759,8 @@ Execute tasks multiple times:
 
 `onigirazu apply site.yml --check` runs every module that supports it in check
 mode: it reports what would change and changes nothing. Supported: `copy`,
-`template`, `file`, `lineinfile`, `blockinfile` and the read-only modules
+`template`, `file`, `lineinfile`, `blockinfile`, `apt`, `yum`, `package`,
+`service`, `user`, `group` and the read-only modules
 (`stat`, `find`, `debug`, `set_fact`, `ping`, `fail`, `wait_for`); other
 modules are skipped with a note. `check_mode: false` on a task runs it for real
 in a check run (e.g. a probe whose result later tasks use); `check_mode: true`
