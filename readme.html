@@ -1038,23 +1038,26 @@ plugins add template filters.</p>
 </code></pre>
 
 <h2>🔄 State Management &amp; Rollback</h2>
-<p>Automatic snapshots and one-command rollback for safe infrastructure changes:</p>
-<pre class="codehilite"><code class="language-bash"># Show current state
-onigirazu state show
-
-# List available snapshots
-onigirazu rollback --list
-
-# Preview rollback
-onigirazu rollback --dry-run --snapshot &lt;id&gt;
-
-# Perform rollback
-onigirazu rollback --snapshot &lt;id&gt;
-
-# Cleanup old snapshots
+<p>Every <code>apply</code> (also a failed one) keeps a snapshot in <code>~/.onigirazu/snapshots</code>
+of what its file modules found before they changed something: <code>copy</code>,
+<code>template</code>, <code>lineinfile</code>, <code>blockinfile</code>, <code>replace</code> and <code>file</code> record the old
+content (text up to 1 MiB), mode, owner and group, or that the path did not
+exist. <code>rollback</code> puts that back, the latest change of a run first:</p>
+<pre class="codehilite"><code class="language-bash">onigirazu rollback --list
+onigirazu rollback --last --dry-run                 # what would be restored
+onigirazu rollback --snapshot &lt;id&gt; -i hosts.yml     # restore
 onigirazu rollback --cleanup --max-age 30d
 </code></pre>
 
+<pre class="codehilite"><code>ORDER  HOST   RESOURCE        DETAILS
+1      web1   /etc/app.d      restore directory mode=0755 owner=root group=root
+2      web1   /etc/app.conf   restore content (812 bytes) mode=0644 owner=root group=root
+3      web1   /etc/app.new    remove (did not exist before)
+</code></pre>
+
+<p>Packages, services, users and other modules are listed as not reversible;
+binary or larger files too. Snapshots hold file contents (0600 files in your
+home); <code>no_log</code> tasks keep none.</p>
 <h2>🎯 Drift Detection</h2>
 <p><code>drift</code> checks whether hosts still match a playbook: the playbook runs in check
 mode, and every task that would change a host is drift. Nothing is changed
