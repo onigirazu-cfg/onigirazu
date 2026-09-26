@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v2"
 
 	"github.com/onigirazu-cfg/onigirazu/internal/audit"
 	"github.com/onigirazu-cfg/onigirazu/internal/cache"
@@ -97,6 +98,23 @@ Examples:
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			playbookPath := args[0]
+
+			// -o json/yaml: stdout carries only the result document; banners,
+			// logs and the progress bar go to stderr
+			resultOut := io.Writer(os.Stdout)
+			var runResult *types.PlaybookResult
+			var runStart time.Time
+			if outputFormat == "json" || outputFormat == "yaml" {
+				realStdout := os.Stdout
+				resultOut = realStdout
+				os.Stdout = os.Stderr
+				defer func() {
+					os.Stdout = realStdout
+					if runResult != nil {
+						writeRunResult(realStdout, outputFormat, runResult, playbookPath, runStart)
+					}
+				}()
+			}
 
 			// Configure colors
 			if noColor {
@@ -475,7 +493,7 @@ Examples:
 				default:
 					result = output.FormatTagsText(tagsResult)
 				}
-				fmt.Print(result)
+				fmt.Fprint(resultOut, result)
 				return nil
 			}
 
@@ -498,7 +516,7 @@ Examples:
 				default:
 					result = output.FormatTasksText(tasksResult)
 				}
-				fmt.Print(result)
+				fmt.Fprint(resultOut, result)
 				return nil
 			}
 
@@ -681,6 +699,7 @@ Examples:
 
 			result, err := executionEngine.ExecutePlaybook(ctx, playbook)
 			duration := time.Since(startTime)
+			runResult, runStart = result, startTime
 
 			// Wait for TUI to finish if it's running (user presses Q to exit)
 			if interactive && tuiModel != nil {
@@ -1142,4 +1161,26 @@ func recordAuditResults(recorder *audit.Recorder, result *types.PlaybookResult, 
 		}
 		playRecorder.Complete(playStatus)
 	}
+}
+
+// writeRunResult prints the machine-readable result of a run: status,
+// totals, and every task with its result per host
+func writeRunResult(w io.Writer, format string, result *types.PlaybookResult, playbookPath string, start time.Time) {
+	record := execution.FromPlaybookResult(result, playbookPath, filepath.Base(playbookPath), start, result.Duration)
+	record.PlaybookResult = nil // the per-task view above carries the same data
+	var data []byte
+	var err error
+	data, err = json.MarshalIndent(record, "", "  ")
+	if err == nil && format == "yaml" {
+		// through the JSON form, so YAML keys are the same as JSON ones
+		var generic interface{}
+		if err = json.Unmarshal(data, &generic); err == nil {
+			data, err = yaml.Marshal(generic)
+		}
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to encode the result: %v\n", err)
+		return
+	}
+	fmt.Fprintln(w, string(data))
 }

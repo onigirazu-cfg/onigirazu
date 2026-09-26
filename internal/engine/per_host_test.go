@@ -250,3 +250,23 @@ func TestBlock_WithoutRescueFailsAfterAlways(t *testing.T) {
 	assert.Equal(t, []string{"fail", "always"}, *ran)
 	assert.False(t, play.Success)
 }
+
+func TestExecutePlaybook_FailedPlayKeepsItsResults(t *testing.T) {
+	engine, mockConfig, _, mockInventory, mockRegistry, mockTemplate := createTestEngine()
+	mockConfig.On("GetDryRun").Return(false)
+	mockTemplate.On("RenderTaskArgs", mock.Anything, mock.Anything, mock.Anything).Return(nil, nil)
+	hosts := twoHosts()[:1]
+	mockInventory.hosts = hosts
+	mockInventory.On("GetHosts", "all").Return(hosts, nil)
+	mockRegistry.On("ExecuteTask", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(types.TaskResult{Success: false, Failed: true, Error: "boom"}, nil)
+
+	result, _ := engine.ExecutePlaybook(context.Background(), &types.Playbook{Plays: []types.Play{{
+		Name: "p", Hosts: "all", Tasks: []types.Task{{Name: "fails", Module: "command"}},
+	}}})
+	require.NotNil(t, result)
+	assert.True(t, result.Failed)
+	require.Len(t, result.Plays, 1, "the failed play is part of the result")
+	require.Len(t, result.Plays[0].Hosts, 1)
+	assert.True(t, result.Plays[0].Hosts[0].Tasks[0].Failed)
+}
