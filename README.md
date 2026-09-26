@@ -290,6 +290,16 @@ plays:
 - ✅ Task notifications and handlers
 - ✅ Error handling with `ignore_errors` and `retries`
 
+Ansible short forms work too:
+
+```yaml
+- command: make install chdir=/src creates=/usr/local/bin/app
+- shell: ./configure
+  args: {chdir: /src}
+- file: path=/etc/app state=directory mode=0750
+- ping:
+```
+
 📚 **For detailed examples, see [docs/examples/README.md](docs/examples/README.md)**
 
 ## CLI Commands
