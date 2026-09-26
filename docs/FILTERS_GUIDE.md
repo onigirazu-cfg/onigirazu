@@ -338,14 +338,13 @@ Not available: the `d` alias of `default`, `hash`, `default(value, true)` (the s
 
 ### Tests
 
-`is defined`, `is undefined` and `is not defined` work in any expression. The other tests are used through `select`, `reject`, `selectattr` and `rejectattr`: `defined`, `undefined`, `none`, `truthy`, `falsy`, `equalto`/`==`/`eq`, `!=`/`ne`, `>`, `<`, `>=`, `<=` (also `gt`, `lt`, `ge`, `le`), `in`, `contains`, `match`/`search`/`regex`, `string`, `number`.
+Tests work in any expression (`x is test(args)`, `x is not test(args)`) and in `select`, `reject`, `selectattr` and `rejectattr`: `defined`, `undefined`, `none`, `truthy`, `falsy`, `equalto`/`==`/`eq`, `!=`/`ne`, `>`, `<`, `>=`, `<=` (also `gt`, `lt`, `ge`, `le`), `in`, `contains`, `match`/`search`/`regex`, `string`, `number`.
 
 ```yaml
-when: my_var is defined and (my_var | length) > 0
+when: my_var is defined and my_var | length > 0
+when: version is match('^2\\.')
 loop: "{{ packages | select('match', '^python3-') | list }}"
 ```
-
-`x is match('re')` is not supported as a condition; use `x | regex_search('re')`.
 
 ### Lookups
 
@@ -373,7 +372,9 @@ loop: "{{ query('fileglob', 'files/conf.d/*.conf') }}"
 - String concatenation: `{{ name ~ '-' ~ version }}`
 - `True`, `False` and `None` as in Jinja; `and`, `or`, `not`, `in`
 - Dictionary methods `d.keys()` and `d.values()`
-- A filter takes everything to its left up to `and`/`or`: write `a and (b | length) > 0`, not `a and b | length > 0` (current limitation)
+- Precedence as in Jinja: a filter applies to the operand right before it
+  (`a and b | length > 0` is `a and ((b | length) > 0)`), `not` is weaker than
+  comparisons (`not n > 5` is `not (n > 5)`)
 
 ## Using Filters in Templates
 

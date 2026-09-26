@@ -203,3 +203,34 @@ func TestLookups(t *testing.T) {
 		assert.Equal(t, want, got, e)
 	}
 }
+
+func TestJinjaPrecedence(t *testing.T) {
+	vars := map[string]interface{}{
+		"a": true, "b": []interface{}{1, 2}, "s": "Hi", "x": "abc", "n": 3,
+		"d": map[string]interface{}{"k": []interface{}{"v"}},
+	}
+	cases := map[string]interface{}{
+		`a and b | length > 1`:                  true,
+		`not b | length > 5`:                    true,
+		`not a and b | length == 2`:             false,
+		`not (a and false)`:                     true,
+		`x not in ['abc']`:                      false,
+		`not x in ['abc']`:                      false,
+		`s | lower == 'hi' or false`:            true,
+		`b | length == 2 and s | upper == 'HI'`: true,
+		`d.k | first | upper`:                   "V",
+		`'a|b' | replace('|', '-')`:             "a-b",
+		`(b | sum) * 2`:                         6,
+		`x is match('a.c') and n > 2`:           true,
+		`x is not match('z')`:                   true,
+		`n is number and s is string`:           true,
+		`missing is defined or b | length > 0`:  true,
+		`b | map('string') | join(',') ~ '!'`:   "1,2!",
+		`'yes' if b | length > 1 else 'no'`:     "yes",
+	}
+	for e, want := range cases {
+		got, err := Eval(e, vars)
+		require.NoError(t, err, e)
+		assert.Equal(t, want, got, e)
+	}
+}

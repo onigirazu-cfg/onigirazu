@@ -267,6 +267,12 @@ func filterFunctions() []expr.Option {
 			}
 			return out, err
 		}),
+		fn("jinja_is", func(p ...interface{}) (interface{}, error) {
+			if len(p) < 2 {
+				return nil, fmt.Errorf("a test needs a name")
+			}
+			return jinjaTest(p[0], p[1:])
+		}),
 		fn("jinja_concat", func(p ...interface{}) (interface{}, error) {
 			var b strings.Builder
 			for _, v := range p {
