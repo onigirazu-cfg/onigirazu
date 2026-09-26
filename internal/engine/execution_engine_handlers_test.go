@@ -8,57 +8,6 @@ import (
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
-// TestCollectTriggeredHandlers tests handler collection from task results
-func TestCollectTriggeredHandlers(t *testing.T) {
-	engine, _, _, _, _, _ := createTestEngine()
-
-	playResult := &types.PlayResult{
-		Name: "test play",
-		Hosts: []types.HostResult{
-			{
-				Host: "host1",
-				Tasks: []types.TaskResult{
-					{
-						TaskName: "Task 1",
-						Success:  true,
-						Notify:   []string{"handler1", "handler2"},
-					},
-					{
-						TaskName: "Task 2",
-						Success:  true,
-						Notify:   []string{"handler2", "handler3"},
-					},
-					{
-						TaskName: "Task 3",
-						Success:  false,
-						Notify:   []string{"handler4"}, // Should be ignored (failed)
-					},
-				},
-			},
-		},
-	}
-
-	triggered := engine.collectTriggeredHandlers(playResult)
-
-	// Check that we have unique handlers
-	assert.Equal(t, 3, len(triggered), "Should have 3 unique triggered handlers")
-
-	// Create a set for quick lookup
-	triggerSet := make(map[string]bool)
-	for _, h := range triggered {
-		triggerSet[h] = true
-	}
-
-	// Check expected handlers
-	expected := []string{"handler1", "handler2", "handler3"}
-	for _, h := range expected {
-		assert.True(t, triggerSet[h], "Handler %s should be triggered", h)
-	}
-
-	// handler4 should NOT be in the list (failed task)
-	assert.False(t, triggerSet["handler4"], "handler4 should not be triggered (task failed)")
-}
-
 // TestHandlerListenDirective tests that handlers with listen directive are triggered correctly
 func TestHandlerListenDirective(t *testing.T) {
 	// Test that a handler with listen="web services" would be triggered by notify="web services"

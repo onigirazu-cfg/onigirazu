@@ -160,12 +160,13 @@ func TestNotify_OnlyWhenChanged(t *testing.T) {
 		task := &types.Task{Name: "conf", Module: "copy", Notify: []string{"restart"}}
 		host := twoHosts()[0]
 		play := &types.PlayResult{Success: true}
+		engine.startPlayHandlers(twoHosts(), []types.Task{{Name: "restart", Module: "service"}}, nil)
 		require.NoError(t, engine.executeTaskOnHost(context.Background(), task, &host, map[string]interface{}{}, play))
-		triggered := engine.collectTriggeredHandlers(play)
+		toRun := engine.handlers.takeNotified(twoHosts())
 		if changed {
-			assert.Equal(t, []string{"restart"}, triggered)
+			assert.Equal(t, []types.Host{host}, toRun[0])
 		} else {
-			assert.Empty(t, triggered)
+			assert.Empty(t, toRun[0])
 		}
 	}
 }
@@ -425,4 +426,34 @@ func TestMagicVariables_HostvarsAndGroups(t *testing.T) {
 		assert.Equal(t, []interface{}{"h1", "h2"}, groups["all"])
 		assert.Equal(t, []interface{}{"h2"}, groups["web"])
 	}
+}
+
+func TestHandlers_OnlyOnNotifyingHostsOnce(t *testing.T) {
+	engine, _, calls := perHostEngine(t, types.TaskResult{Success: true, Changed: true})
+	hosts := twoHosts()
+	engine.startPlayHandlers(hosts, []types.Task{
+		{Name: "restart app", Module: "service", Listen: "app changed"},
+		{Name: "other", Module: "service"},
+	}, map[string]interface{}{})
+	engine.notifyHandlers([]string{"app changed"}, "h2")
+	play := &types.PlayResult{Success: true}
+
+	require.NoError(t, engine.flushHandlers(context.Background(), hosts, play))
+	require.Len(t, *calls, 1)
+	assert.Equal(t, "h2", (*calls)[0]["host"])
+
+	require.NoError(t, engine.flushHandlers(context.Background(), hosts, play))
+	assert.Len(t, *calls, 1, "a flushed notification does not run again")
+}
+
+func TestMeta_EndHostStopsTheHost(t *testing.T) {
+	engine, _, calls := perHostEngine(t, types.TaskResult{Success: true})
+	hosts := twoHosts()
+	engine.startPlayHandlers(hosts, nil, nil)
+	play := &types.PlayResult{Success: true}
+	end := &types.Task{Name: "stop", Module: "meta", Args: map[string]interface{}{"free_form": "end_host"}, When: "inventory_hostname == 'h1'"}
+	require.NoError(t, engine.executeTask(context.Background(), end, hosts, map[string]interface{}{}, play))
+	require.NoError(t, engine.executeTask(context.Background(), &types.Task{Name: "after", Module: "debug"}, hosts, map[string]interface{}{}, play))
+	require.Len(t, *calls, 1)
+	assert.Equal(t, "h2", (*calls)[0]["host"])
 }
