@@ -826,6 +826,13 @@ onigirazu run all -m ping -i inventory.yml -o table
       - git
 </code></pre>
 
+<h3>Task options</h3>
+<p>Besides <code>when</code>, <code>loop</code>, <code>register</code> and friends, a task takes <code>environment</code>
+(variables for its commands, also under <code>become</code>), <code>vars</code> (variables of this
+task only), <code>no_log: true</code> (output and errors hidden from logs, state and
+<code>-o json</code>; <code>register</code> still gets them), <code>loop_control</code> (<code>loop_var</code>,
+<code>index_var</code>) and the older <code>with_items</code>. <code>command</code> and <code>shell</code> honour
+<code>creates</code> and <code>removes</code>.</p>
 <h3>Machine-readable output</h3>
 <p><code>onigirazu apply site.yml -o json</code> (or <code>-o yaml</code>) writes one document to
 stdout: status (<code>success</code>, <code>partial_success</code>, <code>failed</code>), totals, and every task
