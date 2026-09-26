@@ -769,6 +769,8 @@ onigirazu run all -m ping -i inventory.yml -o table
 <li><strong>shell</strong>: the same through <code>sh -c</code> (or <code>executable</code>)</li>
 <li><strong>assert</strong>: <code>that</code> (one expression or a list), <code>fail_msg</code>/<code>msg</code>, <code>success_msg</code></li>
 <li><strong>replace</strong>: replace every match of <code>regexp</code> in a file (multiline, <code>\1</code> back references)</li>
+<li><strong>include_vars</strong>: variables from YAML files on the control machine (<code>file</code>, relative to the
+  playbook or the role's <code>vars/</code>; <code>dir</code>; <code>name</code> to put them under one key)</li>
 </ul>
 <h3>Configuration Modules</h3>
 <ul>
@@ -844,7 +846,8 @@ onigirazu run all -m ping -i inventory.yml -o table
 
 <p><code>loop:</code> also takes an expression (<code>"{{ result.stdout_lines }}"</code>). A dictionary
 is looped over as <code>{key, value}</code> items sorted by key, with <code>with_dict: "{{ d }}"</code>
-or <code>loop: "{{ d | dict2items }}"</code>; <code>items2dict</code> turns them back.</p>
+or <code>loop: "{{ d | dict2items }}"</code>; <code>items2dict</code> turns them back. <code>with_sequence:
+start=1 end=5 stride=1 format=web%02d</code> (or <code>count=</code>) gives numbered items.</p>
 <h3>Roles</h3>
 <p><code>roles:</code> in a play runs <code>roles/&lt;name&gt;</code> next to the playbook: <code>tasks/</code>,
 <code>handlers/</code>, <code>defaults/</code> and <code>vars/</code> (<code>main.yml</code>). A role's <code>template</code>, <code>copy</code>,
