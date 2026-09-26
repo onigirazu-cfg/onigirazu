@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/onigirazu-cfg/onigirazu/internal/executor"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
@@ -84,81 +83,20 @@ func (m *UserModuleFixed) PreCheckState(ctx context.Context, host types.Host, ar
 
 func (m *UserModuleFixed) Execute(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
 	startTime := time.Now()
-
 	result := types.TaskResult{
 		TaskName:  taskName(args),
 		Host:      host.Name,
 		Module:    m.name,
 		Timestamp: startTime,
 	}
-
-	// Pre-check: if state is already correct, skip execution
-	preCheck, err := m.PreCheckState(ctx, host, args)
-	if err == nil && preCheck.IsStateCorrect {
-		result.Success = true
-		result.Changed = false
-		result.Output = map[string]interface{}{
-			"message":     preCheck.Reason,
-			"pre_checked": true,
-			"user_state":  preCheck.CurrentState,
-		}
-		result.Duration = time.Since(startTime)
-		return result, nil
-	}
-	if inCheckMode(args) {
-		result.Success = true
-		result.Changed = true
-		if result.Output == nil {
-			result.Output = map[string]interface{}{}
-		}
-		if err == nil {
-			result.Output["msg"] = "would change: " + preCheck.Reason
-		} else {
-			result.Output["msg"] = "would change"
-		}
-		result.Duration = time.Since(startTime)
-		return result, nil
-	}
-
-	// Create a fresh executor for this execution
-	exec, err := executor.NewCommandExecutor(host)
-	if err != nil {
-		result.Success = false
-		result.Error = fmt.Sprintf("failed to create executor: %v", err)
-		result.Duration = time.Since(startTime)
-		return result, nil
-	}
-	defer exec.Close()
-
-	// Configure become (privilege escalation)
-	if become, ok := args["_become"].(bool); ok && become {
-		becomeUser, _ := args["_become_user"].(string)
-		becomeMethod, _ := args["_become_method"].(string)
-		exec.SetBecome(true, becomeUser, becomeMethod)
-	}
-
-	// Validate arguments
+	normalizeUserArgs(args)
 	if err := m.Validate(args); err != nil {
 		result.Success = false
 		result.Error = err.Error()
 		result.Duration = time.Since(startTime)
 		return result, nil
 	}
-
-	username, _ := args["name"].(string)
-	state, _ := args["state"].(string)
-
-	switch state {
-	case "present":
-		return m.ensureUserPresent(exec, username, args, result, startTime)
-	case "absent":
-		return m.ensureUserAbsent(exec, username, result, startTime)
-	default:
-		result.Success = false
-		result.Error = fmt.Sprintf("invalid state: %s", state)
-		result.Duration = time.Since(startTime)
-		return result, nil
-	}
+	return m.convergeUser(ctx, host, args, result, startTime)
 }
 
 func (m *UserModuleFixed) Validate(args map[string]interface{}) error {
@@ -177,7 +115,7 @@ func (m *UserModuleFixed) Validate(args map[string]interface{}) error {
 
 	state, exists := args["state"]
 	if !exists {
-		return fmt.Errorf("argument 'state' is required")
+		state = "present"
 	}
 
 	if stateStr, ok := state.(string); !ok {
@@ -206,8 +144,10 @@ func (m *UserModuleFixed) Validate(args map[string]interface{}) error {
 	}
 
 	if groups, exists := args["groups"]; exists {
-		if _, ok := groups.(string); !ok {
-			return fmt.Errorf("argument 'groups' must be a string")
+		switch groups.(type) {
+		case string, []interface{}:
+		default:
+			return fmt.Errorf("argument 'groups' must be a list or a comma separated string")
 		}
 	}
 
@@ -234,80 +174,6 @@ func (m *UserModuleFixed) Validate(args map[string]interface{}) error {
 	}
 
 	return nil
-}
-
-func (m *UserModuleFixed) ensureUserPresent(exec *executor.CommandExecutor, username string, args map[string]interface{}, result types.TaskResult, startTime time.Time) (types.TaskResult, error) {
-	if m.userExists(exec, username) {
-		result.Success = true
-		result.Changed = false
-		result.Output = map[string]interface{}{
-			"message": fmt.Sprintf("User %s already exists", username),
-		}
-	} else {
-		// Create user using remote executor
-		cmdArgs := m.buildUserAddCommand(username, args)
-		output, err := exec.Execute(cmdArgs[0], cmdArgs[1:]...)
-		if err != nil {
-			result.Success = false
-			result.Error = fmt.Sprintf("error creating user: %v", err)
-			result.Output = map[string]interface{}{
-				"message": "User creation failed",
-				"error":   err.Error(),
-				"stdout":  output,
-			}
-			result.Duration = time.Since(startTime)
-			return result, nil
-		}
-
-		result.Success = true
-		result.Changed = true
-		result.Output = map[string]interface{}{
-			"message": fmt.Sprintf("User %s created", username),
-			"stdout":  output,
-		}
-	}
-
-	result.Duration = time.Since(startTime)
-	return result, nil
-}
-
-func (m *UserModuleFixed) ensureUserAbsent(exec *executor.CommandExecutor, username string, result types.TaskResult, startTime time.Time) (types.TaskResult, error) {
-	if !m.userExists(exec, username) {
-		result.Success = true
-		result.Changed = false
-		result.Output = map[string]interface{}{
-			"message": fmt.Sprintf("User %s does not exist", username),
-		}
-	} else {
-		// Remove user using remote executor
-		output, err := exec.Execute("userdel", "-r", username)
-		if err != nil {
-			result.Success = false
-			result.Error = fmt.Sprintf("error removing user: %v", err)
-			result.Output = map[string]interface{}{
-				"message": "User removal failed",
-				"error":   err.Error(),
-				"stdout":  output,
-			}
-			result.Duration = time.Since(startTime)
-			return result, nil
-		}
-
-		result.Success = true
-		result.Changed = true
-		result.Output = map[string]interface{}{
-			"message": fmt.Sprintf("User %s removed", username),
-			"stdout":  output,
-		}
-	}
-
-	result.Duration = time.Since(startTime)
-	return result, nil
-}
-
-func (m *UserModuleFixed) userExists(exec *executor.CommandExecutor, username string) bool {
-	_, err := exec.Execute("id", username)
-	return err == nil
 }
 
 func (m *UserModuleFixed) buildUserAddCommand(username string, args map[string]interface{}) []string {
@@ -377,8 +243,22 @@ func (m *UserModuleFixed) buildUserAddCommand(username string, args map[string]i
 		}
 	}
 
+	if comment, ok := args["comment"].(string); ok && comment != "" {
+		cmdArgs = append(cmdArgs, "-c", comment)
+	}
+	if password := getStringArg(args, "password", ""); password != "" {
+		cmdArgs = append(cmdArgs, "-p", password)
+	}
+	if getBoolArg(args, "system", false) {
+		cmdArgs = append(cmdArgs, "-r")
+	}
+
 	// Create home directory by default
-	cmdArgs = append(cmdArgs, "-m")
+	if getBoolArg(args, "create_home", true) {
+		cmdArgs = append(cmdArgs, "-m")
+	} else {
+		cmdArgs = append(cmdArgs, "-M")
+	}
 
 	// Add username as the last argument
 	cmdArgs = append(cmdArgs, username)

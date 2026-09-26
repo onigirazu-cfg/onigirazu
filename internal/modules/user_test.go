@@ -136,7 +136,7 @@ func TestUserModule_Validate(t *testing.T) {
 			args: map[string]interface{}{
 				"name": "testuser",
 			},
-			wantErr: true,
+			wantErr: false, // Ansible: state defaults to present
 		},
 		{
 			name: "invalid_state",
@@ -633,8 +633,7 @@ func TestUserModule_ValidateEdgeCases(t *testing.T) {
 			args: map[string]interface{}{
 				"name": "testuser",
 			},
-			wantErr: true,
-			errMsg:  "state",
+			wantErr: false, // Ansible: state defaults to present
 		},
 		{
 			name: "invalid_state_value",

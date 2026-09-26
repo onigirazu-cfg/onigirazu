@@ -126,7 +126,7 @@ func TestGroupModule_Validate(t *testing.T) {
 			args: map[string]interface{}{
 				"name": "testgroup",
 			},
-			wantErr: true,
+			wantErr: false, // Ansible: state defaults to present
 		},
 		{
 			name: "invalid_state",

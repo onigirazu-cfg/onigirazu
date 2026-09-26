@@ -1,0 +1,17 @@
+plays:
+  - name: user converges
+    hosts: all
+    become: true
+    tasks:
+      - name: Group without state
+        group: {name: onigirazu-e2e-uc}
+      - name: Change shell, comment and groups of the existing user
+        user:
+          name: onigirazu-e2e-uc
+          shell: /bin/bash
+          comment: second
+          groups: [onigirazu-e2e-uc, adm]
+      - name: Append a group it already has
+        user: {name: onigirazu-e2e-uc, groups: adm, append: yes}
+      - name: A new user whose group exists
+        user: {name: onigirazu-e2e-uc2, group: onigirazu-e2e-uc}
