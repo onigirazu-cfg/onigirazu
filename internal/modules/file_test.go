@@ -28,20 +28,18 @@ func TestFileModuleValidation(t *testing.T) {
 	module := NewFileModule()
 
 	// Test missing required arguments
-	args := map[string]interface{}{
-		"name": "test-task",
-	}
+	args := map[string]interface{}{}
 
 	err := module.Validate(args)
 	if err == nil {
 		t.Error("Expected validation error for missing 'path' argument")
 	}
 
-	// Test missing state argument
+	// Without state: attributes of an existing path
 	args["path"] = "/tmp/test"
 	err = module.Validate(args)
-	if err == nil {
-		t.Error("Expected validation error for missing 'state' argument")
+	if err != nil {
+		t.Errorf("Expected no validation error without state, got: %v", err)
 	}
 
 	// Test invalid state value
@@ -128,7 +126,6 @@ func TestFileModule_Validate(t *testing.T) {
 		{
 			name: "missing path parameter",
 			args: map[string]interface{}{
-				"name":  "test-task",
 				"state": "present",
 			},
 			expectError: true,
@@ -137,26 +134,22 @@ func TestFileModule_Validate(t *testing.T) {
 		{
 			name: "missing state parameter",
 			args: map[string]interface{}{
-				"name": "test-task",
 				"path": "/tmp/test.txt",
 			},
-			expectError: true,
-			errorMsg:    "argument 'state' is required",
+			expectError: false, // Ansible: attributes of an existing path
 		},
 		{
 			name: "path not a string",
 			args: map[string]interface{}{
-				"name":  "test-task",
 				"path":  123,
 				"state": "present",
 			},
 			expectError: true,
-			errorMsg:    "argument 'path' must be a string",
+			errorMsg:    "argument 'path' is required",
 		},
 		{
 			name: "state not a string",
 			args: map[string]interface{}{
-				"name":  "test-task",
 				"path":  "/tmp/test.txt",
 				"state": 123,
 			},
@@ -166,7 +159,6 @@ func TestFileModule_Validate(t *testing.T) {
 		{
 			name: "invalid state value",
 			args: map[string]interface{}{
-				"name":  "test-task",
 				"path":  "/tmp/test.txt",
 				"state": "invalid",
 			},
@@ -176,41 +168,36 @@ func TestFileModule_Validate(t *testing.T) {
 		{
 			name: "invalid state - file",
 			args: map[string]interface{}{
-				"name":  "test-task",
 				"path":  "/tmp/test.txt",
 				"state": "file",
 			},
-			expectError: true,
-			errorMsg:    "unsupported state: file",
+			expectError: false,
 		},
 		{
 			name: "invalid state - link",
 			args: map[string]interface{}{
-				"name":  "test-task",
 				"path":  "/tmp/test.txt",
 				"state": "link",
 			},
 			expectError: true,
-			errorMsg:    "unsupported state: link",
+			errorMsg:    "argument 'src' is required for state link",
 		},
 		{
 			name: "empty path",
 			args: map[string]interface{}{
-				"name":  "test-task",
 				"path":  "",
 				"state": "present",
 			},
-			expectError: false, // Empty string is still a string, validation passes
+			expectError: true,
+			errorMsg:    "argument 'path' is required",
 		},
 		{
 			name: "empty state",
 			args: map[string]interface{}{
-				"name":  "test-task",
 				"path":  "/tmp/test.txt",
 				"state": "",
 			},
-			expectError: true,
-			errorMsg:    "unsupported state: ",
+			expectError: false,
 		},
 	}
 
@@ -616,7 +603,6 @@ func TestFileModule_ValidateState(t *testing.T) {
 		{
 			name: "missing_path",
 			args: map[string]interface{}{
-				"name":  "task",
 				"state": "present",
 			},
 			wantErr: true,
@@ -624,10 +610,9 @@ func TestFileModule_ValidateState(t *testing.T) {
 		{
 			name: "missing_state",
 			args: map[string]interface{}{
-				"name": "task",
 				"path": "/tmp/test",
 			},
-			wantErr: true,
+			wantErr: false, // attributes of an existing path
 		},
 		{
 			name: "with_mode",

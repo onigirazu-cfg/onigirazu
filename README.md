@@ -679,7 +679,8 @@ Onigirazu includes 22+ built-in modules for common automation tasks:
 
 ### System Modules
 
-- **file**: File and directory operations
+- **file**: files, directories, `link`/`hard` links, `touch`, `absent`; without `state` it sets
+  mode/owner/group of an existing path; `recurse: true` for directories; `dest`/`name` alias `path`
 - **package**: Package management
 - **service**: Service management
 - **user**: User management
