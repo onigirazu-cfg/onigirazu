@@ -21,6 +21,12 @@ on:
           - major
           - prerelease
 
+# Merges in quick succession must tag one after another, or both runs compute
+# the same version and the second fails to push its tag
+concurrency:
+  group: auto-release
+  cancel-in-progress: false
+
 permissions:
   actions: write
   contents: write
