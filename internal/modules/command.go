@@ -58,6 +58,13 @@ func (m *CommandModuleFixed) Execute(ctx context.Context, host types.Host, args 
 		return result, nil
 	}
 
+	if skip, msg := skipByCreatesRemoves(exec, args); skip {
+		result.Success = true
+		result.Output = map[string]interface{}{"msg": msg}
+		result.Duration = time.Since(startTime)
+		return result, nil
+	}
+
 	command, _ := args["command"].(string)
 	shell := false
 	if shellVal, exists := args["shell"]; exists {
@@ -285,9 +292,16 @@ func (m *ShellModuleFixed) Execute(ctx context.Context, host types.Host, args ma
 	// Build the command with environment and working directory
 	fullCommand := command
 
+	if skip, msg := skipByCreatesRemoves(exec, args); skip {
+		result.Success = true
+		result.Output = map[string]interface{}{"msg": msg}
+		result.Duration = time.Since(startTime)
+		return result, nil
+	}
+
 	// Handle working directory change
 	if chdir, ok := args["chdir"].(string); ok {
-		fullCommand = fmt.Sprintf("cd %s && %s", chdir, command)
+		fullCommand = fmt.Sprintf("cd %s && %s", shellQuote(chdir), command)
 	}
 
 	// Handle environment variables
@@ -295,12 +309,13 @@ func (m *ShellModuleFixed) Execute(ctx context.Context, host types.Host, args ma
 		envVars := make([]string, 0, len(env))
 		for key, value := range env {
 			if strValue, ok := value.(string); ok {
-				envVars = append(envVars, fmt.Sprintf("%s=%s", key, strValue))
+				envVars = append(envVars, shellQuote(key+"="+strValue))
 			}
 		}
 		if len(envVars) > 0 {
 			envString := strings.Join(envVars, " ")
-			fullCommand = fmt.Sprintf("env %s %s", envString, fullCommand)
+			// its own shell, so $VAR in the command sees the new value
+			fullCommand = fmt.Sprintf("env %s sh -c %s", envString, shellQuote(fullCommand))
 		}
 	}
 
@@ -399,4 +414,20 @@ func splitCommandLine(line string) ([]string, error) {
 		words = append(words, cur.String())
 	}
 	return words, nil
+}
+
+// skipByCreatesRemoves applies creates/removes: the command is skipped when
+// the creates path already exists or the removes path does not
+func skipByCreatesRemoves(exec *executor.CommandExecutor, args map[string]interface{}) (bool, string) {
+	exists := func(path string) bool {
+		_, err := exec.Execute("test -e " + shellQuote(path))
+		return err == nil
+	}
+	if path := getStringArg(args, "creates", ""); path != "" && exists(path) {
+		return true, fmt.Sprintf("skipped: %s exists", path)
+	}
+	if path := getStringArg(args, "removes", ""); path != "" && !exists(path) {
+		return true, fmt.Sprintf("skipped: %s does not exist", path)
+	}
+	return false, ""
 }

@@ -1,0 +1,38 @@
+plays:
+  - name: environment, task vars, loop_control, with_items, no_log
+    hosts: all
+    become: true
+    tasks:
+      - name: Environment through sudo
+        shell:
+          cmd: "echo $E2E_GREETING > /root/onigirazu-e2e-env"
+          creates: /root/onigirazu-e2e-env
+        environment:
+          E2E_GREETING: "hello {{ inventory_hostname }}"
+      - name: Task vars
+        copy:
+          content: "{{ tier }}\n"
+          dest: /root/onigirazu-e2e-taskvars
+        vars:
+          tier: "tier-{{ inventory_hostname }}"
+      - name: loop_control
+        copy:
+          content: "{{ i }}\n"
+          dest: "/root/onigirazu-e2e-lc-{{ name }}"
+        loop: [x, y]
+        loop_control: {loop_var: name, index_var: i}
+      - name: with_items
+        copy:
+          content: "{{ item }}\n"
+          dest: "/root/onigirazu-e2e-wi-{{ item }}"
+        with_items: [p, q]
+      - name: Secret probe
+        command:
+          cmd: "echo e2e-s3cr3t"
+        register: secret
+        no_log: true
+        changed_when: false
+      - name: Registered value survives no_log
+        copy:
+          content: "{{ secret.stdout }}\n"
+          dest: /root/onigirazu-e2e-nolog

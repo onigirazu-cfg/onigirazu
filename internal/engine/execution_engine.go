@@ -716,6 +716,17 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 	e.notifyTaskStart(task.Name, host.Name)
 
 	taskVars := e.hostVariables(host, variables)
+	// task vars come last; string values may use other variables
+	for k, v := range task.Vars {
+		if str, ok := v.(string); ok && strings.Contains(str, "{{") {
+			if rendered, err := e.templateEngine.Render(ctx, str, taskVars); err == nil {
+				v = rendered
+			} else {
+				return fmt.Errorf("task var %s: %w", k, err)
+			}
+		}
+		taskVars[k] = v
+	}
 
 	// Debug: log available variables
 	e.logger.Debug("Task '%s' variables: %v", task.Name, taskVars)
@@ -768,6 +779,19 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 		Facts:     e.facts[host.Name],
 	}
 
+	// environment: rendered with the task's variables
+	var environment map[string]interface{}
+	if len(task.Environment) > 0 {
+		environment = make(map[string]interface{}, len(task.Environment))
+		for k, v := range task.Environment {
+			rendered, err := e.templateEngine.Render(ctx, fmt.Sprint(v), taskVars)
+			if err != nil {
+				return fmt.Errorf("environment %s: %w", k, err)
+			}
+			environment[k] = rendered
+		}
+	}
+
 	// check mode: --check, unless the task says check_mode: false; a task with
 	// check_mode: true is checked in any run
 	check := e.config.GetDryRun()
@@ -814,6 +838,7 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 			BecomeUser:   become.User,
 			BecomeMethod: become.Method,
 			CheckMode:    &check,
+			Environment:  environment,
 		}, target, taskVars)
 
 		if task.Until != "" && err == nil {
@@ -873,6 +898,12 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 // register and set_fact. It returns an error when the task failed.
 func (e *ExecutionEngine) finishTask(task *types.Task, host *types.Host, result types.TaskResult,
 	playResult *types.PlayResult) error {
+	// no_log: register and set_fact get the real result; logs, the play
+	// result, state and the returned error get a placeholder
+	real := result
+	if task.NoLog {
+		result = censored(result)
+	}
 	if result.Failed {
 		e.metricsManager.IncrementTasksFailed()
 		e.metricsManager.IncrementErrorByType("task_execution")
@@ -946,10 +977,10 @@ func (e *ExecutionEngine) finishTask(task *types.Task, host *types.Host, result 
 	// register and set_fact belong to this host. A failed or skipped task
 	// is registered too, so later tasks can test r.failed / r.skipped.
 	if task.Register != "" {
-		e.setHostVar(host.Name, task.Register, registeredValue(result))
+		e.setHostVar(host.Name, task.Register, registeredValue(real))
 	}
-	if task.Module == "set_fact" && !result.Failed {
-		if facts, ok := result.Output["onigirazu_facts"].(map[string]interface{}); ok {
+	if task.Module == "set_fact" && !real.Failed {
+		if facts, ok := real.Output["onigirazu_facts"].(map[string]interface{}); ok {
 			for key, value := range facts {
 				e.setHostVar(host.Name, key, value)
 			}
@@ -1890,4 +1921,15 @@ func inheritBlock(block *types.Task, tasks []types.Task, rescuable bool) []types
 		out[i] = t
 	}
 	return out
+}
+
+const noLogMessage = "the output has been hidden due to no_log: true"
+
+// censored is a task result without anything the task could have leaked
+func censored(result types.TaskResult) types.TaskResult {
+	result.Output = map[string]interface{}{"censored": noLogMessage}
+	if result.Error != "" {
+		result.Error = noLogMessage
+	}
+	return result
 }

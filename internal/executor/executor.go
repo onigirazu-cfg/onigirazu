@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"sort"
 	"strings"
 	"time"
 
@@ -22,6 +23,7 @@ type CommandExecutor struct {
 	become       bool
 	becomeUser   string
 	becomeMethod string
+	env          string // "env 'K=V' ..." for the task's environment, or empty
 }
 
 // NewCommandExecutor creates a new command executor for the given host
@@ -46,6 +48,7 @@ func NewCommandExecutor(host types.Host) (*CommandExecutor, error) {
 	if host.Become {
 		executor.SetBecome(true, host.BecomeUser, host.BecomeMethod)
 	}
+	executor.setEnvironment(host.Environment)
 
 	return executor, nil
 }
@@ -71,6 +74,7 @@ func NewCommandExecutorWithoutPool(host types.Host) (*CommandExecutor, error) {
 	if host.Become {
 		executor.SetBecome(true, host.BecomeUser, host.BecomeMethod)
 	}
+	executor.setEnvironment(host.Environment)
 
 	return executor, nil
 }
@@ -92,6 +96,33 @@ func (e *CommandExecutor) SetBecome(become bool, becomeUser, becomeMethod string
 // wrapWithBecome runs the whole command line through a root (or become user)
 // shell, so redirections, pipes and && chains are escalated too - not only the
 // first word, which is all "sudo cmd > file" would cover.
+// setEnvironment keeps the task's environment as "env 'K=V' ..." (sorted)
+func (e *CommandExecutor) setEnvironment(env map[string]string) {
+	if len(env) == 0 {
+		e.env = ""
+		return
+	}
+	keys := make([]string, 0, len(env))
+	for k := range env {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	parts := []string{"env"}
+	for _, k := range keys {
+		parts = append(parts, shellQuote(k+"="+env[k]))
+	}
+	e.env = strings.Join(parts, " ")
+}
+
+// withEnvironment runs command under the task's environment. The command
+// goes through its own shell, so $VAR in it sees the new value.
+func (e *CommandExecutor) withEnvironment(command string) string {
+	if e.env == "" {
+		return command
+	}
+	return e.env + " sh -c " + shellQuote(command)
+}
+
 func (e *CommandExecutor) wrapWithBecome(command string) string {
 	if !e.become {
 		return command
@@ -159,7 +190,7 @@ func (e *CommandExecutor) Execute(command string, args ...string) (string, error
 }
 
 func (e *CommandExecutor) execute(command string, args ...string) (string, error) {
-	fullCommand := commandLine(command, args)
+	fullCommand := e.withEnvironment(commandLine(command, args))
 
 	// Wrap with become if enabled
 	fullCommand = e.wrapWithBecome(fullCommand)
@@ -167,7 +198,7 @@ func (e *CommandExecutor) execute(command string, args ...string) (string, error
 	if e.sshClient != nil {
 		// Execute on remote host via SSH
 		return e.sshClient.ExecuteCommand(fullCommand)
-	} else if e.become {
+	} else if e.become || e.env != "" {
 		// A single string with spaces goes through sh -c
 		return e.executeLocal(fullCommand)
 	} else {
@@ -183,7 +214,7 @@ func (e *CommandExecutor) ExecuteWithContext(ctx context.Context, command string
 }
 
 func (e *CommandExecutor) executeWithContext(ctx context.Context, command string, args ...string) (string, error) {
-	fullCommand := commandLine(command, args)
+	fullCommand := e.withEnvironment(commandLine(command, args))
 
 	// Wrap with become if enabled
 	fullCommand = e.wrapWithBecome(fullCommand)
@@ -191,7 +222,7 @@ func (e *CommandExecutor) executeWithContext(ctx context.Context, command string
 	if e.sshClient != nil {
 		// Execute on remote host via SSH with context support
 		return e.executeSSHWithContext(ctx, fullCommand)
-	} else if e.become {
+	} else if e.become || e.env != "" {
 		// #nosec G204 -- privilege escalation wraps the module's own command
 		cmd := exec.CommandContext(ctx, "sh", "-c", fullCommand)
 		output, err := cmd.CombinedOutput()
