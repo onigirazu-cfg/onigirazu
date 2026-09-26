@@ -149,32 +149,41 @@ func (e *Executor) executeOnHost(
 		Task: task,
 	}
 
-	// Get module from registry
 	module, err := e.moduleRegistry.GetModule(task.Module)
 	if err != nil {
 		result.Error = fmt.Errorf("module not found: %s", task.Module)
 		result.Duration = time.Since(startTime)
 		return result
 	}
-
-	// Prepare module arguments - add task name if not present
-	moduleArgs := make(map[string]interface{})
-	for k, v := range task.Args {
-		moduleArgs[k] = v
-	}
-	moduleArgs["_task_name"] = task.Name
-	if task.Name == "" {
-		moduleArgs["_task_name"] = fmt.Sprintf("ad-hoc %s", task.Module)
-	}
-
-	if err := module.Validate(moduleArgs); err != nil {
+	if err := module.Validate(copyArgs(task.Args)); err != nil {
 		result.Error = fmt.Errorf("invalid arguments for %s: %w", task.Module, err)
 		result.Duration = time.Since(startTime)
 		return result
 	}
 
-	// Execute module
-	taskResult, err := module.Execute(ctx, host, moduleArgs)
+	// through the registry, as a playbook task: --check runs only modules
+	// that support check mode (the others are skipped, not run), --diff asks
+	// for before/after, arguments are normalized like in apply
+	check := opts.Check
+	run := &types.Task{Name: task.Name, Module: task.Module, Args: copyArgs(task.Args), CheckMode: &check, Diff: opts.Diff}
+	if run.Name == "" {
+		run.Name = fmt.Sprintf("ad-hoc %s", task.Module)
+	}
+	if opts.Timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, opts.Timeout)
+		defer cancel()
+	}
+	vars := map[string]interface{}{}
+	for k, v := range host.Vars {
+		vars[k] = v
+	}
+	for k, v := range opts.Variables {
+		vars[k] = v
+	}
+	vars["inventory_hostname"] = host.Name
+
+	taskResult, err := e.moduleRegistry.ExecuteTask(ctx, run, host, vars)
 	if err != nil {
 		result.Error = err
 		result.Duration = time.Since(startTime)
@@ -216,4 +225,12 @@ func (e *Executor) generateSummary(results []*Result, duration time.Duration) *S
 	}
 
 	return summary
+}
+
+func copyArgs(args map[string]interface{}) map[string]interface{} {
+	out := make(map[string]interface{}, len(args))
+	for k, v := range args {
+		out[k] = v
+	}
+	return out
 }
