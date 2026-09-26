@@ -112,3 +112,15 @@ func TestRoleDependency_Forms(t *testing.T) {
 	assert.Equal(t, "web", meta.Dependencies[1].Name)
 	assert.Equal(t, 80, meta.Dependencies[1].Vars["port"])
 }
+
+func TestTask_LocalAction(t *testing.T) {
+	var s, m Task
+	require.NoError(t, yaml.Unmarshal([]byte("name: a\nlocal_action: command echo hi chdir=/tmp\n"), &s))
+	require.NoError(t, yaml.Unmarshal([]byte("name: b\nlocal_action: {module: copy, dest: /tmp/x, content: y}\n"), &m))
+	assert.Equal(t, "command", s.Module)
+	assert.Equal(t, map[string]interface{}{"cmd": "echo hi", "chdir": "/tmp"}, s.Args)
+	assert.Equal(t, "localhost", s.DelegateTo)
+	assert.Equal(t, "copy", m.Module)
+	assert.Equal(t, map[string]interface{}{"dest": "/tmp/x", "content": "y"}, m.Args)
+	assert.Equal(t, "localhost", m.DelegateTo)
+}

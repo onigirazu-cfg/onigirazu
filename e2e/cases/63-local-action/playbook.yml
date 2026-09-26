@@ -1,0 +1,21 @@
+plays:
+  - name: local_action
+    hosts: all
+    become: true
+    tasks:
+      - name: Runs on the control machine
+        local_action: command echo from-control
+        become: no
+        register: local
+        changed_when: false
+      - name: Map form
+        local_action:
+          module: command
+          cmd: echo map-form
+        become: no
+        register: local_map
+        changed_when: false
+      - name: Record
+        copy:
+          content: "{{ local.stdout }} {{ local_map.stdout }}\n"
+          dest: /root/onigirazu-e2e-la
