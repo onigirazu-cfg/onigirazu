@@ -76,6 +76,16 @@ func (m *DockerContainerModule) Execute(ctx context.Context, host types.Host, ar
 		return result, err
 	}
 
+	if inCheckMode(args) {
+		running := exists && currentState.Running
+		if action := plannedContainerAction(state, exists, running); action != "" {
+			result.Changed = true
+			result.Output["action"] = action
+		}
+		result.Duration = time.Since(startTime)
+		return result, nil
+	}
+
 	switch state {
 	case "present", "started":
 		if !exists {
@@ -285,4 +295,31 @@ func (m *DockerContainerModule) removeContainer(ctx context.Context, exec *execu
 // Validate validates docker_container module arguments
 func (m *DockerContainerModule) Validate(args map[string]interface{}) error {
 	return requireStringArg(args, "name")
+}
+
+// plannedContainerAction is what a container task would do, for check mode
+func plannedContainerAction(state string, exists, running bool) string {
+	switch state {
+	case "present":
+		if !exists {
+			return "created"
+		}
+	case "started":
+		if !exists || !running {
+			return "started"
+		}
+	case "stopped":
+		if exists && running {
+			return "stopped"
+		}
+	case "restarted":
+		if exists {
+			return "restarted"
+		}
+	case "absent":
+		if exists {
+			return "removed"
+		}
+	}
+	return ""
 }
