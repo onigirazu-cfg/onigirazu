@@ -297,45 +297,6 @@ func TestGetURLModule_ChecksumMatches(t *testing.T) {
 	}
 }
 
-// TestEncodeBase64 tests the encodeBase64 helper function
-func TestEncodeBase64(t *testing.T) {
-	tests := []struct {
-		name  string
-		input []byte
-		want  string
-	}{
-		{
-			name:  "empty input",
-			input: []byte{},
-			want:  "",
-		},
-		{
-			name:  "simple text",
-			input: []byte("hello"),
-			want:  "aGVsbG8=",
-		},
-		{
-			name:  "text with padding",
-			input: []byte("hi"),
-			want:  "aGk=",
-		},
-		{
-			name:  "binary data",
-			input: []byte{0x00, 0x01, 0x02, 0x03},
-			want:  "AAECAw==",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := encodeBase64(tt.input)
-			if got != tt.want {
-				t.Errorf("encodeBase64() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
 // TestGetURLModule_ResultStructure tests the result structure
 func TestGetURLModule_ResultStructure(t *testing.T) {
 	module := NewGetURLModule()
@@ -589,20 +550,6 @@ func BenchmarkGetURLModule_Validate(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_ = module.Validate(args)
-	}
-}
-
-// BenchmarkEncodeBase64 benchmarks the encodeBase64 function
-func BenchmarkEncodeBase64(b *testing.B) {
-	// Create 1KB of test data
-	data := make([]byte, 1024)
-	for i := range data {
-		data[i] = byte(i % 256)
-	}
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_ = encodeBase64(data)
 	}
 }
 
