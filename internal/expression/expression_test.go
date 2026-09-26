@@ -82,3 +82,40 @@ func TestItems(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "x", value)
 }
+
+func TestInOperator(t *testing.T) {
+	vars := map[string]interface{}{
+		"out":  "Active: running",
+		"list": []interface{}{"a", 1},
+		"m":    map[string]interface{}{"k": 1},
+	}
+	cases := map[string]bool{
+		`"running" in out`:     true,
+		`'stopped' in out`:     false,
+		`"stopped" not in out`: true,
+		`"a" in list`:          true,
+		`1 in list`:            true,
+		`1.0 in list`:          true,
+		`"k" in m`:             true,
+		`"x" in m`:             false,
+		`"x" in missing`:       false,
+	}
+	for cond, want := range cases {
+		got, err := Condition(cond, vars)
+		require.NoError(t, err, cond)
+		assert.Equal(t, want, got, cond)
+	}
+}
+
+func TestDict2Items(t *testing.T) {
+	vars := map[string]interface{}{"d": map[string]interface{}{"b": 2, "a": 1}}
+	out, err := Eval("{{ d | dict2items }}", vars)
+	require.NoError(t, err)
+	assert.Equal(t, []interface{}{
+		map[string]interface{}{"key": "a", "value": 1},
+		map[string]interface{}{"key": "b", "value": 2},
+	}, out)
+	back, err := Eval("d | dict2items | items2dict", vars)
+	require.NoError(t, err)
+	assert.Equal(t, vars["d"], back)
+}

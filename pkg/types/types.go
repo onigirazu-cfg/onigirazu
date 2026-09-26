@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -255,6 +256,7 @@ func (t *Task) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		"loop_control":  true,
 		"with_items":    true,
 		"with_list":     true,
+		"with_dict":     true,
 	}
 
 	if env, ok := taskMap["environment"].(map[string]interface{}); ok {
@@ -274,6 +276,26 @@ func (t *Task) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		case string:
 			t.Loop = &Loop{Expr: items}
 		}
+	}
+	// with_dict: loop over {key, value} items of a dictionary
+	switch d := taskMap["with_dict"].(type) {
+	case map[string]interface{}:
+		keys := make([]string, 0, len(d))
+		for k := range d {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		items := make([]interface{}, 0, len(keys))
+		for _, k := range keys {
+			items = append(items, map[string]interface{}{"key": k, "value": d[k]})
+		}
+		t.Loop = &Loop{Items: items}
+	case string:
+		inner := strings.TrimSpace(d)
+		if strings.HasPrefix(inner, "{{") && strings.HasSuffix(inner, "}}") {
+			inner = strings.TrimSpace(inner[2 : len(inner)-2])
+		}
+		t.Loop = &Loop{Expr: "(" + inner + ") | dict2items"}
 	}
 
 	// check_mode: false runs the task for real in a check run; true checks

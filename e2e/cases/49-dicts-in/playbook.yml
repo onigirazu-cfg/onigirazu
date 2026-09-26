@@ -1,0 +1,32 @@
+plays:
+  - name: with_dict, dict2items, substring in
+    hosts: all
+    become: true
+    vars:
+      ports: {http: 80, https: 443}
+    tasks:
+      - name: with_dict
+        copy:
+          content: "{{ item.value }}\n"
+          dest: "/root/onigirazu-e2e-wd-{{ item.key }}"
+        with_dict: "{{ ports }}"
+      - name: loop over dict2items
+        copy:
+          content: "{{ item.key }}\n"
+          dest: "/root/onigirazu-e2e-d2i-{{ item.value }}"
+        loop: "{{ ports | dict2items }}"
+      - name: Probe
+        command:
+          cmd: "echo Active: running"
+        register: probe
+        changed_when: false
+      - name: Substring match
+        copy:
+          content: "yes\n"
+          dest: /root/onigirazu-e2e-in
+        when: "'running' in probe.stdout"
+      - name: Substring miss
+        copy:
+          content: "no\n"
+          dest: /root/onigirazu-e2e-notin
+        when: "'stopped' in probe.stdout"
