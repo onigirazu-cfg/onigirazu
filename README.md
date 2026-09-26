@@ -755,6 +755,13 @@ Execute tasks multiple times:
       - git
 ```
 
+### Extra variables and limits
+
+`-e` sets variables that override all others: `-e env=prod -e version=1.2`,
+`-e '{"replicas": 3}'` or `-e @vars.yml` (repeatable, later ones win).
+`--limit web1,db1` (or `--limit 'web:!web3'`) runs every play only on the
+matching hosts.
+
 ### Task options
 
 Besides `when`, `loop`, `register` and friends, a task takes `environment`

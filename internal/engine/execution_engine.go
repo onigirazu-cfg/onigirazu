@@ -33,6 +33,11 @@ type ExecutionObserverI interface {
 
 // ExecutionEngine is the main engine for executing playbooks
 type ExecutionEngine struct {
+	// extra vars (-e) override every other variable; limit (--limit)
+	// narrows the hosts of every play
+	extraVars map[string]interface{}
+	limit     string
+
 	config            interfaces.Config
 	logger            interfaces.Logger
 	stateManager      interfaces.StateManager
@@ -457,6 +462,7 @@ func (e *ExecutionEngine) executePlay(ctx context.Context, play *types.Play) (*t
 		// Merge rendered vars back
 		playVars = e.mergeVariables(e.variables, renderedPlayVars)
 	}
+	playVars = e.mergeVariables(playVars, e.extraVars)
 
 	// Execute roles (with conditional and dependency support)
 	if len(play.Roles) > 0 || len(play.RoleObjects) > 0 {
@@ -725,6 +731,9 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 				return fmt.Errorf("task var %s: %w", k, err)
 			}
 		}
+		taskVars[k] = v
+	}
+	for k, v := range e.extraVars { // -e wins over task vars too
 		taskVars[k] = v
 	}
 
@@ -1123,7 +1132,34 @@ func (e *ExecutionEngine) getPlayHosts(play *types.Play) ([]types.Host, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get hosts for pattern '%s': %w", play.Hosts, err)
 	}
-	return hosts, nil
+	if e.limit == "" {
+		return hosts, nil
+	}
+	allowed, err := e.inventoryMgr.GetHosts(e.limit)
+	if err != nil {
+		return nil, fmt.Errorf("--limit %q: %w", e.limit, err)
+	}
+	names := make(map[string]bool, len(allowed))
+	for _, h := range allowed {
+		names[h.Name] = true
+	}
+	limited := hosts[:0]
+	for _, h := range hosts {
+		if names[h.Name] {
+			limited = append(limited, h)
+		}
+	}
+	return limited, nil
+}
+
+// SetExtraVars sets variables that override every other variable (-e)
+func (e *ExecutionEngine) SetExtraVars(vars map[string]interface{}) {
+	e.extraVars = vars
+}
+
+// SetLimit narrows the hosts of every play to a host pattern (--limit)
+func (e *ExecutionEngine) SetLimit(pattern string) {
+	e.limit = strings.TrimSpace(pattern)
 }
 
 // gatherFacts gathers facts from hosts
@@ -1806,7 +1842,7 @@ func (e *ExecutionEngine) hostVariables(host *types.Host, variables map[string]i
 	if hostFacts, exists := e.facts[host.Name]; exists {
 		vars = e.mergeVariables(vars, map[string]interface{}{"onigirazu_facts": hostFacts}, hostFacts)
 	}
-	return e.mergeVariables(vars, e.hostVars[host.Name])
+	return e.mergeVariables(vars, e.hostVars[host.Name], e.extraVars)
 }
 
 func splitLines(text string) []interface{} {

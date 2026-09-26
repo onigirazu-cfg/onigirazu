@@ -270,3 +270,43 @@ func TestExecutePlaybook_FailedPlayKeepsItsResults(t *testing.T) {
 	require.Len(t, result.Plays[0].Hosts, 1)
 	assert.True(t, result.Plays[0].Hosts[0].Tasks[0].Failed)
 }
+
+func TestLimit_NarrowsPlayHosts(t *testing.T) {
+	engine, _, _, mockInventory, _, _ := createTestEngine()
+	all := []types.Host{{Name: "web1"}, {Name: "web2"}, {Name: "db1"}}
+	mockInventory.On("GetHosts", "all").Return(all, nil)
+	mockInventory.On("GetHosts", "web2,db1").Return([]types.Host{{Name: "web2"}, {Name: "db1"}}, nil)
+
+	engine.SetLimit("web2,db1")
+	hosts, err := engine.getPlayHosts(&types.Play{Hosts: "all"})
+	require.NoError(t, err)
+	var names []string
+	for _, h := range hosts {
+		names = append(names, h.Name)
+	}
+	assert.Equal(t, []string{"web2", "db1"}, names)
+}
+
+func TestExtraVars_OverrideEverything(t *testing.T) {
+	engine, _, _, _, _, _ := createTestEngine()
+	engine.SetExtraVars(map[string]interface{}{"port": 9090})
+	host := &types.Host{Name: "h1", Vars: map[string]interface{}{"port": 22}}
+	engine.setHostVar("h1", "port", 1234) // set_fact
+	vars := engine.hostVariables(host, map[string]interface{}{"port": 80})
+	assert.Equal(t, 9090, vars["port"])
+}
+
+func TestExtraVars_OverrideTaskVars(t *testing.T) {
+	engine, mockConfig, _, _, mockRegistry, mockTemplate := createTestEngine()
+	mockConfig.On("GetDryRun").Return(false)
+	mockTemplate.On("RenderTaskArgs", mock.Anything, mock.Anything, mock.Anything).Return(nil, nil)
+	var seen interface{}
+	mockRegistry.On("ExecuteTask", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) { seen = args.Get(3).(map[string]interface{})["port"] }).
+		Return(types.TaskResult{Success: true}, nil)
+	engine.SetExtraVars(map[string]interface{}{"port": 9090})
+	host := twoHosts()[0]
+	task := &types.Task{Name: "t", Module: "debug", Vars: map[string]interface{}{"port": 1}}
+	require.NoError(t, engine.executeTaskOnHost(context.Background(), task, &host, map[string]interface{}{}, &types.PlayResult{}))
+	assert.Equal(t, 9090, seen)
+}
