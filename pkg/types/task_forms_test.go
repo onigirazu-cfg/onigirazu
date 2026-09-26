@@ -79,3 +79,17 @@ func TestTask_ShortForms(t *testing.T) {
 	var bad Task
 	assert.Error(t, yaml.Unmarshal([]byte("name: t\nfile: path=/x touch\n"), &bad))
 }
+
+func TestPlay_GatherFactsDefault(t *testing.T) {
+	cases := map[string]bool{
+		"name: a\nhosts: all\ntasks: []\n":                      true,
+		"name: a\nhosts: all\ngather_facts: false\ntasks: []\n": false,
+		"name: a\nhosts: all\ngather_facts: no\ntasks: []\n":    false,
+		"name: a\nhosts: all\ngather_facts: yes\ntasks: []\n":   true,
+	}
+	for src, want := range cases {
+		var p Play
+		require.NoError(t, yaml.Unmarshal([]byte(src), &p), src)
+		assert.Equal(t, want, p.GatherFacts, src)
+	}
+}
