@@ -40,3 +40,16 @@ func TestPlay_HostsStringOrList(t *testing.T) {
 	assert.Equal(t, "web", s.Hosts)
 	assert.Equal(t, "web,db", l.Hosts)
 }
+
+func TestTask_WithDict(t *testing.T) {
+	var lit, expr Task
+	require.NoError(t, yaml.Unmarshal([]byte("name: a\ndebug: {msg: x}\nwith_dict: {b: 2, a: 1}\n"), &lit))
+	require.NoError(t, yaml.Unmarshal([]byte("name: b\ndebug: {msg: x}\nwith_dict: \"{{ users }}\"\n"), &expr))
+	require.NotNil(t, lit.Loop)
+	assert.Equal(t, []interface{}{
+		map[string]interface{}{"key": "a", "value": 1},
+		map[string]interface{}{"key": "b", "value": 2},
+	}, lit.Loop.Items)
+	require.NotNil(t, expr.Loop)
+	assert.Equal(t, "(users) | dict2items", expr.Loop.Expr)
+}

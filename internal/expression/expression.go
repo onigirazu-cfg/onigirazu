@@ -7,10 +7,12 @@ import (
 	"fmt"
 	"reflect"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 
 	"github.com/expr-lang/expr"
+	"github.com/expr-lang/expr/ast"
 	"github.com/expr-lang/expr/vm"
 )
 
@@ -20,7 +22,7 @@ var (
 	// subject of an "is [not] defined" test: a name with .attr or [key] parts
 	definedTest = regexp.MustCompile(`([A-Za-z_]\w*(?:\.[A-Za-z_]\w*|\[[^\]]+\])*)\s+is\s+(not\s+defined|undefined|defined)\b`)
 	// Jinja filters without arguments that map onto expr builtins
-	bareFilter = regexp.MustCompile(`\|\s*(length|count|lower|upper|int|float|string|trim|bool|first|last)\b(\s*\()?`)
+	bareFilter = regexp.MustCompile(`\|\s*(length|count|lower|upper|int|float|string|trim|bool|first|last|dict2items|items2dict)\b(\s*\()?`)
 	jinjaWord  = regexp.MustCompile(`\b(True|False|None)\b`)
 	jinjaWords = strings.NewReplacer("True", "true", "False", "false", "None", "nil")
 	quoted     = regexp.MustCompile(`"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'`)
@@ -73,6 +75,16 @@ func compile(expression string) (*vm.Program, error) {
 	program, err := expr.Compile(translate(expression),
 		expr.Env(map[string]interface{}{}),
 		expr.AllowUndefinedVariables(),
+		expr.Patch(inPatch{}),
+		expr.Function("jinja_in", func(params ...interface{}) (interface{}, error) {
+			return contains(params[1], params[0]), nil
+		}),
+		expr.Function("dict2items", func(params ...interface{}) (interface{}, error) {
+			return Dict2Items(params[0])
+		}),
+		expr.Function("items2dict", func(params ...interface{}) (interface{}, error) {
+			return items2dict(params[0])
+		}),
 		expr.Function("bool", func(params ...interface{}) (interface{}, error) {
 			return Truthy(params[0]), nil
 		}),
@@ -180,4 +192,100 @@ func Truthy(v interface{}) bool {
 		return len(t) > 0
 	}
 	return true
+}
+
+// inPatch sends every "in" through jinja_in, which also tests substrings
+type inPatch struct{}
+
+func (inPatch) Visit(node *ast.Node) {
+	if b, ok := (*node).(*ast.BinaryNode); ok && b.Operator == "in" {
+		ast.Patch(node, &ast.CallNode{
+			Callee:    &ast.IdentifierNode{Value: "jinja_in"},
+			Arguments: []ast.Node{b.Left, b.Right},
+		})
+	}
+}
+
+// contains is Jinja's "needle in haystack": substring, list item or map key
+func contains(haystack, needle interface{}) bool {
+	switch h := haystack.(type) {
+	case nil:
+		return false
+	case string:
+		n, ok := needle.(string)
+		return ok && strings.Contains(h, n)
+	case map[string]interface{}:
+		_, ok := h[fmt.Sprint(needle)]
+		return ok
+	}
+	rv := reflect.ValueOf(haystack)
+	switch rv.Kind() {
+	case reflect.Slice, reflect.Array:
+		for i := 0; i < rv.Len(); i++ {
+			if equal(rv.Index(i).Interface(), needle) {
+				return true
+			}
+		}
+	case reflect.Map:
+		return rv.MapIndex(reflect.ValueOf(needle)).IsValid()
+	}
+	return false
+}
+
+// equal compares loosely like expr's ==: numbers by value
+func equal(a, b interface{}) bool {
+	if fa, ok := number(a); ok {
+		fb, ok := number(b)
+		return ok && fa == fb
+	}
+	return reflect.DeepEqual(a, b)
+}
+
+func number(v interface{}) (float64, bool) {
+	switch n := v.(type) {
+	case int:
+		return float64(n), true
+	case int64:
+		return float64(n), true
+	case float64:
+		return n, true
+	}
+	return 0, false
+}
+
+// Dict2Items turns a map into a list of {key, value} maps sorted by key
+func Dict2Items(value interface{}) ([]interface{}, error) {
+	if value == nil {
+		return []interface{}{}, nil
+	}
+	m, ok := value.(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("dict2items needs a dictionary, got %T", value)
+	}
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	items := make([]interface{}, 0, len(keys))
+	for _, k := range keys {
+		items = append(items, map[string]interface{}{"key": k, "value": m[k]})
+	}
+	return items, nil
+}
+
+func items2dict(value interface{}) (map[string]interface{}, error) {
+	items, err := Items(value)
+	if err != nil {
+		return nil, fmt.Errorf("items2dict: %w", err)
+	}
+	out := make(map[string]interface{}, len(items))
+	for _, item := range items {
+		m, ok := item.(map[string]interface{})
+		if !ok {
+			return nil, fmt.Errorf("items2dict needs a list of {key, value}, got %T", item)
+		}
+		out[fmt.Sprint(m["key"])] = m["value"]
+	}
+	return out, nil
 }

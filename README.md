@@ -756,6 +756,10 @@ Execute tasks multiple times:
       - git
 ```
 
+`loop:` also takes an expression (`"{{ result.stdout_lines }}"`). A dictionary
+is looped over as `{key, value}` items sorted by key, with `with_dict: "{{ d }}"`
+or `loop: "{{ d | dict2items }}"`; `items2dict` turns them back.
+
 ### Extra variables and limits
 
 `-e` sets variables that override all others: `-e env=prod -e version=1.2`,
@@ -829,7 +833,8 @@ evaluated per host with that host's facts and registered results:
   failed_when: app.rc is defined and app.rc > 3
 ```
 
-Supported: `==`, `!=`, `<`, `>`, `and`, `or`, `not`, `in`, `is defined`,
+Supported: `==`, `!=`, `<`, `>`, `and`, `or`, `not`, `in` (list item, dictionary
+key or substring), `is defined`,
 `is not defined`, filters `| length`, `| lower`, `| upper`, `| int`,
 `| trim`. A list under `when` means all items must hold; `{{ }}` around
 the expression is optional. A condition that cannot be evaluated fails the task.
