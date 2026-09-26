@@ -80,7 +80,7 @@ func (m *DockerImageModule) Execute(ctx context.Context, host types.Host, args m
 	}
 
 	if inCheckMode(args) {
-		force, _ := args["force"].(bool)
+		force := getBoolArg(args, "force", false)
 		action := ""
 		switch {
 		case state == "present" && !exists:
@@ -111,7 +111,7 @@ func (m *DockerImageModule) Execute(ctx context.Context, host types.Host, args m
 			result.Changed = true
 			result.Output["action"] = "pulled"
 		} else {
-			force, _ := args["force"].(bool)
+			force := getBoolArg(args, "force", false)
 			if force {
 				if err := m.pullImage(ctx, exec, fullName, args); err != nil {
 					result.Success = false
@@ -204,7 +204,7 @@ func (m *DockerImageModule) pullImage(ctx context.Context, exec *executor.Comman
 func (m *DockerImageModule) removeImage(ctx context.Context, exec *executor.CommandExecutor, name string, args map[string]interface{}) error {
 	cmdParts := []string{"docker", "rmi"}
 
-	force, _ := args["force"].(bool)
+	force := getBoolArg(args, "force", false)
 	if force {
 		cmdParts = append(cmdParts, "-f")
 	}
@@ -238,11 +238,11 @@ func (m *DockerImageModule) buildImage(ctx context.Context, exec *executor.Comma
 		}
 	}
 
-	if nocache, ok := args["nocache"].(bool); ok && nocache {
+	if getBoolArg(args, "nocache", false) {
 		cmdParts = append(cmdParts, "--no-cache")
 	}
 
-	if pull, ok := args["pull"].(bool); ok && pull {
+	if getBoolArg(args, "pull", false) {
 		cmdParts = append(cmdParts, "--pull")
 	}
 

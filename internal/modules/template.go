@@ -451,7 +451,7 @@ func (m *TemplateModule) Validate(args map[string]interface{}) error {
 	}
 
 	if backup, exists := args["backup"]; exists {
-		if _, ok := backup.(bool); !ok {
+		if _, ok := parseBool(backup); !ok {
 			return fmt.Errorf("backup must be a boolean")
 		}
 	}

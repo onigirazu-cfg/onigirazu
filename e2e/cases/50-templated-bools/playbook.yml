@@ -1,0 +1,17 @@
+plays:
+  - name: boolean arguments from variables
+    hosts: all
+    become: true
+    vars:
+      make_it: true
+    tasks:
+      - name: lineinfile create from a variable
+        lineinfile:
+          path: /root/onigirazu-e2e-tbool
+          line: created
+          create: "{{ make_it }}"
+      - name: blockinfile backup from a variable
+        blockinfile:
+          path: /root/onigirazu-e2e-tbool
+          block: "second"
+          backup: "{{ make_it }}"

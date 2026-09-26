@@ -145,7 +145,7 @@ func TestTemplateModule_Validate(t *testing.T) {
 			args: map[string]interface{}{
 				"src":    "/tmp/template.j2",
 				"dest":   "/tmp/output.txt",
-				"backup": "true",
+				"backup": "maybe",
 			},
 			wantErr: true,
 		},

@@ -245,7 +245,7 @@ func (m *PodmanModule) createContainer(ctx context.Context, name string, args ma
 		cmdParts = append(cmdParts, "--restart", restart)
 	}
 
-	if rootless, ok := args["rootless"].(bool); ok && rootless {
+	if getBoolArg(args, "rootless", false) {
 		cmdParts = append(cmdParts, "--userns=keep-id")
 	}
 
@@ -296,7 +296,7 @@ func (m *PodmanModule) restartContainer(ctx context.Context, name string) error 
 }
 
 func (m *PodmanModule) removeContainer(ctx context.Context, name string, args map[string]interface{}) error {
-	force, _ := args["force"].(bool)
+	force := getBoolArg(args, "force", false)
 	cmdParts := []string{"podman", "rm"}
 	if force {
 		cmdParts = append(cmdParts, "-f")

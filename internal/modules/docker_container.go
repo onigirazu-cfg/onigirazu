@@ -277,7 +277,7 @@ func (m *DockerContainerModule) restartContainer(ctx context.Context, exec *exec
 }
 
 func (m *DockerContainerModule) removeContainer(ctx context.Context, exec *executor.CommandExecutor, name string, args map[string]interface{}) error {
-	force, _ := args["force"].(bool)
+	force := getBoolArg(args, "force", false)
 	cmdParts := []string{"docker", "rm"}
 	if force {
 		cmdParts = append(cmdParts, "-f")

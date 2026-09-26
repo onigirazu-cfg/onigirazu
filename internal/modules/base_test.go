@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
+	"github.com/stretchr/testify/assert"
 )
 
 // TestNewBaseModule tests base module creation
@@ -543,4 +544,12 @@ func BenchmarkGetIntArg(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		_ = getIntArg(args, "key2", 0)
 	}
+}
+
+func TestGetBoolArg_TemplatedStrings(t *testing.T) {
+	for v, want := range map[interface{}]bool{true: true, "true": true, "Yes": true, "on": true, "1": true, "false": false, "no": false} {
+		assert.Equal(t, want, getBoolArg(map[string]interface{}{"k": v}, "k", !want), v)
+	}
+	assert.True(t, getBoolArg(map[string]interface{}{"k": "maybe"}, "k", true), "unknown keeps the default")
+	assert.False(t, getBoolArg(map[string]interface{}{}, "k", false))
 }

@@ -74,12 +74,7 @@ func (m *AuthorizedKeyModule) Execute(ctx context.Context, host types.Host, args
 		}
 	}
 
-	exclusive := false
-	if exclusiveVal, exists := args["exclusive"]; exists {
-		if exclusiveBool, ok := exclusiveVal.(bool); ok {
-			exclusive = exclusiveBool
-		}
-	}
+	exclusive := getBoolArg(args, "exclusive", false)
 
 	// Resolve the account on the target host, not on the control machine
 	passwd, err := runOnHost(ctx, host, args, "getent", "passwd", username)

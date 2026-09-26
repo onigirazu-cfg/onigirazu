@@ -66,12 +66,7 @@ func (m *CommandModuleFixed) Execute(ctx context.Context, host types.Host, args 
 	}
 
 	command, _ := args["command"].(string)
-	shell := false
-	if shellVal, exists := args["shell"]; exists {
-		if shellBool, ok := shellVal.(bool); ok {
-			shell = shellBool
-		}
-	}
+	shell := getBoolArg(args, "shell", false)
 
 	if shell {
 		return m.executeShellCommand(exec, ctx, command, result, startTime)
@@ -111,7 +106,7 @@ func (m *CommandModuleFixed) Validate(args map[string]interface{}) error {
 
 	// Validate shell parameter if provided
 	if shell, exists := args["shell"]; exists {
-		if _, ok := shell.(bool); !ok {
+		if _, ok := parseBool(shell); !ok {
 			return fmt.Errorf("argument 'shell' must be a boolean")
 		}
 	}
