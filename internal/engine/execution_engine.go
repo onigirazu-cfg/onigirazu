@@ -712,6 +712,7 @@ func (e *ExecutionEngine) executePlayOn(ctx context.Context, play *types.Play, h
 	// health checks of the batch, for the rollout to decide on
 	e.rolloutVars = playVars
 	if len(play.HealthCheck) > 0 {
+		e.notifyBatch("checking", types.BatchReport{Play: play.Name})
 		e.rolloutUnhealthy = e.runHealthChecks(ctx, play.HealthCheck, hosts, playVars, result)
 	}
 

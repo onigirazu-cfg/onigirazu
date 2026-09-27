@@ -76,3 +76,5 @@ Rollout:
   rollback errors, healthy_after_rollback); `rolled_back` is true.
 - The run snapshot (`onigirazu rollback --last`) no longer holds the changes the rollout undid.
 - In check mode nothing is changed, so nothing is rolled back: an unhealthy batch stops the rollout.
+- `--interactive`: the dashboard shows the batches as they go (B for the details); see
+  [INTERACTIVE_MODE.md](INTERACTIVE_MODE.md).

@@ -290,3 +290,40 @@ func TestTUIRerunFailedHosts(t *testing.T) {
 	assert.Equal(t, []string{"db1", "db2"}, m.RerunHosts())
 	assert.True(t, m.shouldExit)
 }
+
+func TestTUIRollout(t *testing.T) {
+	m, _ := newTestModel()
+	b1 := types.BatchReport{Play: "web", Batch: 1, Batches: 2, Canary: true, Healthy: true, Hosts: []string{"web1"}}
+	b2 := types.BatchReport{Play: "web", Batch: 2, Batches: 2, Healthy: true, Hosts: []string{"web2", "web3"}}
+	m.processRollout("start", &b1)
+	m.processRollout("checking", &types.BatchReport{Play: "web"})
+	assert.Contains(t, screen(m), "checking health")
+	m.processRollout("healthy", &b1)
+	m.processRollout("start", &b2)
+	bad := b2
+	bad.Healthy, bad.Reason, bad.UnhealthyHosts = false, "health checks failed", []string{"web3"}
+	m.processRollout("unhealthy", &bad)
+	m.processRollout("rolling_back", &bad)
+	s := screen(m)
+	assert.Contains(t, s, "ROLLING BACK")
+	assert.Contains(t, s, "Rollout: 2/2")
+	assert.Contains(t, s, "batch 2/2 unhealthy (health checks failed): web3")
+
+	ok := true
+	done := bad
+	done.RolledBack, done.Undone, done.HealthyAfterRollback = true, 3, &ok
+	done.Irreversible = []string{"web3: restart (command)"}
+	m.processRollout("rolled_back", &done)
+	s = screen(m)
+	assert.Contains(t, s, "rolled back: 3 change(s) undone, healthy again")
+	assert.Contains(t, s, "B: Rollout")
+
+	key(m, "b")
+	s = screen(m)
+	assert.Contains(t, s, "ROLLOUT (2 batches)")
+	assert.Contains(t, s, "✓ canary batch 1/2: healthy")
+	assert.Contains(t, s, "↺ batch 2/2: rolled back")
+	assert.Contains(t, s, "kept: web3: restart (command)")
+	key(m, "esc")
+	assert.NotContains(t, screen(m), "ROLLOUT (")
+}
