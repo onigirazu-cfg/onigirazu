@@ -485,7 +485,7 @@ func TestInventoryParser_ParseSimpleHostLine_IPOnly(t *testing.T) {
 	assert.Equal(t, "192.168.1.1", host.Address)
 	assert.Equal(t, "192.168.1.1", host.Name)
 	assert.Equal(t, 22, host.Port)
-	assert.Equal(t, "root", host.User)
+	assert.Equal(t, "", host.User) // SSH uses the local user
 }
 
 func TestInventoryParser_ParseSimpleHostLine_WithPort(t *testing.T) {

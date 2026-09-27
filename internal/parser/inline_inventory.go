@@ -308,11 +308,7 @@ func (d *InlineInventoryDetector) parseHostSpecification(hostSpec string, index 
 		name = address
 	}
 
-	// Set default user if not specified
-	if user == "" {
-		user = "root"
-	}
-
+	// no user: SSH connects as the local user, as Ansible does
 	host := &types.Host{
 		Name:    name,
 		Address: address,
