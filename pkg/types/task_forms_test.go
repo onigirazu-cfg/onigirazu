@@ -193,3 +193,13 @@ func TestPlayAndRoleTagsAsString(t *testing.T) {
 	require.Len(t, play.Roles, 1)
 	assert.Equal(t, []string{"web"}, play.Roles[0].Tags)
 }
+
+func TestShortFormEscapes(t *testing.T) {
+	args, err := ShortFormArgs("copy", `content="a\nb\tc" dest=/x regexp='^\s+x'`)
+	require.NoError(t, err)
+	assert.Equal(t, "a\nb\tc", args["content"])
+	assert.Equal(t, `^\s+x`, args["regexp"])
+	cmd, err := ShortFormArgs("shell", `printf 'a\n' > /tmp/x`)
+	require.NoError(t, err)
+	assert.Equal(t, `printf 'a\n' > /tmp/x`, cmd["cmd"])
+}
