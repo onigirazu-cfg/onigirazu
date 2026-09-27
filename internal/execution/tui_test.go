@@ -214,3 +214,31 @@ func TestTUIHelpIsVisible(t *testing.T) {
 	key(m, "esc")
 	assert.NotContains(t, screen(m), "KEYBOARD SHORTCUTS")
 }
+
+func TestTUIDetailDiffAndScroll(t *testing.T) {
+	m, _ := newTestModel()
+	m.height = 20
+	var before, after strings.Builder
+	for i := 0; i < 40; i++ {
+		before.WriteString("line " + strings.Repeat("x", i%3) + "\n")
+		after.WriteString("line " + strings.Repeat("x", i%3) + "\n")
+	}
+	after.WriteString("port=8080\n")
+	taskEnd(m, types.TaskResult{TaskName: "config", Host: "web1", Changed: true, Module: "template",
+		Output: map[string]interface{}{"stdout": before.String(), "diff": []interface{}{map[string]interface{}{
+			"before_header": "/etc/app.conf", "before": before.String(), "after": after.String()}}}})
+	key(m, "r")
+	key(m, "enter")
+	s := screen(m)
+	assert.Contains(t, s, "Module:   template")
+	assert.Contains(t, s, "lines 1-")
+	assert.NotContains(t, s, "+port=8080")
+	key(m, "end")
+	s = screen(m)
+	assert.Contains(t, s, "+port=8080")
+	assert.NotContains(t, s, "Module:   template")
+	key(m, "home")
+	assert.Contains(t, screen(m), "Module:   template")
+	key(m, "esc")
+	assert.Contains(t, screen(m), "TASK RESULTS")
+}

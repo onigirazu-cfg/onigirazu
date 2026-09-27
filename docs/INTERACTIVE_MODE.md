@@ -45,7 +45,7 @@ rollback snapshot are saved as for any run.
 |-----|--------|
 | **R** | Task results, newest last: host, task, status |
 | **↑** / **↓**, **PgUp** / **PgDn**, **Home** / **End** | Move |
-| **Enter** | Everything about one result: module, duration, error, message, stdout, stderr, ... |
+| **Enter** | Everything about one result: module, duration, error, message, stdout, stderr, and the diff of a changed file (as with `--diff`); **↑↓ PgUp PgDn Home End** scroll |
 | **F** | Failed results only (toggle) |
 | **Esc** | Back |
 
