@@ -24,6 +24,22 @@ type SafeApply struct {
 // Restorer undoes the changes of task results (rollback.RollbackExecutor)
 type Restorer func(ctx context.Context, results []types.TaskResult) rollback.RestoreReport
 
+// RolloutObserver is told how the batches of a checked rollout go; an
+// observer of the engine that implements it gets these calls
+type RolloutObserver interface {
+	// phase: start, checking, canary_pause, healthy, unhealthy,
+	// rolling_back, rolled_back, stopped
+	OnRolloutBatch(phase string, report types.BatchReport)
+}
+
+func (e *ExecutionEngine) notifyBatch(phase string, report types.BatchReport) {
+	for _, obs := range e.observers {
+		if ro, ok := obs.(RolloutObserver); ok {
+			ro.OnRolloutBatch(phase, report)
+		}
+	}
+}
+
 // ErrRolledBack ends a run whose unhealthy batch was rolled back
 var ErrRolledBack = errors.New("rolled back")
 
@@ -140,6 +156,12 @@ func (e *ExecutionEngine) executeRollout(ctx context.Context, play *types.Play, 
 			label = fmt.Sprintf("canary batch 1/%d", len(batches))
 		}
 		e.logger.Info("Play '%s': %s (%d hosts)", play.Name, label, len(batch))
+		report := types.BatchReport{Play: play.Name, Batch: i + 1, Batches: len(batches),
+			Canary: canary && i == 0, Healthy: true}
+		for _, h := range batch {
+			report.Hosts = append(report.Hosts, h.Name)
+		}
+		e.notifyBatch("start", report)
 
 		e.rolloutUnhealthy = nil
 		batchResult, err := e.executePlayOn(ctx, play, batch)
@@ -153,11 +175,6 @@ func (e *ExecutionEngine) executeRollout(ctx context.Context, play *types.Play, 
 			return result, err
 		}
 
-		report := types.BatchReport{Play: play.Name, Batch: i + 1, Batches: len(batches),
-			Canary: canary && i == 0, Healthy: true}
-		for _, h := range batch {
-			report.Hosts = append(report.Hosts, h.Name)
-		}
 		unhealthy := e.batchUnhealthy(batch)
 		reason := ""
 		switch {
@@ -173,6 +190,7 @@ func (e *ExecutionEngine) executeRollout(ctx context.Context, play *types.Play, 
 		// a healthy canary soaks, then is checked again
 		if len(unhealthy) == 0 && report.Canary && e.safe.CanaryPause > 0 && i < len(batches)-1 && len(play.HealthCheck) > 0 {
 			e.logger.Info("Canary healthy; checking again in %s", e.safe.CanaryPause)
+			e.notifyBatch("canary_pause", report)
 			if werr := e.wait(ctx, e.safe.CanaryPause); werr != nil {
 				result.Success = false
 				finish()
@@ -189,6 +207,7 @@ func (e *ExecutionEngine) executeRollout(ctx context.Context, play *types.Play, 
 		batchChanges := changesOf(batchResult)
 		if len(unhealthy) == 0 {
 			e.logger.Info("Play '%s': %s healthy", play.Name, label)
+			e.notifyBatch("healthy", report)
 			e.rolloutApplied = append(e.rolloutApplied, batchChanges...)
 			e.rolloutReports = append(e.rolloutReports, report)
 			continue
@@ -204,6 +223,7 @@ func (e *ExecutionEngine) executeRollout(ctx context.Context, play *types.Play, 
 			reason += "; check mode, nothing to roll back"
 		}
 		e.logger.Warn("Play '%s': %s unhealthy (%s: %s); %s", play.Name, label, reason, strings.Join(unhealthy, ", "), action)
+		e.notifyBatch("unhealthy", report)
 
 		switch action {
 		case "continue":
@@ -215,12 +235,15 @@ func (e *ExecutionEngine) executeRollout(ctx context.Context, play *types.Play, 
 			if e.safe.Scope == "run" {
 				undo = append(append([]types.TaskResult{}, e.rolloutApplied...), batchChanges...)
 			}
+			e.notifyBatch("rolling_back", report)
 			e.rollbackBatch(ctx, play, batch, undo, result, &report)
 			e.rolloutReports = append(e.rolloutReports, report)
+			e.notifyBatch("rolled_back", report)
 			finish()
 			return result, fmt.Errorf("%s unhealthy (%s): %w", label, reason, ErrRolledBack)
 		default: // stop
 			e.rolloutReports = append(e.rolloutReports, report)
+			e.notifyBatch("stopped", report)
 			finish()
 			return result, fmt.Errorf("%s unhealthy (%s): rollout stopped", label, reason)
 		}

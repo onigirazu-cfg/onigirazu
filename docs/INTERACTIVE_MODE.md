@@ -58,6 +58,17 @@ rollback snapshot are saved as for any run.
 | **↑** / **↓**, **Enter** | Select a host and show its tasks as bars on the run's time axis: when each started and how long it took |
 | **Esc** | Back |
 
+### Rollout
+
+With health checks, `--canary` or `--auto-rollback` (see [SAFE_APPLY.md](SAFE_APPLY.md)) the
+statistics panel shows the batches of the play as marks (✓ healthy, ◌ running, ◎ checking health,
+⏳ canary soak, ✗ unhealthy, ↺ rolled back), the log reports every batch, and the header says
+ROLLING BACK while a batch is being put back.
+
+| Key | Action |
+|-----|--------|
+| **B** | Every batch: hosts, state, reason, unhealthy hosts, changes undone, changes kept, rollback errors, health after the rollback |
+
 ### Log
 
 | Key | Action |

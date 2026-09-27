@@ -51,6 +51,9 @@ type ExecutionEvent struct {
 	Result *types.TaskResult
 	// Success of the whole run (execution_end)
 	Success bool
+	// Rollout: phase and batch (rollout)
+	Phase string
+	Batch *types.BatchReport
 }
 
 // EnhancedTUIModel - the main Bubble Tea model for glance-style dashboard
@@ -120,8 +123,11 @@ type EnhancedTUIModel struct {
 	timelineCursor int
 	// rerunHosts are the failed hosts to run again after the dashboard closes
 	rerunHosts []string
-	closeOnce  sync.Once
-	readyOnce  sync.Once
+	// rollout batches and the phase each one is in
+	rollout       []types.BatchReport
+	rolloutPhases []string
+	closeOnce     sync.Once
+	readyOnce     sync.Once
 }
 
 // DetailedTaskStats extends basic TaskStats with more info
@@ -405,6 +411,9 @@ func (m *EnhancedTUIModel) View() string {
 	if m.activeModal == "timeline" {
 		return m.renderTimelineModal()
 	}
+	if m.activeModal == "rollout" {
+		return m.renderRolloutModal()
+	}
 	if m.activeModal == "hosttimeline" {
 		return m.renderHostTimelineModal()
 	}
@@ -625,6 +634,7 @@ func (m *EnhancedTUIModel) renderStatsPanel(width int, height int) string {
 	lines = append(lines, "")
 	hostCountStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("45"))
 	lines = append(lines, hostCountStyle.Render(fmt.Sprintf("Hosts: %d", len(m.hostStats))))
+	lines = append(lines, m.rolloutLines(contentWidth)...)
 	lines = append(lines, m.hostLines(contentWidth, contentHeight-len(lines)-8)...)
 
 	// Speed metrics (if there's space)
@@ -684,7 +694,11 @@ func (m *EnhancedTUIModel) renderFooter() string {
 		Foreground(lipgloss.Color("8")).
 		Padding(0, 1)
 
-	hints := []string{"H: Help", "R: Results", "L: Timeline", "F: Filter", "/: Search", "V/D/N: Detail"}
+	hints := []string{"H: Help", "R: Results", "L: Timeline"}
+	if len(m.rollout) > 0 {
+		hints = append(hints, "B: Rollout")
+	}
+	hints = append(hints, "F: Filter", "/: Search", "V/D/N: Detail")
 	if m.running() {
 		hints = append(hints, "P: Pause", "G: Stop")
 	}
@@ -728,6 +742,7 @@ func (m *EnhancedTUIModel) renderHelpModal() string {
 		"",
 		"  VIEW  R task results, Enter details (output, error, diff)",
 		"        L timeline per host, Enter its tasks over time",
+		"        B rollout batches (health, rollback)",
 		"        S statistics · H this help",
 		"        ↑↓ j k scroll · PgUp PgDn page · Home End",
 		"",
@@ -1326,6 +1341,12 @@ func (m *EnhancedTUIModel) handleKeypress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "x":
 		m.askRerun()
 
+	case "b":
+		m.mutex.Lock()
+		m.activeModal = "rollout"
+		m.detailOffset = 0
+		m.mutex.Unlock()
+
 	case "r":
 		m.mutex.Lock()
 		m.activeModal = "results"
@@ -1504,6 +1525,8 @@ func (m *EnhancedTUIModel) handleModalKeypress(msg tea.KeyMsg) (tea.Model, tea.C
 		m.handleDetailKeypress(key)
 	case "timeline":
 		m.handleTimelineKeypress(key)
+	case "rollout":
+		m.handleRolloutKeypress(key)
 	case "hosttimeline":
 		m.handleHostTimelineKeypress(key)
 	default: // help, stats
@@ -1588,6 +1611,10 @@ func (m *EnhancedTUIModel) processEvent(event ExecutionEvent) {
 
 	case "play_end":
 		level = "INFO"
+
+	case "rollout":
+		m.processRollout(event.Phase, event.Batch)
+		return
 
 	case "execution_end":
 		switch {
