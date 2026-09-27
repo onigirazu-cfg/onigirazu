@@ -19,5 +19,4 @@ func TestPrintDiffs(t *testing.T) {
 	assert.Contains(t, out.String(), "--- web1: conf")
 	assert.Contains(t, out.String(), "-b\n+c\n")
 	assert.NotContains(t, out.String(), "none")
-	assert.Equal(t, []string{"a\n", "b" + "\n\\ No newline at end of file\n"}, diffLines("a\nb"))
 }

@@ -440,7 +440,8 @@ Examples:
 			executionEngine.SetCallbacks(callbacks)
 			executionEngine.SetRolesPath(filepath.Join(filepath.Dir(playbookPath), "roles"))
 			executionEngine.SetPlaybookDir(filepath.Dir(playbookPath))
-			executionEngine.SetShowDiff(diff)
+			// the dashboard shows the diff of a changed file in its details
+			executionEngine.SetShowDiff(diff || interactive)
 			executionEngine.SetRunControl(runControl)
 
 			policy, policySource, err := security.LoadPolicy(securityPolicyPath)

@@ -115,6 +115,7 @@ type EnhancedTUIModel struct {
 	results       []types.TaskResult
 	resultsCursor int
 	failedOnly    bool
+	detailOffset  int
 	closeOnce     sync.Once
 	readyOnce     sync.Once
 }
@@ -1469,12 +1470,7 @@ func (m *EnhancedTUIModel) handleModalKeypress(msg tea.KeyMsg) (tea.Model, tea.C
 	case "results":
 		m.handleResultsKeypress(key)
 	case "detail":
-		switch key {
-		case "esc", "q", "backspace", "enter":
-			m.mutex.Lock()
-			m.activeModal = "results"
-			m.mutex.Unlock()
-		}
+		m.handleDetailKeypress(key)
 	default: // help, stats
 		switch key {
 		case "esc", "q", "h", "s", "ctrl+c":

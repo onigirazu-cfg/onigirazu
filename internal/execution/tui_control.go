@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/onigirazu-cfg/onigirazu/internal/diffview"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
@@ -165,6 +166,7 @@ func (m *EnhancedTUIModel) handleResultsKeypress(key string) {
 	case "enter":
 		if n > 0 {
 			m.activeModal = "detail"
+			m.detailOffset = 0
 		}
 	case "esc", "q", "r":
 		m.activeModal = ""
@@ -225,14 +227,8 @@ func (m *EnhancedTUIModel) renderResultsModal() string {
 		m.modalStyle(width, "51").Render(strings.Join(lines, "\n")))
 }
 
-// renderDetailModal shows everything about one task result
-func (m *EnhancedTUIModel) renderDetailModal() string {
-	width := m.width - 6
-	shown := m.shownResults()
-	if m.resultsCursor >= len(shown) {
-		return m.renderResultsModal()
-	}
-	r := shown[m.resultsCursor]
+// detailLines is everything about one task result, diff included
+func detailLines(r types.TaskResult, width int) []string {
 	status := resultStatus(r)
 	lines := []string{
 		lipgloss.NewStyle().Bold(true).Render(r.TaskName),
@@ -264,13 +260,96 @@ func (m *EnhancedTUIModel) renderDetailModal() string {
 			lines = append(lines, truncateString(fmt.Sprintf("%s: %s", k, text), width-4))
 		}
 	}
-	max := m.height - 6
-	if len(lines) > max && max > 1 {
-		lines = append(lines[:max-1], "…")
+	if diff := diffview.TaskDiff(r); diff != "" {
+		lines = append(lines, "", lipgloss.NewStyle().Bold(true).Render("Diff:"))
+		for _, line := range strings.Split(strings.TrimRight(diff, "\n"), "\n") {
+			style := lipgloss.NewStyle()
+			switch {
+			case strings.HasPrefix(line, "+++"), strings.HasPrefix(line, "---"):
+				style = style.Bold(true)
+			case strings.HasPrefix(line, "+"):
+				style = style.Foreground(lipgloss.Color("46"))
+			case strings.HasPrefix(line, "-"):
+				style = style.Foreground(lipgloss.Color("196"))
+			case strings.HasPrefix(line, "@@"):
+				style = style.Foreground(lipgloss.Color("51"))
+			}
+			lines = append(lines, style.Render(truncateString(line, width-4)))
+		}
 	}
-	lines = append(lines, "", "Esc back")
+	return lines
+}
+
+// renderDetailModal shows one task result, scrolled by detailOffset
+func (m *EnhancedTUIModel) renderDetailModal() string {
+	width := m.width - 6
+	shown := m.shownResults()
+	if m.resultsCursor >= len(shown) {
+		return m.renderResultsModal()
+	}
+	r := shown[m.resultsCursor]
+	all := detailLines(r, width)
+	rows := m.detailRows()
+	offset := m.detailOffset
+	if offset > len(all)-rows {
+		offset = len(all) - rows
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	end := offset + rows
+	if end > len(all) {
+		end = len(all)
+	}
+	lines := append([]string{}, all[offset:end]...)
+	footer := "Esc back"
+	if len(all) > rows {
+		footer = fmt.Sprintf("lines %d-%d of %d · ↑↓ PgUp PgDn Home End scroll · Esc back", offset+1, end, len(all))
+	}
+	lines = append(lines, "", footer)
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center,
-		m.modalStyle(width, string(statusColor(status))).Render(strings.Join(lines, "\n")))
+		m.modalStyle(width, string(statusColor(resultStatus(r)))).Render(strings.Join(lines, "\n")))
+}
+
+// detailRows is the number of content lines the detail view shows
+func (m *EnhancedTUIModel) detailRows() int {
+	rows := m.height - 6
+	if rows < 3 {
+		rows = 3
+	}
+	return rows
+}
+
+// handleDetailKeypress scrolls the detail view or goes back to the list
+func (m *EnhancedTUIModel) handleDetailKeypress(key string) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	switch key {
+	case "up", "k":
+		m.detailOffset--
+	case "down", "j":
+		m.detailOffset++
+	case "pgup":
+		m.detailOffset -= m.detailRows()
+	case "pgdown":
+		m.detailOffset += m.detailRows()
+	case "home":
+		m.detailOffset = 0
+	case "end":
+		m.detailOffset = 1 << 30
+	case "esc", "q", "backspace", "enter":
+		m.activeModal = "results"
+		return
+	}
+	shown := m.shownResults()
+	if m.resultsCursor < len(shown) {
+		if max := len(detailLines(shown[m.resultsCursor], m.width-6)) - m.detailRows(); m.detailOffset > max {
+			m.detailOffset = max
+		}
+	}
+	if m.detailOffset < 0 {
+		m.detailOffset = 0
+	}
 }
 
 // wrapLines splits text into lines of at most width characters
