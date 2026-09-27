@@ -714,8 +714,9 @@ type Play struct {
 	Tags              []string               `yaml:"tags,omitempty"`
 	When              string                 `yaml:"when,omitempty"`
 	Serial            interface{}            `yaml:"serial,omitempty"`
-	MaxFailPercentage int                    `yaml:"max_fail_percentage,omitempty"`
+	MaxFailPercentage *int                   `yaml:"max_fail_percentage,omitempty"`
 	AnyErrorsFatal    bool                   `yaml:"any_errors_fatal,omitempty"`
+	ForceHandlers     bool                   `yaml:"force_handlers,omitempty"`
 	IgnoreErrors      bool                   `yaml:"ignore_errors,omitempty"`
 	GatherFacts       bool                   `yaml:"gather_facts,omitempty"`
 	// Environment of every task of the play; a task's own environment wins
@@ -1152,6 +1153,7 @@ type RoleReference struct {
 // UnmarshalYAML accepts hosts as a pattern string or as a list of patterns
 // (joined with ",", which the inventory reads as a union)
 func (p *Play) UnmarshalYAML(value *yaml.Node) error {
+	tagsAsList(value)
 	if value.Kind == yaml.MappingNode {
 		for i := 0; i+1 < len(value.Content); i += 2 {
 			key, val := value.Content[i], value.Content[i+1]
@@ -1179,6 +1181,7 @@ func (r *RoleReference) UnmarshalYAML(value *yaml.Node) error {
 		r.Name = value.Value
 		return nil
 	}
+	tagsAsList(value)
 	var raw map[string]interface{}
 	if err := value.Decode(&raw); err != nil {
 		return err
@@ -1445,4 +1448,24 @@ func sequenceItems(spec string) ([]interface{}, error) {
 		items = append(items, fmt.Sprintf(format, i))
 	}
 	return items, nil
+}
+
+// tagsAsList turns "tags: a, b" of a mapping node into the list [a, b]
+func tagsAsList(value *yaml.Node) {
+	if value.Kind != yaml.MappingNode {
+		return
+	}
+	for i := 0; i+1 < len(value.Content); i += 2 {
+		key, val := value.Content[i], value.Content[i+1]
+		if key.Value != "tags" || val.Kind != yaml.ScalarNode {
+			continue
+		}
+		list := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
+		for _, tag := range strings.Split(val.Value, ",") {
+			if tag = strings.TrimSpace(tag); tag != "" {
+				list.Content = append(list.Content, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: tag})
+			}
+		}
+		value.Content[i+1] = list
+	}
 }

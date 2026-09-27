@@ -247,8 +247,7 @@ tasks:
 ### Handlers and Failures
 
 - A failing handler stops the remaining handlers and fails the play, unless it has `ignore_errors: true`.
-- If a task fails (without `ignore_errors` or a `rescue`), the play stops before the next flush, so handlers notified earlier do not run.
-- **Current limitation**: there is no `force_handlers`.
+- A host whose task failed (without `ignore_errors` or a `rescue`) leaves the run, and its notified handlers do not run. With `force_handlers: true` on the play they run anyway, also when the play stops.
 
 ### Role Handlers
 
@@ -313,12 +312,12 @@ handlers:
 | Feature | Onigirazu | Ansible | Notes |
 |---------|-----------|---------|-------|
 | notify directive | Yes | Yes | Only on `changed` |
-| listen directive | Yes | Yes | Single string only |
+| listen directive | Yes | Yes | String or list |
 | Run once per flush | Yes | Yes | |
 | Handler ordering | Yes | Yes | Definition order |
 | meta: flush_handlers | Yes | Yes | |
 | Handlers notifying handlers | Yes | Yes | Up to 10 passes |
-| force_handlers | No | Yes | |
+| force_handlers | Yes | Yes | |
 
 ## Best Practices
 

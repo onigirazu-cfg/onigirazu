@@ -145,7 +145,7 @@ Task: Restart app      → web1, web2, web3
 Task: Add to LB        → localhost, once for web1, web2, web3
 ```
 
-All hosts leave the load balancer at the same time. For a one-host-at-a-time rollout set `serial: 1` on the play: the whole play then runs host by host, and a failed host stops the rollout.
+All hosts leave the load balancer at the same time. For a one-host-at-a-time rollout set `serial: 1` on the play: the whole play then runs host by host. Add `max_fail_percentage: 0` (or `any_errors_fatal: true`) so that a failed host stops the rollout.
 
 ## local_action
 

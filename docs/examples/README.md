@@ -297,7 +297,7 @@ plays:
 
 ### Rolling Update with Rollback
 
-Play-level `serial` runs the whole play on one batch of hosts after another (`serial: 1`, `"30%"` or `[1, 5, "20%"]`); a failed batch stops the play. `max_fail_percentage` is not applied. `serial: true` on a task runs that task one host at a time.
+Play-level `serial` runs the whole play on one batch of hosts after another (`serial: 1`, `"30%"` or `[1, 5, "20%"]`); a host whose task failed leaves the run. The play stops when every host of a batch failed, with `any_errors_fatal: true`, or when more than `max_fail_percentage` of a batch failed. `serial: true` on a task runs that task one host at a time.
 
 ```yaml
 # rolling-update.yml

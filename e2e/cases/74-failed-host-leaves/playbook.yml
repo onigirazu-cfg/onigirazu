@@ -1,0 +1,19 @@
+plays:
+  - name: a failed host leaves, the others go on
+    hosts: all
+    become: true
+    tasks:
+      - name: Fails on the first host
+        shell: |
+          if [ "{{ inventory_hostname }}" = "{{ groups['all'] | sort | first }}" ]; then
+            touch /root/onigirazu-e2e-leave-failed; exit 1
+          fi
+        changed_when: false
+      - name: Runs on the others
+        copy: {content: "went on\n", dest: /root/onigirazu-e2e-leave-after}
+  - name: the next play skips the failed host too
+    hosts: all
+    become: true
+    tasks:
+      - name: Next play
+        copy: {content: "next\n", dest: /root/onigirazu-e2e-leave-next}
