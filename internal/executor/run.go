@@ -40,7 +40,7 @@ func (e *CommandExecutor) Run(ctx context.Context, commandLine string) (RunResul
 	if client == nil {
 		return RunResult{}, fmt.Errorf("SSH client not available")
 	}
-	session, err := client.NewSession()
+	session, err := e.newSession(client)
 	if err != nil {
 		return RunResult{}, fmt.Errorf("failed to create SSH session: %w", err)
 	}

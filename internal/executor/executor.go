@@ -255,7 +255,7 @@ func (e *CommandExecutor) executeSSHWithContext(ctx context.Context, command str
 		return "", fmt.Errorf("SSH client not available")
 	}
 
-	session, err := client.NewSession()
+	session, err := e.newSession(client)
 	if err != nil {
 		return "", fmt.Errorf("failed to create SSH session: %w", err)
 	}
@@ -337,4 +337,19 @@ func (e *CommandExecutor) Close() error {
 // IsRemote returns true if this executor is for a remote host
 func (e *CommandExecutor) IsRemote() bool {
 	return e.sshClient != nil
+}
+
+// newSession opens a session on the pooled connection; a connection that
+// died while pooled is replaced once
+func (e *CommandExecutor) newSession(client *ssh.Client) (*ssh.Session, error) {
+	session, err := client.NewSession()
+	if err == nil || !e.usePool {
+		return session, err
+	}
+	fresh, rerr := sshpkg.GetGlobalPool().Reconnect(e.host)
+	if rerr != nil {
+		return nil, fmt.Errorf("%w (reconnect: %v)", err, rerr)
+	}
+	e.sshClient = fresh
+	return fresh.GetClient().NewSession()
 }
