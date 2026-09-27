@@ -87,7 +87,7 @@ func TestParseInlineInventory(t *testing.T) {
 			expectedCount:  1,
 			expectedErrors: false,
 			checkFunc: func(inv *types.Inventory) bool {
-				return inv.Hosts[0].Address == "host.example.com" && inv.Hosts[0].User == "root"
+				return inv.Hosts[0].Address == "host.example.com" && inv.Hosts[0].User == "" // SSH uses the local user
 			},
 		},
 		{
@@ -138,7 +138,7 @@ func TestParseInlineInventory(t *testing.T) {
 				return inv.Hosts[0].User == "ubuntu" &&
 					inv.Hosts[0].Port == 2222 &&
 					inv.Hosts[1].User == "root" &&
-					inv.Hosts[2].User == "root"
+					inv.Hosts[2].User == "" // SSH uses the local user
 			},
 		},
 		{

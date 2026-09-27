@@ -256,11 +256,7 @@ func (p *InventoryParser) parseSimpleHostLine(line string, lineNum int) *types.H
 		name = address
 	}
 
-	// Set default user if not specified
-	if user == "" {
-		user = "root"
-	}
-
+	// no user: SSH connects as the local user, as Ansible does
 	host := &types.Host{
 		Name:    name,
 		Address: address,
@@ -393,7 +389,6 @@ func (p *InventoryParser) parseAnsibleHost(hostName string, hostData interface{}
 		Name:    hostName,
 		Address: hostName,
 		Port:    22,
-		User:    "root",
 		Vars:    make(map[string]interface{}),
 	}
 

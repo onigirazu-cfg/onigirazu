@@ -107,8 +107,8 @@ environment=production
 
 ## Plain host list
 
-One `[user@]host[:port]` per line; `#` starts a comment. Hosts get port 22 and user
-`root` unless given and belong to the group `all`. A host with a user is named
+One `[user@]host[:port]` per line; `#` starts a comment. Hosts get port 22 and the local user
+unless given and belong to the group `all`. A host with a user is named
 `user@host`.
 
 ```
@@ -157,7 +157,7 @@ Existing Ansible inventory scripts work unchanged. As in Ansible, a host that is
 |----------|---------|---------|
 | `onigirazu_host` / `ansible_host` (`address` in JSON/TOML) | address to connect to | host name |
 | `onigirazu_port` / `ansible_port` (`port`) | SSH port | 22 |
-| `onigirazu_user` / `ansible_user` (`user`) | SSH user | `root` in plain lists and Ansible YAML, otherwise the local `$USER` |
+| `onigirazu_user` / `ansible_user` (`user`) | SSH user | the local `$USER`, as in Ansible |
 | `onigirazu_ssh_private_key_file` / `ansible_ssh_private_key_file` (`key_file`) | private key | — |
 | `onigirazu_password` / `ansible_password` (`password`) | SSH password | — |
 | any other key | host variable for templates | — |
