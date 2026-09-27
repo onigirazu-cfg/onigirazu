@@ -4,10 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"os/exec"
-
-	"golang.org/x/crypto/ssh"
 )
 
 // RunResult is what a command that ran left behind
@@ -36,29 +33,9 @@ func (e *CommandExecutor) Run(ctx context.Context, commandLine string) (RunResul
 		return RunResult{stdout.String(), stderr.String(), 0}, err
 	}
 
-	client := e.sshClient.GetClient()
-	if client == nil {
-		return RunResult{}, fmt.Errorf("SSH client not available")
-	}
-	session, err := e.newSession(client)
+	out, errOut, rc, err := e.exec(ctx, full, false)
 	if err != nil {
-		return RunResult{}, fmt.Errorf("failed to create SSH session: %w", err)
+		return RunResult{}, err
 	}
-	defer session.Close()
-	session.Stdout, session.Stderr = &stdout, &stderr
-
-	done := make(chan error, 1)
-	go func() { done <- session.Run(full) }()
-	select {
-	case err = <-done:
-	case <-ctx.Done():
-		_ = session.Signal(ssh.SIGTERM)
-		// the session may still be writing to the buffers: leave them
-		return RunResult{}, fmt.Errorf("command execution canceled: %w", ctx.Err())
-	}
-	var exitErr *ssh.ExitError
-	if errors.As(err, &exitErr) {
-		return RunResult{stdout.String(), stderr.String(), exitErr.ExitStatus()}, nil
-	}
-	return RunResult{stdout.String(), stderr.String(), 0}, err
+	return RunResult{string(out), string(errOut), rc}, nil
 }

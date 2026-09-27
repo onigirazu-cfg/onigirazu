@@ -1,6 +1,7 @@
 package ssh
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net"
@@ -29,6 +30,7 @@ type Client struct {
 	client *ssh.Client
 	host   types.Host
 	logger Logger
+	shells shellPool
 }
 
 // NewClient creates a new SSH client for the given host
@@ -139,18 +141,14 @@ func NewClientWithHostKeyManagerAndLogger(host types.Host, hostKeyManager *HostK
 
 // ExecuteCommand executes a command on the remote host
 func (c *Client) ExecuteCommand(command string) (string, error) {
-	session, err := c.client.NewSession()
+	out, _, rc, err := c.Exec(context.Background(), command, true)
 	if err != nil {
-		return "", fmt.Errorf("failed to create session: %v", err)
+		return string(out), fmt.Errorf("command failed: %w", err)
 	}
-	defer session.Close()
-
-	output, err := session.CombinedOutput(command)
-	if err != nil {
-		return string(output), fmt.Errorf("command failed: %w", err)
+	if rc != 0 {
+		return string(out), fmt.Errorf("command failed: %w", &ExitStatusError{Status: rc})
 	}
-
-	return string(output), nil
+	return string(out), nil
 }
 
 // GetClient returns the underlying SSH client
@@ -160,6 +158,7 @@ func (c *Client) GetClient() *ssh.Client {
 
 // Close closes the SSH connection
 func (c *Client) Close() error {
+	c.closeShells()
 	if c.client != nil {
 		return c.client.Close()
 	}

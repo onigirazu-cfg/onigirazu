@@ -2,13 +2,12 @@ package executor
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os/exec"
 	"sort"
 	"strings"
 	"time"
-
-	"golang.org/x/crypto/ssh"
 
 	sshpkg "github.com/onigirazu-cfg/onigirazu/internal/ssh"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
@@ -197,7 +196,11 @@ func (e *CommandExecutor) execute(command string, args ...string) (string, error
 
 	if e.sshClient != nil {
 		// Execute on remote host via SSH
-		return e.sshClient.ExecuteCommand(fullCommand)
+		out, err := e.executeSSHWithContext(context.Background(), fullCommand)
+		if err != nil {
+			return out, fmt.Errorf("command failed: %w", err)
+		}
+		return out, nil
 	} else if e.become || e.env != "" {
 		// A single string with spaces goes through sh -c
 		return e.executeLocal(fullCommand)
@@ -247,52 +250,32 @@ func (e *CommandExecutor) ExecuteWithTimeout(command string, timeout time.Durati
 	return e.ExecuteWithContext(ctx, command, args...)
 }
 
-// executeSSHWithContext executes SSH command with context cancellation support
+// executeSSHWithContext runs a command on the host; stderr comes with
+// stdout, and a non-zero exit is an error, as with CombinedOutput
 func (e *CommandExecutor) executeSSHWithContext(ctx context.Context, command string) (string, error) {
-	// Get the underlying SSH client
-	client := e.sshClient.GetClient()
-	if client == nil {
-		return "", fmt.Errorf("SSH client not available")
-	}
-
-	session, err := e.newSession(client)
+	out, _, rc, err := e.exec(ctx, command, true)
 	if err != nil {
-		return "", fmt.Errorf("failed to create SSH session: %w", err)
+		return string(out), err
 	}
-	defer session.Close()
-
-	// Структура для результата
-	type result struct {
-		output string
-		err    error
+	if rc != 0 {
+		return string(out), &sshpkg.ExitStatusError{Status: rc}
 	}
+	return string(out), nil
+}
 
-	resultChan := make(chan result, 1)
-
-	// Запускаем команду в горутине
-	go func() {
-		defer close(resultChan)
-
-		output, err := session.CombinedOutput(command)
-		select {
-		case resultChan <- result{string(output), err}:
-		case <-ctx.Done():
-			// Контекст отменен, пытаемся завершить сессию
-			// Ignore signal error as session may already be closed
-			_ = session.Signal(ssh.SIGTERM)
-		}
-	}()
-
-	// Ждем результат или отмену контекста
-	select {
-	case res := <-resultChan:
-		return res.output, res.err
-	case <-ctx.Done():
-		// Пытаемся корректно завершить сессию
-		// Ignore signal error as we're already in error state
-		_ = session.Signal(ssh.SIGTERM)
-		return "", fmt.Errorf("command execution canceled: %w", ctx.Err())
+// exec runs a command through the connection's shell; a command that never
+// reached a host whose connection died is sent again on a new connection
+func (e *CommandExecutor) exec(ctx context.Context, command string, combined bool) ([]byte, []byte, int, error) {
+	out, errOut, rc, err := e.sshClient.Exec(ctx, command, combined)
+	if err == nil || !e.usePool || !errors.Is(err, sshpkg.ErrNotSent) {
+		return out, errOut, rc, err
 	}
+	fresh, rerr := sshpkg.GetGlobalPool().Reconnect(e.host)
+	if rerr != nil {
+		return nil, nil, 0, fmt.Errorf("%w (reconnect: %v)", err, rerr)
+	}
+	e.sshClient = fresh
+	return fresh.Exec(ctx, command, combined)
 }
 
 // executeLocal executes a command locally
@@ -337,19 +320,4 @@ func (e *CommandExecutor) Close() error {
 // IsRemote returns true if this executor is for a remote host
 func (e *CommandExecutor) IsRemote() bool {
 	return e.sshClient != nil
-}
-
-// newSession opens a session on the pooled connection; a connection that
-// died while pooled is replaced once
-func (e *CommandExecutor) newSession(client *ssh.Client) (*ssh.Session, error) {
-	session, err := client.NewSession()
-	if err == nil || !e.usePool {
-		return session, err
-	}
-	fresh, rerr := sshpkg.GetGlobalPool().Reconnect(e.host)
-	if rerr != nil {
-		return nil, fmt.Errorf("%w (reconnect: %v)", err, rerr)
-	}
-	e.sshClient = fresh
-	return fresh.GetClient().NewSession()
 }
