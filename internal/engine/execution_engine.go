@@ -95,6 +95,13 @@ type ExecutionEngine struct {
 	failedHosts   map[string]bool
 	policy        failurePolicy
 	forceHandlers bool
+	// control pauses and stops the run between tasks (interactive mode)
+	control *RunControl
+}
+
+// SetRunControl lets the caller pause and stop the run between tasks
+func (e *ExecutionEngine) SetRunControl(c *RunControl) {
+	e.control = c
 }
 
 // becomeSettings is the privilege escalation a task runs with
@@ -727,6 +734,11 @@ func (e *ExecutionEngine) executeTaskList(ctx context.Context, tasks []types.Tas
 				e.logger.Debug("Skipping task '%s' before --start-at-task", task.Name)
 				continue
 			}
+		}
+
+		// paused: wait; stopped: the run ends here
+		if err := e.control.Checkpoint(ctx); err != nil {
+			return err
 		}
 
 		// hosts a task failed on have left the run
@@ -1860,6 +1872,11 @@ func (e *ExecutionEngine) executeTaskListWithRetry(ctx context.Context, tasks []
 				e.logger.Debug("Skipping task '%s' before --start-at-task", task.Name)
 				continue
 			}
+		}
+
+		// paused: wait; stopped: the run ends here
+		if err := e.control.Checkpoint(ctx); err != nil {
+			return err
 		}
 
 		// hosts a task failed on have left the run
