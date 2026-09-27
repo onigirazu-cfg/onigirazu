@@ -16,6 +16,7 @@ import (
 	"github.com/onigirazu-cfg/onigirazu/internal/logger"
 	"github.com/onigirazu-cfg/onigirazu/internal/modules"
 	"github.com/onigirazu-cfg/onigirazu/internal/parser"
+	"github.com/onigirazu-cfg/onigirazu/internal/security"
 	sshpkg "github.com/onigirazu-cfg/onigirazu/internal/ssh"
 	"github.com/onigirazu-cfg/onigirazu/internal/template"
 	"github.com/onigirazu-cfg/onigirazu/pkg/utils"
@@ -288,6 +289,14 @@ func runAdHocCommand(
 	// Initialize ad-hoc components
 	adhocParser := adhoc.NewParser()
 	adhocExecutor := adhoc.NewExecutor(moduleRegistry, inventoryMgr, log)
+	policy, policySource, err := security.LoadPolicy(securityPolicyPath)
+	if err != nil {
+		return err
+	}
+	adhocExecutor.SetSecurityPolicy(policy)
+	if policySource != "" {
+		log.Info("Security policy loaded from %s", policySource)
+	}
 	formatter := adhoc.NewFormatter(noColor)
 
 	// Parse command

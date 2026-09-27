@@ -1,0 +1,6 @@
+plays:
+  - name: the host is reachable
+    hosts: all
+    tasks:
+      - name: Ping
+        ping:
