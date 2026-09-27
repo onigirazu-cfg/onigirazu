@@ -1,6 +1,6 @@
 # Security Policy
 
-A security policy restricts what `onigirazu apply` may do. It lives on the control
+A security policy restricts what `onigirazu apply` (and `plan`, `drift`, `run`) may do. It lives on the control
 machine (where you run `onigirazu`). **Without a policy file nothing is restricted.**
 
 ## Where the policy comes from
@@ -13,7 +13,7 @@ The first match wins:
 4. `~/.onigirazu/security-policy.json`
 5. `/etc/onigirazu/security-policy.json`
 
-An explicitly given file (1, 2) must exist. `apply` logs which file was loaded.
+An explicitly given file (1, 2) must exist. `apply` and `run` log which file was loaded.
 
 ## Format
 
