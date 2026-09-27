@@ -136,6 +136,7 @@ func (m *Manager) GetHosts(pattern string) ([]types.Host, error) {
 
 	// Apply filters
 	filteredHosts := m.applyHostFilters(hosts)
+	m.sortHosts(filteredHosts)
 
 	m.logger.Debug("Found %d hosts matching pattern '%s'", len(filteredHosts), pattern)
 	return filteredHosts, nil
@@ -1078,4 +1079,29 @@ type GroupHierarchy struct {
 	Parents  []string
 	Children []string
 	Hosts    []string
+}
+
+// sortHosts puts hosts in inventory order (as Ansible runs them), hosts the
+// inventory lists only in groups after, by name; batches and the canary are
+// then the same on every run
+func (m *Manager) sortHosts(hosts []types.Host) {
+	order := make(map[string]int, len(m.inventory.Hosts))
+	for i, h := range m.inventory.Hosts {
+		if _, ok := order[h.Name]; !ok {
+			order[h.Name] = i
+		}
+	}
+	rank := func(name string) int {
+		if i, ok := order[name]; ok {
+			return i
+		}
+		return len(order)
+	}
+	sort.SliceStable(hosts, func(i, j int) bool {
+		ri, rj := rank(hosts[i].Name), rank(hosts[j].Name)
+		if ri != rj {
+			return ri < rj
+		}
+		return hosts[i].Name < hosts[j].Name
+	})
 }

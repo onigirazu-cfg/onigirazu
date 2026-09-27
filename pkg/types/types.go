@@ -717,8 +717,12 @@ type Play struct {
 	MaxFailPercentage *int                   `yaml:"max_fail_percentage,omitempty"`
 	AnyErrorsFatal    bool                   `yaml:"any_errors_fatal,omitempty"`
 	ForceHandlers     bool                   `yaml:"force_handlers,omitempty"`
-	IgnoreErrors      bool                   `yaml:"ignore_errors,omitempty"`
-	GatherFacts       bool                   `yaml:"gather_facts,omitempty"`
+	// HealthCheck runs after every batch on its hosts; OnUnhealthy is
+	// rollback (default with health checks), stop or continue
+	HealthCheck  []Task `yaml:"health_check,omitempty"`
+	OnUnhealthy  string `yaml:"on_unhealthy,omitempty"`
+	IgnoreErrors bool   `yaml:"ignore_errors,omitempty"`
+	GatherFacts  bool   `yaml:"gather_facts,omitempty"`
 	// Environment of every task of the play; a task's own environment wins
 	Environment map[string]interface{} `yaml:"environment,omitempty"`
 	Roles       []RoleReference        `yaml:"roles,omitempty"` // NEW: List of roles to execute
@@ -773,12 +777,14 @@ type TaskResult struct {
 	Changed  bool                   `json:"changed"`
 	Skipped  bool                   `json:"skipped"`
 	// Ignored: the task failed, but ignore_errors or a rescue section handled it
-	Ignored   bool                   `json:"ignored,omitempty"`
-	Output    map[string]interface{} `json:"output"`
-	Error     string                 `json:"error,omitempty"`
-	Notify    []string               `json:"notify,omitempty"`
-	Duration  time.Duration          `json:"duration_ms"` // Store as milliseconds for JSON compatibility
-	Timestamp time.Time              `json:"timestamp"`
+	Ignored bool `json:"ignored,omitempty"`
+	// RolledBack: a failed batch's rollback has undone this change
+	RolledBack bool                   `json:"rolled_back,omitempty"`
+	Output     map[string]interface{} `json:"output"`
+	Error      string                 `json:"error,omitempty"`
+	Notify     []string               `json:"notify,omitempty"`
+	Duration   time.Duration          `json:"duration_ms"` // Store as milliseconds for JSON compatibility
+	Timestamp  time.Time              `json:"timestamp"`
 }
 
 // MarshalJSON implements custom JSON marshaling for TaskResult
@@ -1051,6 +1057,28 @@ type PlaybookResult struct {
 	Variables    map[string]interface{} `json:"variables,omitempty"`
 	Stats        map[string]interface{} `json:"stats,omitempty"`
 	Error        string                 `json:"error,omitempty"`
+	// Rollout reports the batches of plays with health checks or rollback
+	Rollout []BatchReport `json:"rollout,omitempty"`
+	// RolledBack: a batch was unhealthy and its changes were undone
+	RolledBack bool `json:"rolled_back,omitempty"`
+}
+
+// BatchReport is how one batch of a rollout went
+type BatchReport struct {
+	Play           string   `json:"play"`
+	Batch          int      `json:"batch"`
+	Batches        int      `json:"batches"`
+	Hosts          []string `json:"hosts"`
+	Canary         bool     `json:"canary,omitempty"`
+	Healthy        bool     `json:"healthy"`
+	UnhealthyHosts []string `json:"unhealthy_hosts,omitempty"`
+	Reason         string   `json:"reason,omitempty"`
+	RolledBack     bool     `json:"rolled_back,omitempty"`
+	Undone         int      `json:"undone,omitempty"`
+	Irreversible   []string `json:"irreversible,omitempty"`
+	RollbackErrors []string `json:"rollback_errors,omitempty"`
+	// HealthyAfterRollback: the health checks pass again after the rollback
+	HealthyAfterRollback *bool `json:"healthy_after_rollback,omitempty"`
 }
 
 // MarshalJSON implements custom JSON marshaling for PlaybookResult

@@ -135,3 +135,6 @@ the task's `become`. The apply log names the snapshot of each run:
 
 Snapshots hold file contents; they are written with mode 0600 in your home
 directory. Tasks with `no_log: true` keep nothing.
+
+A rollout can also roll back by itself: see [SAFE_APPLY.md](SAFE_APPLY.md) (health checks after
+every batch, the unhealthy batch undone).
