@@ -22,6 +22,7 @@ type ConnectionWrapper struct {
 // ConnectionPool manages a pool of SSH connections
 type ConnectionPool struct {
 	connections map[string]*ConnectionWrapper
+	dialing     map[string]*sync.Mutex // one connect at a time per host
 	mutex       sync.RWMutex
 	maxIdle     time.Duration
 	maxLifetime time.Duration
@@ -80,6 +81,7 @@ func NewConnectionPoolWithHostKeyManagerAndLogger(config PoolConfig, hostKeyMgr 
 
 	pool := &ConnectionPool{
 		connections: make(map[string]*ConnectionWrapper),
+		dialing:     make(map[string]*sync.Mutex),
 		maxIdle:     config.MaxIdle,
 		maxLifetime: config.MaxLifetime,
 		cleanupTick: config.CleanupTick,
@@ -93,46 +95,75 @@ func NewConnectionPoolWithHostKeyManagerAndLogger(config PoolConfig, hostKeyMgr 
 	return pool
 }
 
-// GetConnection gets or creates a connection for the given host
+// GetConnection gets or creates a connection for the given host. The pool
+// lock covers only the map: connecting (a few round trips) happens under a
+// lock of that host alone, so hosts connect in parallel. A pooled connection
+// is not probed on every use; a dead one is replaced when opening a session
+// on it fails (Reconnect).
 func (p *ConnectionPool) GetConnection(host types.Host) (*Client, error) {
 	key := p.getConnectionKey(host)
-
-	p.mutex.Lock()
-	defer p.mutex.Unlock()
-
-	// Check if we have an existing connection
-	if wrapper, exists := p.connections[key]; exists {
-		// Check if connection is still valid
-		if p.isConnectionValid(wrapper) {
-			wrapper.lastUsed = time.Now()
-			wrapper.inUse = true
-			wrapper.usageCount++
-			return wrapper.client, nil
-		}
-
-		// Connection is invalid, close and remove it
-		_ = wrapper.client.Close() // Ignore close error, connection is already invalid
-		delete(p.connections, key)
+	if client := p.pooled(key); client != nil {
+		return client, nil
 	}
 
-	// Create new connection
+	p.mutex.Lock()
+	dial, ok := p.dialing[key]
+	if !ok {
+		dial = &sync.Mutex{}
+		p.dialing[key] = dial
+	}
+	p.mutex.Unlock()
+
+	dial.Lock()
+	defer dial.Unlock()
+	// another caller may have connected while this one waited
+	if client := p.pooled(key); client != nil {
+		return client, nil
+	}
+
 	client, err := NewClientWithHostKeyManagerAndLogger(host, p.hostKeyMgr, p.logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create SSH connection: %w", err)
 	}
-
-	// Store in pool
-	wrapper := &ConnectionWrapper{
-		client:     client,
-		lastUsed:   time.Now(),
-		inUse:      true,
-		host:       host,
-		createdAt:  time.Now(),
-		usageCount: 1,
+	now := time.Now()
+	p.mutex.Lock()
+	p.connections[key] = &ConnectionWrapper{
+		client: client, lastUsed: now, inUse: true, host: host, createdAt: now, usageCount: 1,
 	}
-	p.connections[key] = wrapper
-
+	p.mutex.Unlock()
 	return client, nil
+}
+
+// pooled returns the pooled connection of key when it is still usable
+func (p *ConnectionPool) pooled(key string) *Client {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+	wrapper, exists := p.connections[key]
+	if !exists {
+		return nil
+	}
+	if p.isConnectionValid(wrapper) {
+		wrapper.lastUsed = time.Now()
+		wrapper.inUse = true
+		wrapper.usageCount++
+		return wrapper.client
+	}
+	go func(c *Client) { _ = c.Close() }(wrapper.client) // closing may wait on the network
+	delete(p.connections, key)
+	return nil
+}
+
+// Reconnect drops the pooled connection of the host (it failed) and makes a
+// new one
+func (p *ConnectionPool) Reconnect(host types.Host) (*Client, error) {
+	key := p.getConnectionKey(host)
+	p.mutex.Lock()
+	if wrapper, ok := p.connections[key]; ok {
+		go func(c *Client) { _ = c.Close() }(wrapper.client)
+		delete(p.connections, key)
+	}
+	p.mutex.Unlock()
+	return p.GetConnection(host)
 }
 
 // ReleaseConnection marks a connection as no longer in use
@@ -237,14 +268,9 @@ func (p *ConnectionPool) isConnectionValid(wrapper *ConnectionWrapper) bool {
 		return false
 	}
 
-	// Perform actual health check on the connection
-	// Use a 5-second timeout for health checks
-	if wrapper.client != nil && !wrapper.client.IsAlive() {
-		p.logger.Debug("Connection health check failed for host %s", wrapper.host.Address)
-		return false
-	}
-
-	return true
+	// a dead connection is found when a session cannot be opened on it
+	// (executor Reconnect); probing here cost a round trip per command
+	return wrapper.client == nil || wrapper.client.GetClient() != nil
 }
 
 // cleanupLoop periodically cleans up stale connections
