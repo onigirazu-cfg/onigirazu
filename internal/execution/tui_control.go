@@ -96,6 +96,8 @@ func (m *EnhancedTUIModel) confirm() tea.Cmd {
 
 // recordResult keeps a finished task for the results browser
 func (m *EnhancedTUIModel) recordResult(r types.TaskResult) {
+	// the task started its duration before its result arrived
+	r.Timestamp = time.Now().Add(-r.Duration)
 	m.results = append(m.results, r)
 	if len(m.results) > m.maxLogs {
 		m.results = append([]types.TaskResult(nil), m.results[len(m.results)-m.maxLogs:]...)

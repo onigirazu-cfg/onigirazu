@@ -116,8 +116,10 @@ type EnhancedTUIModel struct {
 	resultsCursor int
 	failedOnly    bool
 	detailOffset  int
-	closeOnce     sync.Once
-	readyOnce     sync.Once
+	// timelineCursor is the host selected in the timeline
+	timelineCursor int
+	closeOnce      sync.Once
+	readyOnce      sync.Once
 }
 
 // DetailedTaskStats extends basic TaskStats with more info
@@ -398,6 +400,12 @@ func (m *EnhancedTUIModel) View() string {
 	if m.activeModal == "detail" {
 		return m.renderDetailModal()
 	}
+	if m.activeModal == "timeline" {
+		return m.renderTimelineModal()
+	}
+	if m.activeModal == "hosttimeline" {
+		return m.renderHostTimelineModal()
+	}
 
 	// Render main dashboard
 	return m.renderDashboard()
@@ -674,7 +682,7 @@ func (m *EnhancedTUIModel) renderFooter() string {
 		Foreground(lipgloss.Color("8")).
 		Padding(0, 1)
 
-	hints := []string{"H: Help", "R: Results", "F: Filter", "/: Search", "V/D/N: Detail"}
+	hints := []string{"H: Help", "R: Results", "L: Timeline", "F: Filter", "/: Search", "V/D/N: Detail"}
 	if m.running() {
 		hints = append(hints, "P: Pause", "G: Stop")
 	}
@@ -707,33 +715,23 @@ func (m *EnhancedTUIModel) renderFooter() string {
 // renderHelpModal renders the help modal overlay
 func (m *EnhancedTUIModel) renderHelpModal() string {
 	// Create modal content
-	var helpLines []string
-	helpLines = append(helpLines, "")
-	helpLines = append(helpLines, "  KEYBOARD SHORTCUTS")
-	helpLines = append(helpLines, "  ──────────────────")
-	helpLines = append(helpLines, "")
-	helpLines = append(helpLines, "  RUN:")
-	helpLines = append(helpLines, "    P - Pause / resume (running tasks finish first)")
-	helpLines = append(helpLines, "    G - Stop gracefully (no new task starts)")
-	helpLines = append(helpLines, "    Q, Ctrl+C - Close (asks to stop a run in progress)")
-	helpLines = append(helpLines, "")
-	helpLines = append(helpLines, "  VIEW:")
-	helpLines = append(helpLines, "    R - Task results; Enter shows one (output, error)")
-	helpLines = append(helpLines, "    S - Statistics      H - This help")
-	helpLines = append(helpLines, "    ↑↓ / j k - Scroll   PgUp PgDn - Page   Home End")
-	helpLines = append(helpLines, "")
-	helpLines = append(helpLines, "  DETAIL:")
-	helpLines = append(helpLines, "    N - Normal: task results, warnings, errors")
-	helpLines = append(helpLines, "    V - Verbose: + task output and every log line")
-	helpLines = append(helpLines, "    D - Debug: + debug lines")
-	helpLines = append(helpLines, "")
-	helpLines = append(helpLines, "  FILTER:")
-	helpLines = append(helpLines, "    F - Filter mode: E errors, W warnings, T tasks, C clear")
-	helpLines = append(helpLines, "    / - Search (Enter keeps it, Esc leaves)")
-	helpLines = append(helpLines, "")
-
+	helpLines := []string{
+		"  KEYBOARD SHORTCUTS",
+		"  RUN   P pause/resume · G stop gracefully · Q, Ctrl+C close",
+		"        (during a run Q asks, and Y stops the run)",
+		"",
+		"  VIEW  R task results, Enter details (output, error, diff)",
+		"        L timeline per host, Enter its tasks over time",
+		"        S statistics · H this help",
+		"        ↑↓ j k scroll · PgUp PgDn page · Home End",
+		"",
+		"  LOG   N results and errors · V + task output and log lines",
+		"        D + debug lines",
+		"        F filter: E errors, W warnings, T tasks, C clear",
+		"        / search (Enter keeps it, Esc leaves)",
+	}
 	// Pad to minimum height
-	for len(helpLines) < 15 {
+	for len(helpLines) < 13 {
 		helpLines = append(helpLines, "")
 	}
 
@@ -744,7 +742,7 @@ func (m *EnhancedTUIModel) renderHelpModal() string {
 		BorderForeground(lipgloss.Color("51")).
 		Background(lipgloss.Color("16")).
 		Foreground(lipgloss.Color("15")).
-		Width(62).
+		Width(66).
 		Height(len(helpLines)+2).
 		Padding(0, 1)
 
@@ -1302,6 +1300,11 @@ func (m *EnhancedTUIModel) handleKeypress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.markClosed()
 		return m, tea.Quit
 
+	case "l":
+		m.mutex.Lock()
+		m.activeModal = "timeline"
+		m.mutex.Unlock()
+
 	case "r":
 		m.mutex.Lock()
 		m.activeModal = "results"
@@ -1471,6 +1474,10 @@ func (m *EnhancedTUIModel) handleModalKeypress(msg tea.KeyMsg) (tea.Model, tea.C
 		m.handleResultsKeypress(key)
 	case "detail":
 		m.handleDetailKeypress(key)
+	case "timeline":
+		m.handleTimelineKeypress(key)
+	case "hosttimeline":
+		m.handleHostTimelineKeypress(key)
 	default: // help, stats
 		switch key {
 		case "esc", "q", "h", "s", "ctrl+c":
