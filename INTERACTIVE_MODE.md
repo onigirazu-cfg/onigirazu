@@ -2,135 +2,69 @@
 
 ## Overview
 
-`apply --interactive` shows a terminal dashboard while the playbook runs: a live log view, a statistics panel and keyboard shortcuts for display modes, filtering and search. It needs an interactive terminal (TTY); do not use it in CI.
+`apply --interactive` (or `interactive_mode: true` in the config) shows a terminal dashboard
+while the playbook runs: a live log, statistics with a host list, a browser for task results,
+and keys to pause or stop the run. It needs a terminal: without one (CI, a pipe, `-o json`)
+`apply` says so and runs with its normal output.
 
-## Quick Start
-
-```bash
-# Basic usage
-onigirazu apply playbook.yaml -i inventory.yaml --interactive
-
-# With tags
-onigirazu apply site.yaml -i inventory.yaml --tags web,app --interactive
-```
-
-When the run finishes, the dashboard stays open until you press **Q**. The end-of-run summary that `apply` normally prints is not shown in interactive mode.
-
-## Keyboard Controls
-
-Keys are case-insensitive.
-
-### Display Modes
-
-| Key | Action |
-|-----|--------|
-| **V** | Toggle VERBOSE (back to NORMAL when pressed again) |
-| **D** | Toggle DEBUG: also show debug events (back to NORMAL when pressed again) |
-| **N** | Back to NORMAL |
-
-Debug events are shown only in DEBUG mode. VERBOSE currently shows the same events as NORMAL.
-
-### Navigation
-
-| Key | Action |
-|-----|--------|
-| **↑** / **↓** | Scroll the log one line |
-| **Page Up** / **Page Down** | Scroll the log half a screen |
-
-### Filtering and Search
-
-| Key | Action |
-|-----|--------|
-| **F** | Toggle filter mode |
-| **E** / **W** / **T** | In filter mode: cycle the error / warning / task filters |
-| **/** | Start a search; type the text, **Enter** to finish, **Backspace** to delete |
-| **C** | In filter or search mode: clear filters |
-
-### Information
-
-| Key | Action |
-|-----|--------|
-| **S** | Toggle the statistics overlay (speed, fastest and slowest tasks, tasks by duration) |
-| **H** | Toggle the help overlay |
-
-In an overlay, press the same key again or **Q** to close it.
-
-### Execution Control
-
-| Key | Action |
-|-----|--------|
-| **Q** / **Ctrl+C** | Close the dashboard. The run is not interrupted; it continues without a display. |
-| **P** | Pause/resume the elapsed-time counter in the dashboard |
-| **G** | Ask "Stop execution gracefully?" (**Y** / **N**) |
-
-**Current limitation**: **P** does not pause the run, and confirming **G** marks the dashboard as "stopping" but does not stop the run. To stop a run, close the dashboard with **Q** and interrupt the process (Ctrl+C in the terminal, or send SIGINT/SIGTERM).
-
-## Practical Examples
-
-### Monitoring a deployment
+When the dashboard closes, the usual end-of-run summary is printed.
 
 ```bash
-onigirazu apply deploy-app.yaml -i prod-inventory.yaml --interactive
-# S - check progress and timings
-# D - show debug events if something looks wrong
-# F then E - show only errors
+onigirazu apply site.yml -i inventory.yml --interactive
+onigirazu apply site.yml -i inventory.yml --tags web --check --interactive
 ```
 
-### Finding a failure
+## The screen
 
-```bash
-onigirazu apply problematic-playbook.yaml -i inventory.yaml --interactive
-# / - search for the host or task name, Enter to keep the filter
-# ↑ / Page Up - scroll back to earlier output
-# C - clear the search
-```
+- **Header**: playbook, status (INITIALIZING, RUNNING, PAUSED, STOPPING, COMPLETED, FAILED,
+  STOPPED), detail level, elapsed time, and task counts.
+- **Log** (left): one line per finished task and host (`✓ web1: Install nginx [changed]`),
+  warnings and errors. More detail with **V** / **D**.
+- **Statistics** (right): play and task progress, speed, the task running now, and every host
+  with its ok / changed / failed counts; hosts that failed (they have left the run) come first,
+  in red.
 
-## Combining with Other Flags
+## Keys
 
-```bash
-# Tags
-onigirazu apply playbook.yaml -i inventory.yaml --tags web,app --interactive
+Keys are case-insensitive. **H** shows them all.
 
-# Check mode
-onigirazu apply playbook.yaml -i inventory.yaml --check --interactive
+### Run
 
-# Limit hosts
-onigirazu apply playbook.yaml -i inventory.yaml --limit webservers --interactive
+| Key | Action |
+|-----|--------|
+| **P** | Pause / resume. Tasks already running finish; the next task waits. |
+| **G** | Stop gracefully (asks first): running tasks finish, no new task starts. The dashboard stays open. |
+| **Q**, **Ctrl+C** | Close. While the run goes on it asks first, and **Y** stops the run and closes. A second **Ctrl+C** at the question does the same. After the run, **Q** closes at once. |
 
-# Config file
-onigirazu apply playbook.yaml -i inventory.yaml -c config.yaml --interactive
-```
+A stopped run ends with a non-zero exit code and "run stopped by user"; state, audit and the
+rollback snapshot are saved as for any run.
 
-## How It Works
+### Results
 
-The execution engine sends task and log events to the dashboard (a Bubble Tea program), which redraws on each event and on a 500 ms timer. Logs are written into the dashboard instead of the terminal.
+| Key | Action |
+|-----|--------|
+| **R** | Task results, newest last: host, task, status |
+| **↑** / **↓**, **PgUp** / **PgDn**, **Home** / **End** | Move |
+| **Enter** | Everything about one result: module, duration, error, message, stdout, stderr, ... |
+| **F** | Failed results only (toggle) |
+| **Esc** | Back |
+
+### Log
+
+| Key | Action |
+|-----|--------|
+| **N** | Normal: task results, warnings, errors |
+| **V** | Verbose: also the task's message and first output lines, tasks as they start, every log line |
+| **D** | Debug: also debug lines |
+| **↑** / **↓** (**k** / **j**), **PgUp** / **PgDn**, **Home** / **End** | Scroll; new lines keep coming at the bottom, **End** follows them again |
+| **F** | Filter mode: **E** errors, **W** warnings, **T** tasks, **C** clear |
+| **/** | Search: type, **Enter** keeps the filter, **Esc** leaves |
+| **S** | Statistics overlay: speed, fastest and slowest tasks |
 
 ## Troubleshooting
 
-### Dashboard seems frozen
-
-1. Press **S** to see whether tasks are still completing.
-2. A task may be waiting (for example `pause`, `wait_for` or a slow command).
-3. To stop the run, press **Q** and then Ctrl+C.
-
-### Cannot see all output
-
-1. Scroll with ↑/↓ and Page Up/Page Down.
-2. Clear filters with **C** (in filter or search mode).
-3. Enlarge the terminal window.
-
-### Dashboard stays open after the run
-
-This is expected: press **Q** to exit.
-
-## Best Practices
-
-- Use `--interactive` for runs you watch; use plain output or `--output json` for CI and logs.
-- Use **F**/**/** to narrow the log instead of scrolling.
-- Do not rely on **G** or **P** to control the run.
-
-## Getting Help
-
-- `onigirazu apply --help` for command line options
-- **H** in the dashboard for keyboard shortcuts
-- Bug reports: include `onigirazu version`, your terminal (`echo $TERM`) and steps to reproduce
+- **Every command starts about 5 seconds late**: the terminal does not answer the colour query
+  the terminal library sends at start. Use another terminal, or `TERM=dumb` for such a session.
+- **"Interactive mode needs a terminal"**: stdin or stderr is not a terminal, or `-o json|yaml`
+  is set; the run goes on with the normal output.
+- **"Terminal too small"**: the dashboard needs at least 80x24.

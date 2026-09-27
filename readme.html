@@ -225,22 +225,12 @@ plays:
 <ul>
 <li><strong><a href="docs/examples/README.md">Playbook Format Guide</a></strong> - Real playbook examples and patterns</li>
 </ul>
-<h2>🖥️ Interactive Mode (v1.54.0+)</h2>
-<p>Interactive Mode provides a beautiful, responsive terminal UI dashboard for real-time execution monitoring. Perfect for long-running playbooks, debugging, and interactive control.</p>
-<h3>Enable Interactive Mode</h3>
-<p>Simply add the <code>--interactive</code> flag to any playbook execution:</p>
+<h2>🖥️ Interactive Mode</h2>
+<p><code>--interactive</code> shows a terminal dashboard while the playbook runs: a live log, progress and
+statistics with every host's ok / changed / failed counts, and a browser for task results.</p>
 <pre class="codehilite"><code class="language-bash">onigirazu apply playbook.yaml -i inventory.yaml --interactive
 </code></pre>
 
-<h3>Features</h3>
-<ul>
-<li><strong>📊 Live Log Dashboard</strong>: Real-time log streaming with automatic scrolling</li>
-<li><strong>🔄 Multi-Mode Display</strong>: Switch between NORMAL, VERBOSE, and DEBUG modes</li>
-<li><strong>📈 Execution Statistics</strong>: Track progress with task counts and timing</li>
-<li><strong>⌨️ Keyboard Control</strong>: Responsive interactive controls</li>
-<li><strong>🎯 Graceful Shutdown</strong>: Stop execution cleanly with proper cleanup</li>
-</ul>
-<h3>Keyboard Controls</h3>
 <table>
 <thead>
 <tr>
@@ -250,82 +240,41 @@ plays:
 </thead>
 <tbody>
 <tr>
-<td><strong>V</strong></td>
-<td>Toggle VERBOSE mode (show more details)</td>
-</tr>
-<tr>
-<td><strong>D</strong></td>
-<td>Toggle DEBUG mode (show debug information)</td>
-</tr>
-<tr>
-<td><strong>N</strong></td>
-<td>Switch to NORMAL mode (less verbose)</td>
-</tr>
-<tr>
-<td><strong>S</strong></td>
-<td>Show execution statistics</td>
-</tr>
-<tr>
-<td><strong>H</strong></td>
-<td>Display help overlay</td>
-</tr>
-<tr>
-<td><strong>↑/↓</strong></td>
-<td>Scroll logs up/down</td>
-</tr>
-<tr>
-<td><strong>Page Up/Down</strong></td>
-<td>Page scroll logs</td>
+<td><strong>P</strong></td>
+<td>Pause / resume the run (running tasks finish first)</td>
 </tr>
 <tr>
 <td><strong>G</strong></td>
-<td>Graceful stop (clean shutdown)</td>
+<td>Stop gracefully: no new task starts</td>
 </tr>
 <tr>
-<td><strong>Q</strong></td>
-<td>Quit TUI (without stopping execution)</td>
+<td><strong>R</strong></td>
+<td>Task results; <strong>Enter</strong> shows one (error, message, stdout, stderr)</td>
 </tr>
 <tr>
-<td><strong>Ctrl+C</strong></td>
-<td>Force quit (emergency exit)</td>
+<td><strong>N</strong> / <strong>V</strong> / <strong>D</strong></td>
+<td>Detail: results and errors / + task output and log lines / + debug</td>
+</tr>
+<tr>
+<td><strong>↑↓</strong>, <strong>PgUp/PgDn</strong>, <strong>Home/End</strong></td>
+<td>Scroll the log</td>
+</tr>
+<tr>
+<td><strong>F</strong>, <strong>/</strong></td>
+<td>Filter (errors, warnings, tasks), search</td>
+</tr>
+<tr>
+<td><strong>S</strong>, <strong>H</strong></td>
+<td>Statistics, help</td>
+</tr>
+<tr>
+<td><strong>Q</strong>, <strong>Ctrl+C</strong></td>
+<td>Close; during the run it asks, and <strong>Y</strong> stops the run</td>
 </tr>
 </tbody>
 </table>
-<h3>Example Workflow</h3>
-<pre class="codehilite"><code class="language-bash"># 1. Start your playbook with interactive mode
-onigirazu apply deployment.yaml -i &quot;ubuntu@server1&quot; --interactive
-
-# 2. Watch the live dashboard
-# 3. Press V to see verbose logs if you want more detail
-# 4. Press S to check progress statistics
-# 5. Press G to gracefully stop if needed
-# 6. Press Q to exit TUI when done
-</code></pre>
-
-<h3>Display Modes</h3>
-<table>
-<thead>
-<tr>
-<th>Mode</th>
-<th>What You See</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>NORMAL</strong></td>
-<td>Standard task output and errors only</td>
-</tr>
-<tr>
-<td><strong>VERBOSE</strong></td>
-<td>Detailed output with variable values and timestamps</td>
-</tr>
-<tr>
-<td><strong>DEBUG</strong></td>
-<td>Complete debug information for troubleshooting</td>
-</tr>
-</tbody>
-</table>
-<p>All modes show real-time updates as tasks execute. The dashboard automatically updates at 30 FPS for smooth performance.</p>
+<p>When the dashboard closes, the usual summary is printed. Without a terminal <code>apply</code> runs with
+its normal output.</p>
 <p>📖 <strong>For detailed interactive mode guide, see <a href="docs/INTERACTIVE_MODE.md">docs/INTERACTIVE_MODE.md</a></strong></p>
 <h2>Playbook Format</h2>
 <p>Onigirazu uses a clean YAML format for playbooks. Here's the structure:</p>
