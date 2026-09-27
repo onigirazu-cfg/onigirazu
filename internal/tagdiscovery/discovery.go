@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/onigirazu-cfg/onigirazu/internal/taskpreview"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
@@ -51,29 +52,13 @@ func DiscoverTags(playbook *types.Playbook) (*ListTagsResult, error) {
 	neverCount := 0
 	totalTaskCount := 0
 
-	// Process all plays
-	for _, play := range playbook.Plays {
-		// Process regular tasks
-		for _, task := range play.Tasks {
+	// Every task as it runs, with the tags it inherits (play, roles: entry,
+	// blocks); handlers are not filtered by tags and are left out
+	for i := range playbook.Plays {
+		for _, flat := range taskpreview.Flatten(&playbook.Plays[i]) {
 			totalTaskCount++
-			result.processTaskTags(&task, allTags, &alwaysCount, &neverCount, &taggedTaskCount)
-		}
-
-		// Process pre-tasks
-		for _, task := range play.PreTasks {
-			totalTaskCount++
-			result.processTaskTags(&task, allTags, &alwaysCount, &neverCount, &taggedTaskCount)
-		}
-
-		// Process post-tasks
-		for _, task := range play.PostTasks {
-			totalTaskCount++
-			result.processTaskTags(&task, allTags, &alwaysCount, &neverCount, &taggedTaskCount)
-		}
-
-		// Process handlers
-		for _, task := range play.Handlers {
-			totalTaskCount++
+			task := *flat.Task
+			task.Tags = uniqueTags(flat.Tags)
 			result.processTaskTags(&task, allTags, &alwaysCount, &neverCount, &taggedTaskCount)
 		}
 	}
@@ -164,4 +149,16 @@ func (r *ListTagsResult) GetSortedSpecialTags() []*TagInfo {
 	})
 
 	return tags
+}
+
+func uniqueTags(tags []string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, t := range tags {
+		if !seen[t] {
+			seen[t] = true
+			out = append(out, t)
+		}
+	}
+	return out
 }
