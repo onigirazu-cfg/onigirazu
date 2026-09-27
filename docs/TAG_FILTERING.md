@@ -219,7 +219,7 @@ onigirazu apply playbook.yml --list-tags
 onigirazu apply playbook.yml --list-tasks --tags setup --skip-tags debug
 ```
 
-**Current limitation**: `--list-tags` and `--list-tasks` do not look inside roles or blocks, list handlers as tasks, and `--list-tasks` does not apply all execution rules (see [List Tags and Tasks Guide](LIST_TAGS_TASKS_GUIDE.md)). Use `plan` for an exact preview.
+`--list-tags` and `--list-tasks` list tasks with their inherited tags and decide with the same filter as execution (see [List Tags and Tasks Guide](LIST_TAGS_TASKS_GUIDE.md)). `plan` gives an exact per-host preview.
 
 ## Commands Supporting Tag Filtering
 

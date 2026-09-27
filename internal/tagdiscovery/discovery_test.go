@@ -204,14 +204,14 @@ func TestDiscoverTags_AllTaskTypes(t *testing.T) {
 		t.Fatalf("Unexpected error: %v", err)
 	}
 
-	// Total tasks: 1 pre + 1 main + 1 post + 1 handler = 4
-	if result.Summary.TotalTasks != 4 {
-		t.Errorf("Expected 4 total tasks, got %d", result.Summary.TotalTasks)
+	// Total tasks: 1 pre + 1 main + 1 post; handlers are not filtered by tags
+	if result.Summary.TotalTasks != 3 {
+		t.Errorf("Expected 3 total tasks, got %d", result.Summary.TotalTasks)
 	}
 
-	// Should have 3 unique tags: setup (appears twice), cleanup, notify
-	if result.Summary.UniqueTags != 3 {
-		t.Errorf("Expected 3 unique tags, got %d", result.Summary.UniqueTags)
+	// 2 unique tags: setup (twice), cleanup
+	if result.Summary.UniqueTags != 2 {
+		t.Errorf("Expected 2 unique tags, got %d", result.Summary.UniqueTags)
 	}
 }
 
@@ -270,18 +270,9 @@ func TestDiscoverTags_GetSortedTags(t *testing.T) {
 				Name:  "Test Play",
 				Hosts: "localhost",
 				Tasks: []types.Task{
-					{
-						Name: "Task 1",
-						Tags: []string{"setup", "setup", "setup"},
-					},
-					{
-						Name: "Task 2",
-						Tags: []string{"deploy", "deploy"},
-					},
-					{
-						Name: "Task 3",
-						Tags: []string{"test"},
-					},
+					{Name: "Task 1", Tags: []string{"setup", "deploy"}},
+					{Name: "Task 2", Tags: []string{"setup", "deploy"}},
+					{Name: "Task 3", Tags: []string{"setup", "test"}},
 				},
 			},
 		},

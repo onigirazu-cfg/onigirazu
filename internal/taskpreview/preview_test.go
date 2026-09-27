@@ -368,3 +368,47 @@ func TestPlayPreview_Summary(t *testing.T) {
 		t.Errorf("Expected play summary skipped 1, got %d", play.Summary.Skipped)
 	}
 }
+
+func TestPreviewInheritsPlayRoleAndBlockTags(t *testing.T) {
+	play := types.Play{
+		Name:        "p",
+		Hosts:       "all",
+		Tags:        []string{"web"},
+		Roles:       []types.RoleReference{{Name: "db", Tags: []string{"database"}}},
+		RoleObjects: []*types.Role{{Name: "db", Tasks: []types.Task{{Name: "db task"}}}},
+		Tasks: []types.Task{
+			{Name: "block", Tags: []string{"setup"}, Block: []types.Task{{Name: "inner"}}},
+			{Name: "plain"},
+		},
+		Handlers: []types.Task{{Name: "handler"}},
+	}
+	pb := &types.Playbook{Plays: []types.Play{play}}
+
+	res, err := PreviewTasks(pb, "SETUP", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, task := range res.Plays[0].Tasks {
+		if task.Status == StatusExecute {
+			names = append(names, task.Name)
+		}
+	}
+	// the block's inner task inherits setup (case-insensitive, as the engine);
+	// the block itself and the handler are not listed
+	if len(names) != 1 || names[0] != "inner" {
+		t.Fatalf("expected [inner], got %v", names)
+	}
+	if res.GlobalSummary.TotalTasks != 3 {
+		t.Fatalf("expected 3 tasks (role, inner, plain), got %d", res.GlobalSummary.TotalTasks)
+	}
+
+	res, _ = PreviewTasks(pb, "database", "")
+	if res.GlobalSummary.WouldExecute != 1 || res.Plays[0].Tasks[0].Name != "db : db task" {
+		t.Fatalf("expected only the role task, got %+v", res.Plays[0].Tasks)
+	}
+	res, _ = PreviewTasks(pb, "", "web")
+	if res.GlobalSummary.WouldExecute != 0 {
+		t.Fatalf("--skip-tags web skips the whole play, got %d", res.GlobalSummary.WouldExecute)
+	}
+}

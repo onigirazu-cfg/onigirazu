@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/onigirazu-cfg/onigirazu/internal/tagfilter"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
@@ -73,9 +74,13 @@ func PreviewTasks(playbook *types.Playbook, tags, skipTags string) (*PreviewResu
 		return nil, fmt.Errorf("playbook cannot be nil")
 	}
 
-	// Parse tag filters
+	// Parse tag filters; the engine's filter decides, as in apply
 	tagList := parseTags(tags)
 	skipTagList := parseTags(skipTags)
+	filter, err := tagfilter.New(tags, skipTags)
+	if err != nil {
+		return nil, err
+	}
 
 	result := &PreviewResult{
 		Tags:     tagList,
@@ -97,35 +102,22 @@ func PreviewTasks(playbook *types.Playbook, tags, skipTags string) (*PreviewResu
 			},
 		}
 
-		// Combine all task types
-		allTasks := []struct {
-			tasks   []types.Task
-			typeStr string
-		}{
-			{play.PreTasks, "pre_task"},
-			{play.Tasks, "task"},
-			{play.PostTasks, "post_task"},
-			{play.Handlers, "handler"},
-		}
+		for taskIdx, flat := range Flatten(&play) {
+			preview := previewTask(flat, playIdx, play.Name, taskIdx, filter, skipTagList)
+			playPreview.Tasks = append(playPreview.Tasks, preview)
 
-		for _, taskGroup := range allTasks {
-			for taskIdx, task := range taskGroup.tasks {
-				preview := previewTask(&task, playIdx, play.Name, taskIdx, taskGroup.typeStr, tagList, skipTagList)
-				playPreview.Tasks = append(playPreview.Tasks, preview)
+			playPreview.Summary.Total++
+			result.GlobalSummary.TotalTasks++
 
-				playPreview.Summary.Total++
-				result.GlobalSummary.TotalTasks++
-
-				if preview.Status == StatusExecute || preview.Status == StatusUnconditional {
-					playPreview.Summary.Would++
-					result.GlobalSummary.WouldExecute++
-				} else {
-					playPreview.Summary.Skipped++
-					result.GlobalSummary.Skipped++
-					reason := getSkipReason(preview.Status)
-					playPreview.Summary.SkipInfo[reason]++
-					result.GlobalSummary.SkipDetails[reason]++
-				}
+			if preview.Status == StatusExecute || preview.Status == StatusUnconditional {
+				playPreview.Summary.Would++
+				result.GlobalSummary.WouldExecute++
+			} else {
+				playPreview.Summary.Skipped++
+				result.GlobalSummary.Skipped++
+				reason := getSkipReason(preview.Status)
+				playPreview.Summary.SkipInfo[reason]++
+				result.GlobalSummary.SkipDetails[reason]++
 			}
 		}
 
@@ -135,88 +127,55 @@ func PreviewTasks(playbook *types.Playbook, tags, skipTags string) (*PreviewResu
 	return result, nil
 }
 
-// previewTask determines if a task would execute
-func previewTask(task *types.Task, playIdx int, playName string, taskIdx int, taskType string, tags, skipTags []string) TaskPreview {
+// previewTask determines if a task would execute, with the tag filter the
+// engine uses
+func previewTask(flat FlatTask, playIdx int, playName string, taskIdx int, filter *tagfilter.Filter, skipTags []string) TaskPreview {
+	task := flat.Task
+	name := task.Name
+	if flat.Role != "" {
+		name = flat.Role + " : " + name
+	}
 	preview := TaskPreview{
-		Name:         task.Name,
+		Name:         name,
 		Module:       task.Module,
-		Tags:         task.Tags,
+		Tags:         flat.Tags,
 		PlayIndex:    playIdx,
 		PlayName:     playName,
 		TaskIndex:    taskIdx,
-		Type:         taskType,
+		Type:         flat.Type,
 		HasCondition: task.When != "",
 		HasLoop:      task.Loop != nil,
 	}
-
-	// Check for "never" tag
-	for _, tag := range task.Tags {
-		if tag == "never" {
-			preview.Status = StatusSkipNever
-			preview.SkipReason = "Task has 'never' tag"
-			return preview
-		}
-	}
-
-	// Check for "always" tag - always executes even if tags don't match
-	hasAlwaysTag := false
-	for _, tag := range task.Tags {
-		if tag == "always" {
-			hasAlwaysTag = true
-			break
-		}
-	}
-
-	if hasAlwaysTag {
+	runs := filter.ShouldRun(flat.Tags)
+	switch {
+	case runs && hasTagFold(flat.Tags, "always"):
 		preview.Status = StatusUnconditional
-		preview.SkipReason = ""
-		return preview
-	}
-
-	// If tags are specified, check if task matches any tag
-	if len(tags) > 0 {
-		matches := false
-		for _, filter := range tags {
-			for _, taskTag := range task.Tags {
-				if taskTag == filter {
-					matches = true
-					break
-				}
-			}
-			if matches {
-				break
-			}
-		}
-
-		if !matches {
-			preview.Status = StatusSkipTags
-			preview.SkipReason = "Task tags don't match filters"
-			return preview
-		}
-	}
-
-	// If skip-tags are specified, check if task matches any skip-tag
-	for _, skipFilter := range skipTags {
-		for _, taskTag := range task.Tags {
-			if taskTag == skipFilter {
+	case runs:
+		preview.Status = StatusExecute
+	case hasTagFold(flat.Tags, "never"):
+		preview.Status = StatusSkipNever
+		preview.SkipReason = "Task has 'never' tag"
+	default:
+		for _, skip := range skipTags {
+			if hasTagFold(flat.Tags, skip) {
 				preview.Status = StatusSkipSkipTags
-				preview.SkipReason = fmt.Sprintf("Task matches skip-tag: %s", skipFilter)
+				preview.SkipReason = fmt.Sprintf("Task matches skip-tag: %s", skip)
 				return preview
 			}
 		}
+		preview.Status = StatusSkipTags
+		preview.SkipReason = "Task tags don't match filters"
 	}
-
-	// If task has no tags, it always executes (unless skipped by other rules)
-	if len(task.Tags) == 0 {
-		preview.Status = StatusExecute
-		preview.SkipReason = ""
-		return preview
-	}
-
-	// Task has tags and passes all filters
-	preview.Status = StatusExecute
-	preview.SkipReason = ""
 	return preview
+}
+
+func hasTagFold(tags []string, tag string) bool {
+	for _, t := range tags {
+		if strings.EqualFold(t, tag) {
+			return true
+		}
+	}
+	return false
 }
 
 // getSkipReason returns a human-readable skip reason
