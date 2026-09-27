@@ -320,6 +320,7 @@ tasks:
 | Selection | `select(test, arg)`, `reject(test, arg)`, `selectattr(attr, test, arg)`, `rejectattr(attr, test, arg)`; without a test an item is kept when it is truthy |
 | Mapping | `map(attribute='x')`, `map('filter', args...)`, `map('extract', container, key)` |
 | Dictionaries | `keys`, `values`, `dict2items`, `items2dict`, `combine(other, ...)` (shallow merge) |
+| Random | `random` (an item of a list, or for a number N one of `start`, `start+step`, ... below N: `60 \| random(seed=inventory_hostname)`), `shuffle`; the same `seed` gives the same result, but not the numbers Ansible would pick |
 | Other | `default(value)`, `mandatory` (error when undefined), `ternary(if_true, if_false)`, `password_hash('sha512' or 'sha256', salt)` |
 
 Not available: the `d` alias of `default`, `hash`, `default(value, true)` (the second argument is ignored; `default` always replaces undefined, null and `""`).
