@@ -52,13 +52,6 @@ type failurePolicy struct {
 
 type inBlockKey struct{}
 
-// isFailed tells whether a host has left the run
-func (e *ExecutionEngine) isFailed(host string) bool {
-	e.mutex.RLock()
-	defer e.mutex.RUnlock()
-	return e.failedHosts[host]
-}
-
 // activeHosts drops the hosts that have left the run
 func (e *ExecutionEngine) activeHosts(hosts []types.Host) []types.Host {
 	e.mutex.RLock()
