@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 	"gopkg.in/yaml.v2"
 
 	"github.com/onigirazu-cfg/onigirazu/internal/audit"
@@ -225,8 +226,16 @@ Examples:
 			var tuiModel *execution.EnhancedTUIModel
 			var logWriter io.Writer = os.Stdout
 
+			// the dashboard needs a terminal; -o json/yaml keeps stdout for the result
+			if interactive && (!term.IsTerminal(int(os.Stdin.Fd())) || !term.IsTerminal(int(os.Stderr.Fd())) ||
+				outputFormat == "json" || outputFormat == "yaml") {
+				fmt.Fprintln(os.Stderr, "Interactive mode needs a terminal and text output; running without the dashboard")
+				interactive = false
+			}
+			runControl := engine.NewRunControl()
 			if interactive {
 				tuiModel = execution.NewEnhancedTUIModel()
+				tuiModel.SetRunController(runControl)
 				logWriter = tuiModel.GetLogWriter()
 			}
 
@@ -432,6 +441,7 @@ Examples:
 			executionEngine.SetRolesPath(filepath.Join(filepath.Dir(playbookPath), "roles"))
 			executionEngine.SetPlaybookDir(filepath.Dir(playbookPath))
 			executionEngine.SetShowDiff(diff)
+			executionEngine.SetRunControl(runControl)
 
 			policy, policySource, err := security.LoadPolicy(securityPolicyPath)
 			if err != nil {
@@ -850,8 +860,8 @@ Examples:
 				return nil
 			}
 
-			// Display results if not in interactive mode (interactive mode handles its own display)
-			if !interactive {
+			// Display results (after the dashboard has closed in interactive mode)
+			{
 				displayMode := execution.DisplayNormal
 				if verboseOutput || cfg.LogLevel == "debug" {
 					if cfg.LogLevel == "debug" {
@@ -1020,6 +1030,9 @@ Examples:
 				// what the failed run changed can be rolled back too
 				if homeDir != "" && !cfg.IsCheckMode() {
 					saveRunSnapshot(homeDir, playbookPath, result, log)
+				}
+				if runControl.Stopped() {
+					return fmt.Errorf("run stopped by user before it finished")
 				}
 				return fmt.Errorf("playbook execution failed")
 			}

@@ -184,63 +184,28 @@ onigirazu apply playbook.yaml -i inventory.yaml
 
 - **[Playbook Format Guide](docs/examples/README.md)** - Real playbook examples and patterns
 
-## 🖥️ Interactive Mode (v1.54.0+)
+## 🖥️ Interactive Mode
 
-Interactive Mode provides a beautiful, responsive terminal UI dashboard for real-time execution monitoring. Perfect for long-running playbooks, debugging, and interactive control.
-
-### Enable Interactive Mode
-
-Simply add the `--interactive` flag to any playbook execution:
+`--interactive` shows a terminal dashboard while the playbook runs: a live log, progress and
+statistics with every host's ok / changed / failed counts, and a browser for task results.
 
 ```bash
 onigirazu apply playbook.yaml -i inventory.yaml --interactive
 ```
 
-### Features
-
-- **📊 Live Log Dashboard**: Real-time log streaming with automatic scrolling
-- **🔄 Multi-Mode Display**: Switch between NORMAL, VERBOSE, and DEBUG modes
-- **📈 Execution Statistics**: Track progress with task counts and timing
-- **⌨️ Keyboard Control**: Responsive interactive controls
-- **🎯 Graceful Shutdown**: Stop execution cleanly with proper cleanup
-
-### Keyboard Controls
-
 | Key | Action |
 |-----|--------|
-| **V** | Toggle VERBOSE mode (show more details) |
-| **D** | Toggle DEBUG mode (show debug information) |
-| **N** | Switch to NORMAL mode (less verbose) |
-| **S** | Show execution statistics |
-| **H** | Display help overlay |
-| **↑/↓** | Scroll logs up/down |
-| **Page Up/Down** | Page scroll logs |
-| **G** | Graceful stop (clean shutdown) |
-| **Q** | Quit TUI (without stopping execution) |
-| **Ctrl+C** | Force quit (emergency exit) |
+| **P** | Pause / resume the run (running tasks finish first) |
+| **G** | Stop gracefully: no new task starts |
+| **R** | Task results; **Enter** shows one (error, message, stdout, stderr) |
+| **N** / **V** / **D** | Detail: results and errors / + task output and log lines / + debug |
+| **↑↓**, **PgUp/PgDn**, **Home/End** | Scroll the log |
+| **F**, **/** | Filter (errors, warnings, tasks), search |
+| **S**, **H** | Statistics, help |
+| **Q**, **Ctrl+C** | Close; during the run it asks, and **Y** stops the run |
 
-### Example Workflow
-
-```bash
-# 1. Start your playbook with interactive mode
-onigirazu apply deployment.yaml -i "ubuntu@server1" --interactive
-
-# 2. Watch the live dashboard
-# 3. Press V to see verbose logs if you want more detail
-# 4. Press S to check progress statistics
-# 5. Press G to gracefully stop if needed
-# 6. Press Q to exit TUI when done
-```
-
-### Display Modes
-
-| Mode | What You See |
-|------|--------------|
-| **NORMAL** | Standard task output and errors only |
-| **VERBOSE** | Detailed output with variable values and timestamps |
-| **DEBUG** | Complete debug information for troubleshooting |
-
-All modes show real-time updates as tasks execute. The dashboard automatically updates at 30 FPS for smooth performance.
+When the dashboard closes, the usual summary is printed. Without a terminal `apply` runs with
+its normal output.
 
 📖 **For detailed interactive mode guide, see [docs/INTERACTIVE_MODE.md](docs/INTERACTIVE_MODE.md)**
 

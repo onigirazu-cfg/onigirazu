@@ -47,6 +47,10 @@ type ExecutionEvent struct {
 	TaskDuration time.Duration
 	// Progress tracking
 	TotalTaskCount int // Total tasks in the playbook
+	// Result of a finished task (task_end)
+	Result *types.TaskResult
+	// Success of the whole run (execution_end)
+	Success bool
 }
 
 // EnhancedTUIModel - the main Bubble Tea model for glance-style dashboard
@@ -61,9 +65,8 @@ type EnhancedTUIModel struct {
 	// Display state
 	mode         DisplayMode // Normal, Verbose, Debug
 	activeModal  string      // "", "help", "stats", "confirm"
-	scrollOffset int         // for main log view
-	logBuffer    []LogEntry  // circular log buffer
-	logIndex     int         // current position in circular buffer
+	scrollOffset int         // lines scrolled up from the newest log line
+	logs         []LogEntry  // log lines, oldest first
 	maxLogs      int
 
 	// Execution state
@@ -95,8 +98,6 @@ type EnhancedTUIModel struct {
 	filterShowErrors   bool   // Show only ERROR level logs
 	filterShowWarnings bool   // Show only WARN level logs
 	filterShowTasks    bool   // Show only task-related logs
-	filteredIndices    []int  // Indices of logs matching current filter
-	searchIndex        int    // Current search result position
 
 	// Synchronization
 	mutex        sync.RWMutex
@@ -105,6 +106,17 @@ type EnhancedTUIModel struct {
 	tickerChan   chan time.Time
 	readyChan    chan struct{} // Signal when TUI is ready to accept logs
 	stopCallback func() error
+
+	// controller pauses and stops the run (engine.RunControl)
+	controller RunController
+	// confirmAction is what the confirm modal asks: "stop" or "quit"
+	confirmAction string
+	// results of the finished tasks, for the results browser
+	results       []types.TaskResult
+	resultsCursor int
+	failedOnly    bool
+	closeOnce     sync.Once
+	readyOnce     sync.Once
 }
 
 // DetailedTaskStats extends basic TaskStats with more info
@@ -165,6 +177,9 @@ type LogEntry struct {
 	Timestamp time.Time
 	Level     string // INFO, WARN, ERROR, DEBUG, TASK_START, TASK_END, etc.
 	Message   string
+	// Tier is the least detailed mode that shows the line: 0 NORMAL,
+	// 1 VERBOSE, 2 DEBUG
+	Tier int
 }
 
 // NewEnhancedTUIModel creates a new enhanced TUI model
@@ -172,30 +187,27 @@ func NewEnhancedTUIModel() *EnhancedTUIModel {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &EnhancedTUIModel{
-		ctx:             ctx,
-		cancel:          cancel,
-		mode:            DisplayNormal,
-		status:          "initializing",
-		startTime:       time.Now(),
-		logBuffer:       make([]LogEntry, 1000), // pre-allocate circular buffer
-		maxLogs:         1000,
-		taskStats:       make(map[string]*DetailedTaskStats),
-		hostStats:       make(map[string]*DetailedHostStats),
-		playStats:       make(map[string]*DetailedPlayStats),
-		metrics:         &ExecutionMetrics{},
-		eventChan:       make(chan ExecutionEvent, 100),
-		stopChan:        make(chan struct{}),
-		tickerChan:      make(chan time.Time),
-		readyChan:       make(chan struct{}),
-		activeModal:     "",
-		shouldExit:      false,
-		paused:          false,
-		gracefulReq:     false,
-		filterMode:      false,
-		searchMode:      false,
-		searchQuery:     "",
-		filteredIndices: make([]int, 0),
-		searchIndex:     0,
+		ctx:         ctx,
+		cancel:      cancel,
+		mode:        DisplayNormal,
+		status:      "initializing",
+		startTime:   time.Now(),
+		maxLogs:     5000,
+		taskStats:   make(map[string]*DetailedTaskStats),
+		hostStats:   make(map[string]*DetailedHostStats),
+		playStats:   make(map[string]*DetailedPlayStats),
+		metrics:     &ExecutionMetrics{},
+		eventChan:   make(chan ExecutionEvent, 100),
+		stopChan:    make(chan struct{}),
+		tickerChan:  make(chan time.Time),
+		readyChan:   make(chan struct{}),
+		activeModal: "",
+		shouldExit:  false,
+		paused:      false,
+		gracefulReq: false,
+		filterMode:  false,
+		searchMode:  false,
+		searchQuery: "",
 	}
 }
 
@@ -203,6 +215,7 @@ func NewEnhancedTUIModel() *EnhancedTUIModel {
 func (m *EnhancedTUIModel) Start() error {
 	// Verify stdin is a terminal
 	if !term.IsTerminal(int(os.Stdin.Fd())) {
+		m.markClosed()
 		return fmt.Errorf("interactive mode requires a terminal")
 	}
 
@@ -220,30 +233,35 @@ func (m *EnhancedTUIModel) Start() error {
 	// Create and run the Bubble Tea program with alt screen
 	m.program = tea.NewProgram(m, tea.WithAltScreen())
 
-	// Run the TUI (blocking)
-	if _, err := m.program.Run(); err != nil {
+	// Run the TUI (blocking); however it ends, the run no longer waits for it
+	_, err = m.program.Run()
+	m.markClosed()
+	if err != nil {
 		return fmt.Errorf("TUI error: %w", err)
 	}
-
 	return nil
 }
 
-// Stop stops the TUI
+// Stop closes the TUI
 func (m *EnhancedTUIModel) Stop() {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
-
-	m.shouldExit = true
-
-	if m.cancel != nil {
-		m.cancel()
-	}
-
-	close(m.stopChan)
-
+	m.markClosed()
 	if m.program != nil {
 		m.program.Quit()
 	}
+}
+
+// markClosed records that the dashboard is gone: events are dropped from
+// now on instead of blocking the run
+func (m *EnhancedTUIModel) markClosed() {
+	m.closeOnce.Do(func() {
+		m.mutex.Lock()
+		m.shouldExit = true
+		m.mutex.Unlock()
+		close(m.stopChan)
+		if m.cancel != nil {
+			m.cancel()
+		}
+	})
 }
 
 // GetLogWriter returns an io.Writer that captures logs into the TUI's log buffer
@@ -299,31 +317,28 @@ func (w *tuiLogWriter) Write(p []byte) (n int, err error) {
 	return len(p), nil
 }
 
-// AddLog adds a log message to the TUI's buffer
+// AddLog adds a line of the logger to the log: its level decides the
+// modes that show it (warnings and errors always, info in VERBOSE, debug in
+// DEBUG)
 func (m *EnhancedTUIModel) AddLog(message string) {
+	level, text := parseLogLine(message)
+	tier := 1
+	switch level {
+	case "ERROR", "WARN":
+		tier = 0
+	case "DEBUG":
+		tier = 2
+	}
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
-
-	entry := LogEntry{
-		Timestamp: time.Now(),
-		Level:     "INFO", // default level, could be parsed from message
-		Message:   message,
-	}
-
-	// Add to circular buffer
-	m.logBuffer[m.logIndex] = entry
-	m.logIndex = (m.logIndex + 1) % m.maxLogs
+	m.addLog(LogEntry{Timestamp: time.Now(), Level: level, Message: text, Tier: tier})
 }
 
 // Init initializes the model (Bubble Tea interface)
 func (m *EnhancedTUIModel) Init() tea.Cmd {
-	// Signal that TUI is ready to accept logs (non-blocking)
-	go func() {
-		select {
-		case m.readyChan <- struct{}{}:
-		default:
-		}
-	}()
+	// Signal that the TUI is ready to accept logs; closing the channel
+	// reaches a waiter that comes later too
+	m.readyOnce.Do(func() { close(m.readyChan) })
 
 	return tea.Batch(
 		m.listenForEvents(),
@@ -375,6 +390,12 @@ func (m *EnhancedTUIModel) View() string {
 	}
 	if m.activeModal == "confirm" {
 		return m.renderConfirmModal()
+	}
+	if m.activeModal == "results" {
+		return m.renderResultsModal()
+	}
+	if m.activeModal == "detail" {
+		return m.renderDetailModal()
 	}
 
 	// Render main dashboard
@@ -589,10 +610,11 @@ func (m *EnhancedTUIModel) renderStatsPanel(width int, height int) string {
 	lines = append(lines, fmt.Sprintf("  %s %d | %s %d", renderTaskStatusIndicator("SUCCESS"), successTasks, renderTaskStatusIndicator("FAILED"), failedTasks))
 	lines = append(lines, fmt.Sprintf("  %s %d | %s %d", renderTaskStatusIndicator("CHANGED"), changedTasks, renderTaskStatusIndicator("SKIPPED"), skippedTasks))
 
-	// Host count
+	// Hosts, failed ones first
 	lines = append(lines, "")
 	hostCountStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("45"))
 	lines = append(lines, hostCountStyle.Render(fmt.Sprintf("Hosts: %d", len(m.hostStats))))
+	lines = append(lines, m.hostLines(contentWidth, contentHeight-len(lines)-8)...)
 
 	// Speed metrics (if there's space)
 	if len(lines) < contentHeight-5 {
@@ -651,18 +673,17 @@ func (m *EnhancedTUIModel) renderFooter() string {
 		Foreground(lipgloss.Color("8")).
 		Padding(0, 1)
 
-	hints := []string{
-		"H: Help",
-		"S: Stats",
-		"F: Filter",
-		"/: Search",
-		"V: Verbose",
-		"D: Debug",
-		"Q: Quit",
+	hints := []string{"H: Help", "R: Results", "F: Filter", "/: Search", "V/D/N: Detail"}
+	if m.running() {
+		hints = append(hints, "P: Pause", "G: Stop")
 	}
+	hints = append(hints, "Q: Quit")
 
 	if m.paused {
 		hints = append([]string{"⏸ PAUSED"}, hints...)
+	}
+	if m.scrollOffset > 0 {
+		hints = append([]string{fmt.Sprintf("↑ %d lines back (End: newest)", m.scrollOffset)}, hints...)
 	}
 
 	footer := strings.Join(hints, " │ ")
@@ -684,28 +705,30 @@ func (m *EnhancedTUIModel) renderFooter() string {
 
 // renderHelpModal renders the help modal overlay
 func (m *EnhancedTUIModel) renderHelpModal() string {
-	// Render dashboard as background
-	dashboard := m.renderDashboard()
-
 	// Create modal content
 	var helpLines []string
 	helpLines = append(helpLines, "")
 	helpLines = append(helpLines, "  KEYBOARD SHORTCUTS")
 	helpLines = append(helpLines, "  ──────────────────")
 	helpLines = append(helpLines, "")
-	helpLines = append(helpLines, "  DISPLAY & NAVIGATION:")
-	helpLines = append(helpLines, "    H - Help (this screen)")
-	helpLines = append(helpLines, "    S - Stats modal")
-	helpLines = append(helpLines, "    ↑↓ - Scroll logs | PgUp/PgDn - Page scroll")
+	helpLines = append(helpLines, "  RUN:")
+	helpLines = append(helpLines, "    P - Pause / resume (running tasks finish first)")
+	helpLines = append(helpLines, "    G - Stop gracefully (no new task starts)")
+	helpLines = append(helpLines, "    Q, Ctrl+C - Close (asks to stop a run in progress)")
 	helpLines = append(helpLines, "")
-	helpLines = append(helpLines, "  FILTERING & SEARCH (Phase 2):")
-	helpLines = append(helpLines, "    F - Toggle filter mode")
-	helpLines = append(helpLines, "    / - Start search")
-	helpLines = append(helpLines, "    When filtering: E=errors W=warnings T=tasks C=clear")
+	helpLines = append(helpLines, "  VIEW:")
+	helpLines = append(helpLines, "    R - Task results; Enter shows one (output, error)")
+	helpLines = append(helpLines, "    S - Statistics      H - This help")
+	helpLines = append(helpLines, "    ↑↓ / j k - Scroll   PgUp PgDn - Page   Home End")
 	helpLines = append(helpLines, "")
-	helpLines = append(helpLines, "  MODES:")
-	helpLines = append(helpLines, "    V - Toggle VERBOSE  |  D - Toggle DEBUG  |  N - NORMAL")
-	helpLines = append(helpLines, "    P - Pause/Resume    |  G - Graceful stop  |  Q - Quit")
+	helpLines = append(helpLines, "  DETAIL:")
+	helpLines = append(helpLines, "    N - Normal: task results, warnings, errors")
+	helpLines = append(helpLines, "    V - Verbose: + task output and every log line")
+	helpLines = append(helpLines, "    D - Debug: + debug lines")
+	helpLines = append(helpLines, "")
+	helpLines = append(helpLines, "  FILTER:")
+	helpLines = append(helpLines, "    F - Filter mode: E errors, W warnings, T tasks, C clear")
+	helpLines = append(helpLines, "    / - Search (Enter keeps it, Esc leaves)")
 	helpLines = append(helpLines, "")
 
 	// Pad to minimum height
@@ -720,7 +743,7 @@ func (m *EnhancedTUIModel) renderHelpModal() string {
 		BorderForeground(lipgloss.Color("51")).
 		Background(lipgloss.Color("16")).
 		Foreground(lipgloss.Color("15")).
-		Width(60).
+		Width(62).
 		Height(len(helpLines)+2).
 		Padding(0, 1)
 
@@ -729,14 +752,11 @@ func (m *EnhancedTUIModel) renderHelpModal() string {
 
 	// Position modal in center using dashboard as base
 	// For now, just overlay on dashboard
-	return lipgloss.JoinVertical(lipgloss.Center, dashboard, modal)
+	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, modal)
 }
 
 // renderStatsModal renders the detailed statistics modal
 func (m *EnhancedTUIModel) renderStatsModal() string {
-	// Render dashboard as background
-	dashboard := m.renderDashboard()
-
 	var lines []string
 	lines = append(lines, "")
 	lines = append(lines, "  DETAILED STATISTICS & SPEED METRICS")
@@ -832,14 +852,11 @@ func (m *EnhancedTUIModel) renderStatsModal() string {
 	modal := overlayStyle.Render(statsText)
 
 	// Position modal below dashboard
-	return lipgloss.JoinVertical(lipgloss.Center, dashboard, modal)
+	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, modal)
 }
 
 // renderConfirmModal renders a confirmation modal
 func (m *EnhancedTUIModel) renderConfirmModal() string {
-	// Render dashboard as background
-	dashboard := m.renderDashboard()
-
 	var confirmLines []string
 	confirmLines = append(confirmLines, "")
 	confirmLines = append(confirmLines, "  GRACEFUL SHUTDOWN")
@@ -869,7 +886,7 @@ func (m *EnhancedTUIModel) renderConfirmModal() string {
 	modal := overlayStyle.Render(confirmText)
 
 	// Position modal below dashboard
-	return lipgloss.JoinVertical(lipgloss.Center, dashboard, modal)
+	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, modal)
 }
 
 // ============================================================================
@@ -902,50 +919,58 @@ func (m *EnhancedTUIModel) formatLogLine(entry LogEntry, maxWidth int) string {
 	return timeStyle.Render(timeStr) + " " + prefix + " " + msg
 }
 
-// getVisibleLogs returns the logs to display
+// visible tells whether a line shows in the current mode and filters
+func (m *EnhancedTUIModel) visible(entry LogEntry) bool {
+	if entry.Tier > m.modeTier() {
+		return false
+	}
+	if m.filterShowErrors && entry.Level != "ERROR" {
+		return false
+	}
+	if m.filterShowWarnings && entry.Level != "WARN" {
+		return false
+	}
+	if m.filterShowTasks && !strings.HasPrefix(entry.Level, "TASK") {
+		return false
+	}
+	if m.searchQuery != "" && !strings.Contains(strings.ToLower(entry.Message), strings.ToLower(m.searchQuery)) {
+		return false
+	}
+	return true
+}
+
+func (m *EnhancedTUIModel) modeTier() int {
+	switch m.mode {
+	case DisplayVerbose:
+		return 1
+	case DisplayDebug:
+		return 2
+	}
+	return 0
+}
+
+// getVisibleLogs returns up to count lines ending scrollOffset lines above
+// the newest one
 func (m *EnhancedTUIModel) getVisibleLogs(count int) []LogEntry {
-	var result []LogEntry
-
-	// Use filtered logs if any filter is active, otherwise use all logs
-	var indices []int
-	if m.filterShowErrors || m.filterShowWarnings || m.filterShowTasks || m.searchQuery != "" {
-		// Any filter active: use filtered indices (even if empty = "no matches")
-		indices = m.filteredIndices
-	} else {
-		// No filters active: collect all non-empty log entries
-		for i, entry := range m.logBuffer {
-			if entry.Timestamp.Unix() > 0 {
-				indices = append(indices, i)
-			}
+	var shown []LogEntry
+	for _, entry := range m.logs {
+		if m.visible(entry) {
+			shown = append(shown, entry)
 		}
 	}
-
-	// Collect log entries from indices
-	for _, idx := range indices {
-		if idx >= 0 && idx < len(m.logBuffer) {
-			if m.logBuffer[idx].Timestamp.Unix() > 0 {
-				result = append(result, m.logBuffer[idx])
-			}
-		}
+	offset := m.scrollOffset
+	if maxOffset := len(shown) - count; offset > maxOffset {
+		offset = maxOffset
 	}
-
-	// Sort by timestamp (latest first)
-	sort.Slice(result, func(i, j int) bool {
-		return result[i].Timestamp.After(result[j].Timestamp)
-	})
-
-	// Return last `count` entries
-	if len(result) > count {
-		result = result[:count]
+	if offset < 0 {
+		offset = 0
 	}
-
-	// Reverse to show chronologically (oldest first)
-	for i := len(result)/2 - 1; i >= 0; i-- {
-		opp := len(result) - 1 - i
-		result[i], result[opp] = result[opp], result[i]
+	end := len(shown) - offset
+	start := end - count
+	if start < 0 {
+		start = 0
 	}
-
-	return result
+	return shown[start:end]
 }
 
 // ============================================================================
@@ -1131,56 +1156,10 @@ func renderTaskStatusIndicator(level string) string {
 // FILTERING & SEARCH (Phase 2)
 // ============================================================================
 
-// applyFilter builds the list of filtered log indices based on current filter settings
+// applyFilter is called when a filter changes: the view goes back to the
+// newest lines
 func (m *EnhancedTUIModel) applyFilter() {
-	m.filteredIndices = make([]int, 0)
-
-	// If no filters are active, include all logs
-	if !m.filterShowErrors && !m.filterShowWarnings && !m.filterShowTasks && m.searchQuery == "" {
-		for i := 0; i < len(m.logBuffer); i++ {
-			if m.logBuffer[i].Message != "" {
-				m.filteredIndices = append(m.filteredIndices, i)
-			}
-		}
-		return
-	}
-
-	// Apply filters
-	for i := 0; i < len(m.logBuffer); i++ {
-		entry := m.logBuffer[i]
-		if entry.Message == "" {
-			continue
-		}
-
-		// Check error filter
-		if m.filterShowErrors && entry.Level != "ERROR" {
-			continue
-		}
-
-		// Check warning filter
-		if m.filterShowWarnings && entry.Level != "WARN" {
-			continue
-		}
-
-		// Check task filter
-		if m.filterShowTasks {
-			if !strings.Contains(entry.Level, "TASK") && entry.Level != "ok" && entry.Level != "failed" && entry.Level != "changed" {
-				continue
-			}
-		}
-
-		// Check search query
-		if m.searchQuery != "" {
-			if !strings.Contains(strings.ToLower(entry.Message), strings.ToLower(m.searchQuery)) {
-				continue
-			}
-		}
-
-		m.filteredIndices = append(m.filteredIndices, i)
-	}
-
-	// Reset search index when filter changes
-	m.searchIndex = 0
+	m.scrollOffset = 0
 }
 
 // toggleFilterMode toggles filter mode on/off
@@ -1311,11 +1290,25 @@ func (m *EnhancedTUIModel) handleKeypress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	switch keyStr {
 	case "ctrl+c", "q":
-		m.shouldExit = true
-		m.mutex.Lock()
-		m.activeModal = ""
-		m.mutex.Unlock()
+		// while the run goes on, closing the dashboard asks to stop it
+		m.mutex.RLock()
+		running := m.running()
+		m.mutex.RUnlock()
+		if running {
+			m.askConfirm("quit")
+			return m, nil
+		}
+		m.markClosed()
 		return m, tea.Quit
+
+	case "r":
+		m.mutex.Lock()
+		m.activeModal = "results"
+		m.resultsCursor = len(m.shownResults()) - 1
+		if m.resultsCursor < 0 {
+			m.resultsCursor = 0
+		}
+		m.mutex.Unlock()
 
 	case "h":
 		m.mutex.Lock()
@@ -1376,23 +1369,15 @@ func (m *EnhancedTUIModel) handleKeypress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.mutex.Unlock()
 
 	case "p":
-		m.mutex.Lock()
-		m.paused = !m.paused
-		statusMsg := "Execution PAUSED"
-		if !m.paused {
-			statusMsg = "Execution RESUMED"
-		}
-		m.addLog(LogEntry{
-			Timestamp: time.Now(),
-			Level:     "INFO",
-			Message:   statusMsg,
-		})
-		m.mutex.Unlock()
+		m.togglePause()
 
 	case "g":
-		m.mutex.Lock()
-		m.activeModal = "confirm"
-		m.mutex.Unlock()
+		m.mutex.RLock()
+		running := m.running()
+		m.mutex.RUnlock()
+		if running {
+			m.askConfirm("stop")
+		}
 
 	case "f":
 		m.mutex.Lock()
@@ -1439,30 +1424,18 @@ func (m *EnhancedTUIModel) handleKeypress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.mutex.Unlock()
 		}
 
-	case "up":
-		m.mutex.Lock()
-		if m.scrollOffset > 0 {
-			m.scrollOffset--
-		}
-		m.mutex.Unlock()
-
-	case "down":
-		m.mutex.Lock()
-		m.scrollOffset++
-		m.mutex.Unlock()
-
-	case "pageup":
-		m.mutex.Lock()
-		m.scrollOffset -= m.height / 2
-		if m.scrollOffset < 0 {
-			m.scrollOffset = 0
-		}
-		m.mutex.Unlock()
-
-	case "pagedown":
-		m.mutex.Lock()
-		m.scrollOffset += m.height / 2
-		m.mutex.Unlock()
+	case "up", "k":
+		m.scroll(1)
+	case "down", "j":
+		m.scroll(-1)
+	case "pgup":
+		m.scroll(m.height / 2)
+	case "pgdown":
+		m.scroll(-m.height / 2)
+	case "home":
+		m.scroll(1 << 30)
+	case "end":
+		m.scroll(-(1 << 30))
 	}
 
 	return m, nil
@@ -1470,50 +1443,46 @@ func (m *EnhancedTUIModel) handleKeypress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // handleModalKeypress handles keys while a modal is open
 func (m *EnhancedTUIModel) handleModalKeypress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "escape", "q":
-		m.mutex.Lock()
-		m.activeModal = ""
-		m.mutex.Unlock()
+	key := strings.ToLower(msg.String())
+	m.mutex.RLock()
+	modal := m.activeModal
+	m.mutex.RUnlock()
 
-	case "h":
-		m.mutex.Lock()
-		if m.activeModal == "help" {
-			m.activeModal = ""
-		}
-		m.mutex.Unlock()
-
-	case "s":
-		m.mutex.Lock()
-		if m.activeModal == "stats" {
-			m.activeModal = ""
-		}
-		m.mutex.Unlock()
-
-	case "y":
-		if m.activeModal == "confirm" {
+	switch modal {
+	case "confirm":
+		switch key {
+		case "y", "enter":
+			cmd := m.confirm()
+			return m, cmd
+		case "n", "esc", "q":
 			m.mutex.Lock()
-			m.gracefulReq = true
 			m.activeModal = ""
-			m.status = "stopping"
+			m.confirmAction = ""
 			m.mutex.Unlock()
-
-			// Trigger graceful stop
-			if m.stopCallback != nil {
-				go func() {
-					_ = m.stopCallback()
-				}()
-			}
+		case "ctrl+c": // a second Ctrl+C while asked: stop and close
+			m.mutex.Lock()
+			m.confirmAction = "quit"
+			m.mutex.Unlock()
+			cmd := m.confirm()
+			return m, cmd
 		}
-
-	case "n":
-		if m.activeModal == "confirm" {
+	case "results":
+		m.handleResultsKeypress(key)
+	case "detail":
+		switch key {
+		case "esc", "q", "backspace", "enter":
+			m.mutex.Lock()
+			m.activeModal = "results"
+			m.mutex.Unlock()
+		}
+	default: // help, stats
+		switch key {
+		case "esc", "q", "h", "s", "ctrl+c":
 			m.mutex.Lock()
 			m.activeModal = ""
 			m.mutex.Unlock()
 		}
 	}
-
 	return m, nil
 }
 
@@ -1523,7 +1492,7 @@ func (m *EnhancedTUIModel) handleSearchKeypress(msg tea.KeyMsg) (tea.Model, tea.
 	defer m.mutex.Unlock()
 
 	switch msg.String() {
-	case "escape":
+	case "esc":
 		m.exitSearchMode()
 	case "enter":
 		// Search confirmed, exit search mode but keep the filter active
@@ -1549,18 +1518,18 @@ func (m *EnhancedTUIModel) handleSearchKeypress(msg tea.KeyMsg) (tea.Model, tea.
 // EVENT PROCESSING
 // ============================================================================
 
-// addLog adds a log entry to the circular buffer
+// addLog appends a log line; the oldest lines go beyond maxLogs. A view
+// scrolled back keeps its place
 func (m *EnhancedTUIModel) addLog(entry LogEntry) {
-	if entry.Timestamp.Unix() == 0 {
+	if entry.Timestamp.IsZero() {
 		entry.Timestamp = time.Now()
 	}
-
-	m.logBuffer[m.logIndex] = entry
-	m.logIndex = (m.logIndex + 1) % m.maxLogs
-
-	// Reapply filters if any are active to include the new log
-	if m.filterShowErrors || m.filterShowWarnings || m.filterShowTasks || m.searchQuery != "" {
-		m.applyFilter()
+	m.logs = append(m.logs, entry)
+	if len(m.logs) > m.maxLogs {
+		m.logs = append([]LogEntry(nil), m.logs[len(m.logs)-m.maxLogs:]...)
+	}
+	if m.scrollOffset > 0 && m.visible(entry) {
+		m.scrollOffset++
 	}
 }
 
@@ -1589,13 +1558,37 @@ func (m *EnhancedTUIModel) processEvent(event ExecutionEvent) {
 	case "play_end":
 		level = "INFO"
 
+	case "execution_end":
+		switch {
+		case m.gracefulReq:
+			m.status = "stopped"
+			msg = "■ STOPPED by user: " + msg
+			level = "WARN"
+		case event.Success:
+			m.status = "completed"
+		default:
+			m.status = "failed"
+			level = "ERROR"
+		}
+		m.paused = false
+		m.elapsedTime = time.Since(m.startTime)
+		m.addLog(LogEntry{Level: level, Message: msg})
+		m.addLog(LogEntry{Level: "INFO", Message: "Run finished: R results, Q quit"})
+		return
+
 	case "task_start":
 		m.currentTaskName = event.TaskName
 		m.currentHost = event.HostName
-		level = "TASK_START"
+		m.addLog(LogEntry{Level: "TASK_START", Message: msg, Tier: 1})
+		return
 
 	case "task_end":
-		level = "TASK_END"
+		if event.Result != nil {
+			m.recordResult(*event.Result)
+			for _, entry := range resultLines(event.Result) {
+				m.addLog(entry)
+			}
+		}
 		// Update stats with proper status counters
 		duration := event.TaskDuration
 		if duration < 0 {
@@ -1650,6 +1643,7 @@ func (m *EnhancedTUIModel) processEvent(event ExecutionEvent) {
 			}
 			m.taskStats[event.TaskName] = newStats
 		}
+		return
 
 	case "error":
 		level = "ERROR"
@@ -1699,7 +1693,7 @@ func (m *EnhancedTUIModel) updateElapsedTime() {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
-	if m.status == "running" && !m.paused {
+	if m.running() && m.status != "initializing" {
 		m.elapsedTime = time.Since(m.startTime)
 	}
 }
@@ -1722,11 +1716,10 @@ func (m *EnhancedTUIModel) getModeDisplay() string {
 
 // getStatusDisplay returns the display string for current status
 func (m *EnhancedTUIModel) getStatusDisplay() string {
-	status := strings.ToUpper(m.status)
-	if m.paused {
-		return "⏸ " + status
+	if m.paused && m.running() {
+		return "⏸ PAUSED"
 	}
-	return status
+	return strings.ToUpper(m.status)
 }
 
 // formatDuration formats a duration nicely
@@ -1766,25 +1759,25 @@ func truncateString(s string, maxWidth int) string {
 
 // OnExecutionStart is called when execution begins
 func (m *EnhancedTUIModel) OnExecutionStart(playbookName string, playCount int, taskCount int) {
-	m.eventChan <- ExecutionEvent{
+	m.send(ExecutionEvent{
 		Type:           "execution_start",
 		PlayName:       playbookName,
 		PlayIndex:      playCount,
 		TotalTaskCount: taskCount,
 		Message:        fmt.Sprintf("Starting playbook: %s (%d plays, %d tasks)", playbookName, playCount, taskCount),
 		Timestamp:      time.Now(),
-	}
+	})
 }
 
 // OnPlayStart is called when a play starts
 func (m *EnhancedTUIModel) OnPlayStart(playName string, playIndex int, totalPlays int) {
-	m.eventChan <- ExecutionEvent{
+	m.send(ExecutionEvent{
 		Type:      "play_start",
 		PlayName:  playName,
 		PlayIndex: playIndex,
 		Message:   fmt.Sprintf("[%d/%d] Play: %s", playIndex, totalPlays, playName),
 		Timestamp: time.Now(),
-	}
+	})
 }
 
 // OnPlayEnd is called when a play ends
@@ -1793,24 +1786,24 @@ func (m *EnhancedTUIModel) OnPlayEnd(playName string, playIndex int, success boo
 	if !success {
 		status = "✗"
 	}
-	m.eventChan <- ExecutionEvent{
+	m.send(ExecutionEvent{
 		Type:      "play_end",
 		PlayName:  playName,
 		PlayIndex: playIndex,
 		Message:   fmt.Sprintf("%s Play completed: %s (%v)", status, playName, duration.Round(time.Millisecond)),
 		Timestamp: time.Now(),
-	}
+	})
 }
 
 // OnTaskStart is called when a task starts
 func (m *EnhancedTUIModel) OnTaskStart(taskName string, hostName string) {
-	m.eventChan <- ExecutionEvent{
+	m.send(ExecutionEvent{
 		Type:      "task_start",
 		TaskName:  taskName,
 		HostName:  hostName,
 		Message:   fmt.Sprintf("▶ %s on %s", taskName, hostName),
 		Timestamp: time.Now(),
-	}
+	})
 }
 
 // OnTaskEnd is called when a task ends
@@ -1825,8 +1818,9 @@ func (m *EnhancedTUIModel) OnTaskEnd(taskResult *types.TaskResult) {
 	} else if taskResult.Changed {
 		status = "⟳"
 	}
+	resultCopy := *taskResult
 
-	m.eventChan <- ExecutionEvent{
+	m.send(ExecutionEvent{
 		Type:         "task_end",
 		TaskName:     taskResult.TaskName,
 		HostName:     taskResult.Host,
@@ -1836,7 +1830,8 @@ func (m *EnhancedTUIModel) OnTaskEnd(taskResult *types.TaskResult) {
 		TaskChanged:  taskResult.Changed,
 		TaskSkipped:  taskResult.Skipped,
 		TaskDuration: taskResult.Duration,
-	}
+		Result:       &resultCopy,
+	})
 
 	// Update host stats (task stats are updated through event processing)
 	m.mutex.Lock()
@@ -1849,31 +1844,25 @@ func (m *EnhancedTUIModel) OnTaskEnd(taskResult *types.TaskResult) {
 	}
 
 	// Update host stats with timing
-	if hostStats, exists := m.hostStats[taskResult.Host]; exists {
-		hostStats.TaskCount++
-		hostStats.TotalDuration += duration
-		hostStats.AvgTaskTime = hostStats.TotalDuration / time.Duration(hostStats.TaskCount)
-		if taskResult.Failed {
-			hostStats.FailedCount++
-		} else {
-			hostStats.SuccessCount++
-		}
-		hostStats.LastTaskTime = time.Now()
-	} else {
-		newHostStats := &DetailedHostStats{
-			Name:          taskResult.Host,
-			TaskCount:     1,
-			TotalDuration: duration,
-			AvgTaskTime:   duration,
-		}
-		if taskResult.Failed {
-			newHostStats.FailedCount = 1
-		} else {
-			newHostStats.SuccessCount = 1
-		}
-		newHostStats.LastTaskTime = time.Now()
-		m.hostStats[taskResult.Host] = newHostStats
+	hostStats, exists := m.hostStats[taskResult.Host]
+	if !exists {
+		hostStats = &DetailedHostStats{Name: taskResult.Host}
+		m.hostStats[taskResult.Host] = hostStats
 	}
+	hostStats.TaskCount++
+	hostStats.TotalDuration += duration
+	hostStats.AvgTaskTime = hostStats.TotalDuration / time.Duration(hostStats.TaskCount)
+	switch {
+	case taskResult.Failed && !taskResult.Ignored:
+		hostStats.FailedCount++
+	case taskResult.Skipped:
+		hostStats.SkippedCount++
+	case taskResult.Changed:
+		hostStats.ChangedCount++
+	default:
+		hostStats.SuccessCount++
+	}
+	hostStats.LastTaskTime = time.Now()
 
 	// Update overall metrics
 	m.updateMetrics()
@@ -1881,31 +1870,28 @@ func (m *EnhancedTUIModel) OnTaskEnd(taskResult *types.TaskResult) {
 
 // OnExecutionEnd is called when execution ends
 func (m *EnhancedTUIModel) OnExecutionEnd(result *types.PlaybookResult, duration time.Duration) {
+	success := result != nil && !result.Failed
 	status := "✓ COMPLETED"
-	if result != nil && !result.Success {
+	if !success {
 		status = "✗ FAILED"
 	}
-
-	m.eventChan <- ExecutionEvent{
+	m.send(ExecutionEvent{
 		Type:      "execution_end",
 		Message:   fmt.Sprintf("%s in %v", status, duration.Round(time.Millisecond)),
 		Timestamp: time.Now(),
-	}
-
-	m.mutex.Lock()
-	m.status = "completed"
-	m.mutex.Unlock()
+		Success:   success,
+	})
 }
 
 // OnError is called when an error occurs
 func (m *EnhancedTUIModel) OnError(taskName string, hostName string, errMsg string) {
-	m.eventChan <- ExecutionEvent{
+	m.send(ExecutionEvent{
 		Type:      "error",
 		TaskName:  taskName,
 		HostName:  hostName,
 		Message:   fmt.Sprintf("ERROR: %s", errMsg),
 		Timestamp: time.Now(),
-	}
+	})
 }
 
 // SetStopCallback sets the callback for stop requests
@@ -1926,4 +1912,83 @@ func (m *EnhancedTUIModel) WaitForExit() {
 
 		time.Sleep(100 * time.Millisecond)
 	}
+}
+
+// scroll moves the log view by lines: up (older) when positive, down
+// (newer) when negative, within the visible lines
+func (m *EnhancedTUIModel) scroll(lines int) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	visible := 0
+	for _, entry := range m.logs {
+		if m.visible(entry) {
+			visible++
+		}
+	}
+	maxOffset := visible - m.logLines()
+	if maxOffset < 0 {
+		maxOffset = 0
+	}
+	m.scrollOffset += lines
+	if m.scrollOffset > maxOffset {
+		m.scrollOffset = maxOffset
+	}
+	if m.scrollOffset < 0 {
+		m.scrollOffset = 0
+	}
+}
+
+// logLines is the number of log lines the logs panel shows
+func (m *EnhancedTUIModel) logLines() int {
+	n := m.height - 4 - 4
+	if n < 1 {
+		n = 1
+	}
+	return n
+}
+
+// send passes an event to the dashboard; once it is closed the event is
+// dropped, so the run never waits for a dashboard that is gone
+func (m *EnhancedTUIModel) send(event ExecutionEvent) {
+	select {
+	case m.eventChan <- event:
+	case <-m.stopChan:
+	}
+}
+
+// hostLines lists hosts with their ok / changed / failed counts, failed
+// hosts (they have left the run) first, within max lines
+func (m *EnhancedTUIModel) hostLines(width, max int) []string {
+	if max < 1 {
+		return nil
+	}
+	hosts := make([]*DetailedHostStats, 0, len(m.hostStats))
+	for _, h := range m.hostStats {
+		hosts = append(hosts, h)
+	}
+	sort.Slice(hosts, func(i, j int) bool {
+		if (hosts[i].FailedCount > 0) != (hosts[j].FailedCount > 0) {
+			return hosts[i].FailedCount > 0
+		}
+		return hosts[i].Name < hosts[j].Name
+	})
+	var out []string
+	for i, h := range hosts {
+		if i == max-1 && len(hosts) > max {
+			out = append(out, fmt.Sprintf("  … %d more", len(hosts)-i))
+			break
+		}
+		counts := fmt.Sprintf("%d/%d/%d", h.SuccessCount, h.ChangedCount, h.FailedCount)
+		name := truncateString(h.Name, width-len(counts)-4)
+		line := fmt.Sprintf("  %-*s %s", width-len(counts)-3, name, counts)
+		color := lipgloss.Color("46")
+		switch {
+		case h.FailedCount > 0:
+			color = lipgloss.Color("196")
+		case h.ChangedCount > 0:
+			color = lipgloss.Color("226")
+		}
+		out = append(out, lipgloss.NewStyle().Foreground(color).Render(line))
+	}
+	return out
 }
