@@ -1158,6 +1158,8 @@ Debian/Ubuntu package management.
 | `name` | string/list | - | Package name(s) (optional if only updating cache) |
 | `state` | string | `present` | Package state (`present`, `latest`, or `absent`) |
 | `update_cache` | boolean | `false` | Update apt cache before operation |
+| `cache_valid_time` | int | - | Skip the cache update if it is younger than this many seconds |
+| `upgrade` | string | `no` | `yes`/`safe` (apt-get upgrade), `full`/`dist` (dist-upgrade); predicted in check mode |
 | `autoremove` | boolean | `false` | Remove unused packages |
 | `autoclean` | boolean | `false` | Clean package cache |
 
@@ -1175,10 +1177,11 @@ Debian/Ubuntu package management.
     update_cache: true
     autoremove: true
 
-# upgrade and cache_valid_time are not supported (ignored); for a full upgrade:
 - name: "Upgrade all packages"
-  shell:
-    cmd: "DEBIAN_FRONTEND=noninteractive apt-get -y dist-upgrade"
+  apt:
+    update_cache: true
+    cache_valid_time: 3600
+    upgrade: dist
   become: true
 ```
 
@@ -1898,7 +1901,7 @@ Print a message or a variable.
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `msg` | string | - | Message (templated) |
-| `var` | string | - | Variable to print; a dotted path such as `result.stdout` |
+| `var` | string | - | Variable or expression to print: `result.stdout`, `result['stdout']`, `items \| length` |
 
 `var` does not evaluate expressions or brackets (`hostvars[inventory_hostname]` prints "VARIABLE IS NOT DEFINED!"); use `msg: "{{ ... }}"` for those.
 
