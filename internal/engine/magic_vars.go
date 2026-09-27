@@ -26,6 +26,7 @@ func ansibleFacts(sf *cache.SystemFacts, onigirazu map[string]interface{}) map[s
 		"kernel":                     sf.KernelVersion,
 		"processor_cores":            sf.CPUCores,
 		"processor_vcpus":            sf.CPUCores,
+		"memtotal_mb":                sf.MemTotalMB,
 		"default_ipv4":               map[string]interface{}{"address": sf.DefaultIPv4},
 		"user_id":                    sf.Username,
 		"date_time":                  onigirazu["onigirazu_date_time"],

@@ -1,0 +1,37 @@
+plays:
+  - name: module arguments as Ansible writes them
+    hosts: all
+    become: true
+    tasks:
+      - name: Reload systemd, nothing else
+        systemd: {daemon_reload: true}
+      - name: Update the package lists
+        apt: {update_cache: true}
+        when: ansible_os_family == 'Debian'
+      - name: Package lists are fresh, no update
+        apt: {update_cache: true, cache_valid_time: 3600}
+        register: cache
+        when: ansible_os_family == 'Debian'
+      - name: Preview an upgrade
+        apt: {upgrade: dist}
+        check_mode: true
+        changed_when: false   # it predicts upgrades; the run itself changes nothing
+        register: upgrade
+        when: ansible_os_family == 'Debian'
+      - name: A cacheable fact
+        set_fact: {e2e_fact: 42, cacheable: true}
+      - name: Check
+        assert:
+          that:
+            - cacheable is not defined
+            - e2e_fact | int == 42
+            - ansible_memtotal_mb | int > 100
+            - onigirazu_memtotal_mb == ansible_memtotal_mb
+            - ansible_os_family != 'Debian' or not cache.cache_updated
+            - ansible_os_family != 'Debian' or upgrade.msg is search('check mode')
+      - name: debug var takes an expression
+        debug: {var: "hostvars[inventory_hostname]['e2e_fact']"}
+        register: shown
+      - name: Shown
+        assert:
+          that: "shown.msg is search(': 42$')"

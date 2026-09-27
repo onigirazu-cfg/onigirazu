@@ -47,6 +47,21 @@ func (m *SystemdModule) Execute(ctx context.Context, host types.Host, args map[s
 		// Get operation type
 		operation := getStringArg(args, "operation", "service")
 
+		// daemon_reload: true (Ansible) reloads before anything else; alone it
+		// is all the task does
+		if daemonReloadArg(args) && operation != "daemon-reload" {
+			if _, err := m.systemctl(exec, args, "daemon-reload"); err != nil {
+				execResult, _ = m.failResult(result, fmt.Sprintf("failed to reload systemd: %v", err))
+				return nil
+			}
+			if _, hasName := args["name"]; !hasName && operation == "service" {
+				execResult = result
+				execResult.Output["action"] = "daemon_reloaded"
+				execResult.Duration = time.Since(result.Timestamp)
+				return nil
+			}
+		}
+
 		var err error
 		switch operation {
 		case "service":
@@ -422,7 +437,7 @@ func (m *SystemdModule) Validate(args map[string]interface{}) error {
 
 	switch operation {
 	case "service", "timer", "status":
-		if _, exists := args["name"]; !exists {
+		if _, exists := args["name"]; !exists && !(operation == "service" && daemonReloadArg(args)) {
 			return fmt.Errorf("name parameter is required")
 		}
 	case "unit":
@@ -458,4 +473,9 @@ func (m *SystemdModule) run(exec *executor.CommandExecutor, args map[string]inte
 		return "", nil
 	}
 	return exec.Execute(command, cmdArgs...)
+}
+
+// daemonReloadArg reads daemon_reload (or daemon-reload) as a boolean
+func daemonReloadArg(args map[string]interface{}) bool {
+	return getBoolArg(args, "daemon_reload", false) || getBoolArg(args, "daemon-reload", false)
 }

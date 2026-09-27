@@ -19,6 +19,7 @@ type SystemFacts struct {
 	Hostname    string `json:"hostname"`
 	CPUCores    int    `json:"cpu_cores"`
 	MemoryTotal string `json:"memory_total"`
+	MemTotalMB  int    `json:"memtotal_mb"`
 
 	// Network
 	FQDN        string `json:"fqdn"`

@@ -61,16 +61,7 @@ Every fact exists under two names: `onigirazu_*` and the Ansible name `ansible_*
 
 ```yaml
 {{ ansible_processor_vcpus }}         # 16 (also ansible_processor_cores, onigirazu_processor_cores)
-{{ onigirazu_memtotal_mb }}           # "15Gi"
-```
-
-Current limitation: `onigirazu_memtotal_mb` is the human-readable string from `free -h` ("15Gi", "8.0G" on macOS), not a number of megabytes, and there is no `ansible_memtotal_mb`. For a number use a task:
-
-```yaml
-- shell: awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo
-  register: mem
-  changed_when: false
-# then: mem.stdout | int
+{{ onigirazu_memtotal_mb }}           # 15970 (also ansible_memtotal_mb)
 ```
 
 ### User & Environment

@@ -272,6 +272,12 @@ func (g *Gatherer) gatherHardwareInfo(client commandRunner, facts *cache.SystemF
 		if err == nil {
 			facts.MemoryTotal = strings.TrimSpace(memInfo)
 		}
+		memKB, err := client.ExecuteCommand("awk '/^MemTotal:/ {print $2}' /proc/meminfo")
+		if err == nil {
+			if kb, err := strconv.Atoi(strings.TrimSpace(memKB)); err == nil {
+				facts.MemTotalMB = kb / 1024
+			}
+		}
 	} else if facts.Kernel == "Darwin" {
 		// macOS CPU cores
 		cpuInfo, err := client.ExecuteCommand("sysctl -n hw.ncpu")
@@ -286,6 +292,7 @@ func (g *Gatherer) gatherHardwareInfo(client commandRunner, facts *cache.SystemF
 		if err == nil {
 			if memBytes, err := strconv.ParseInt(strings.TrimSpace(memInfo), 10, 64); err == nil {
 				facts.MemoryTotal = fmt.Sprintf("%.1fG", float64(memBytes)/(1024*1024*1024))
+				facts.MemTotalMB = int(memBytes / (1024 * 1024))
 			}
 		}
 	}
