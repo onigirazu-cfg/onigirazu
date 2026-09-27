@@ -51,6 +51,7 @@ Every fact exists under two names: `onigirazu_*` and the Ansible name `ansible_*
 {{ ansible_distribution }}                 # Ubuntu, Rocky, RedHat (Ansible spelling)
 {{ onigirazu_distribution }}               # ubuntu, rocky, rhel (os-release ID)
 {{ ansible_distribution_version }}         # 24.04, 9.4
+{{ ansible_distribution_release }}         # noble, Blue Onyx
 {{ ansible_distribution_major_version }}   # 24, 9
 {{ ansible_architecture }}                 # x86_64, aarch64
 {{ ansible_system }}                       # Linux, Darwin (onigirazu_kernel)

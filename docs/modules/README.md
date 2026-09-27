@@ -79,7 +79,7 @@ Ansible's short forms work:
 
 ### Check Mode
 
-With `--check` only these modules run, reporting what they would change: ping, debug, set_fact, stat, find, fail, wait_for, assert, include_vars, file, copy, template, lineinfile, blockinfile, replace, apt, yum, package, service, user, group, cron, sysctl, get_url, git, systemd, mount, config, timezone, unarchive, docker_container, podman, docker_image. Every other module (command, shell, script, uri, firewall, archive, fetch, reboot, authorized_key, docker_compose, database modules, ...) is skipped.
+With `--check` only these modules run, reporting what they would change: ping, debug, set_fact, stat, find, fail, wait_for, assert, include_vars, file, copy, template, lineinfile, blockinfile, replace, apt, yum, package, service, user, group, cron, sysctl, get_url, git, systemd, mount, config, timezone, unarchive, apt_repository, apt_key, docker_container, podman, docker_image. Every other module (command, shell, script, uri, firewall, archive, fetch, reboot, authorized_key, docker_compose, database modules, ...) is skipped.
 
 ## 🖥️ System Modules
 
@@ -1217,6 +1217,40 @@ Debian/Ubuntu package management.
     cache_valid_time: 3600
     upgrade: dist
   become: true
+```
+
+### apt_repository
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `repo` | string | - | A `deb ...` / `deb-src ...` line, or `ppa:owner/name` |
+| `state` | string | `present` | `present` or `absent` |
+| `filename` | string | from the URL | File in `/etc/apt/sources.list.d/` (without `.list`) |
+| `update_cache` | boolean | `true` | Run `apt-get update` after a change |
+
+A line is looked for in `/etc/apt/sources.list` and `sources.list.d/*.list` (deb822 `.sources`
+files are not read). A new line goes to its own file, named as Ansible names it
+(`download_docker_com_linux_ubuntu.list`); removing the last line of a `.list` file deletes it.
+PPAs go through `add-apt-repository` (package `software-properties-common`).
+
+### apt_key
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `url` / `data` / `file` | string | - | Where the key comes from (one of them); `url` is fetched by the host with curl or wget, `file` is on the host |
+| `keyring` | string | - | Absolute path to write the key to, e.g. `/etc/apt/keyrings/docker.asc` |
+| `id` | string | - | Key id; names the file in `/etc/apt/trusted.gpg.d/` when there is no `keyring` |
+| `state` | string | `present` | `present`, or `absent` (removes `keyring`, or the file named by `id`) |
+
+`apt-key` is not used. An ASCII-armored key is written as is (use a `.asc` keyring); for a `.gpg`
+keyring it is converted with `gpg --dearmor` on the host. `keyserver` is not supported.
+
+```yaml
+- apt_key:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    keyring: /etc/apt/keyrings/docker.asc
+- apt_repository:
+    repo: "deb [signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
 ```
 
 ### yum

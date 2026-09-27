@@ -21,6 +21,7 @@ func ansibleFacts(sf *cache.SystemFacts, onigirazu map[string]interface{}) map[s
 		"distribution":               ansibleDistribution(sf.Distribution),
 		"distribution_version":       sf.OSVersion,
 		"distribution_major_version": major,
+		"distribution_release":       sf.OSCodename,
 		"architecture":               sf.Architecture,
 		"system":                     sf.Kernel,
 		"kernel":                     sf.KernelVersion,

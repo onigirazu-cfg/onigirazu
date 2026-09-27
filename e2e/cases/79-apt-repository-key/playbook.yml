@@ -1,0 +1,22 @@
+plays:
+  - name: apt_key and apt_repository without the network
+    hosts: all
+    become: true
+    tasks:
+      - name: A local flat repository
+        shell: mkdir -p /opt/onigirazu-e2e-repo && touch /opt/onigirazu-e2e-repo/Packages
+        args: {creates: /opt/onigirazu-e2e-repo/Packages}
+      - name: Keyrings directory
+        file: {path: /etc/apt/keyrings, state: directory}
+      - name: Key given as data
+        apt_key:
+          data: "{{ lookup('file', 'docker.asc') }}"
+          keyring: /etc/apt/keyrings/onigirazu-e2e.asc
+      - name: Repository
+        apt_repository:
+          repo: "deb [trusted=yes] file:/opt/onigirazu-e2e-repo ./"
+          filename: onigirazu-e2e
+      - name: A removed repository leaves no file
+        apt_repository:
+          repo: "deb [trusted=yes] file:/opt/onigirazu-e2e-gone ./"
+          state: absent
