@@ -317,7 +317,14 @@ plays:
 ```
 
 With `serial` the whole play (facts, tasks, handlers) runs on one batch of hosts after
-another. A batch that fails stops the play: later batches do not start.
+another.
+
+### Failed hosts
+
+As in Ansible, a host whose task fails leaves the run (later tasks and plays skip it) and the
+other hosts go on; the run still ends with a non-zero exit code. The play stops at once with
+`any_errors_fatal: true`, when more than `max_fail_percentage` of a batch failed, or when no
+host is left. `force_handlers: true` runs notified handlers even on failed hosts.
 
 📚 **For detailed examples, see [docs/examples/README.md](docs/examples/README.md)**
 

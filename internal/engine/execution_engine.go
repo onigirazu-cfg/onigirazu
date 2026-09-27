@@ -87,6 +87,14 @@ type ExecutionEngine struct {
 	showDiff bool
 	// lazyVars are the play vars rendered per host at task time
 	lazyVars map[string]bool
+	// inheritedTags are the tags of the play and of the roles: entry that
+	// every task under them has too
+	inheritedTags []string
+	// failedHosts have left the run (a task failed on them); policy is how
+	// the running play treats failures
+	failedHosts   map[string]bool
+	policy        failurePolicy
+	forceHandlers bool
 }
 
 // becomeSettings is the privilege escalation a task runs with
@@ -258,6 +266,9 @@ func (e *ExecutionEngine) notifyError(taskName string, hostName string, error st
 // ExecutePlaybook executes a complete playbook
 func (e *ExecutionEngine) ExecutePlaybook(ctx context.Context, playbook *types.Playbook) (*types.PlaybookResult, error) {
 	e.logger.Info("Starting playbook execution: %s", playbook.Name)
+	e.mutex.Lock()
+	e.failedHosts = nil
+	e.mutex.Unlock()
 
 	// Record playbook execution start
 	e.metricsManager.IncrementPlaybooksExecuted()
@@ -548,7 +559,25 @@ func (e *ExecutionEngine) executePlayOn(ctx context.Context, play *types.Play, h
 	}()
 	playVars = e.mergeVariables(playVars, e.extraVars)
 	e.startPlayHandlers(hosts, play.Handlers, playVars)
-	defer func() { e.handlers = nil }()
+	e.inheritedTags = play.Tags
+	defer func() { e.inheritedTags = nil }()
+	e.mutex.Lock()
+	e.policy = failurePolicy{anyErrorsFatal: play.AnyErrorsFatal, maxFailPct: -1, batchSize: len(hosts)}
+	if play.MaxFailPercentage != nil {
+		e.policy.maxFailPct = *play.MaxFailPercentage
+	}
+	e.forceHandlers = play.ForceHandlers
+	e.mutex.Unlock()
+	defer func() {
+		// force_handlers: notified handlers run even when the play failed
+		if play.ForceHandlers && e.handlers != nil {
+			if err := e.flushHandlers(ctx, hosts, result); err != nil {
+				e.logger.Error("Handlers failed: %v", err)
+			}
+		}
+		e.handlers = nil
+		e.forceHandlers = false
+	}()
 
 	// As in Ansible: pre_tasks, handlers, roles and tasks, handlers,
 	// post_tasks, handlers
@@ -615,7 +644,10 @@ func (e *ExecutionEngine) executePlayOn(ctx context.Context, play *types.Play, h
 				withParams.Params = roleRef.Vars
 				role = &withParams
 			}
-			if err := e.executeRoleWithDependencies(ctx, role, hosts, playVars, result); err != nil {
+			e.inheritedTags = append(append([]string{}, play.Tags...), roleRef.Tags...)
+			err := e.executeRoleWithDependencies(ctx, role, hosts, playVars, result)
+			e.inheritedTags = play.Tags
+			if err != nil {
 				e.logger.Error("Role '%s' failed: %v", role.Name, err)
 				if !play.IgnoreErrors {
 					return result, fmt.Errorf("role '%s' failed: %w", role.Name, err)
@@ -697,16 +729,24 @@ func (e *ExecutionEngine) executeTaskList(ctx context.Context, tasks []types.Tas
 			}
 		}
 
+		// hosts a task failed on have left the run
+		active := e.activeHosts(hosts)
+		if len(active) == 0 {
+			return nil
+		}
+
 		// a block filters its own tasks by tag, so it is not filtered here
 		if len(task.Block) > 0 {
-			if err := e.executeBlock(ctx, &task, hosts, variables, playResult); err != nil {
-				return fmt.Errorf("block '%s' failed: %w", task.Name, err)
+			if err := e.executeBlock(ctx, &task, active, variables, playResult); err != nil {
+				if err = e.continueAfter(ctx, err, active, playResult); err != nil {
+					return fmt.Errorf("block '%s' failed: %w", task.Name, err)
+				}
 			}
 			continue
 		}
 
 		// Check if task should be skipped based on tags
-		if e.tagFilter != nil && !e.tagFilter.ShouldRun(task.Tags) {
+		if e.tagFilter != nil && !e.tagFilter.ShouldRun(e.taskTags(&task)) {
 			e.logger.Debug("Skipping task '%s' due to tag filter (%s), task tags: %v", task.Name, e.tagFilter.String(), task.Tags)
 			e.updateTaskStats("", &task, types.TaskResult{Skipped: true})
 			continue
@@ -715,8 +755,10 @@ func (e *ExecutionEngine) executeTaskList(ctx context.Context, tasks []types.Tas
 		// when is evaluated per host in executeTaskOnHost
 
 		// Execute task on all hosts
-		if err := e.executeTask(ctx, &task, hosts, variables, playResult); err != nil {
-			return fmt.Errorf("task '%s' failed: %w", task.Name, err)
+		if err := e.executeTask(ctx, &task, active, variables, playResult); err != nil {
+			if err = e.continueAfter(ctx, err, active, playResult); err != nil {
+				return fmt.Errorf("task '%s' failed: %w", task.Name, err)
+			}
 		}
 	}
 
@@ -787,6 +829,7 @@ func (e *ExecutionEngine) executeTask(ctx context.Context, task *types.Task, hos
 // executeTaskSerial executes a task on hosts serially
 func (e *ExecutionEngine) executeTaskSerial(ctx context.Context, task *types.Task, hosts []types.Host,
 	variables map[string]interface{}, playResult *types.PlayResult) error {
+	var failed failures
 	for _, host := range hosts {
 		// Check for context cancellation (graceful shutdown)
 		select {
@@ -798,13 +841,14 @@ func (e *ExecutionEngine) executeTaskSerial(ctx context.Context, task *types.Tas
 
 		if err := e.executeTaskOnHost(ctx, task, &host, variables, playResult); err != nil {
 			if !task.IgnoreErrors {
-				return err
+				failed.add(host.Name, err)
+				continue
 			}
 			e.logger.Warn("Task '%s' failed on host '%s' (ignored): %v", task.Name, host.Name, err)
 		}
 	}
 
-	return nil
+	return failed.err()
 }
 
 // executeTaskParallel executes a task on hosts in parallel
@@ -812,7 +856,7 @@ func (e *ExecutionEngine) executeTaskParallel(ctx context.Context, task *types.T
 	variables map[string]interface{}, playResult *types.PlayResult) error {
 	var wg sync.WaitGroup
 	var mutex sync.Mutex
-	var firstError error
+	var failed failures
 
 	for _, host := range hosts {
 		// Check for context cancellation before submitting new tasks
@@ -831,8 +875,8 @@ func (e *ExecutionEngine) executeTaskParallel(ctx context.Context, task *types.T
 
 			if err := e.executeTaskOnHost(ctx, task, &host, variables, playResult); err != nil {
 				mutex.Lock()
-				if firstError == nil && !task.IgnoreErrors {
-					firstError = err
+				if !task.IgnoreErrors {
+					failed.add(host.Name, err)
 				}
 				mutex.Unlock()
 
@@ -844,7 +888,7 @@ func (e *ExecutionEngine) executeTaskParallel(ctx context.Context, task *types.T
 	}
 
 	wg.Wait()
-	return firstError
+	return failed.err()
 }
 
 // SetSecurityPolicy replaces the security policy tasks are validated against
@@ -1204,18 +1248,18 @@ func (e *ExecutionEngine) finishTask(task *types.Task, host *types.Host, result 
 // and runs them in order; hosts run in parallel unless the task is serial
 func (e *ExecutionEngine) executeTaskWithLoop(ctx context.Context, task *types.Task, hosts []types.Host,
 	variables map[string]interface{}, playResult *types.PlayResult) error {
+	var failed failures
 	if task.Serial || len(hosts) == 1 {
 		for i := range hosts {
 			if err := e.runLoopOnHost(ctx, task, &hosts[i], variables, playResult); err != nil {
-				return err
+				failed.add(hosts[i].Name, err)
 			}
 		}
-		return nil
+		return failed.err()
 	}
 
 	var wg sync.WaitGroup
 	var mutex sync.Mutex
-	var firstError error
 	for i := range hosts {
 		host := &hosts[i]
 		wg.Add(1)
@@ -1223,15 +1267,13 @@ func (e *ExecutionEngine) executeTaskWithLoop(ctx context.Context, task *types.T
 			defer wg.Done()
 			if err := e.runLoopOnHost(ctx, task, host, variables, playResult); err != nil {
 				mutex.Lock()
-				if firstError == nil {
-					firstError = err
-				}
+				failed.add(host.Name, err)
 				mutex.Unlock()
 			}
 		})
 	}
 	wg.Wait()
-	return firstError
+	return failed.err()
 }
 
 // runLoopOnHost runs every item of a looped task on one host. A registered
@@ -1325,6 +1367,8 @@ func (e *ExecutionEngine) getPlayHosts(play *types.Play) ([]types.Host, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get hosts for pattern '%s': %w", play.Hosts, err)
 	}
+	// hosts that failed in an earlier play have left the run
+	hosts = e.activeHosts(hosts)
 	if e.limit == "" {
 		return hosts, nil
 	}
@@ -1818,16 +1862,24 @@ func (e *ExecutionEngine) executeTaskListWithRetry(ctx context.Context, tasks []
 			}
 		}
 
+		// hosts a task failed on have left the run
+		active := e.activeHosts(hosts)
+		if len(active) == 0 {
+			return nil
+		}
+
 		// a block filters its own tasks by tag, so it is not filtered here
 		if len(task.Block) > 0 {
-			if err := e.executeBlock(ctx, &task, hosts, variables, playResult); err != nil {
-				return fmt.Errorf("block '%s' failed: %w", task.Name, err)
+			if err := e.executeBlock(ctx, &task, active, variables, playResult); err != nil {
+				if err = e.continueAfter(ctx, err, active, playResult); err != nil {
+					return fmt.Errorf("block '%s' failed: %w", task.Name, err)
+				}
 			}
 			continue
 		}
 
 		// Check if task should be skipped based on tags
-		if e.tagFilter != nil && !e.tagFilter.ShouldRun(task.Tags) {
+		if e.tagFilter != nil && !e.tagFilter.ShouldRun(e.taskTags(&task)) {
 			e.logger.Debug("Skipping task '%s' due to tag filter (%s), task tags: %v", task.Name, e.tagFilter.String(), task.Tags)
 			e.metricsManager.IncrementTasksSkipped()
 			continue
@@ -1836,11 +1888,14 @@ func (e *ExecutionEngine) executeTaskListWithRetry(ctx context.Context, tasks []
 		// when is evaluated per host in executeTaskOnHost
 
 		// Execute task with retry logic
-		if err := e.executeTaskWithRetryLogic(ctx, &task, hosts, variables, playResult); err != nil {
+		if err := e.executeTaskWithRetryLogic(ctx, &task, active, variables, playResult); err != nil {
 			if !task.IgnoreErrors {
-				return fmt.Errorf("task '%s' failed: %w", task.Name, err)
+				if err = e.continueAfter(ctx, err, active, playResult); err != nil {
+					return fmt.Errorf("task '%s' failed: %w", task.Name, err)
+				}
+			} else {
+				e.logger.Warn("Task '%s' failed but continuing due to ignore_errors", task.Name)
 			}
-			e.logger.Warn("Task '%s' failed but continuing due to ignore_errors", task.Name)
 		}
 	}
 
@@ -2030,6 +2085,9 @@ func (e *ExecutionEngine) executeBlock(ctx context.Context, block *types.Task, h
 	rescue := inheritBlock(block, block.Rescue, false)
 	always := inheritBlock(block, block.Always, false)
 
+	// inside the block a failure goes to rescue; the host leaves the run
+	// only when the block as a whole failed on it
+	ctx = context.WithValue(ctx, inBlockKey{}, true)
 	runOnHost := func(host types.Host) error {
 		one := []types.Host{host}
 		err := e.executeTaskList(ctx, body, one, variables, playResult)
@@ -2045,12 +2103,15 @@ func (e *ExecutionEngine) executeBlock(ctx context.Context, block *types.Task, h
 		return err
 	}
 
+	var failed failures
 	if len(hosts) == 1 {
-		return runOnHost(hosts[0])
+		if err := runOnHost(hosts[0]); err != nil {
+			failed.add(hosts[0].Name, err)
+		}
+		return failed.err()
 	}
 	var wg sync.WaitGroup
 	var mutex sync.Mutex
-	var firstError error
 	for i := range hosts {
 		host := hosts[i]
 		wg.Add(1)
@@ -2058,15 +2119,13 @@ func (e *ExecutionEngine) executeBlock(ctx context.Context, block *types.Task, h
 			defer wg.Done()
 			if err := runOnHost(host); err != nil {
 				mutex.Lock()
-				if firstError == nil {
-					firstError = err
-				}
+				failed.add(host.Name, err)
 				mutex.Unlock()
 			}
 		})
 	}
 	wg.Wait()
-	return firstError
+	return failed.err()
 }
 
 // inheritBlock returns copies of a block's tasks carrying the block's when,
@@ -2224,4 +2283,13 @@ func (e *ExecutionEngine) renderLazyVars(ctx context.Context, vars map[string]in
 			return
 		}
 	}
+}
+
+// taskTags are a task's own tags and those it inherits from its play and
+// roles: entry
+func (e *ExecutionEngine) taskTags(task *types.Task) []string {
+	if len(e.inheritedTags) == 0 {
+		return task.Tags
+	}
+	return append(append([]string{}, e.inheritedTags...), task.Tags...)
 }

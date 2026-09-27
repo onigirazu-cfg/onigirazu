@@ -185,3 +185,11 @@ func TestTask_FullyQualifiedModules(t *testing.T) {
 	assert.Equal(t, "command", tasks[4].Module)
 	assert.Equal(t, "other.yml", tasks[5].Include)
 }
+
+func TestPlayAndRoleTagsAsString(t *testing.T) {
+	var play Play
+	require.NoError(t, yaml.Unmarshal([]byte("name: p\nhosts: all\ntags: a, b\nroles:\n  - {role: web, tags: web}\ntasks: []\n"), &play))
+	assert.Equal(t, []string{"a", "b"}, play.Tags)
+	require.Len(t, play.Roles, 1)
+	assert.Equal(t, []string{"web"}, play.Roles[0].Tags)
+}

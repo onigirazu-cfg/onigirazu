@@ -120,6 +120,10 @@ func (e *ExecutionEngine) flushHandlers(ctx context.Context, hosts []types.Host,
 	if h == nil {
 		return nil
 	}
+	// handlers run on the hosts still in the run, or on all with force_handlers
+	if !e.forceHandlers {
+		hosts = e.activeHosts(hosts)
+	}
 	for pass := 0; pass < 10; pass++ {
 		toRun := h.takeNotified(hosts)
 		ran := false

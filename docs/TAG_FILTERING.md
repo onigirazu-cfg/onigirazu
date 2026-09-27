@@ -49,11 +49,11 @@ Tags are passed down to the tasks inside:
 
 | Where the tags are set | Inherited by |
 |------------------------|--------------|
+| play | every task of the play, its roles included |
+| `roles:` entry (`- { role: web, tags: web }`) | the role's tasks and its dependencies |
 | `block` | its `block`, `rescue` and `always` tasks |
 | `include_tasks` / `import_tasks` | the included tasks |
 | `include_role` / `import_role` | the role's tasks |
-
-**Current limitation**: `tags` on a play and on a `roles:` entry (`- { role: web, tags: [web] }`) are ignored.
 
 Handlers are not filtered by tags; they run when notified.
 
@@ -250,10 +250,9 @@ onigirazu drift playbook.yml --tags setup
 ### Task not running
 
 1. Does it have the `never` tag? It never runs; remove the tag.
-2. Are its tags set on the play or on a `roles:` entry? Those are ignored.
-3. Does `--tags untagged` apply while the task has tags?
-4. Is one of its tags in `--skip-tags`?
-5. With `--tags`, does at least one of its tags match?
+2. Does `--tags untagged` apply while the task has tags (also inherited from the play or role)?
+3. Is one of its tags, or one inherited, in `--skip-tags`?
+4. With `--tags`, does at least one of its tags match?
 
 ### Task running when it shouldn't
 
