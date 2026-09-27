@@ -68,7 +68,6 @@ func (m *EnhancedTUIModel) processRollout(phase string, b *types.BatchReport) {
 	if idx < 0 {
 		m.rollout = append(m.rollout, *b)
 		m.rolloutPhases = append(m.rolloutPhases, phase)
-		idx = len(m.rollout) - 1
 	} else {
 		m.rollout[idx] = *b
 		m.rolloutPhases[idx] = phase
