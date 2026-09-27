@@ -392,7 +392,12 @@ plays:
 </code></pre>
 
 <p>With <code>serial</code> the whole play (facts, tasks, handlers) runs on one batch of hosts after
-another. A batch that fails stops the play: later batches do not start.</p>
+another.</p>
+<h3>Failed hosts</h3>
+<p>As in Ansible, a host whose task fails leaves the run (later tasks and plays skip it) and the
+other hosts go on; the run still ends with a non-zero exit code. The play stops at once with
+<code>any_errors_fatal: true</code>, when more than <code>max_fail_percentage</code> of a batch failed, or when no
+host is left. <code>force_handlers: true</code> runs notified handlers even on failed hosts.</p>
 <p>📚 <strong>For detailed examples, see <a href="docs/examples/README.md">docs/examples/README.md</a></strong></p>
 <h2>CLI Commands</h2>
 <h3>All Available Commands</h3>
