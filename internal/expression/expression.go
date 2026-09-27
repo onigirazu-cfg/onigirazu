@@ -25,6 +25,8 @@ var (
 	bareFilter = regexp.MustCompile(`\|\s*(` + strings.Join(filterNames, "|") + `)\b(\s*\()?`)
 	// map(attribute='x') has a keyword argument, which expr does not
 	mapAttribute = regexp.MustCompile(`\bmap\(\s*attribute\s*=\s*`)
+	// keyword arguments of random/shuffle become "name", value pairs
+	randomKeyword = regexp.MustCompile(`\b(seed|start|step)\s*=\s*([^=\s])`)
 	// d.keys() and d.values() are Python methods
 	dictMethod = regexp.MustCompile(`\.(keys|values)\(\)`)
 	// lookup() and query() get the playbook directory as their first argument
@@ -177,6 +179,7 @@ func translateCode(code string) string {
 		return "| " + name + "()"
 	})
 	code = mapAttribute.ReplaceAllString(code, "map_attribute(")
+	code = randomKeyword.ReplaceAllString(code, `"$1", $2`)
 	code = dictMethod.ReplaceAllString(code, " | $1()")
 	code = lookupCall.ReplaceAllStringFunc(code, func(m string) string {
 		if strings.HasPrefix(m, "lookup") {

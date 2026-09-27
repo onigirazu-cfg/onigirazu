@@ -185,7 +185,8 @@ so they win). They override variables written in the inventory itself.
 `run` requires `-i`. `apply` (and `plan`/`drift`) look in the playbook's directory for
 `inventory.yml`, `inventory.yaml`, `inventory.toml`, `inventory.json`, `inventory.ini`,
 `hosts`, `hosts.yml`, `hosts.yaml`, `hosts.toml`, `hosts.json`, `hosts.ini`, `inventory`,
-then in `/etc/onigirazu/` for `inventory.yml`, `hosts.yml`, `inventory`.
+then in `/etc/onigirazu/` for `inventory.yml`, `hosts.yml`, `inventory`. When none is found,
+the inventory is `localhost` alone, run on the control machine.
 
 ## Limitations
 
