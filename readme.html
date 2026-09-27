@@ -350,6 +350,17 @@ plays:
 
 <p>With <code>serial</code> the whole play (facts, tasks, handlers) runs on one batch of hosts after
 another.</p>
+<h3>Safe apply: health checks and automatic rollback</h3>
+<pre class="codehilite"><code class="language-yaml">    serial: [1, &quot;25%&quot;]
+    health_check:
+      - uri: {url: &quot;http://127.0.0.1:8080/health&quot;, status_code: 200}
+        retries: 10
+        delay: 3
+</code></pre>
+
+<p>After every batch the checks run on its hosts; an unhealthy batch is rolled back (its changes
+undone, newest first) and the rollout stops, exit code 5. <code>--canary 1 --canary-pause 5m</code> runs one
+host first and checks it again after a soak. See <a href="docs/SAFE_APPLY.md">docs/SAFE_APPLY.md</a>.</p>
 <h3>Failed hosts</h3>
 <p>As in Ansible, a host whose task fails leaves the run (later tasks and plays skip it) and the
 other hosts go on; the run still ends with a non-zero exit code. The play stops at once with
