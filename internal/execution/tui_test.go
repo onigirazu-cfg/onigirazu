@@ -210,7 +210,7 @@ func TestTUIHelpIsVisible(t *testing.T) {
 	key(m, "h")
 	s := screen(m)
 	assert.Contains(t, s, "KEYBOARD SHORTCUTS")
-	assert.Contains(t, s, "G - Stop gracefully")
+	assert.Contains(t, s, "G stop gracefully")
 	key(m, "esc")
 	assert.NotContains(t, screen(m), "KEYBOARD SHORTCUTS")
 }
@@ -241,4 +241,26 @@ func TestTUIDetailDiffAndScroll(t *testing.T) {
 	assert.Contains(t, screen(m), "Module:   template")
 	key(m, "esc")
 	assert.Contains(t, screen(m), "TASK RESULTS")
+}
+
+func TestTUITimeline(t *testing.T) {
+	m, _ := newTestModel()
+	m.startTime = time.Now().Add(-10 * time.Second)
+	taskEnd(m, types.TaskResult{TaskName: "install", Host: "web1", Changed: true, Duration: 4 * time.Second})
+	taskEnd(m, types.TaskResult{TaskName: "install", Host: "db1", Duration: time.Second})
+	taskEnd(m, types.TaskResult{TaskName: "migrate", Host: "db1", Failed: true, Duration: 2 * time.Second})
+	key(m, "l")
+	s := screen(m)
+	assert.Contains(t, s, "TIMELINE (2 hosts)")
+	assert.Regexp(t, `db1\s+✓✗\s+2 tasks`, s) // failed host first
+	assert.Less(t, strings.Index(s, "db1 "), strings.Index(s, "web1 "))
+	key(m, "enter")
+	s = screen(m)
+	assert.Contains(t, s, "db1: 2 tasks over")
+	assert.Contains(t, s, "migrate")
+	assert.Contains(t, s, "█")
+	key(m, "esc")
+	assert.Contains(t, screen(m), "TIMELINE")
+	key(m, "esc")
+	assert.Contains(t, screen(m), "Statistics")
 }

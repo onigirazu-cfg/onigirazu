@@ -197,7 +197,8 @@ onigirazu apply playbook.yaml -i inventory.yaml --interactive
 |-----|--------|
 | **P** | Pause / resume the run (running tasks finish first) |
 | **G** | Stop gracefully: no new task starts |
-| **R** | Task results; **Enter** shows one (error, message, stdout, stderr) |
+| **R** | Task results; **Enter** shows one (error, message, stdout, stderr, diff) |
+| **L** | Timeline: task marks per host; **Enter** shows a host's tasks over time |
 | **N** / **V** / **D** | Detail: results and errors / + task output and log lines / + debug |
 | **↑↓**, **PgUp/PgDn**, **Home/End** | Scroll the log |
 | **F**, **/** | Filter (errors, warnings, tasks), search |
