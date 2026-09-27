@@ -76,3 +76,24 @@ func TestSources_SameAddressTwoPorts(t *testing.T) {
 	inv := loadSources(t, "e2e@127.0.0.1:2222,e2e@127.0.0.1:2223")
 	assert.Equal(t, []string{"127.0.0.1:2222", "127.0.0.1:2223"}, hostNames(inv))
 }
+
+func TestPatternWithPortInHostName(t *testing.T) {
+	inv := loadSources(t, "e2e@127.0.0.1:2222,e2e@127.0.0.1:2223")
+	p := parser.NewEnhancedParser(nil, &mockLogger{})
+	m := NewManager(p, &mockLogger{}, newMockCache())
+	require.NoError(t, m.SetInventory(inv))
+	for pattern, want := range map[string][]string{
+		"127.0.0.1:2222":                {"127.0.0.1:2222"},
+		"127.0.0.1:2222,127.0.0.1:2223": {"127.0.0.1:2222", "127.0.0.1:2223"},
+		"all,!127.0.0.1:2223":           {"127.0.0.1:2222"},
+	} {
+		hosts, err := m.GetHosts(pattern)
+		require.NoError(t, err, pattern)
+		var names []string
+		for _, h := range hosts {
+			names = append(names, h.Name)
+		}
+		sort.Strings(names)
+		assert.Equal(t, want, names, pattern)
+	}
+}

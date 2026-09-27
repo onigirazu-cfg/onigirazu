@@ -35,6 +35,7 @@ Keys are case-insensitive. **H** shows them all.
 | **P** | Pause / resume. Tasks already running finish; the next task waits. |
 | **G** | Stop gracefully (asks first): running tasks finish, no new task starts. The dashboard stays open. |
 | **Q**, **Ctrl+C** | Close. While the run goes on it asks first, and **Y** stops the run and closes. A second **Ctrl+C** at the question does the same. After the run, **Q** closes at once. |
+| **X** | After the run: run the playbook again on the hosts that failed (asks first). The dashboard closes, and the same command runs again with `--limit` set to those hosts, in a new dashboard. |
 
 A stopped run ends with a non-zero exit code and "run stopped by user"; state, audit and the
 rollback snapshot are saved as for any run.

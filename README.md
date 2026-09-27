@@ -203,6 +203,7 @@ onigirazu apply playbook.yaml -i inventory.yaml --interactive
 | **↑↓**, **PgUp/PgDn**, **Home/End** | Scroll the log |
 | **F**, **/** | Filter (errors, warnings, tasks), search |
 | **S**, **H** | Statistics, help |
+| **X** | After the run: run it again on the failed hosts |
 | **Q**, **Ctrl+C** | Close; during the run it asks, and **Y** stops the run |
 
 When the dashboard closes, the usual summary is printed. Without a terminal `apply` runs with
