@@ -94,6 +94,33 @@ func (m *EnhancedTUIModel) confirm() tea.Cmd {
 	return nil
 }
 
+// askRerun offers to run the playbook again on the failed hosts
+func (m *EnhancedTUIModel) askRerun() {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	if m.running() {
+		m.addLog(LogEntry{Level: "WARN", Message: "X runs the failed hosts again once the run has finished"})
+		return
+	}
+	if len(m.failedHosts()) == 0 {
+		m.addLog(LogEntry{Level: "INFO", Message: "No host failed: nothing to run again"})
+		return
+	}
+	m.activeModal = "confirm"
+	m.confirmAction = "rerun"
+}
+
+// confirmRerun closes the dashboard and records the hosts to run again
+func (m *EnhancedTUIModel) confirmRerun() tea.Cmd {
+	m.mutex.Lock()
+	m.rerunHosts = m.failedHosts()
+	m.activeModal = ""
+	m.confirmAction = ""
+	m.mutex.Unlock()
+	m.markClosed()
+	return tea.Quit
+}
+
 // recordResult keeps a finished task for the results browser
 func (m *EnhancedTUIModel) recordResult(r types.TaskResult) {
 	// the task started its duration before its result arrived
@@ -406,4 +433,24 @@ func resultLines(r *types.TaskResult) []LogEntry {
 func firstLine(s string) string {
 	line, _, _ := strings.Cut(strings.TrimSpace(s), "\n")
 	return line
+}
+
+// failedHosts are the hosts a task failed on (not ignored, not rescued)
+func (m *EnhancedTUIModel) failedHosts() []string {
+	var hosts []string
+	for name, h := range m.hostStats {
+		if h.FailedCount > 0 {
+			hosts = append(hosts, name)
+		}
+	}
+	sort.Strings(hosts)
+	return hosts
+}
+
+// RerunHosts are the failed hosts the user asked to run the playbook on
+// again (X after the run), or nil
+func (m *EnhancedTUIModel) RerunHosts() []string {
+	m.mutex.RLock()
+	defer m.mutex.RUnlock()
+	return m.rerunHosts
 }

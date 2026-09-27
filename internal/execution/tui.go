@@ -118,8 +118,10 @@ type EnhancedTUIModel struct {
 	detailOffset  int
 	// timelineCursor is the host selected in the timeline
 	timelineCursor int
-	closeOnce      sync.Once
-	readyOnce      sync.Once
+	// rerunHosts are the failed hosts to run again after the dashboard closes
+	rerunHosts []string
+	closeOnce  sync.Once
+	readyOnce  sync.Once
 }
 
 // DetailedTaskStats extends basic TaskStats with more info
@@ -686,6 +688,9 @@ func (m *EnhancedTUIModel) renderFooter() string {
 	if m.running() {
 		hints = append(hints, "P: Pause", "G: Stop")
 	}
+	if !m.running() && len(m.failedHosts()) > 0 {
+		hints = append(hints, "X: Rerun failed")
+	}
 	hints = append(hints, "Q: Quit")
 
 	if m.paused {
@@ -719,6 +724,7 @@ func (m *EnhancedTUIModel) renderHelpModal() string {
 		"  KEYBOARD SHORTCUTS",
 		"  RUN   P pause/resume · G stop gracefully · Q, Ctrl+C close",
 		"        (during a run Q asks, and Y stops the run)",
+		"        X after the run: run the failed hosts again",
 		"",
 		"  VIEW  R task results, Enter details (output, error, diff)",
 		"        L timeline per host, Enter its tasks over time",
@@ -857,18 +863,30 @@ func (m *EnhancedTUIModel) renderStatsModal() string {
 // renderConfirmModal renders a confirmation modal
 func (m *EnhancedTUIModel) renderConfirmModal() string {
 	var confirmLines []string
-	confirmLines = append(confirmLines, "")
-	confirmLines = append(confirmLines, "  GRACEFUL SHUTDOWN")
-	confirmLines = append(confirmLines, "  ─────────────────")
-	confirmLines = append(confirmLines, "")
-	confirmLines = append(confirmLines, "  Stop execution gracefully?")
-	confirmLines = append(confirmLines, "")
-	confirmLines = append(confirmLines, "  Running tasks will complete.")
-	confirmLines = append(confirmLines, "  No new tasks will start.")
-	confirmLines = append(confirmLines, "")
-	confirmLines = append(confirmLines, "  [Y] Continue with shutdown")
-	confirmLines = append(confirmLines, "  [N] Cancel")
-	confirmLines = append(confirmLines, "")
+	switch m.confirmAction {
+	case "rerun":
+		hosts := m.failedHosts()
+		list := strings.Join(hosts, ", ")
+		if len(list) > 45 {
+			list = list[:42] + "..."
+		}
+		confirmLines = []string{"", "  RUN AGAIN ON FAILED HOSTS", "",
+			fmt.Sprintf("  Run the playbook again on %d host(s):", len(hosts)),
+			"  " + list, "",
+			"  The dashboard closes; the new run gets its own.", "",
+			"  [Y] Run again", "  [N] Cancel", ""}
+	case "quit":
+		confirmLines = []string{"", "  THE RUN IS STILL GOING", "",
+			"  Stop it and close the dashboard?", "",
+			"  Running tasks finish, no new task starts.", "",
+			"  [Y] Stop and close", "  [N] Keep watching", ""}
+	default:
+		confirmLines = []string{"", "  STOP THE RUN", "",
+			"  Stop gracefully?", "",
+			"  Running tasks finish, no new task starts.",
+			"  The dashboard stays open.", "",
+			"  [Y] Stop", "  [N] Cancel", ""}
+	}
 
 	confirmText := strings.Join(confirmLines, "\n")
 
@@ -1305,6 +1323,9 @@ func (m *EnhancedTUIModel) handleKeypress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.activeModal = "timeline"
 		m.mutex.Unlock()
 
+	case "x":
+		m.askRerun()
+
 	case "r":
 		m.mutex.Lock()
 		m.activeModal = "results"
@@ -1456,6 +1477,13 @@ func (m *EnhancedTUIModel) handleModalKeypress(msg tea.KeyMsg) (tea.Model, tea.C
 	case "confirm":
 		switch key {
 		case "y", "enter":
+			m.mutex.RLock()
+			rerun := m.confirmAction == "rerun"
+			m.mutex.RUnlock()
+			if rerun {
+				cmd := m.confirmRerun()
+				return m, cmd
+			}
 			cmd := m.confirm()
 			return m, cmd
 		case "n", "esc", "q":

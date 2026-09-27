@@ -264,3 +264,29 @@ func TestTUITimeline(t *testing.T) {
 	key(m, "esc")
 	assert.Contains(t, screen(m), "Statistics")
 }
+
+func TestTUIRerunFailedHosts(t *testing.T) {
+	m, _ := newTestModel()
+	m.OnTaskEnd(&types.TaskResult{TaskName: "a", Host: "web1", Changed: true})
+	m.OnTaskEnd(&types.TaskResult{TaskName: "a", Host: "db2", Failed: true})
+	m.OnTaskEnd(&types.TaskResult{TaskName: "a", Host: "db1", Failed: true})
+	m.OnTaskEnd(&types.TaskResult{TaskName: "b", Host: "web2", Failed: true, Ignored: true})
+	for len(m.eventChan) > 0 {
+		m.processEvent(<-m.eventChan)
+	}
+	// only after the run
+	key(m, "x")
+	assert.NotContains(t, screen(m), "RUN AGAIN")
+	m.processEvent(ExecutionEvent{Type: "execution_end", Success: false, Message: "failed"})
+	assert.Contains(t, screen(m), "X: Rerun failed")
+	key(m, "x")
+	s := screen(m)
+	assert.Contains(t, s, "RUN AGAIN ON FAILED HOSTS")
+	assert.Contains(t, s, "db1, db2")
+	key(m, "n")
+	assert.Nil(t, m.RerunHosts())
+	key(m, "x")
+	key(m, "y")
+	assert.Equal(t, []string{"db1", "db2"}, m.RerunHosts())
+	assert.True(t, m.shouldExit)
+}

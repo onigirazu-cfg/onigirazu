@@ -145,7 +145,7 @@ func (m *Manager) GetHosts(pattern string) ([]types.Host, error) {
 // host name or wildcard, or several of them joined with "," or ":" (union);
 // a part starting with "!" removes its hosts, as in Ansible
 func (m *Manager) hostsForPattern(pattern string) []types.Host {
-	parts := strings.FieldsFunc(pattern, func(r rune) bool { return r == ',' || r == ':' })
+	parts := m.patternParts(pattern)
 	if len(parts) > 1 {
 		var hosts []types.Host
 		seen := make(map[string]bool)
@@ -185,6 +185,46 @@ func (m *Manager) hostsForPattern(pattern string) []types.Host {
 		return m.getGroupHosts(group, pattern)
 	}
 	return m.getHostsByPattern(pattern)
+}
+
+// patternParts splits a pattern on "," and then ":", except that a part
+// naming a host or group exactly stays whole ("127.0.0.1:2222" is a host)
+func (m *Manager) patternParts(pattern string) []string {
+	var parts []string
+	for _, part := range strings.Split(pattern, ",") {
+		name := strings.TrimPrefix(strings.TrimSpace(part), "!")
+		if name == "" {
+			continue
+		}
+		if m.isName(name) || !strings.Contains(name, ":") {
+			parts = append(parts, strings.TrimSpace(part))
+			continue
+		}
+		for _, sub := range strings.Split(part, ":") {
+			if sub = strings.TrimSpace(sub); sub != "" {
+				parts = append(parts, sub)
+			}
+		}
+	}
+	return parts
+}
+
+// isName tells whether s is the name of a host or group
+func (m *Manager) isName(s string) bool {
+	if _, ok := m.inventory.Groups[s]; ok {
+		return true
+	}
+	for _, h := range m.inventory.Hosts {
+		if h.Name == s {
+			return true
+		}
+	}
+	for _, g := range m.inventory.Groups {
+		if _, ok := g.Hosts[s]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 // GetGroups returns all groups matching the given pattern

@@ -812,6 +812,10 @@ Examples:
 			// Wait for TUI to finish if it's running (user presses Q to exit)
 			if interactive && tuiModel != nil {
 				tuiModel.WaitForExit()
+				// X in the dashboard: main runs apply again on the failed hosts
+				if hosts := tuiModel.RerunHosts(); len(hosts) > 0 {
+					rerunLimit = strings.Join(hosts, ",")
+				}
 			}
 
 			if err != nil {
