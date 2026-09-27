@@ -9,6 +9,7 @@ import (
 	"github.com/onigirazu-cfg/onigirazu/internal/interfaces"
 	"github.com/onigirazu-cfg/onigirazu/internal/inventory"
 	"github.com/onigirazu-cfg/onigirazu/internal/modules"
+	"github.com/onigirazu-cfg/onigirazu/internal/template"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
@@ -17,6 +18,7 @@ type Executor struct {
 	moduleRegistry *modules.Registry
 	inventoryMgr   *inventory.Manager
 	logger         interfaces.Logger
+	templates      *template.Engine
 }
 
 // NewExecutor creates a new ad-hoc executor
@@ -29,6 +31,7 @@ func NewExecutor(
 		moduleRegistry: moduleRegistry,
 		inventoryMgr:   inventoryMgr,
 		logger:         logger,
+		templates:      template.NewEngine(),
 	}
 }
 
@@ -155,25 +158,10 @@ func (e *Executor) executeOnHost(
 		result.Duration = time.Since(startTime)
 		return result
 	}
-	if err := module.Validate(copyArgs(task.Args)); err != nil {
-		result.Error = fmt.Errorf("invalid arguments for %s: %w", task.Module, err)
-		result.Duration = time.Since(startTime)
-		return result
-	}
 
 	// through the registry, as a playbook task: --check runs only modules
 	// that support check mode (the others are skipped, not run), --diff asks
 	// for before/after, arguments are normalized like in apply
-	check := opts.Check
-	run := &types.Task{Name: task.Name, Module: task.Module, Args: copyArgs(task.Args), CheckMode: &check, Diff: opts.Diff}
-	if run.Name == "" {
-		run.Name = fmt.Sprintf("ad-hoc %s", task.Module)
-	}
-	if opts.Timeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, opts.Timeout)
-		defer cancel()
-	}
 	vars := map[string]interface{}{}
 	for k, v := range host.Vars {
 		vars[k] = v
@@ -183,6 +171,30 @@ func (e *Executor) executeOnHost(
 	}
 	vars["inventory_hostname"] = host.Name
 
+	// {{ }} in the arguments, as in a playbook task
+	args, err := e.templates.RenderTaskArgs(ctx, copyArgs(task.Args), vars)
+	if err != nil {
+		result.Error = fmt.Errorf("failed to render arguments: %w", err)
+		result.Duration = time.Since(startTime)
+		return result
+	}
+	if err := module.Validate(copyArgs(args)); err != nil {
+		result.Error = fmt.Errorf("invalid arguments for %s: %w", task.Module, err)
+		result.Duration = time.Since(startTime)
+		return result
+	}
+
+	check := opts.Check
+	run := &types.Task{Name: task.Name, Module: task.Module, Args: args, CheckMode: &check, Diff: opts.Diff,
+		Become: opts.Become, BecomeUser: opts.BecomeUser}
+	if run.Name == "" {
+		run.Name = fmt.Sprintf("ad-hoc %s", task.Module)
+	}
+	if opts.Timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, opts.Timeout)
+		defer cancel()
+	}
 	taskResult, err := e.moduleRegistry.ExecuteTask(ctx, run, host, vars)
 	if err != nil {
 		result.Error = err
