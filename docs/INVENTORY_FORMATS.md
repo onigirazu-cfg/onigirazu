@@ -162,6 +162,9 @@ Existing Ansible inventory scripts work unchanged. As in Ansible, a host that is
 | `onigirazu_password` / `ansible_password` (`password`) | SSH password | — |
 | any other key | host variable for templates | — |
 
+These variables also work as group variables (`all: vars: ansible_user: deploy`, group_vars
+files): a host takes them unless it sets its own.
+
 `apply -u USER` and `--private-key FILE` (`run -u`/`-k`) override user and key for every host.
 
 ## group_vars and host_vars

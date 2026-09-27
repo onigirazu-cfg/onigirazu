@@ -586,11 +586,11 @@ func (m *Manager) validateHosts(inventory *types.Inventory) error {
 			if host.Vars == nil {
 				host.Vars = make(map[string]interface{})
 			}
-			if host.Port == 0 {
-				host.Vars["_original_port"] = 0
-				host.Port = 22
-			} else {
+			if _, set := host.Vars["_original_port"]; !set {
 				host.Vars["_original_port"] = host.Port
+			}
+			if host.Port == 0 {
+				host.Port = 22
 			}
 
 			// Log final host configuration

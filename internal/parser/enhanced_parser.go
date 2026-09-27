@@ -365,9 +365,15 @@ func (p *EnhancedParser) validateHost(host *types.Host, name string) error {
 		host.Address = name // Use hostname as address if not specified
 	}
 
-	// Set default SSH port if not specified
+	// Set default SSH port if not specified; a group variable may set it later
 	if host.Port == 0 {
 		host.Port = 22
+		if host.Vars == nil {
+			host.Vars = make(map[string]interface{})
+		}
+		if _, set := host.Vars["_original_port"]; !set {
+			host.Vars["_original_port"] = 0
+		}
 	}
 
 	return nil
