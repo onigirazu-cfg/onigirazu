@@ -179,7 +179,9 @@ func uploadArchive(ctx context.Context, host types.Host, args map[string]interfa
 	if _, err := runShellOnHost(ctx, host, map[string]interface{}{}, "chmod 0644 "+shellQuote(tmp)); err != nil {
 		return "", nil, err
 	}
-	return tmp, func() { _, _ = runShellOnHost(context.Background(), host, map[string]interface{}{}, "rm -f "+shellQuote(tmp)) }, nil
+	return tmp, func() {
+		_, _ = runShellOnHost(context.Background(), host, map[string]interface{}{}, "rm -f "+shellQuote(tmp))
+	}, nil
 }
 
 // archiveMembers are the paths of an archive listing, without "./"
