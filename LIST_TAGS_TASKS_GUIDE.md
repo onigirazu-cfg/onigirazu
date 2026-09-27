@@ -9,13 +9,13 @@ Two `apply` flags inspect a playbook without running anything:
 
 Both read only the playbook; nothing runs on the hosts, so `--check` and `--diff` have no effect on the listing. For an exact per-host preview of what would change, use `onigirazu plan`.
 
-## Limitations
+## What is listed
 
-The listing is a static view of the playbook and does not match execution in every case:
-
-- Tasks inside roles (`roles:`, `include_role`, `import_role`) and inside `block`s are not listed.
-- Handlers are listed (and counted as would-run), although they run only when notified.
-- `--list-tasks` matches tags case-sensitively, treats `tagged`, `untagged` and `all` as ordinary tag names, and ignores `--skip-tags always`. Execution does none of these.
+Tasks as they run: the tasks of `roles:` entries (named `role : task`) and the tasks inside `block`s
+are listed, with the tags they inherit from the play, the `roles:` entry and the block. Handlers are
+not listed; they run only when notified. The decision uses the same tag filter as execution
+(case-insensitive, `tagged`/`untagged`/`all`). Not listed: tasks of `include_role` / `import_role`
+and of role dependencies, and `when` conditions are not evaluated.
 
 ## Quick Examples
 
@@ -121,7 +121,7 @@ Tags are sorted by count, then by name. `always` and `never` are listed separate
 onigirazu apply <playbook> --list-tasks [--tags TAG1,TAG2] [--skip-tags TAG3] [--output text|json|yaml|csv]
 ```
 
-Tasks are listed per play in the order pre_tasks, tasks, post_tasks, handlers. Each task gets one of:
+Tasks are listed per play in the order pre_tasks, roles, tasks, post_tasks. Each task gets one of:
 
 | Mark | Meaning |
 |------|---------|
