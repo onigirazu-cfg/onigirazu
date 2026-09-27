@@ -184,6 +184,16 @@ func (g *Gatherer) parseOSRelease(content string, facts *cache.SystemFacts) {
 			facts.Distribution = strings.Trim(strings.TrimPrefix(line, "ID="), "\"")
 		} else if strings.HasPrefix(line, "VERSION_ID=") {
 			facts.OSVersion = strings.Trim(strings.TrimPrefix(line, "VERSION_ID="), "\"")
+		} else if strings.HasPrefix(line, "VERSION_CODENAME=") {
+			if codename := strings.Trim(strings.TrimPrefix(line, "VERSION_CODENAME="), "\""); codename != "" {
+				facts.OSCodename = codename
+			}
+		} else if strings.HasPrefix(line, "VERSION=") && facts.OSCodename == "" {
+			// "9.4 (Blue Onyx)": the release name in parentheses
+			version := strings.Trim(strings.TrimPrefix(line, "VERSION="), "\"")
+			if i, j := strings.Index(version, "("), strings.LastIndex(version, ")"); i >= 0 && j > i {
+				facts.OSCodename = version[i+1 : j]
+			}
 		} else if strings.HasPrefix(line, "ID_LIKE=") {
 			idLike := strings.Trim(strings.TrimPrefix(line, "ID_LIKE="), "\"")
 			if strings.Contains(idLike, "debian") {
