@@ -111,8 +111,24 @@ type remoteFile struct {
 	SHA256 string
 }
 
-// statRemoteFile reads mode, owner and content hash of path on the host.
+// statRemoteFile reads mode, owner and content hash of path on the host;
+// the registry's capture of the task's target (args["_before"]) answers
+// without a round trip
 func statRemoteFile(ctx context.Context, host types.Host, args map[string]interface{}, path string) (remoteFile, error) {
+	if before, ok := args["_before"].(map[string]interface{}); ok && before["path"] == path {
+		switch before["kind"] {
+		case "absent":
+			return remoteFile{}, nil
+		case "file":
+			if sum, ok := before["sha256"].(string); ok && sum != "" {
+				mode, err := strconv.ParseUint(fmt.Sprint(before["mode"]), 8, 32)
+				if err == nil {
+					return remoteFile{Exists: true, Mode: os.FileMode(mode), Owner: fmt.Sprint(before["owner"]),
+						Group: fmt.Sprint(before["group"]), SHA256: sum}, nil
+				}
+			}
+		}
+	}
 	q := shellQuote(path)
 	out, err := runShellOnHost(ctx, host, args, fmt.Sprintf(
 		// GNU stat/sha256sum, with BSD fallbacks (a local macOS host)
