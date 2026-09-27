@@ -1,0 +1,6 @@
+plays:
+  - name: longer than --timeout
+    hosts: all
+    tasks:
+      - name: Sleep
+        command: sleep 30

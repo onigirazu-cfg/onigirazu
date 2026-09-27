@@ -48,7 +48,7 @@ Environment variables only change the defaults; a key in `onigirazu.yml` wins ov
 | `metrics_ip_whitelist` | `ONIGIRAZU_METRICS_IP_WHITELIST` | empty | If set, only these client IPs may connect (env: comma-separated). |
 | `ssh_timeout` | `ONIGIRAZU_SSH_TIMEOUT` | `30s` | Time to connect to a host. |
 | `show_diff` | — | `false` | As `apply --diff`. |
-| `default_timeout` | — | none | As `apply --timeout` (the whole run). |
+| `default_timeout` | — | none | As `apply --timeout` (the whole run; state, audit and snapshot are still saved). |
 | `verbose` | — | `false` | Debug logging, as `apply -v`. |
 
 `show_diff`, `default_timeout` and `verbose` apply only when written in the file, and the

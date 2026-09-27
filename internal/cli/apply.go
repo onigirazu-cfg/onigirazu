@@ -472,7 +472,8 @@ Examples:
 				foundPath, err := enhancedParser.FindInventoryFile(playbookDir)
 				if err != nil {
 					log.Warn("No inventory file found in playbook directory: %v", err)
-					log.Info("Continuing without inventory (only 'localhost' will be available)")
+					log.Info("Continuing without inventory: only 'localhost' is available (runs locally)")
+					finalInventoryPaths = []string{"localhost,"}
 				} else {
 					finalInventoryPaths = []string{foundPath}
 					log.Info("Auto-detected inventory source: %s", foundPath)
@@ -772,6 +773,10 @@ Examples:
 
 			result, err := executionEngine.ExecutePlaybook(ctx, playbook)
 			duration := time.Since(startTime)
+			// state and audit are saved after the run even when --timeout or
+			// Ctrl-C ended it
+			saveCtx, saveCancel := context.WithTimeout(context.WithoutCancel(ctx), time.Minute)
+			defer saveCancel()
 			runResult, runStart = result, startTime
 			if diff && onResult == nil && result != nil && outputFormat != "json" && outputFormat != "yaml" {
 				printDiffs(resultOut, result)
@@ -911,6 +916,9 @@ Examples:
 							for _, task := range hostResult.Tasks {
 								if task.Skipped {
 									tasksSkipped++
+								} else if task.Failed && task.Ignored {
+									// handled by ignore_errors or a rescue
+									tasksOK++
 								} else if task.Failed {
 									tasksFailed++
 								} else if task.Changed {
@@ -977,12 +985,12 @@ Examples:
 				}
 
 				if !cfg.IsCheckMode() {
-					if err := stateManager.SaveState(ctx, currentState); err != nil {
+					if err := stateManager.SaveState(saveCtx, currentState); err != nil {
 						log.Warn("Failed to save state after failure (manager): %v", err)
 					}
 
 					// Also save to backend
-					if err := stateBackend.SaveState(ctx, currentState); err != nil {
+					if err := stateBackend.SaveState(saveCtx, currentState); err != nil {
 						log.Warn("Failed to save state to backend: %v", err)
 					} else {
 						log.Info("State file saved to backend (failure recorded)")
@@ -1033,12 +1041,12 @@ Examples:
 				log.Info("Check mode: state file and snapshot left untouched")
 			} else {
 				log.Info("Saving state to: %s", cfg.StateFile)
-				if err := stateManager.SaveState(ctx, currentState); err != nil {
+				if err := stateManager.SaveState(saveCtx, currentState); err != nil {
 					log.Warn("Failed to save final state (manager): %v", err)
 				}
 
 				// Also save to backend
-				if err := stateBackend.SaveState(ctx, currentState); err != nil {
+				if err := stateBackend.SaveState(saveCtx, currentState); err != nil {
 					log.Warn("Failed to save final state to backend: %v", err)
 				} else {
 					log.Info("State file successfully saved to backend with %d play results", len(currentState.Results))

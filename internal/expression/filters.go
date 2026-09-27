@@ -22,7 +22,7 @@ var filterNames = []string{
 	"dict2items", "items2dict", "to_json", "to_nice_json", "to_yaml", "to_nice_yaml", "from_json",
 	"from_yaml", "unique", "list", "capitalize", "title", "b64encode", "b64decode", "quote", "basename",
 	"dirname", "sort", "sum", "max", "min", "reverse", "flatten", "join", "keys", "values", "abs", "round",
-	"select", "reject", "mandatory", "password_hash",
+	"select", "reject", "mandatory", "password_hash", "random", "shuffle",
 }
 
 func filterFunctions() []expr.Option {
@@ -45,6 +45,8 @@ func filterFunctions() []expr.Option {
 			out, err := json.MarshalIndent(p[0], "", "    ")
 			return string(out), err
 		}),
+		fn("random", jinjaRandom),
+		fn("shuffle", jinjaShuffle),
 		fn("to_yaml", toYAML),
 		fn("to_nice_yaml", toYAML),
 		fn("from_json", func(p ...interface{}) (interface{}, error) {
