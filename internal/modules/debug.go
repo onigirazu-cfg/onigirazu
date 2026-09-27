@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/onigirazu-cfg/onigirazu/internal/expression"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
@@ -49,7 +50,14 @@ func (m *DebugModule) Execute(ctx context.Context, host types.Host, args map[str
 	} else if varVal, exists := args["var"]; exists {
 		// Support for var parameter (print variable)
 		if varStr, ok := varVal.(string); ok {
-			value, found := lookupVar(taskVars(args), varStr)
+			vars := taskVars(args)
+			value, found := lookupVar(vars, varStr)
+			if !found {
+				// an expression, as in Ansible: result['stdout'], x | length
+				if v, err := expression.Eval(varStr, vars); err == nil {
+					value, found = v, true
+				}
+			}
 			if !found {
 				value = "VARIABLE IS NOT DEFINED!"
 			}

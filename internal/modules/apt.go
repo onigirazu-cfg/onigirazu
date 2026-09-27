@@ -3,6 +3,8 @@ package modules
 import (
 	"context"
 	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -168,16 +170,38 @@ func (m *AptModule) Execute(ctx context.Context, host types.Host, args map[strin
 			return result, nil
 		}
 	}
+	upgrade, err := aptUpgradeArg(args)
+	if err != nil {
+		result.Success = false
+		result.Error = err.Error()
+		result.Duration = time.Since(startTime)
+		return result, nil
+	}
+	if inCheckMode(args) && upgrade != "" {
+		// apt-get -s shows what the upgrade would do without doing it
+		out, err := aptGet(ctx, host, args, "-s", upgrade)
+		if err != nil {
+			result.Success = false
+			result.Error = err.Error()
+		} else {
+			result.Changed = aptChanged(out)
+			result.Output["msg"] = "check mode: " + aptSummary(out)
+		}
+		result.Duration = time.Since(startTime)
+		return result, nil
+	}
 	if inCheckMode(args) {
-		// cache updates, upgrades and cleanups are not predicted
+		// cache updates and cleanups are not predicted
 		result.Success = true
 		result.Output["msg"] = "check mode: nothing done for this apt operation"
 		result.Duration = time.Since(startTime)
 		return result, nil
 	}
 
-	// Update cache if requested
-	if updateCache {
+	// Update cache if requested and older than cache_valid_time seconds
+	if updateCache && m.cacheValid(ctx, host, args) {
+		result.Output["cache_updated"] = false
+	} else if updateCache {
 		if err := m.updateAptCache(ctx, host, args); err != nil {
 			result.Success = false
 			result.Error = fmt.Sprintf("failed to update cache: %v", err)
@@ -210,15 +234,28 @@ func (m *AptModule) Execute(ctx context.Context, host types.Host, args map[strin
 		}
 	}
 
+	if upgrade != "" {
+		out, err := aptGet(ctx, host, args, "-y", "-o", "Dpkg::Options::=--force-confdef", "-o", "Dpkg::Options::=--force-confold", upgrade)
+		if err != nil {
+			result.Success = false
+			result.Error = fmt.Sprintf("failed to upgrade: %v", err)
+			result.Duration = time.Since(startTime)
+			return result, nil
+		}
+		result.Changed = result.Changed || aptChanged(out)
+		result.Output["upgrade"] = aptSummary(out)
+	}
+
 	// Autoremove if requested
 	if autoremove {
-		if err := m.autoremovePackages(ctx, host, args); err != nil {
+		out, err := m.autoremovePackages(ctx, host, args)
+		if err != nil {
 			result.Success = false
 			result.Error = fmt.Sprintf("failed to autoremove: %v", err)
 			result.Duration = time.Since(startTime)
 			return result, nil
 		}
-		result.Changed = true
+		result.Changed = result.Changed || aptChanged(out)
 	}
 
 	// Autoclean if requested
@@ -277,9 +314,59 @@ func (m *AptModule) removePackages(ctx context.Context, host types.Host, args ma
 	return err
 }
 
-func (m *AptModule) autoremovePackages(ctx context.Context, host types.Host, args map[string]interface{}) error {
-	_, err := aptGet(ctx, host, args, "autoremove", "-y")
-	return err
+func (m *AptModule) autoremovePackages(ctx context.Context, host types.Host, args map[string]interface{}) (string, error) {
+	return aptGet(ctx, host, args, "autoremove", "-y")
+}
+
+// cacheValid tells whether the package lists were updated less than
+// cache_valid_time seconds ago
+func (m *AptModule) cacheValid(ctx context.Context, host types.Host, args map[string]interface{}) bool {
+	validFor := getIntArg(args, "cache_valid_time", 0)
+	if validFor <= 0 {
+		return false
+	}
+	// the newest of the files apt-get update writes; none means no valid cache
+	out, err := runOnHost(ctx, host, args, "sh", "-c",
+		`t=$(stat -c %Y /var/cache/apt/pkgcache.bin /var/lib/apt/periodic/update-success-stamp 2>/dev/null | sort -n | tail -1); [ -n "$t" ] && echo $(( $(date +%s) - t ))`)
+	if err != nil {
+		return false
+	}
+	age, err := strconv.Atoi(strings.TrimSpace(out))
+	return err == nil && age >= 0 && age < validFor
+}
+
+// aptUpgradeArg maps the upgrade argument to an apt-get command
+func aptUpgradeArg(args map[string]interface{}) (string, error) {
+	v, ok := args["upgrade"]
+	if !ok || v == nil {
+		return "", nil
+	}
+	s := strings.ToLower(strings.TrimSpace(fmt.Sprint(v)))
+	switch s {
+	case "no", "false", "":
+		return "", nil
+	case "yes", "true", "safe":
+		return "upgrade", nil
+	case "full", "dist":
+		return "dist-upgrade", nil
+	}
+	return "", fmt.Errorf("upgrade: expected yes, safe, full, dist or no, got %q", s)
+}
+
+var aptCounts = regexp.MustCompile(`(\d+) upgraded, (\d+) newly installed, (\d+) to remove`)
+
+// aptChanged tells from apt-get output whether packages were (or would be)
+// upgraded, installed or removed
+func aptChanged(out string) bool {
+	m := aptCounts.FindStringSubmatch(out)
+	return len(m) == 4 && (m[1] != "0" || m[2] != "0" || m[3] != "0")
+}
+
+func aptSummary(out string) string {
+	if m := aptCounts.FindString(out); m != "" {
+		return m
+	}
+	return "nothing to do"
 }
 
 func (m *AptModule) autocleanPackages(ctx context.Context, host types.Host, args map[string]interface{}) error {

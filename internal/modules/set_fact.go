@@ -74,10 +74,11 @@ func (m *SetFactModule) Validate(args map[string]interface{}) error {
 }
 
 // factArgs returns the facts to set: every argument except internal "_" keys
+// and cacheable, an option as in Ansible (facts are not cached across runs)
 func factArgs(args map[string]interface{}) map[string]interface{} {
 	facts := make(map[string]interface{})
 	for key, value := range args {
-		if !strings.HasPrefix(key, "_") {
+		if !strings.HasPrefix(key, "_") && key != "cacheable" {
 			facts[key] = value
 		}
 	}

@@ -14,7 +14,7 @@ This document provides comprehensive documentation for the three new system mana
 
 The **systemd** module manages systemd services, unit files, and timers. `operation` defaults to `service`.
 
-Ansible's `daemon_reload: true` is not supported; use `operation: daemon-reload`.
+`daemon_reload: true` (as in Ansible) reloads systemd before the operation; without `name` the reload is all the task does.
 
 ### Operations
 

@@ -1439,7 +1439,7 @@ func (e *ExecutionEngine) gatherFacts(ctx context.Context, hosts []types.Host) e
 			"onigirazu_kernel_version":       systemFacts.KernelVersion,
 			"onigirazu_fqdn":                 systemFacts.FQDN,
 			"onigirazu_processor_cores":      systemFacts.CPUCores,
-			"onigirazu_memtotal_mb":          systemFacts.MemoryTotal,
+			"onigirazu_memtotal_mb":          systemFacts.MemTotalMB,
 			"onigirazu_default_ipv4": map[string]interface{}{
 				"address": systemFacts.DefaultIPv4,
 			},
