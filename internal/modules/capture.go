@@ -3,8 +3,8 @@ package modules
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"fmt"
-	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -49,20 +49,29 @@ func captureBefore(ctx context.Context, host types.Host, module string, args map
 	if path == "" || strings.Contains(path, "{{") {
 		return nil
 	}
+	// one round trip: kind, mode, owner, group, size, sha256 and, for a file
+	// up to maxCaptureSize, its content
 	q := shellQuote(path)
 	out, err := runShellOnHost(ctx, host, args, fmt.Sprintf(
 		`p=%s; if [ -L "$p" ]; then k=link; elif [ -d "$p" ]; then k=directory; elif [ -f "$p" ]; then k=file; elif [ -e "$p" ]; then k=other; else echo absent; exit 0; fi
-echo "$k $( (stat -c '%%a %%U %%G %%s' "$p" 2>/dev/null || stat -f '%%Lp %%Su %%Sg %%z' "$p") )"`, q))
+s=$( (stat -c '%%a %%U %%G %%s' "$p" 2>/dev/null || stat -f '%%Lp %%Su %%Sg %%z' "$p") )
+if [ "$k" = file ]; then
+  h=$( (sha256sum "$p" 2>/dev/null || shasum -a 256 "$p") | cut -d' ' -f1)
+  echo "$k $s $h"
+  set -- $s
+  if [ "$4" -le %d ]; then printf 'C:'; base64 < "$p" | tr -d '\n'; echo; fi
+else echo "$k $s -"; fi`, q, maxCaptureSize))
 	if err != nil {
 		return map[string]interface{}{"path": path, "error": err.Error()}
 	}
-	f := strings.Fields(strings.TrimSpace(out))
+	lines := strings.SplitN(strings.TrimSpace(out), "\n", 2)
+	f := strings.Fields(lines[0])
 	before := map[string]interface{}{"path": path}
 	if len(f) == 1 && f[0] == "absent" {
 		before["kind"] = "absent"
 		return withBecome(before, args)
 	}
-	if len(f) != 5 {
+	if len(f) != 6 {
 		return map[string]interface{}{"path": path, "error": fmt.Sprintf("unexpected stat output %q", out)}
 	}
 	mode := f[1]
@@ -70,10 +79,14 @@ echo "$k $( (stat -c '%%a %%U %%G %%s' "$p" 2>/dev/null || stat -f '%%Lp %%Su %%
 		mode = "0" + mode
 	}
 	before["kind"], before["mode"], before["owner"], before["group"] = f[0], mode, f[2], f[3]
-	if size, _ := strconv.Atoi(f[4]); f[0] == "file" && size <= maxCaptureSize {
-		data, exists, err := readHostFile(ctx, host, args, path)
-		if err == nil && exists && utf8.Valid(data) && bytes.IndexByte(data, 0) < 0 {
-			before["content"] = string(data)
+	if f[5] != "-" {
+		before["sha256"] = f[5]
+	}
+	if len(lines) == 2 {
+		if encoded, ok := strings.CutPrefix(strings.TrimSpace(lines[1]), "C:"); ok {
+			if data, err := base64.StdEncoding.DecodeString(encoded); err == nil && utf8.Valid(data) && bytes.IndexByte(data, 0) < 0 {
+				before["content"] = string(data)
+			}
 		}
 	}
 	return withBecome(before, args)
@@ -114,15 +127,24 @@ func capturePackages(ctx context.Context, host types.Host, args map[string]inter
 	if len(names) == 0 {
 		return nil
 	}
+	// one round trip for all of them: the installed ones, one per line
+	quoted := make([]string, len(names))
+	for i, n := range names {
+		quoted[i] = shellQuote(n)
+	}
+	out, err := runShellOnHost(ctx, host, args, fmt.Sprintf(
+		`for n in %s; do (dpkg-query -W -f='${Status}' "$n" 2>/dev/null | grep -q 'install ok installed' || rpm -q "$n" >/dev/null 2>&1) && echo "$n"; done; true`,
+		strings.Join(quoted, " ")))
+	if err != nil {
+		return map[string]interface{}{"error": err.Error()}
+	}
+	present := map[string]bool{}
+	for _, line := range strings.Split(out, "\n") {
+		present[strings.TrimSpace(line)] = true
+	}
 	var installed []interface{}
 	for _, n := range names {
-		q := shellQuote(n)
-		out, err := runShellOnHost(ctx, host, args, fmt.Sprintf(
-			"(dpkg-query -W -f='${Status}' %s 2>/dev/null | grep -q 'install ok installed' || rpm -q %s >/dev/null 2>&1) && echo yes || echo no", q, q))
-		if err != nil {
-			return map[string]interface{}{"error": err.Error()}
-		}
-		if strings.TrimSpace(out) == "yes" {
+		if present[n] {
 			installed = append(installed, n)
 		}
 	}

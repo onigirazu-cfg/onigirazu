@@ -70,8 +70,12 @@ func (m *FileModule) Execute(ctx context.Context, host types.Host, args map[stri
 
 	switch state {
 	case "file":
-		out, err := runShellOnHost(ctx, host, args, "test -e "+shellQuote(path)+" && echo exists || true")
-		if err != nil || strings.TrimSpace(out) != "exists" {
+		exists, known := capturedExists(args, path)
+		if !known {
+			out, err := runShellOnHost(ctx, host, args, "test -e "+shellQuote(path)+" && echo exists || true")
+			exists = err == nil && strings.TrimSpace(out) == "exists"
+		}
+		if !exists {
 			result.Success = false
 			result.Error = fmt.Sprintf("file %s does not exist (use state: touch or directory to create it)", path)
 			result.Duration = time.Since(startTime)
@@ -86,7 +90,7 @@ func (m *FileModule) Execute(ctx context.Context, host types.Host, args map[stri
 	case "directory":
 		result, err = m.ensureDirectory(exec, path, result, startTime, inCheckMode(args))
 	case "touch":
-		result, err = m.touchFile(exec, path, result, startTime, inCheckMode(args))
+		result, err = m.touchFile(exec, args, path, result, startTime, inCheckMode(args))
 	default:
 		result.Success = false
 		result.Error = fmt.Sprintf("unsupported state: %s", state)
@@ -103,6 +107,23 @@ func (m *FileModule) Execute(ctx context.Context, host types.Host, args map[stri
 		}
 	}
 	return m.applyAttributes(ctx, host, args, path, result, startTime)
+}
+
+// capturedExists reports whether path exists, from the registry's capture of
+// the task's target (args["_before"]); known is false without a capture.
+func capturedExists(args map[string]interface{}, path string) (exists, known bool) {
+	before, ok := args["_before"].(map[string]interface{})
+	if !ok || before["path"] != path {
+		return false, false
+	}
+	switch before["kind"] {
+	case "absent":
+		return false, true
+	case nil, "", "link":
+		// a link may dangle: let test -e decide
+		return false, false
+	}
+	return true, true
 }
 
 // filePath is path, or its Ansible aliases dest and name
@@ -428,12 +449,21 @@ func (m *FileModule) ensureDirectory(exec *executor.CommandExecutor, path string
 	return result, nil
 }
 
-func (m *FileModule) touchFile(exec *executor.CommandExecutor, path string, result types.TaskResult, startTime time.Time, check bool) (types.TaskResult, error) {
-	// Check if file exists
-	// Note: executor.Execute will automatically use shell if needed
-	checkCmd := fmt.Sprintf(`test -e %s && echo exists || echo notexists`, shellQuote(path))
-	output, err := exec.Execute(checkCmd)
-	fileExists := (err == nil && strings.TrimSpace(output) == "exists")
+func (m *FileModule) touchFile(exec *executor.CommandExecutor, args map[string]interface{}, path string, result types.TaskResult, startTime time.Time, check bool) (types.TaskResult, error) {
+	fileExists, known := capturedExists(args, path)
+	if !known {
+		checkCmd := fmt.Sprintf(`test -e %s && echo exists || echo notexists`, shellQuote(path))
+		output, err := exec.Execute(checkCmd)
+		fileExists = err == nil && strings.TrimSpace(output) == "exists"
+	}
+	if fileExists && getStringArg(args, "modification_time", "") == "preserve" &&
+		getStringArg(args, "access_time", "") == "preserve" {
+		// Ansible: nothing to touch when both times are kept
+		result.Success = true
+		result.Output = map[string]interface{}{"message": fmt.Sprintf("File %s exists", path)}
+		result.Duration = time.Since(startTime)
+		return result, nil
+	}
 
 	if check {
 		return wouldChange(result, startTime, fmt.Sprintf("%s would be touched", path))

@@ -229,6 +229,10 @@ func (r *Registry) ExecuteTask(ctx context.Context, task *types.Task, host types
 	var before map[string]interface{}
 	if !inCheckMode(args) {
 		before = captureBefore(ctx, host, task.Module, args)
+		// the module may use it instead of asking the host again
+		if before != nil && before["error"] == nil {
+			args["_before"] = before
+		}
 	}
 
 	result, err := module.Execute(ctx, host, args)

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
@@ -653,5 +654,52 @@ func TestFileModule_ValidateState(t *testing.T) {
 				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
+	}
+}
+
+func TestFileModuleTouchPreserve(t *testing.T) {
+	testFile := filepath.Join(t.TempDir(), "keep.txt")
+	if err := os.WriteFile(testFile, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Date(2020, 1, 2, 3, 4, 5, 0, time.UTC)
+	if err := os.Chtimes(testFile, old, old); err != nil {
+		t.Fatal(err)
+	}
+	host := types.Host{Name: "localhost", Address: "127.0.0.1"}
+	result, err := NewFileModule().Execute(context.Background(), host, map[string]interface{}{
+		"path": testFile, "state": "touch", "modification_time": "preserve", "access_time": "preserve",
+	})
+	if err != nil || !result.Success || result.Changed {
+		t.Fatalf("expected an unchanged success, got %+v, %v", result, err)
+	}
+	info, err := os.Stat(testFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !info.ModTime().Equal(old) {
+		t.Errorf("mtime changed to %v", info.ModTime())
+	}
+}
+
+func TestCapturedExists(t *testing.T) {
+	for _, tc := range []struct {
+		kind          interface{}
+		exists, known bool
+	}{
+		{"absent", false, true},
+		{"file", true, true},
+		{"directory", true, true},
+		{"link", false, false},
+		{nil, false, false},
+	} {
+		args := map[string]interface{}{"_before": map[string]interface{}{"path": "/p", "kind": tc.kind}}
+		exists, known := capturedExists(args, "/p")
+		if exists != tc.exists || known != tc.known {
+			t.Errorf("kind %v: got %v %v", tc.kind, exists, known)
+		}
+		if _, known := capturedExists(args, "/other"); known {
+			t.Errorf("kind %v: another path must not be known", tc.kind)
+		}
 	}
 }
