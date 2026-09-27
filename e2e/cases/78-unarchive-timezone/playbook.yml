@@ -1,0 +1,18 @@
+plays:
+  - name: unarchive and timezone
+    hosts: all
+    become: true
+    tasks:
+      - name: Time zone
+        timezone: {name: Europe/Madrid}
+      - name: Target directory
+        file: {path: /opt/onigirazu-e2e-ua, state: directory}
+      - name: Archive from the control machine
+        unarchive: {src: app.tar.gz, dest: /opt/onigirazu-e2e-ua, owner: nobody}
+      - name: An archive made on the host
+        shell: tar -czf /tmp/onigirazu-e2e-host.tgz -C /etc hostname
+        args: {creates: /tmp/onigirazu-e2e-host.tgz}
+      - name: Second target
+        file: {path: /opt/onigirazu-e2e-ur, state: directory}
+      - name: Archive on the host
+        unarchive: {src: /tmp/onigirazu-e2e-host.tgz, dest: /opt/onigirazu-e2e-ur, remote_src: true}
