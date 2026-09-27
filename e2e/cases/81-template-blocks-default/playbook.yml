@@ -1,0 +1,15 @@
+plays:
+  - name: template block options and default on missing items
+    hosts: all
+    become: true
+    vars:
+      ports: [80, 443]
+      missing: []
+    tasks:
+      - name: lstrip_blocks
+        template: {src: app.conf.j2, dest: /root/onigirazu-e2e-tb.conf, lstrip_blocks: true}
+      - name: default on a missing item
+        assert:
+          that:
+            - "(missing[0] | default('x')) == 'x'"
+            - "(ports[5] | d(0)) == 0"

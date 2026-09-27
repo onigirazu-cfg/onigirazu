@@ -113,6 +113,19 @@ Examples:
 		RunE: func(cmd *cobra.Command, args []string) error {
 			playbookPath := args[0]
 
+			// output_format and interactive_mode from the config stand for -o and
+			// --interactive; they are needed before the rest of the config loads
+			if !cmd.Flags().Changed("output") || !cmd.Flags().Changed("interactive") {
+				if early, err := config.LoadConfigWithDiscovery(configPath, filepath.Dir(playbookPath)); err == nil {
+					if early.IsSet("output_format") && !cmd.Flags().Changed("output") && early.OutputFormat != "" {
+						outputFormat = early.OutputFormat
+					}
+					if early.IsSet("interactive_mode") && !cmd.Flags().Changed("interactive") {
+						interactive = early.InteractiveMode
+					}
+				}
+			}
+
 			// -o json/yaml: stdout carries only the result document; banners,
 			// logs and the progress bar go to stderr
 			resultOut := io.Writer(os.Stdout)

@@ -152,7 +152,13 @@ func pipesToCalls(s string) string {
 			from = i + 1
 			continue
 		}
-		call := name + "(" + s[start:end+1]
+		operand := s[start : end+1]
+		if name == "default" || name == "d" {
+			// a missing index or attribute is undefined for default, not an error
+			operand = safeAccess(operand)
+			name = "default"
+		}
+		call := name + "(" + operand
 		if args != "" {
 			call += ", " + args
 		}
@@ -263,4 +269,77 @@ func findUnaryNot(s string) int {
 		}
 		return i
 	}
+}
+
+// safeAccess rewrites x[i] into jinja_index(x, i) and .attr into ?.attr at
+// the top level of an operand, so a missing item yields nil
+func safeAccess(operand string) string {
+	var b strings.Builder
+	base := ""
+	for i := 0; i < len(operand); i++ {
+		c := operand[i]
+		switch {
+		case c == '"' || c == '\'':
+			j := i + 1
+			for j < len(operand) && operand[j] != c {
+				if operand[j] == '\\' {
+					j++
+				}
+				j++
+			}
+			if j >= len(operand) {
+				j = len(operand) - 1
+			}
+			base += operand[i : j+1]
+			i = j
+		case c == '(':
+			end := matching(operand, i, '(', ')')
+			if end < 0 {
+				return operand
+			}
+			base += operand[i : end+1]
+			i = end
+		case c == '[' && base != "":
+			end := matching(operand, i, '[', ']')
+			if end < 0 {
+				return operand
+			}
+			base = "jinja_index(" + base + ", " + operand[i+1:end] + ")"
+			i = end
+		case c == '.' && base != "" && i+1 < len(operand) && isNameStart(operand[i+1]):
+			base += "?."
+		default:
+			base += string(c)
+		}
+	}
+	b.WriteString(base)
+	return b.String()
+}
+
+func isNameStart(c byte) bool {
+	return c == '_' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+}
+
+// matching finds the bracket closing the one at open, outside quotes
+func matching(s string, open int, l, r byte) int {
+	depth := 0
+	for i := open; i < len(s); i++ {
+		switch s[i] {
+		case '"', '\'':
+			q := s[i]
+			for i++; i < len(s) && s[i] != q; i++ {
+				if s[i] == '\\' {
+					i++
+				}
+			}
+		case l:
+			depth++
+		case r:
+			depth--
+			if depth == 0 {
+				return i
+			}
+		}
+	}
+	return -1
 }

@@ -491,7 +491,9 @@ Process Jinja2 templates and copy to target hosts.
 | `group` | string | - | File group |
 | `force` | boolean | `false` | Rewrite the file even when the content is unchanged |
 
-The newline after a `{% ... %}` tag is removed, as with Ansible's `trim_blocks`; `{%-`/`-%}` strip whitespace.
+As in Ansible, `trim_blocks: true` (default) removes the newline after a `{% ... %}` tag and
+`lstrip_blocks: true` (default false) removes spaces before a tag at the start of a line (`{%+` keeps them);
+`{%-`/`-%}` strip whitespace.
 
 #### Example
 
@@ -1228,8 +1230,8 @@ Debian/Ubuntu package management.
 | `filename` | string | from the URL | File in `/etc/apt/sources.list.d/` (without `.list`) |
 | `update_cache` | boolean | `true` | Run `apt-get update` after a change |
 
-A line is looked for in `/etc/apt/sources.list` and `sources.list.d/*.list` (deb822 `.sources`
-files are not read). A new line goes to its own file, named as Ansible names it
+A line is looked for in `/etc/apt/sources.list` and `sources.list.d/*.list`; a repository already
+described in a deb822 `.sources` file (such as Ubuntu's own) also counts as present. `.sources` files are not edited. A new line goes to its own file, named as Ansible names it
 (`download_docker_com_linux_ubuntu.list`); removing the last line of a `.list` file deletes it.
 PPAs go through `add-apt-repository` (package `software-properties-common`).
 
@@ -1237,13 +1239,14 @@ PPAs go through `add-apt-repository` (package `software-properties-common`).
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `url` / `data` / `file` | string | - | Where the key comes from (one of them); `url` is fetched by the host with curl or wget, `file` is on the host |
+| `url` / `data` / `file` / `keyserver` | string | - | Where the key comes from (one of them); `url` is fetched by the host with curl or wget, `file` is on the host, `keyserver` needs `id` and gpg |
 | `keyring` | string | - | Absolute path to write the key to, e.g. `/etc/apt/keyrings/docker.asc` |
 | `id` | string | - | Key id; names the file in `/etc/apt/trusted.gpg.d/` when there is no `keyring` |
 | `state` | string | `present` | `present`, or `absent` (removes `keyring`, or the file named by `id`) |
 
 `apt-key` is not used. An ASCII-armored key is written as is (use a `.asc` keyring); for a `.gpg`
-keyring it is converted with `gpg --dearmor` on the host. `keyserver` is not supported.
+keyring it is converted with `gpg --dearmor` on the host. With `keyserver` (and `id`) the host fetches the
+key with gpg (`keyserver: hkps://keyserver.ubuntu.com`).
 
 ```yaml
 - apt_key:

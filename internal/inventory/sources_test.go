@@ -38,7 +38,7 @@ func hostNames(inv *types.Inventory) []string {
 
 func TestSources_HostList(t *testing.T) {
 	inv := loadSources(t, "web1,deploy@web2:2222")
-	assert.Equal(t, []string{"deploy@web2", "web1"}, hostNames(inv))
+	assert.Equal(t, []string{"web1", "web2"}, hostNames(inv))
 	for _, h := range inv.Hosts {
 		if h.Address == "web2" {
 			assert.Equal(t, 2222, h.Port)
@@ -62,7 +62,7 @@ func TestSources_PlainListWithUsersAndPorts(t *testing.T) {
 	dir := t.TempDir()
 	writeFiles(t, dir, map[string]string{"hosts": "web1\ndeploy@web2:2222\n10.0.0.3:2200\n"})
 	inv := loadSources(t, filepath.Join(dir, "hosts"))
-	assert.Equal(t, []string{"10.0.0.3", "deploy@web2", "web1"}, hostNames(inv))
+	assert.Equal(t, []string{"10.0.0.3", "web1", "web2"}, hostNames(inv))
 }
 
 func TestSources_MissingFile(t *testing.T) {
@@ -70,4 +70,9 @@ func TestSources_MissingFile(t *testing.T) {
 	_, err := NewMultiSourceLoader(p, &mockLogger{}, newMockCache(), 0).
 		LoadFromMultipleSources(context.Background(), []string{"no-such-inventory"})
 	assert.ErrorContains(t, err, "not found")
+}
+
+func TestSources_SameAddressTwoPorts(t *testing.T) {
+	inv := loadSources(t, "e2e@127.0.0.1:2222,e2e@127.0.0.1:2223")
+	assert.Equal(t, []string{"127.0.0.1:2222", "127.0.0.1:2223"}, hostNames(inv))
 }

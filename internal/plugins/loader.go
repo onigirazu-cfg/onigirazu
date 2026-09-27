@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"plugin"
+	"strings"
 	"sync"
 )
 
@@ -35,6 +36,10 @@ func (l *GoPluginLoader) Load(ctx context.Context, path string) (Plugin, error) 
 	// Load plugin
 	p, err := plugin.Open(path)
 	if err != nil {
+		if strings.Contains(err.Error(), "not implemented") {
+			return nil, fmt.Errorf("cannot load %s: this onigirazu binary is built without cgo (as the released binaries are); "+
+				"build onigirazu and the plugin from the same source with CGO_ENABLED=1, see docs/PLUGIN_INTEGRATION.md", path)
+		}
 		return nil, fmt.Errorf("failed to open plugin: %w", err)
 	}
 

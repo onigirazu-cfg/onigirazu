@@ -211,6 +211,7 @@ func (p *InventoryParser) parseSimpleList(data []byte) (*types.Inventory, error)
 		return nil, fmt.Errorf("no valid hosts found in inventory")
 	}
 
+	uniqueHostNames(inventory, allGroup)
 	inventory.Groups["all"] = allGroup
 
 	p.logger.Info("Parsed simple list inventory: %d hosts", len(inventory.Hosts))
@@ -249,12 +250,7 @@ func (p *InventoryParser) parseSimpleHostLine(line string, lineNum int) *types.H
 		address = line
 	}
 
-	// Generate host name
-	if user != "" {
-		name = fmt.Sprintf("%s@%s", user, address)
-	} else {
-		name = address
-	}
+	name = address
 
 	// no user: SSH connects as the local user, as Ansible does
 	host := &types.Host{

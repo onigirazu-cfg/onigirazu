@@ -12,10 +12,9 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/onigirazu-cfg/onigirazu/internal/expression"
-
 	"github.com/onigirazu-cfg/onigirazu/internal/bufferpool"
 	"github.com/onigirazu-cfg/onigirazu/internal/cache"
+	"github.com/onigirazu-cfg/onigirazu/internal/expression"
 	"github.com/onigirazu-cfg/onigirazu/internal/plugins"
 	"github.com/onigirazu-cfg/onigirazu/internal/secrets"
 )
@@ -104,17 +103,23 @@ func (e *Engine) loadFilterPlugins(ctx context.Context) {
 
 		// Get all filters from the plugin
 		filters := filterPlugin.GetFilters()
+		// the built-in plugin duplicates filters expressions already have
+		toExpressions := filterPlugin.GetName() != "builtin"
 
 		// Add each filter to funcMap
 		for filterName, filterFunc := range filters {
 			// Create a closure to capture the filter function
 			fn := filterFunc
 
-			e.funcMap[filterName] = func(args ...interface{}) (interface{}, error) {
+			call := func(args ...interface{}) (interface{}, error) {
 				if len(args) == 0 {
 					return fn(nil)
 				}
 				return fn(args[0], args[1:]...)
+			}
+			e.funcMap[filterName] = call
+			if toExpressions {
+				expression.RegisterFilter(filterName, call)
 			}
 		}
 	}
@@ -146,6 +151,13 @@ func (e *Engine) GetSecretManager() *secrets.TemplateSecretManager {
 
 // Render renders a template string with variables
 func (e *Engine) Render(ctx context.Context, templateStr string, variables map[string]interface{}) (string, error) {
+	opts := blockOptionsFrom(ctx)
+	// lstrip_blocks: spaces and tabs before a block tag at the start of a
+	// line go; {%+ keeps them
+	if opts.lstrip {
+		templateStr = leadingBlockSpace.ReplaceAllString(templateStr, "$1")
+	}
+	templateStr = strings.ReplaceAll(templateStr, "{%+", "{%")
 	// Jinja whitespace control: {%- / {{- strip before, -%} / -}} after
 	templateStr = trimBefore.ReplaceAllString(templateStr, "$1")
 	templateStr = trimAfter.ReplaceAllString(templateStr, "$1")
@@ -154,8 +166,11 @@ func (e *Engine) Render(ctx context.Context, templateStr string, variables map[s
 	if err != nil {
 		return "", err
 	}
-	// as Ansible's template module (trim_blocks): no newline after a block tag
-	templateStr = blockTagNewline.ReplaceAllString(templateStr, "$1")
+	// trim_blocks (on by default, as in Ansible's template module): no
+	// newline after a block tag
+	if opts.trim {
+		templateStr = blockTagNewline.ReplaceAllString(templateStr, "$1")
+	}
 	templateStr, values := evalBlocks(templateStr, variables)
 	if !strings.Contains(templateStr, "{{") && !strings.Contains(templateStr, "{%") {
 		return restoreLoops(restoreBlocks(templateStr, values), loops), nil
@@ -197,7 +212,26 @@ var (
 	trimAfter  = regexp.MustCompile(`-([%}]\})\s*`)
 )
 
-var blockTagNewline = regexp.MustCompile(`(\{%[^%]*%\})\n`)
+var (
+	blockTagNewline   = regexp.MustCompile(`(\{%[^%]*%\})\n`)
+	leadingBlockSpace = regexp.MustCompile(`(?m)^[ \t]+(\{%[^+])`)
+)
+
+type blockOptionsKey struct{}
+
+type blockOptions struct{ trim, lstrip bool }
+
+// WithBlockOptions sets trim_blocks and lstrip_blocks for Render
+func WithBlockOptions(ctx context.Context, trim, lstrip bool) context.Context {
+	return context.WithValue(ctx, blockOptionsKey{}, blockOptions{trim: trim, lstrip: lstrip})
+}
+
+func blockOptionsFrom(ctx context.Context) blockOptions {
+	if opts, ok := ctx.Value(blockOptionsKey{}).(blockOptions); ok {
+		return opts
+	}
+	return blockOptions{trim: true}
+}
 
 var ifBlock = regexp.MustCompile(`\{%-?\s*(if|elif)\s+(.+?)\s*-?%\}`)
 

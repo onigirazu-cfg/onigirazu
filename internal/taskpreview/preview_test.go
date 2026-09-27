@@ -412,3 +412,18 @@ func TestPreviewInheritsPlayRoleAndBlockTags(t *testing.T) {
 		t.Fatalf("--skip-tags web skips the whole play, got %d", res.GlobalSummary.WouldExecute)
 	}
 }
+
+func TestPreviewIncludeRole(t *testing.T) {
+	pb := &types.Playbook{Plays: []types.Play{{
+		Name: "p", Hosts: "all",
+		Tasks: []types.Task{{Name: "inc", Module: "include_role", Tags: []string{"app"},
+			IncludedRole: &types.Role{Name: "app", Tasks: []types.Task{{Name: "install"}}}}},
+	}}}
+	res, err := PreviewTasks(pb, "app", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.GlobalSummary.WouldExecute != 1 || res.Plays[0].Tasks[0].Name != "app : install" {
+		t.Fatalf("expected the included role's task, got %+v", res.Plays[0].Tasks)
+	}
+}

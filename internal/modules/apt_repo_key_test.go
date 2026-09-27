@@ -31,7 +31,29 @@ func TestAptKeyValidate(t *testing.T) {
 	assert.NoError(t, m.Validate(map[string]interface{}{"url": "https://x/key.gpg", "keyring": "/etc/apt/keyrings/x.gpg"}))
 	assert.NoError(t, m.Validate(map[string]interface{}{"id": "0x9DC858229FC7DD38854AE2D88D81803C0EBFCD88", "state": "absent"}))
 	assert.Error(t, m.Validate(map[string]interface{}{"url": "https://x", "data": "k"}))
-	assert.Error(t, m.Validate(map[string]interface{}{"keyserver": "keyserver.ubuntu.com", "id": "0EBFCD88"}))
+	assert.NoError(t, m.Validate(map[string]interface{}{"keyserver": "keyserver.ubuntu.com", "id": "0EBFCD88"}))
+	assert.Error(t, m.Validate(map[string]interface{}{"keyserver": "keyserver.ubuntu.com"}))
+	assert.Error(t, m.Validate(map[string]interface{}{"keyserver": "x; rm -rf /", "id": "0EBFCD88"}))
 	assert.Error(t, m.Validate(map[string]interface{}{"data": "k", "keyring": "relative.gpg"}))
 	assert.Error(t, m.Validate(map[string]interface{}{"state": "absent"}))
+}
+
+func TestDeb822Contains(t *testing.T) {
+	sources := `Types: deb
+URIs: http://archive.ubuntu.com/ubuntu/
+Suites: noble noble-updates
+Components: main restricted universe
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+
+Types: deb
+URIs: http://security.ubuntu.com/ubuntu/
+Suites: noble-security
+Components: main
+Enabled: no
+`
+	assert.True(t, deb822Contains(sources, "deb http://archive.ubuntu.com/ubuntu noble-updates main universe"))
+	assert.True(t, deb822Contains(sources, "deb [arch=amd64] http://archive.ubuntu.com/ubuntu/ noble main"))
+	assert.False(t, deb822Contains(sources, "deb http://archive.ubuntu.com/ubuntu noble multiverse"))
+	assert.False(t, deb822Contains(sources, "deb http://security.ubuntu.com/ubuntu noble-security main"))
+	assert.False(t, deb822Contains(sources, "deb-src http://archive.ubuntu.com/ubuntu noble main"))
 }
