@@ -1,0 +1,7 @@
+plays:
+  - name: version 1 is running
+    hosts: all
+    become: true
+    tasks:
+      - {name: v1, copy: {content: "v1\n", dest: /root/onigirazu-e2e-sa-app}}
+      - {name: healthy, copy: {content: "ok\n", dest: /root/onigirazu-e2e-sa-health}}

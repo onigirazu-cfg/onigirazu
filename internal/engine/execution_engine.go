@@ -97,6 +97,13 @@ type ExecutionEngine struct {
 	forceHandlers bool
 	// control pauses and stops the run between tasks (interactive mode)
 	control *RunControl
+	// safe apply: canary, health checks and rollback of an unhealthy batch
+	safe             SafeApply
+	restorer         Restorer
+	rolloutVars      map[string]interface{}
+	rolloutUnhealthy []string
+	rolloutApplied   []types.TaskResult
+	rolloutReports   []types.BatchReport
 }
 
 // SetRunControl lets the caller pause and stop the run between tasks
@@ -275,6 +282,8 @@ func (e *ExecutionEngine) ExecutePlaybook(ctx context.Context, playbook *types.P
 	e.logger.Info("Starting playbook execution: %s", playbook.Name)
 	e.mutex.Lock()
 	e.failedHosts = nil
+	e.rolloutApplied = nil
+	e.rolloutReports = nil
 	e.mutex.Unlock()
 
 	// Record playbook execution start
@@ -410,6 +419,13 @@ func (e *ExecutionEngine) ExecutePlaybook(ctx context.Context, playbook *types.P
 		}
 	}
 
+	result.Rollout = e.rolloutReports
+	for _, r := range e.rolloutReports {
+		if r.RolledBack {
+			result.RolledBack = true
+		}
+	}
+
 	result.TotalTasks = totalTasks
 	result.SuccessTasks = successCount
 	result.FailedTasks = failedCount
@@ -462,9 +478,12 @@ func (e *ExecutionEngine) executePlay(ctx context.Context, play *types.Play) (*t
 	if err != nil {
 		return nil, fmt.Errorf("failed to get hosts for play '%s': %w", play.Name, err)
 	}
-	batches, err := serialBatches(play.Serial, len(hosts))
+	batches, canary, err := e.rolloutBatches(play, len(hosts))
 	if err != nil {
 		return nil, fmt.Errorf("play '%s': %w", play.Name, err)
+	}
+	if e.rolloutEnabled(play) {
+		return e.executeRollout(ctx, play, hosts, batches, canary)
 	}
 	if len(batches) <= 1 {
 		return e.executePlayOn(ctx, play, hosts)
@@ -502,22 +521,7 @@ func (e *ExecutionEngine) executePlay(ctx context.Context, play *types.Play) (*t
 
 // executePlayOn runs a play on the given hosts
 func (e *ExecutionEngine) executePlayOn(ctx context.Context, play *types.Play, hosts []types.Host) (*types.PlayResult, error) {
-	e.mutex.Lock()
-	e.playBecome = becomeSettings{Become: play.Become, User: play.BecomeUser, Method: play.BecomeMethod}
-	e.playEnvironment = play.Environment
-	if e.forceBecome {
-		e.playBecome.Become = true
-		if e.forceBecomeUser != "" {
-			e.playBecome.User = e.forceBecomeUser
-		}
-	}
-	e.mutex.Unlock()
-	defer func() {
-		e.mutex.Lock()
-		e.playBecome = becomeSettings{}
-		e.playEnvironment = nil
-		e.mutex.Unlock()
-	}()
+	defer e.enterPlay(play)()
 
 	if len(hosts) == 0 {
 		e.logger.Warn("No hosts found for play '%s'", play.Name)
@@ -703,6 +707,12 @@ func (e *ExecutionEngine) executePlayOn(ctx context.Context, play *types.Play, h
 		if !play.IgnoreErrors {
 			return result, err
 		}
+	}
+
+	// health checks of the batch, for the rollout to decide on
+	e.rolloutVars = playVars
+	if len(play.HealthCheck) > 0 {
+		e.rolloutUnhealthy = e.runHealthChecks(ctx, play.HealthCheck, hosts, playVars, result)
 	}
 
 	result.EndTime = time.Now()
@@ -2309,4 +2319,25 @@ func (e *ExecutionEngine) taskTags(task *types.Task) []string {
 		return task.Tags
 	}
 	return append(append([]string{}, e.inheritedTags...), task.Tags...)
+}
+
+// enterPlay sets the play's become and environment for its tasks and
+// returns the function that clears them
+func (e *ExecutionEngine) enterPlay(play *types.Play) func() {
+	e.mutex.Lock()
+	e.playBecome = becomeSettings{Become: play.Become, User: play.BecomeUser, Method: play.BecomeMethod}
+	e.playEnvironment = play.Environment
+	if e.forceBecome {
+		e.playBecome.Become = true
+		if e.forceBecomeUser != "" {
+			e.playBecome.User = e.forceBecomeUser
+		}
+	}
+	e.mutex.Unlock()
+	return func() {
+		e.mutex.Lock()
+		e.playBecome = becomeSettings{}
+		e.playEnvironment = nil
+		e.mutex.Unlock()
+	}
 }

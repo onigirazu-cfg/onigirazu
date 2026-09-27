@@ -1,0 +1,15 @@
+plays:
+  - name: version 2, one host at a time, checked
+    hosts: all
+    become: true
+    serial: 1
+    health_check:
+      - name: the service answers ok
+        command: grep -qx ok /root/onigirazu-e2e-sa-health
+        changed_when: false
+    tasks:
+      - {name: v2, copy: {content: "v2\n", dest: /root/onigirazu-e2e-sa-app}}
+      - name: the last host breaks
+        copy:
+          content: "{{ 'broken' if inventory_hostname == (groups['all'] | sort | last) else 'ok' }}\n"
+          dest: /root/onigirazu-e2e-sa-health

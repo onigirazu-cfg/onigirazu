@@ -69,6 +69,10 @@ func newApplyCommand(onResult func(*types.PlaybookResult)) *cobra.Command {
 		parallel       int
 		timeout        time.Duration
 		interactive    bool
+		canary         string
+		canaryPause    time.Duration
+		autoRollback   bool
+		rollbackScope  string
 		tags           string
 		skipTags       string
 		listTags       bool
@@ -443,6 +447,21 @@ Examples:
 			// the dashboard shows the diff of a changed file in its details
 			executionEngine.SetShowDiff(diff || interactive)
 			executionEngine.SetRunControl(runControl)
+
+			// safe apply: canary, health checks, rollback of an unhealthy batch
+			if rollbackScope != "batch" && rollbackScope != "run" {
+				return fmt.Errorf("--rollback-scope: expected batch or run, got %q", rollbackScope)
+			}
+			executionEngine.SetSafeApply(engine.SafeApply{Canary: canary, CanaryPause: canaryPause,
+				AutoRollback: autoRollback, Scope: rollbackScope})
+			restorer := rollback.NewRollbackExecutor(nil, moduleRegistry, log).WithHosts(func(name string) (types.Host, error) {
+				hosts, err := inventoryManager.GetHosts(name)
+				if err != nil || len(hosts) == 0 {
+					return types.Host{}, fmt.Errorf("host %s not in the inventory", name)
+				}
+				return hosts[0], nil
+			})
+			executionEngine.SetRestorer(restorer.RestoreResults)
 
 			policy, policySource, err := security.LoadPolicy(securityPolicyPath)
 			if err != nil {
@@ -1039,9 +1058,15 @@ Examples:
 				if runControl.Stopped() {
 					return fmt.Errorf("run stopped by user before it finished")
 				}
+				if result.RolledBack {
+					printRollout(os.Stdout, result.Rollout)
+					return &ExitError{Code: 5, Message: "an unhealthy batch was rolled back; the rollout stopped"}
+				}
+				printRollout(os.Stdout, result.Rollout)
 				return fmt.Errorf("playbook execution failed")
 			}
 
+			printRollout(os.Stdout, result.Rollout)
 			log.Info("Playbook execution successful")
 			// Print formatted execution end
 			log.PrintExecutionEnd(summary)
@@ -1115,6 +1140,10 @@ Examples:
 	cmd.Flags().IntVarP(&parallel, "parallel", "f", 10, "Number of parallel executions")
 	cmd.Flags().DurationVarP(&timeout, "timeout", "t", 30*time.Minute, "Execution timeout")
 	cmd.Flags().BoolVar(&interactive, "interactive", false, "Interactive mode with beautiful TUI")
+	cmd.Flags().StringVar(&canary, "canary", "", "Run the first batch on this many hosts (N or P%) and check it before the rest")
+	cmd.Flags().DurationVar(&canaryPause, "canary-pause", 0, "After a healthy canary batch, wait this long and check its health again")
+	cmd.Flags().BoolVar(&autoRollback, "auto-rollback", false, "Roll back a batch whose tasks or health checks failed, and stop")
+	cmd.Flags().StringVar(&rollbackScope, "rollback-scope", "batch", "What a rollback undoes: batch (the unhealthy batch) or run (every batch so far)")
 	cmd.Flags().StringVar(&tags, "tags", "", "Only run tasks with these tags (comma-separated). Use 'tagged' for tasks with any tag, 'untagged' for tasks without tags, 'all' for default behavior")
 	cmd.Flags().StringVar(&skipTags, "skip-tags", "", "Skip tasks with these tags (comma-separated)")
 	cmd.Flags().BoolVar(&listTags, "list-tags", false, "List all available tags in the playbook without executing")
@@ -1267,7 +1296,7 @@ func saveRunSnapshot(homeDir, playbookPath string, result *types.PlaybookResult,
 		for _, host := range play.Hosts {
 			for _, task := range host.Tasks {
 				seq++
-				if !task.Changed {
+				if !task.Changed || task.RolledBack { // an unhealthy batch's rollback undid it
 					continue
 				}
 				if r, ok := rollback.ResourceFromResult(task, host.Host, seq); ok {

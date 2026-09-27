@@ -1,0 +1,10 @@
+plays:
+  - name: the first host kept version 2, the broken one is back on version 1
+    hosts: all
+    become: true
+    tasks:
+      - name: app
+        copy:
+          content: "{{ 'v2' if inventory_hostname == (groups['all'] | sort | first) else 'v1' }}\n"
+          dest: /root/onigirazu-e2e-sa-app
+      - {name: health, copy: {content: "ok\n", dest: /root/onigirazu-e2e-sa-health}}
