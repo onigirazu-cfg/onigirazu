@@ -145,7 +145,7 @@ func (m *GetURLModule) Execute(ctx context.Context, host types.Host, args map[st
 	// checksum check with the algorithm asked for, then install(1).
 	headerFile := ""
 	if len(headers) > 0 {
-		headerFile = fmt.Sprintf("/tmp/.onigirazu-headers-%d", time.Now().UnixNano())
+		headerFile = remoteTempName(".onigirazu-headers-", "")
 		var cfg strings.Builder
 		for k, v := range headers {
 			fmt.Fprintf(&cfg, "header = %q\n", k+": "+v)

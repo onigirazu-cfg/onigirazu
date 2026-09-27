@@ -14,7 +14,6 @@ import (
 
 	sshpkg "github.com/onigirazu-cfg/onigirazu/internal/ssh"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
-	"golang.org/x/crypto/ssh"
 )
 
 // ScriptModule executes a local script on the remote host
@@ -153,7 +152,7 @@ func (m *ScriptModule) executeRemote(ctx context.Context, host types.Host, args 
 	}
 	defer pool.ReleaseConnection(host)
 
-	remotePath := fmt.Sprintf("/tmp/onigirazu-script-%d-%s", time.Now().UnixNano(), filepath.Base(scriptPath))
+	remotePath := remoteTempName("onigirazu-script-", filepath.Base(scriptPath))
 	if err := client.WriteFile(remotePath, data, 0700); err != nil {
 		return fail(fmt.Sprintf("failed to upload script: %v", err))
 	}
@@ -164,7 +163,7 @@ func (m *ScriptModule) executeRemote(ctx context.Context, host types.Host, args 
 	rc := 0
 	if err != nil {
 		rc = -1
-		var exitErr *ssh.ExitError
+		var exitErr interface{ ExitStatus() int }
 		if errors.As(err, &exitErr) {
 			rc = exitErr.ExitStatus()
 		}
