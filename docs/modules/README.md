@@ -64,7 +64,7 @@ Ansible's short forms work:
 
 ```yaml
 - command: echo hi chdir=/tmp       # free form; inline options: chdir, creates, removes, executable
-- file: path=/tmp/x state=touch     # key=value pairs
+- file: path=/tmp/x state=touch     # key=value pairs; \n, \t, \\ and \" in values are decoded
 - ping:                             # no arguments
 - command: make
   args:

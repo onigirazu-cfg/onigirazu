@@ -102,7 +102,7 @@ func shortFormArgs(module, s string) (map[string]interface{}, error) {
 		if !ok || k == "" {
 			return nil, fmt.Errorf("expected key=value, got %q", w)
 		}
-		args[k] = v
+		args[k] = DecodeEscapes(v)
 	}
 	return args, nil
 }
@@ -189,4 +189,34 @@ func (t *Task) applyLocalAction(v interface{}) error {
 	}
 	t.DelegateTo = "localhost"
 	return nil
+}
+
+// DecodeEscapes turns \n, \t, \r, \\ and escaped quotes in a key=value
+// value into their characters, as Ansible does; other backslashes stay
+func DecodeEscapes(v string) string {
+	if !strings.Contains(v, "\\") {
+		return v
+	}
+	var b strings.Builder
+	for i := 0; i < len(v); i++ {
+		if v[i] != '\\' || i+1 == len(v) {
+			b.WriteByte(v[i])
+			continue
+		}
+		switch v[i+1] {
+		case 'n':
+			b.WriteByte('\n')
+		case 't':
+			b.WriteByte('\t')
+		case 'r':
+			b.WriteByte('\r')
+		case '\\', '"', '\'':
+			b.WriteByte(v[i+1])
+		default:
+			b.WriteByte(v[i])
+			continue
+		}
+		i++
+	}
+	return b.String()
 }

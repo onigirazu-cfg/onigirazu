@@ -340,6 +340,7 @@ func (p *Parser) parseKeyValue(pair string, args map[string]interface{}) error {
 		(strings.HasPrefix(value, `'`) && strings.HasSuffix(value, `'`)) {
 		value = value[1 : len(value)-1]
 	}
+	value = types.DecodeEscapes(value)
 
 	// Try to parse as boolean
 	if value == "true" || value == "yes" {

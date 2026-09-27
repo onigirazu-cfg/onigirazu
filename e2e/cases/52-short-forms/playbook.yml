@@ -16,3 +16,5 @@ plays:
           creates: /root/onigirazu-e2e-sf-pwd
       - name: quoted value
         copy: dest=/root/onigirazu-e2e-sf-msg content="hello world"
+      - name: escapes in a value
+        copy: dest=/root/onigirazu-e2e-sf-esc content="a\tb\nc\n"
