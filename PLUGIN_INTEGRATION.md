@@ -37,7 +37,7 @@ plugins:
 
 | Type | Effect |
 |------|--------|
-| `filter` | Its filters become template filters: `{{ 'hello' \| reverse }}` |
+| `filter` | Its filters become filters in templates and expressions (`when`, `{{ x \| reverse }}`) |
 | `module` | Usable in tasks like a built-in module. A plugin cannot replace a built-in module: on a name clash it is not registered and a warning is logged. |
 | `callback` | Receives playbook, play and task events, see [CALLBACKS_GUIDE.md](CALLBACKS_GUIDE.md) |
 
@@ -104,6 +104,6 @@ Current limitation: the released binaries and Docker images are built with
 ## Troubleshooting
 
 - `Failed to load plugins: …` in the log: check `path`, and that the binary and the
-  plugin were built together as described above. `plugin: not implemented` means the
-  binary was built without cgo.
+  plugin were built together as described above. "built without cgo" means the
+  binary (a released one, for example) cannot load plugins at all.
 - `Module plugin X not registered`: the name is taken by a built-in module; rename it.

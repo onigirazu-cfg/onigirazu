@@ -323,7 +323,8 @@ tasks:
 | Random | `random` (an item of a list, or for a number N one of `start`, `start+step`, ... below N: `60 \| random(seed=inventory_hostname)`), `shuffle`; the same `seed` gives the same result, but not the numbers Ansible would pick |
 | Other | `default(value)`, `mandatory` (error when undefined), `ternary(if_true, if_false)`, `password_hash('sha512' or 'sha256', salt)` |
 
-Not available: the `d` alias of `default`, `hash`, `default(value, true)` (the second argument is ignored; `default` always replaces undefined, null and `""`).
+`default` (alias `d`) also replaces a missing list item or key: `result.stdout_lines[0] | default('')`.
+Not available: `hash`, `default(value, true)` (the second argument is ignored; `default` always replaces undefined, null and `""`).
 
 ```yaml
 - debug:

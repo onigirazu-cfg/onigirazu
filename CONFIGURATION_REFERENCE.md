@@ -50,8 +50,10 @@ Environment variables only change the defaults; a key in `onigirazu.yml` wins ov
 | `show_diff` | — | `false` | As `apply --diff`. |
 | `default_timeout` | — | none | As `apply --timeout` (the whole run; state, audit and snapshot are still saved). |
 | `verbose` | — | `false` | Debug logging, as `apply -v`. |
+| `output_format` | — | `text` | As `apply -o` (`text`, `json`, `yaml`). |
+| `interactive_mode` | — | `false` | As `apply --interactive` (TUI). |
 
-`show_diff`, `default_timeout` and `verbose` apply only when written in the file, and the
+`show_diff`, `default_timeout`, `verbose`, `output_format` and `interactive_mode` apply only when written in the file, and the
 command-line flag wins.
 
 Durations are written as `30s`, `5m`, `1h`.
@@ -66,14 +68,12 @@ These keys are parsed but nothing reads them; a file that sets one gets a warnin
 `retry_attempts`, `retry_delay`, `config_file`,
 `allow_shell_commands`, `blocked_commands` (use the security policy instead),
 `enable_caching`, `cache_ttl`, `enable_checksum`, `enable_parallel`,
-`parallel_strategy`, `progress_bar`, `interactive_mode`,
-`output_format`, `metrics_path` (the path is always `/metrics`), `enable_profiling`,
+`parallel_strategy`, `progress_bar`, `metrics_path` (the path is always `/metrics`), `enable_profiling`,
 `ssh_keepalive`, `ssh_max_sessions`, `connection_reuse`,
 `default_insecure_ignore_host_key`, `vault_enabled`, `vault_address`, `vault_token`,
 `preferred_module_syntax`, `enforce_module_syntax`.
 
-Use command-line flags instead: `--interactive`, `-o json|yaml`, `--profile`;
-task-level `retries`/`delay` for retries.
+Use command-line flags instead: `--profile`; task-level `retries`/`delay` for retries.
 
 ## Example
 
