@@ -9,6 +9,7 @@ import (
 	"github.com/onigirazu-cfg/onigirazu/internal/interfaces"
 	"github.com/onigirazu-cfg/onigirazu/internal/inventory"
 	"github.com/onigirazu-cfg/onigirazu/internal/modules"
+	"github.com/onigirazu-cfg/onigirazu/internal/security"
 	"github.com/onigirazu-cfg/onigirazu/internal/template"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
@@ -19,6 +20,7 @@ type Executor struct {
 	inventoryMgr   *inventory.Manager
 	logger         interfaces.Logger
 	templates      *template.Engine
+	validator      *security.SecurityValidator
 }
 
 // NewExecutor creates a new ad-hoc executor
@@ -33,6 +35,11 @@ func NewExecutor(
 		logger:         logger,
 		templates:      template.NewEngine(),
 	}
+}
+
+// SetSecurityPolicy applies a security policy to the commands, as apply does
+func (e *Executor) SetSecurityPolicy(cfg security.SecurityConfig) {
+	e.validator = security.NewSecurityValidator(cfg)
 }
 
 // Execute runs an ad-hoc command on specified hosts
@@ -177,6 +184,18 @@ func (e *Executor) executeOnHost(
 		result.Error = fmt.Errorf("failed to render arguments: %w", err)
 		result.Duration = time.Since(startTime)
 		return result
+	}
+	if e.validator != nil {
+		if err := e.validator.ValidateHostAccess(host); err != nil {
+			result.Error = fmt.Errorf("security validation failed: %w", err)
+			result.Duration = time.Since(startTime)
+			return result
+		}
+		if v := e.validator.ValidateTask(types.Task{Name: task.Name, Module: task.Module, Args: args}); !v.Valid {
+			result.Error = fmt.Errorf("security validation failed: %s", v.Error())
+			result.Duration = time.Since(startTime)
+			return result
+		}
 	}
 	if err := module.Validate(copyArgs(args)); err != nil {
 		result.Error = fmt.Errorf("invalid arguments for %s: %w", task.Module, err)

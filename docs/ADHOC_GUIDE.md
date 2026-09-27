@@ -104,7 +104,8 @@ onigirazu run all -m ping -i inventory.yml -o json | jq -r '.results[] | select(
 | `--lenient` | skip invalid inventory entries |
 | `--no-color` | plain output |
 
-Current limitation: the security policy is not applied to `run`.
+The security policy (`--security-policy`, see [SECURITY_POLICY_GUIDE.md](SECURITY_POLICY_GUIDE.md))
+applies to `run` as to `apply`.
 
 ## Compared with Ansible
 
