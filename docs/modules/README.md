@@ -199,12 +199,13 @@ Manage files, directories and links.
 | `group` | string | - | Group |
 | `recurse` | boolean | `false` | With `state: directory`: apply owner/group/mode to everything below |
 | `force` | boolean | `false` | Replace an existing non-link path with the link |
+| `modification_time`, `access_time` | string | - | With `state: touch`: `preserve` on both leaves an existing file untouched |
 
 #### States
 
 - `file`: the path must exist; only its attributes are set (fails otherwise)
 - `directory`: create the directory (with parents)
-- `touch`: create an empty file or update its timestamps
+- `touch`: create an empty file or update its timestamps (an existing file is reported unchanged)
 - `present`: create the file if it is missing; with `content`, write that content when it differs
 - `absent`: remove the file or directory
 - `link`: symbolic link at `path` pointing to `src`
