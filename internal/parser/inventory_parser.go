@@ -384,7 +384,6 @@ func (p *InventoryParser) parseAnsibleHost(hostName string, hostData interface{}
 	host := &types.Host{
 		Name:    hostName,
 		Address: hostName,
-		Port:    22,
 		Vars:    make(map[string]interface{}),
 	}
 

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -585,11 +586,11 @@ func (m *Manager) validateHosts(inventory *types.Inventory) error {
 			if host.Vars == nil {
 				host.Vars = make(map[string]interface{})
 			}
-			if host.Port == 0 {
-				host.Vars["_original_port"] = 0
-				host.Port = 22
-			} else {
+			if _, set := host.Vars["_original_port"]; !set {
 				host.Vars["_original_port"] = host.Port
+			}
+			if host.Port == 0 {
+				host.Port = 22
 			}
 
 			// Log final host configuration
@@ -730,25 +731,39 @@ func (m *Manager) hostView(host *types.Host) types.Host {
 	return hostCopy
 }
 
-// applyGroupConnectionVars fills connection fields the host leaves at their
-// defaults from group variables
-func applyGroupConnectionVars(hostCopy, host *types.Host, vars map[string]interface{}) {
-	if address, ok := vars["address"].(string); ok && (host.Address == "" || host.Address == host.Name) {
-		hostCopy.Address = address
-	}
-	if user, ok := vars["user"].(string); ok && host.User == "" {
-		hostCopy.User = user
-	}
-	if port, ok := vars["port"].(int); ok {
-		if origPort, hasOrig := host.Vars["_original_port"].(int); hasOrig && origPort == 0 {
-			hostCopy.Port = port
+// groupVar is the first of the names a group variable is set under:
+// onigirazu_x, ansible_x, or the plain name of the JSON/TOML format
+func groupVar(vars map[string]interface{}, names ...string) (interface{}, bool) {
+	for _, n := range names {
+		if v, ok := vars[n]; ok && v != nil && fmt.Sprint(v) != "" {
+			return v, true
 		}
 	}
-	if password, ok := vars["password"].(string); ok && host.Password == "" {
-		hostCopy.Password = password
+	return nil, false
+}
+
+// applyGroupConnectionVars fills connection fields the host leaves at their
+// defaults from group variables (ansible_user in group_vars/all, ...)
+func applyGroupConnectionVars(hostCopy, host *types.Host, vars map[string]interface{}) {
+	if v, ok := groupVar(vars, "onigirazu_host", "ansible_host", "address"); ok && (host.Address == "" || host.Address == host.Name) {
+		hostCopy.Address = fmt.Sprint(v)
 	}
-	if keyFile, ok := vars["key_file"].(string); ok && host.KeyFile == "" {
-		hostCopy.KeyFile = keyFile
+	if v, ok := groupVar(vars, "onigirazu_user", "ansible_user", "ansible_ssh_user", "user"); ok && host.User == "" {
+		hostCopy.User = fmt.Sprint(v)
+	}
+	if v, ok := groupVar(vars, "onigirazu_port", "ansible_port", "ansible_ssh_port", "port"); ok {
+		origPort, hasOrig := host.Vars["_original_port"].(int)
+		if (hasOrig && origPort == 0) || (!hasOrig && (host.Port == 0 || host.Port == 22)) {
+			if port, err := strconv.Atoi(fmt.Sprint(v)); err == nil && port > 0 {
+				hostCopy.Port = port
+			}
+		}
+	}
+	if v, ok := groupVar(vars, "onigirazu_password", "ansible_password", "ansible_ssh_pass", "password"); ok && host.Password == "" {
+		hostCopy.Password = fmt.Sprint(v)
+	}
+	if v, ok := groupVar(vars, "onigirazu_ssh_private_key_file", "ansible_ssh_private_key_file", "ansible_private_key_file", "key_file"); ok && host.KeyFile == "" {
+		hostCopy.KeyFile = fmt.Sprint(v)
 	}
 	if insecure, ok := vars["insecure_ignore_host_key"].(bool); ok && !host.InsecureIgnoreHostKey {
 		hostCopy.InsecureIgnoreHostKey = insecure

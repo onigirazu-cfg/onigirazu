@@ -97,3 +97,36 @@ func TestPatternWithPortInHostName(t *testing.T) {
 		assert.Equal(t, want, names, pattern)
 	}
 }
+
+// ansible_user and the key in group variables (all.vars) are how many
+// Ansible inventories connect
+func TestGroupConnectionVars(t *testing.T) {
+	dir := t.TempDir()
+	writeFiles(t, dir, map[string]string{"hosts.yml": `all:
+  vars:
+    ansible_user: deploy
+    ansible_ssh_private_key_file: /keys/id
+  children:
+    web:
+      vars:
+        ansible_port: "2201"
+      hosts:
+        web1: {ansible_host: 10.0.0.1}
+        web2: {ansible_host: 10.0.0.2, ansible_user: admin, ansible_port: 22}
+`})
+	inv := loadSources(t, filepath.Join(dir, "hosts.yml"))
+	p := parser.NewEnhancedParser(nil, &mockLogger{})
+	m := NewManager(p, &mockLogger{}, newMockCache())
+	require.NoError(t, m.SetInventory(inv))
+	hosts, err := m.GetHosts("all")
+	require.NoError(t, err)
+	byName := map[string]types.Host{}
+	for _, h := range hosts {
+		byName[h.Name] = h
+	}
+	assert.Equal(t, "deploy", byName["web1"].User)
+	assert.Equal(t, "/keys/id", byName["web1"].KeyFile)
+	assert.Equal(t, 2201, byName["web1"].Port)
+	assert.Equal(t, "10.0.0.1", byName["web1"].Address)
+	assert.Equal(t, "admin", byName["web2"].User) // the host's own wins
+}
