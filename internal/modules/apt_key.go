@@ -137,9 +137,12 @@ func (m *AptKeyModule) Execute(ctx context.Context, host types.Host, args map[st
 	}
 	if armored(key) && !strings.HasSuffix(target, ".asc") {
 		// a .gpg keyring holds the binary key
+		if _, err := runShellOnHost(ctx, host, args, "command -v gpg"); err != nil {
+			return fail(fmt.Sprintf("gpg is needed on %s to dearmor the key for %s; use a .asc keyring", host.Name, target))
+		}
 		out, err := runShellOnHost(ctx, host, args, fmt.Sprintf(
-			"command -v gpg >/dev/null || { echo 'gpg is needed to dearmor the key for %s; use a .asc keyring' >&2; exit 1; }; printf '%%s' %s | base64 -d | gpg --dearmor | base64 | tr -d '\\n'",
-			target, shellQuote(base64.StdEncoding.EncodeToString(key))))
+			"printf '%%s' %s | base64 -d | gpg --dearmor | base64 | tr -d '\\n'",
+			shellQuote(base64.StdEncoding.EncodeToString(key))))
 		if err != nil {
 			return fail(fmt.Sprintf("failed to dearmor the key: %v", err))
 		}
