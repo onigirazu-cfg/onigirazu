@@ -79,7 +79,7 @@ Ansible's short forms work:
 
 ### Check Mode
 
-With `--check` only these modules run, reporting what they would change: ping, debug, set_fact, stat, find, fail, wait_for, assert, include_vars, file, copy, template, lineinfile, blockinfile, replace, apt, yum, package, service, user, group, cron, sysctl, get_url, git, systemd, mount, config, docker_container, podman, docker_image. Every other module (command, shell, script, uri, firewall, archive, fetch, reboot, authorized_key, docker_compose, database modules, ...) is skipped.
+With `--check` only these modules run, reporting what they would change: ping, debug, set_fact, stat, find, fail, wait_for, assert, include_vars, file, copy, template, lineinfile, blockinfile, replace, apt, yum, package, service, user, group, cron, sysctl, get_url, git, systemd, mount, config, timezone, unarchive, docker_container, podman, docker_image. Every other module (command, shell, script, uri, firewall, archive, fetch, reboot, authorized_key, docker_compose, database modules, ...) is skipped.
 
 ## 🖥️ System Modules
 
@@ -1106,6 +1106,40 @@ Create and manage compressed archives. Supports multiple formats including tar, 
 - **Remove Safety**: Files are only removed after successful archive creation
 - **Exclusions**: Exclude patterns use glob matching (e.g., `*.tmp`, `dir/*`)
 - **Format Selection**: Choose `tar.xz` for maximum compression, `zip` for Windows compatibility
+
+### unarchive
+
+Extracts a tar (any compression tar understands) or zip archive into an existing directory.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `src` | string | - | Archive on the control machine (in a role: `files/`), or on the host with `remote_src` |
+| `dest` | string | - | Directory to extract into; it must exist |
+| `remote_src` | boolean | `false` | `src` is on the host |
+| `creates` | string | - | Skip when this path exists |
+| `owner`, `group` | string | - | Owner of the extracted files (recursive) |
+| `extra_opts` | list | - | Extra options for `tar` / `unzip` |
+| `list_files` | boolean | `false` | Return the archive's members in `files` |
+
+The task is `ok` when every member of the archive already exists in `dest`; otherwise
+the archive is extracted over it. Zip archives need `unzip` on the host.
+
+```yaml
+- name: Install the app
+  unarchive:
+    src: app-1.4.tar.gz
+    dest: /opt/app
+    owner: app
+```
+
+### timezone
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `name` | string | - | IANA time zone, e.g. `Europe/Madrid`, `UTC` |
+
+Uses `timedatectl` when systemd runs, else links `/etc/localtime` (and writes
+`/etc/timezone` where it exists).
 
 ## 📦 Package Modules
 
