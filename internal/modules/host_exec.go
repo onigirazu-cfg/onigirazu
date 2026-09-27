@@ -2,6 +2,7 @@ package modules
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/base64"
 	"fmt"
 	"os"
@@ -140,7 +141,7 @@ func statRemoteFile(ctx context.Context, host types.Host, args map[string]interf
 // created; the owner of an existing file is kept.
 func installRemoteFile(ctx context.Context, host types.Host, args map[string]interface{}, client *sshpkg.Client,
 	path string, data []byte, mode os.FileMode, existing remoteFile) error {
-	tmp := fmt.Sprintf("/tmp/.onigirazu-%d-%s", time.Now().UnixNano(), filepath.Base(path))
+	tmp := remoteTempName(".onigirazu-", filepath.Base(path))
 	// a local host has no SSH client: the temporary file is written directly
 	if client == nil {
 		if err := os.WriteFile(tmp, data, 0600); err != nil {
@@ -224,4 +225,17 @@ func modeString(mode os.FileMode) string {
 func inCheckMode(args map[string]interface{}) bool {
 	check, _ := args["_check_mode"].(bool)
 	return check
+}
+
+// remoteTempName is a temporary path in /tmp on the host that parallel
+// tasks (or hosts sharing a /tmp) do not collide on: the clock alone can
+// repeat (microseconds on macOS)
+func remoteTempName(prefix, base string) string {
+	b := make([]byte, 8)
+	_, _ = rand.Read(b)
+	name := fmt.Sprintf("/tmp/%s%d-%x", prefix, time.Now().UnixNano(), b)
+	if base != "" {
+		name += "-" + base
+	}
+	return name
 }

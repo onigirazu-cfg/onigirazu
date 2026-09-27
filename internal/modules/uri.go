@@ -150,7 +150,7 @@ func (m *URIModule) Execute(ctx context.Context, host types.Host, args map[strin
 	credFile := ""
 	if username != "" {
 		// Credentials go through a 0600 file, never the command line (ps)
-		credFile = fmt.Sprintf("/tmp/.onigirazu-uri-%d", time.Now().UnixNano())
+		credFile = remoteTempName(".onigirazu-uri-", "")
 		cfg := fmt.Sprintf("user = \"%s:%s\"\n", curlConfigEscape(username), curlConfigEscape(password))
 		if err := putPrivateFile(ctx, host, credFile, []byte(cfg)); err != nil {
 			result.Success = false

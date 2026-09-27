@@ -171,7 +171,7 @@ func uploadArchive(ctx context.Context, host types.Host, args map[string]interfa
 		return "", nil, fmt.Errorf("failed to get SSH connection: %w", err)
 	}
 	defer pool.ReleaseConnection(host)
-	tmp := fmt.Sprintf("/tmp/.onigirazu-unarchive-%d-%s", time.Now().UnixNano(), filepath.Base(src))
+	tmp := remoteTempName(".onigirazu-unarchive-", filepath.Base(src))
 	if err := client.WriteFile(tmp, data, 0600); err != nil {
 		return "", nil, fmt.Errorf("failed to upload %s: %w", src, err)
 	}

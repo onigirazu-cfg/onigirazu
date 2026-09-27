@@ -97,6 +97,8 @@ type ExecutionEngine struct {
 	forceHandlers bool
 	// control pauses and stops the run between tasks (interactive mode)
 	control *RunControl
+	// resultMu guards the play results that parallel hosts add to
+	resultMu sync.Mutex
 	// safe apply: canary, health checks and rollback of an unhealthy batch
 	safe             SafeApply
 	restorer         Restorer
@@ -1184,7 +1186,8 @@ func (e *ExecutionEngine) finishTask(task *types.Task, host *types.Host, result 
 		e.notifyHandlers(task.Notify, host.Name)
 	}
 
-	// Update play result
+	// Update play result: hosts finish tasks in parallel
+	e.resultMu.Lock()
 	if playResult.Hosts == nil {
 		playResult.Hosts = make([]types.HostResult, 0)
 	}
@@ -1219,6 +1222,7 @@ func (e *ExecutionEngine) finishTask(task *types.Task, host *types.Host, result 
 		hostResult.Success = false
 		playResult.Success = false
 	}
+	e.resultMu.Unlock()
 
 	// Log result
 	e.logger.TaskEnd(task.Name, host.Name, result.Changed, !result.Failed)
