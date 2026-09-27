@@ -37,6 +37,10 @@ type Options struct {
 
 	// Variables
 	Variables map[string]interface{} // Extra variables
+
+	// Privilege escalation
+	Become     bool
+	BecomeUser string
 }
 
 // Command represents a parsed ad-hoc command

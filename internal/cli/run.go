@@ -39,7 +39,11 @@ func newRunCmd() *cobra.Command {
 		verboseMode bool
 
 		// Variables
-		extraVars map[string]string
+		extraVars []string
+
+		// Privilege escalation
+		become     bool
+		becomeUser string
 
 		// SSH connection options
 		sshUser    string
@@ -142,6 +146,8 @@ Examples:
 				sshUser,
 				sshKeyFile,
 				lenient,
+				become,
+				becomeUser,
 			)
 		},
 	}
@@ -161,7 +167,9 @@ Examples:
 	cmd.Flags().BoolVarP(&verboseMode, "verbose-mode", "V", false, "Verbose output (show detailed results)")
 
 	// Variable flags
-	cmd.Flags().StringToStringVarP(&extraVars, "extra-vars", "e", map[string]string{}, "Extra variables (key=value)")
+	cmd.Flags().StringArrayVarP(&extraVars, "extra-vars", "e", nil, "Variables: key=value ..., JSON/YAML, or @file (repeatable)")
+	cmd.Flags().BoolVarP(&become, "become", "b", false, "Run the module with privilege escalation (sudo)")
+	cmd.Flags().StringVar(&becomeUser, "become-user", "", "User to become (default root)")
 
 	// SSH connection flags
 	cmd.Flags().StringVarP(&sshUser, "user", "u", "", "SSH user (overrides inventory)")
@@ -185,10 +193,12 @@ func runAdHocCommand(
 	parallel int,
 	outputFormat string,
 	verboseMode bool,
-	extraVars map[string]string,
+	extraVars []string,
 	sshUser string,
 	sshKeyFile string,
 	lenient bool,
+	become bool,
+	becomeUser string,
 ) error {
 	// Load configuration
 	cfg, err := config.LoadConfig(configPath)
@@ -300,22 +310,23 @@ func runAdHocCommand(
 		fmt.Fprintf(os.Stderr, "Executing: %s on %s\n", command.Module, hostPattern)
 	}
 
-	// Convert extra vars to interface map
-	variables := make(map[string]interface{})
-	for k, v := range extraVars {
-		variables[k] = v
+	variables, err := parseExtraVars(extraVars)
+	if err != nil {
+		return err
 	}
 
 	// Prepare options
 	opts := adhoc.Options{
-		Check:     check,
-		Diff:      diff,
-		Timeout:   timeout,
-		Parallel:  parallel,
-		Output:    outputFormat,
-		Verbose:   verboseMode,
-		NoColor:   noColor,
-		Variables: variables,
+		Check:      check,
+		Diff:       diff,
+		Timeout:    timeout,
+		Parallel:   parallel,
+		Output:     outputFormat,
+		Verbose:    verboseMode,
+		NoColor:    noColor,
+		Variables:  variables,
+		Become:     become || becomeUser != "",
+		BecomeUser: becomeUser,
 	}
 
 	// Execute command with signal handling

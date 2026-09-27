@@ -97,17 +97,14 @@ onigirazu run all -m ping -i inventory.yml -o json | jq -r '.results[] | select(
 | `-o, --output` | `text`, `json`, `yaml`, `table` |
 | `-u, --user` | SSH user for all hosts |
 | `-k, --key-file` | SSH private key for all hosts |
+| `-b, --become`, `--become-user` | run the module with sudo (as root, or the given user) |
+| `-e, --extra-vars` | variables: `key=value ...`, JSON/YAML, or `@file`; usable in `{{ }}` in the arguments |
+| `--check`, `--diff`, `--timeout` | check mode (modules without it are skipped), file diffs, per-host timeout |
 | `-V, --verbose-mode` | detailed results |
 | `--lenient` | skip invalid inventory entries |
 | `--no-color` | plain output |
 
-Current limitations of `run`:
-
-- `{{ }}` in arguments is not rendered; for templated arguments write a one-task
-  playbook. (`--check` runs only modules that support check mode and skips the others,
-  `--diff` shows file changes, `-e` and `--timeout` apply.)
-- There is no become option and the security policy is not applied; use a playbook with
-  `become: true` / `apply -b`.
+Current limitation: the security policy is not applied to `run`.
 
 ## Compared with Ansible
 
@@ -117,5 +114,5 @@ Current limitations of `run`:
 | `ansible all -i inv -a "uptime"` | `onigirazu run all -i inv "uptime"` |
 | `ansible all -i inv -m shell -a "df -h \| head"` | `onigirazu run all -i inv -m shell -a "df -h \| head"` |
 | `ansible all -i web1,web2 -m ping` | `onigirazu run all -i web1,web2 -m ping` |
-| `ansible all -i inv -m package -a "name=nginx state=present" -b` | playbook + `onigirazu apply -b` (no become in `run`) |
+| `ansible all -i inv -m package -a "name=nginx state=present" -b` | `onigirazu run all -i inv -m package -a "name=nginx state=present" -b` |
 

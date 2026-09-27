@@ -1,0 +1,7 @@
+plays:
+  - name: what run -b wrote
+    hosts: all
+    become: true
+    tasks:
+      - name: Written by run
+        copy: {content: "{{ inventory_hostname }} v7", dest: /root/onigirazu-e2e-run, mode: "0600"}
