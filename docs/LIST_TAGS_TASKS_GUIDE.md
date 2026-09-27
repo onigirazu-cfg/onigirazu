@@ -12,10 +12,10 @@ Both read only the playbook; nothing runs on the hosts, so `--check` and `--diff
 ## What is listed
 
 Tasks as they run: the tasks of `roles:` entries (named `role : task`) and the tasks inside `block`s
-are listed, with the tags they inherit from the play, the `roles:` entry and the block. Handlers are
-not listed; they run only when notified. The decision uses the same tag filter as execution
-(case-insensitive, `tagged`/`untagged`/`all`). Not listed: tasks of `include_role` / `import_role`
-and of role dependencies, and `when` conditions are not evaluated.
+and of `include_role` / `import_role` are listed, with the tags they inherit from the play, the
+`roles:` entry, the include and the block. Handlers are not listed; they run only when notified. The
+decision uses the same tag filter as execution (case-insensitive, `tagged`/`untagged`/`all`). Not
+listed: tasks of role dependencies; `when` conditions are not evaluated.
 
 ## Quick Examples
 

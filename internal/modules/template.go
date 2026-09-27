@@ -50,6 +50,7 @@ func (m *TemplateModule) GetDescription() string {
 
 // Execute processes a template file
 func (m *TemplateModule) Execute(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
+	ctx = template.WithBlockOptions(ctx, getBoolArg(args, "trim_blocks", true), getBoolArg(args, "lstrip_blocks", false))
 	startTime := time.Now()
 
 	result := types.TaskResult{

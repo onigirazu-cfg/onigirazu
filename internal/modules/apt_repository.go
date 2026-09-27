@@ -109,7 +109,17 @@ done; true`)
 			matchFiles[file] = true
 		}
 	}
-	present := len(matchFiles) > 0
+	// a deb822 .sources file that already describes the repository counts
+	// as present; such files are not edited
+	inSources := false
+	if state == "present" && !strings.HasPrefix(repo, "ppa:") {
+		sources, err := runShellOnHost(ctx, host, args, `for f in /etc/apt/sources.list.d/*.sources; do [ -f "$f" ] && { cat "$f"; echo; }; done; true`)
+		if err != nil {
+			return fail(fmt.Sprintf("failed to read the APT sources: %v", err))
+		}
+		inSources = deb822Contains(sources, repo)
+	}
+	present := len(matchFiles) > 0 || inSources
 	if present == (state == "present") {
 		result.Output["msg"] = fmt.Sprintf("repository is %s", state)
 		return done()
@@ -207,4 +217,65 @@ func removeRepoLine(ctx context.Context, host types.Host, args map[string]interf
 		return err
 	}
 	return writeHostFile(ctx, host, args, path, []byte(strings.Join(kept, "\n")+"\n"), 0)
+}
+
+// deb822Contains tells whether a stanza of deb822 sources covers a one-line
+// source: its type, URI and suite, and every component
+func deb822Contains(sources, repo string) bool {
+	fields := strings.Fields(repo)
+	if len(fields) < 3 {
+		return false
+	}
+	typ, rest := fields[0], fields[1:]
+	if strings.HasPrefix(rest[0], "[") { // options
+		for len(rest) > 0 && !strings.HasSuffix(rest[0], "]") {
+			rest = rest[1:]
+		}
+		if len(rest) > 0 {
+			rest = rest[1:]
+		}
+	}
+	if len(rest) < 2 {
+		return false
+	}
+	uri, suite, comps := strings.TrimSuffix(rest[0], "/"), rest[1], rest[2:]
+	for _, stanza := range strings.Split(strings.ReplaceAll(sources, "\r", ""), "\n\n") {
+		st := map[string][]string{}
+		for _, line := range strings.Split(stanza, "\n") {
+			k, v, ok := strings.Cut(line, ":")
+			if !ok || strings.HasPrefix(strings.TrimSpace(line), "#") {
+				continue
+			}
+			st[strings.ToLower(strings.TrimSpace(k))] = strings.Fields(v)
+		}
+		if strings.EqualFold(strings.Join(st["enabled"], ""), "no") {
+			continue
+		}
+		var uris []string
+		for _, u := range st["uris"] {
+			uris = append(uris, strings.TrimSuffix(u, "/"))
+		}
+		if inList(st["types"], typ) && inList(uris, uri) && inList(st["suites"], suite) && containsAll(st["components"], comps) {
+			return true
+		}
+	}
+	return false
+}
+
+func inList(list []string, s string) bool {
+	for _, v := range list {
+		if v == s {
+			return true
+		}
+	}
+	return false
+}
+
+func containsAll(list, want []string) bool {
+	for _, w := range want {
+		if !inList(list, w) {
+			return false
+		}
+	}
+	return true
 }

@@ -508,7 +508,7 @@ func TestInventoryParser_ParseSimpleHostLine_WithUser(t *testing.T) {
 	assert.NotNil(t, host)
 	assert.Equal(t, "192.168.1.1", host.Address)
 	assert.Equal(t, "admin", host.User)
-	assert.Equal(t, "admin@192.168.1.1", host.Name)
+	assert.Equal(t, "192.168.1.1", host.Name)
 }
 
 func TestInventoryParser_ParseSimpleHostLine_WithUserAndPort(t *testing.T) {
@@ -521,7 +521,7 @@ func TestInventoryParser_ParseSimpleHostLine_WithUserAndPort(t *testing.T) {
 	assert.Equal(t, "192.168.1.1", host.Address)
 	assert.Equal(t, "admin", host.User)
 	assert.Equal(t, 2222, host.Port)
-	assert.Equal(t, "admin@192.168.1.1", host.Name)
+	assert.Equal(t, "192.168.1.1", host.Name)
 }
 
 func TestInventoryParser_ParseSimpleHostLine_Hostname(t *testing.T) {

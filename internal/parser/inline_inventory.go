@@ -267,6 +267,7 @@ func (d *InlineInventoryDetector) ParseInlineInventory(input string) (*types.Inv
 		return nil, fmt.Errorf("no valid hosts in inventory specification")
 	}
 
+	uniqueHostNames(inventory, allGroup)
 	inventory.Groups["all"] = allGroup
 
 	d.logger.Info("Parsed inline inventory: %d hosts", len(inventory.Hosts))
@@ -300,13 +301,9 @@ func (d *InlineInventoryDetector) parseHostSpecification(hostSpec string, index 
 		address = hostSpec
 	}
 
-	// Generate host name
-	var name string
-	if user != "" {
-		name = fmt.Sprintf("%s@%s", user, address)
-	} else {
-		name = address
-	}
+	// the host is named by its address, as in Ansible (uniqueHostNames adds
+	// the port when one address appears with several ports)
+	name := address
 
 	// no user: SSH connects as the local user, as Ansible does
 	host := &types.Host{
@@ -333,4 +330,20 @@ func (d *InlineInventoryDetector) parsePort(portStr string) (int, error) {
 		return 0, fmt.Errorf("port out of range: %d", port)
 	}
 	return port, nil
+}
+
+// uniqueHostNames names hosts that share an address "address:port"
+func uniqueHostNames(inventory *types.Inventory, all *types.Group) {
+	count := map[string]int{}
+	for _, h := range inventory.Hosts {
+		count[h.Address]++
+	}
+	all.Hosts = make(map[string]*types.Host, len(inventory.Hosts))
+	for i := range inventory.Hosts {
+		h := &inventory.Hosts[i]
+		if count[h.Address] > 1 {
+			h.Name = fmt.Sprintf("%s:%d", h.Address, h.Port)
+		}
+		all.Hosts[h.Name] = h
+	}
 }

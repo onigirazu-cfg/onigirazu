@@ -33,17 +33,25 @@ func (m *AptKeyModule) GetDescription() string {
 	return "Add or remove an APT signing key"
 }
 
-var keyID = regexp.MustCompile(`^(0x)?[0-9A-Fa-f]{8,40}$`)
+var (
+	keyID     = regexp.MustCompile(`^(0x)?[0-9A-Fa-f]{8,40}$`)
+	keyServer = regexp.MustCompile(`^((hkps?|https?)://)?[A-Za-z0-9.-]+(:[0-9]+)?/?$`)
+)
 
 func (m *AptKeyModule) Validate(args map[string]interface{}) error {
 	if err := m.BaseModule.Validate(args); err != nil {
 		return err
 	}
-	if _, ok := args["keyserver"]; ok {
-		return fmt.Errorf("apt_key: keyserver is not supported; give the key with url or data")
-	}
 	state := getStringArg(args, "state", "present")
 	id := getStringArg(args, "id", "")
+	if ks := getStringArg(args, "keyserver", ""); ks != "" {
+		if id == "" {
+			return fmt.Errorf("apt_key: keyserver needs id")
+		}
+		if !keyServer.MatchString(ks) {
+			return fmt.Errorf("apt_key: keyserver %q is not a host name or hkp(s):// URL", ks)
+		}
+	}
 	if id != "" && !keyID.MatchString(id) {
 		return fmt.Errorf("apt_key: id %q is not a key id", id)
 	}
@@ -51,7 +59,7 @@ func (m *AptKeyModule) Validate(args map[string]interface{}) error {
 		return fmt.Errorf("apt_key: keyring must be an absolute path")
 	}
 	sources := 0
-	for _, k := range []string{"url", "data", "file"} {
+	for _, k := range []string{"url", "data", "file", "keyserver"} {
 		if getStringArg(args, k, "") != "" {
 			sources++
 		}
@@ -59,7 +67,7 @@ func (m *AptKeyModule) Validate(args map[string]interface{}) error {
 	switch state {
 	case "present":
 		if sources != 1 {
-			return fmt.Errorf("apt_key: give the key with exactly one of url, data or file")
+			return fmt.Errorf("apt_key: give the key with exactly one of url, data, file or keyserver")
 		}
 	case "absent":
 		if getStringArg(args, "keyring", "") == "" && id == "" {
@@ -185,6 +193,21 @@ func (m *AptKeyModule) keyMaterial(ctx context.Context, host types.Host, args ma
 		}
 		if !exists {
 			return nil, fmt.Errorf("key file %s not found on %s", file, host.Name)
+		}
+		return key, nil
+	}
+	if ks := getStringArg(args, "keyserver", ""); ks != "" {
+		id := getStringArg(args, "id", "")
+		out, err := runShellOnHost(ctx, host, args, fmt.Sprintf(`command -v gpg >/dev/null || { echo "gpg is not installed" >&2; exit 1; }
+h=$(mktemp -d); trap 'rm -rf "$h"' EXIT
+GNUPGHOME=$h gpg --batch --quiet --keyserver %s --recv-keys %s >&2
+GNUPGHOME=$h gpg --batch --armor --export %s | base64 | tr -d '\n'`, shellQuote(ks), shellQuote(id), shellQuote(id)))
+		if err != nil {
+			return nil, fmt.Errorf("failed to receive key %s from %s: %v", id, ks, err)
+		}
+		key, err := base64.StdEncoding.DecodeString(strings.TrimSpace(out))
+		if err != nil || len(key) == 0 {
+			return nil, fmt.Errorf("key %s not found on %s", id, ks)
 		}
 		return key, nil
 	}

@@ -38,14 +38,30 @@ func Flatten(play *types.Play) []FlatTask {
 func appendFlat(out []FlatTask, tasks []types.Task, typ, role string, inherited []string) []FlatTask {
 	for i := range tasks {
 		t := &tasks[i]
-		tags := append(append([]string{}, inherited...), t.Tags...)
+		tags := uniqueTags(append(append([]string{}, inherited...), t.Tags...))
 		if len(t.Block) > 0 || len(t.Rescue) > 0 || len(t.Always) > 0 {
 			out = appendFlat(out, t.Block, typ, role, tags)
 			out = appendFlat(out, t.Rescue, typ, role, tags)
 			out = appendFlat(out, t.Always, typ, role, tags)
 			continue
 		}
+		if t.IncludedRole != nil { // include_role / import_role: the role's tasks
+			out = appendFlat(out, t.IncludedRole.Tasks, typ, t.IncludedRole.Name, tags)
+			continue
+		}
 		out = append(out, FlatTask{Task: t, Type: typ, Role: role, Tags: tags})
+	}
+	return out
+}
+
+func uniqueTags(tags []string) []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(tags))
+	for _, t := range tags {
+		if !seen[t] {
+			seen[t] = true
+			out = append(out, t)
+		}
 	}
 	return out
 }

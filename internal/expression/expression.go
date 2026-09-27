@@ -96,6 +96,9 @@ func compile(expression string) (*vm.Program, error) {
 		expr.Function("bool", func(params ...interface{}) (interface{}, error) {
 			return Truthy(params[0]), nil
 		}),
+		expr.Function("jinja_index", func(params ...interface{}) (interface{}, error) {
+			return jinjaIndex(params[0], params[1]), nil
+		}),
 		expr.Function("default", func(params ...interface{}) (interface{}, error) {
 			if len(params) < 2 {
 				return nil, fmt.Errorf("default needs a value")
@@ -105,7 +108,7 @@ func compile(expression string) (*vm.Program, error) {
 			}
 			return params[0], nil
 		}),
-	}, filterFunctions()...)
+	}, append(extraFilterOptions(), filterFunctions()...)...)
 	program, err := expr.Compile(notToBang(testsToCalls(pipesToCalls(translate(expression)))), options...)
 	if err != nil {
 		return nil, err
@@ -367,4 +370,39 @@ func splitTop(code, sep string) []string {
 		}
 	}
 	return append(parts, code[start:])
+}
+
+// jinjaIndex is container[key], or nil when the key or index is missing
+func jinjaIndex(container, key interface{}) interface{} {
+	switch c := container.(type) {
+	case map[string]interface{}:
+		return c[fmt.Sprint(key)]
+	case nil:
+		return nil
+	}
+	rv := reflect.ValueOf(container)
+	switch rv.Kind() {
+	case reflect.Slice, reflect.Array, reflect.String:
+		i, ok := key.(int)
+		if !ok {
+			return nil
+		}
+		if i < 0 {
+			i += rv.Len()
+		}
+		if i < 0 || i >= rv.Len() {
+			return nil
+		}
+		if rv.Kind() == reflect.String {
+			return string(rv.String()[i])
+		}
+		return rv.Index(i).Interface()
+	case reflect.Map:
+		v := rv.MapIndex(reflect.ValueOf(key))
+		if !v.IsValid() {
+			return nil
+		}
+		return v.Interface()
+	}
+	return nil
 }

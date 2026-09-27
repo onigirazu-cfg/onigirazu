@@ -108,8 +108,8 @@ environment=production
 ## Plain host list
 
 One `[user@]host[:port]` per line; `#` starts a comment. Hosts get port 22 and the local user
-unless given and belong to the group `all`. A host with a user is named
-`user@host`.
+unless given and belong to the group `all`. A host is named by its address; when one
+address appears with several ports, as `address:port`.
 
 ```
 192.168.1.1
