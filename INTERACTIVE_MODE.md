@@ -49,6 +49,14 @@ rollback snapshot are saved as for any run.
 | **F** | Failed results only (toggle) |
 | **Esc** | Back |
 
+### Timeline
+
+| Key | Action |
+|-----|--------|
+| **L** | Every host as a row of task marks in run order (✓ ok, ⟳ changed, ✗ failed, ⊘ skipped), failed hosts first |
+| **↑** / **↓**, **Enter** | Select a host and show its tasks as bars on the run's time axis: when each started and how long it took |
+| **Esc** | Back |
+
 ### Log
 
 | Key | Action |
