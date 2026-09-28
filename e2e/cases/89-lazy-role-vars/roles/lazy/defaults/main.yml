@@ -1,0 +1,4 @@
+# as in a role that follows a port from the inventory: rendered when used
+lazy_port: "{{ lazy_base_port | default(22) }}"
+lazy_items:
+  - {name: first, value: "{{ lazy_port }}"}

@@ -1,0 +1,84 @@
+{
+  "version": 1,
+  "playbook": "",
+  "serial": 2,
+  "updated": "2026-09-28T14:18:45.194799Z",
+  "resources": [
+    {
+      "host": "r",
+      "type": "file",
+      "id": "/root/onigirazu-e2e-lazy",
+      "tasks": [
+        "play:role defaults with templates/role:lazy/tasks/Only when the port is still the default"
+      ],
+      "task_name": "Only when the port is still the default",
+      "origin": "created",
+      "before": {
+        "_become": true,
+        "_become_method": "",
+        "_become_user": "",
+        "kind": "absent",
+        "path": "/root/onigirazu-e2e-lazy"
+      },
+      "first_applied": "2026-09-28T14:18:44.651297Z",
+      "last_applied": "2026-09-28T14:18:44.651297Z"
+    },
+    {
+      "host": "r",
+      "type": "file",
+      "id": "/root/onigirazu-e2e-lazy-wrong",
+      "tasks": [
+        "play:role defaults with templates/role:lazy/tasks/Never, the port is 22"
+      ],
+      "task_name": "Never, the port is 22",
+      "origin": "created",
+      "before": {
+        "_become": true,
+        "_become_method": "",
+        "_become_user": "",
+        "kind": "absent",
+        "path": "/root/onigirazu-e2e-lazy-wrong"
+      },
+      "first_applied": "2026-09-28T14:18:45.194799Z",
+      "last_applied": "2026-09-28T14:18:45.194799Z"
+    },
+    {
+      "host": "u",
+      "type": "file",
+      "id": "/root/onigirazu-e2e-lazy",
+      "tasks": [
+        "play:role defaults with templates/role:lazy/tasks/Only when the port is still the default"
+      ],
+      "task_name": "Only when the port is still the default",
+      "origin": "created",
+      "before": {
+        "_become": true,
+        "_become_method": "",
+        "_become_user": "",
+        "kind": "absent",
+        "path": "/root/onigirazu-e2e-lazy"
+      },
+      "first_applied": "2026-09-28T14:18:44.651297Z",
+      "last_applied": "2026-09-28T14:18:44.651297Z"
+    },
+    {
+      "host": "u",
+      "type": "file",
+      "id": "/root/onigirazu-e2e-lazy-wrong",
+      "tasks": [
+        "play:role defaults with templates/role:lazy/tasks/Never, the port is 22"
+      ],
+      "task_name": "Never, the port is 22",
+      "origin": "created",
+      "before": {
+        "_become": true,
+        "_become_method": "",
+        "_become_user": "",
+        "kind": "absent",
+        "path": "/root/onigirazu-e2e-lazy-wrong"
+      },
+      "first_applied": "2026-09-28T14:18:45.194799Z",
+      "last_applied": "2026-09-28T14:18:45.194799Z"
+    }
+  ]
+}
