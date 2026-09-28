@@ -8,9 +8,26 @@ Ansible has nothing like it: a deleted task leaves its file or package behind.
 
 ## Where it lives
 
-`.onigirazu/<playbook name>.state.json` next to the playbook, one file per playbook, mode 0600.
-It holds the previous content of adopted text files (up to 1 MiB), so keep it out of public
-repositories.
+By default `.onigirazu/<playbook name>.state.json` next to the playbook, one file per playbook,
+mode 0600. It holds the previous content of adopted text files (up to 1 MiB), so keep it out of
+public repositories.
+
+A team shares it through an S3 bucket (AWS, Garage, MinIO, ...), set in `onigirazu.yml`:
+
+```yaml
+managed_state:
+  backend: s3
+  bucket: onigirazu-state
+  prefix: prod/              # object: prod/<playbook name>.state.json
+  endpoint: s3.example.org:3900   # empty: AWS
+  region: garage
+  path_style: true           # most self-hosted servers
+  # insecure: true           # plain HTTP
+```
+
+Credentials come from `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` (or `AWS_PROFILE` and
+`~/.aws/credentials`, or the instance role), never from the file. Playbooks with the same name
+need different prefixes.
 
 ## What is recorded
 
@@ -85,6 +102,9 @@ Managed state: resources that left the playbook
 
 apply locks the playbook's managed state for the run (`<state>.lock`, with who, pid and a lock
 ID); a second apply of the same playbook fails at once, or waits with `--lock-timeout 5m`.
+In S3 the lock is an object per run under `<state>.lock/`: a run holds it when a listing right
+after its write shows no other. It needs no conditional writes (Garage ignores `If-None-Match`),
+only read-after-write consistency, which AWS, Garage and MinIO have.
 `plan` and `drift` do not lock. A lock left by a run that died:
 
 ```
