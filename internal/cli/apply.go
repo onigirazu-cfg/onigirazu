@@ -22,6 +22,7 @@ import (
 	"github.com/onigirazu-cfg/onigirazu/internal/interfaces"
 	"github.com/onigirazu-cfg/onigirazu/internal/inventory"
 	"github.com/onigirazu-cfg/onigirazu/internal/logger"
+	"github.com/onigirazu-cfg/onigirazu/internal/managed"
 	"github.com/onigirazu-cfg/onigirazu/internal/metrics"
 	"github.com/onigirazu-cfg/onigirazu/internal/modules"
 	"github.com/onigirazu-cfg/onigirazu/internal/output"
@@ -73,6 +74,8 @@ func newApplyCommand(onResult func(*types.PlaybookResult)) *cobra.Command {
 		canaryPause    time.Duration
 		autoRollback   bool
 		noDestroy      bool
+		stateLock      bool
+		lockTimeout    time.Duration
 		autoApprove    bool
 		rollbackScope  string
 		tags           string
@@ -816,6 +819,19 @@ Examples:
 				}
 			}
 
+			// one apply of a playbook at a time: its managed state
+			if !cfg.IsCheckMode() && stateLock {
+				lock, err := managed.AcquireLock(managed.Path(playbookPath), "apply", lockTimeout)
+				if err != nil {
+					return err
+				}
+				defer func() {
+					if err := lock.Release(); err != nil {
+						log.Warn("Managed state lock: %v", err)
+					}
+				}()
+			}
+
 			result, err := executionEngine.ExecutePlaybook(ctx, playbook)
 			duration := time.Since(startTime)
 			// state and audit are saved after the run even when --timeout or
@@ -1165,6 +1181,8 @@ Examples:
 	cmd.Flags().DurationVar(&canaryPause, "canary-pause", 0, "After a healthy canary batch, wait this long and check its health again")
 	cmd.Flags().BoolVar(&autoRollback, "auto-rollback", false, "Roll back a batch whose tasks or health checks failed, and stop")
 	cmd.Flags().BoolVar(&noDestroy, "no-destroy", false, "Keep the resources that left the playbook (plan keeps listing them)")
+	cmd.Flags().BoolVar(&stateLock, "lock", true, "Lock the playbook's managed state for the run")
+	cmd.Flags().DurationVar(&lockTimeout, "lock-timeout", 0, "Wait this long for another run's state lock")
 	cmd.Flags().BoolVar(&autoApprove, "auto-approve", false, "Remove or put back the resources that left the playbook without asking")
 	cmd.Flags().StringVar(&rollbackScope, "rollback-scope", "batch", "What a rollback undoes: batch (the unhealthy batch) or run (every batch so far)")
 	cmd.Flags().StringVar(&tags, "tags", "", "Only run tasks with these tags (comma-separated). Use 'tagged' for tasks with any tag, 'untagged' for tasks without tags, 'all' for default behavior")

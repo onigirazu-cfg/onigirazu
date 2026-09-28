@@ -30,7 +30,8 @@ Subcommands:
   list      - List all resources in state
   show      - Show detailed information about a resource
   resources - List the resources a playbook manages on its hosts (managed state)
-  rm        - Forget a managed resource without touching the host`,
+  rm        - Forget a managed resource without touching the host
+  unlock    - Remove the managed state lock of a run that is gone`,
 		Example: `  # List all resources
   onigirazu state list
 
@@ -46,6 +47,7 @@ Subcommands:
 	cmd.AddCommand(newStateShowCmd())
 	cmd.AddCommand(newStateResourcesCmd())
 	cmd.AddCommand(newStateRmCmd())
+	cmd.AddCommand(newStateUnlockCmd())
 
 	return cmd
 }

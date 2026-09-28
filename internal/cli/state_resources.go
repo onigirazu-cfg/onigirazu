@@ -71,6 +71,11 @@ func newStateRmCmd() *cobra.Command {
 		Args: cobra.ExactArgs(4),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			path := managed.Path(args[0])
+			lock, err := managed.AcquireLock(path, "state rm", 0)
+			if err != nil {
+				return err
+			}
+			defer func() { _ = lock.Release() }()
 			st, err := managed.Load(path)
 			if err != nil {
 				return err
@@ -83,6 +88,25 @@ func newStateRmCmd() *cobra.Command {
 				return err
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Forgot %s %s on %s\n", typ, id, host)
+			return nil
+		},
+	}
+}
+
+// newStateUnlockCmd removes a lock left by a run that died
+func newStateUnlockCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "unlock PLAYBOOK LOCK_ID",
+		Short: "Remove the managed state lock of a run that is gone",
+		Long: `Remove the lock of a playbook's managed state that a crashed or killed apply left
+behind. The lock ID is in the error of the apply that found the state locked. Make sure no
+apply of the playbook is still running: two at once can lose records.`,
+		Args: cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := managed.ForceUnlock(managed.Path(args[0]), args[1]); err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "Unlocked the managed state of %s\n", args[0])
 			return nil
 		},
 	}
