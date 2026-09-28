@@ -85,6 +85,7 @@ across your infrastructure with a focus on simplicity and reliability.`,
 	rootCmd.AddCommand(newGraphCmd())
 	rootCmd.AddCommand(newRunCmd())
 	rootCmd.AddCommand(newImportCmd())
+	rootCmd.AddCommand(newGalaxyCmd())
 	rootCmd.AddCommand(rollbackCmd)
 	rootCmd.AddCommand(newDriftCmd())
 	rootCmd.AddCommand(inventoryCmd)

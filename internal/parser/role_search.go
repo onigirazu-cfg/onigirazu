@@ -170,3 +170,10 @@ func findRole(name, playRoles string) (string, []string) {
 	}
 	return "", tried
 }
+
+// InstallPaths are where galaxy install puts roles and collections: the
+// first roles_path and collections_path Ansible would use
+func InstallPaths(playbookDir string) (roles, collections string) {
+	r, c := roleSearch(playbookDir)
+	return r[0], c[0]
+}
