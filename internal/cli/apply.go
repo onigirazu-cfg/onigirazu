@@ -481,6 +481,8 @@ Examples:
 					return err
 				}
 				executionEngine.SetExtraVars(vars)
+				// -e ansible_user=... reaches the hosts, as in Ansible
+				inventoryManager.SetConnectionOverrides(vars)
 			}
 			executionEngine.SetLimit(limit)
 			executionEngine.SetForceBecome(become || becomeUser != "", becomeUser)

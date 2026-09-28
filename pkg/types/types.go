@@ -22,6 +22,9 @@ type Host struct {
 	KeyFile               string                 `yaml:"key_file,omitempty"`
 	InsecureIgnoreHostKey bool                   `yaml:"insecure_ignore_host_key,omitempty"`
 	Vars                  map[string]interface{} `yaml:"vars,omitempty"`
+	// BecomePassword is given to sudo (ansible_become_password); never
+	// written anywhere
+	BecomePassword string `yaml:"-" json:"-"`
 
 	// Privilege escalation of the task being run on this host; set per task by
 	// the module registry, never read from inventory

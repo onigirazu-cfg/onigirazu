@@ -22,7 +22,9 @@ type CommandExecutor struct {
 	become       bool
 	becomeUser   string
 	becomeMethod string
-	env          string // "env 'K=V' ..." for the task's environment, or empty
+	// becomePassword goes to sudo -S on stdin; empty: sudo -n
+	becomePassword string
+	env            string // "env 'K=V' ..." for the task's environment, or empty
 }
 
 // NewCommandExecutor creates a new command executor for the given host
@@ -44,6 +46,7 @@ func NewCommandExecutor(host types.Host) (*CommandExecutor, error) {
 		}
 		executor.sshClient = client
 	}
+	executor.becomePassword = host.BecomePassword
 	if host.Become {
 		executor.SetBecome(true, host.BecomeUser, host.BecomeMethod)
 	}
@@ -70,6 +73,7 @@ func NewCommandExecutorWithoutPool(host types.Host) (*CommandExecutor, error) {
 		}
 		executor.sshClient = client
 	}
+	executor.becomePassword = host.BecomePassword
 	if host.Become {
 		executor.SetBecome(true, host.BecomeUser, host.BecomeMethod)
 	}
@@ -141,10 +145,16 @@ func (e *CommandExecutor) wrapWithBecome(command string) string {
 		}
 		return fmt.Sprintf("doas -u %s %s", shellQuote(e.becomeUser), shell)
 	default: // sudo
-		if e.becomeUser == "root" {
-			return "sudo -n " + shell
+		// with a password it reaches sudo on stdin through printf, a shell
+		// builtin: it shows in no process list
+		sudo := "sudo -n"
+		if e.becomePassword != "" {
+			sudo = "printf '%s\\n' " + shellQuote(e.becomePassword) + " | sudo -S -p ''"
 		}
-		return fmt.Sprintf("sudo -n -u %s %s", shellQuote(e.becomeUser), shell)
+		if e.becomeUser == "root" {
+			return sudo + " " + shell
+		}
+		return fmt.Sprintf("%s -u %s %s", sudo, shellQuote(e.becomeUser), shell)
 	}
 }
 

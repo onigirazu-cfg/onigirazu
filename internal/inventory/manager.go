@@ -32,6 +32,8 @@ type Manager struct {
 	// merges hosts into parent groups; host variables are resolved from these
 	groupVars    map[string]map[string]interface{}
 	groupParents map[string][]string
+	// connection variables given with -e: they win over the inventory
+	connOverrides map[string]interface{}
 }
 
 // HostFilter defines a function type for filtering hosts
@@ -724,6 +726,10 @@ func (m *Manager) hostView(host *types.Host) types.Host {
 		hostCopy.Vars[k] = v
 	}
 	applyGroupConnectionVars(&hostCopy, host, merged)
+	if len(m.connOverrides) > 0 {
+		empty := types.Host{Name: host.Name, Vars: map[string]interface{}{}}
+		applyGroupConnectionVars(&hostCopy, &empty, m.connOverrides)
+	}
 
 	names := append([]string(nil), groups...)
 	sort.Strings(names)
@@ -764,6 +770,12 @@ func applyGroupConnectionVars(hostCopy, host *types.Host, vars map[string]interf
 	}
 	if v, ok := groupVar(vars, "onigirazu_ssh_private_key_file", "ansible_ssh_private_key_file", "ansible_private_key_file", "key_file"); ok && host.KeyFile == "" {
 		hostCopy.KeyFile = fmt.Sprint(v)
+	}
+	if v, ok := groupVar(vars, "onigirazu_become_password", "ansible_become_password", "ansible_become_pass", "ansible_sudo_pass"); ok && host.BecomePassword == "" {
+		hostCopy.BecomePassword = fmt.Sprint(v)
+	}
+	if v, ok := groupVar(vars, "ansible_ssh_common_args", "ansible_ssh_extra_args"); ok && strings.Contains(fmt.Sprint(v), "StrictHostKeyChecking=no") {
+		hostCopy.InsecureIgnoreHostKey = true
 	}
 	if insecure, ok := vars["insecure_ignore_host_key"].(bool); ok && !host.InsecureIgnoreHostKey {
 		hostCopy.InsecureIgnoreHostKey = insecure
@@ -1119,4 +1131,30 @@ func (m *Manager) sortHosts(hosts []types.Host) {
 		}
 		return hosts[i].Name < hosts[j].Name
 	})
+}
+
+// connectionVarNames are the variables that set how a host is reached
+var connectionVarNames = []string{
+	"ansible_host", "ansible_user", "ansible_ssh_user", "ansible_port", "ansible_ssh_port",
+	"ansible_password", "ansible_ssh_pass", "ansible_ssh_private_key_file", "ansible_private_key_file",
+	"ansible_become_password", "ansible_become_pass", "ansible_sudo_pass",
+	"ansible_ssh_common_args", "ansible_ssh_extra_args",
+	"onigirazu_host", "onigirazu_user", "onigirazu_port", "onigirazu_password",
+	"onigirazu_ssh_private_key_file", "onigirazu_become_password",
+}
+
+// SetConnectionOverrides takes the connection variables of the extra vars
+// (-e ansible_user=deploy): as in Ansible they win over the inventory
+func (m *Manager) SetConnectionOverrides(extraVars map[string]interface{}) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	m.connOverrides = nil
+	for _, name := range connectionVarNames {
+		if v, ok := extraVars[name]; ok {
+			if m.connOverrides == nil {
+				m.connOverrides = map[string]interface{}{}
+			}
+			m.connOverrides[name] = v
+		}
+	}
 }
