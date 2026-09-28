@@ -2,11 +2,9 @@
 
 apply remembers what each playbook manages on every host: the files, packages, services, users
 and groups its tasks keep, which task claims each of them, and what was there before. When a task
-leaves the playbook, `plan` shows what becomes of its resources. Ansible has nothing like it: a
-deleted task leaves its file or package behind.
-
-Removing and restoring orphaned resources during apply is not implemented yet; for now `plan`,
-`drift` and apply list them.
+leaves the playbook, `plan` shows what becomes of its resources and the next apply does it, like
+`terraform apply`: what onigirazu created is removed, what it took over is put back as it was.
+Ansible has nothing like it: a deleted task leaves its file or package behind.
 
 ## Where it lives
 
@@ -62,6 +60,27 @@ No longer in the playbook: 3 resource(s)
 
 `drift` counts orphans as drift (exit code 2).
 
+## apply
+
+After the plays, apply removes or puts back the orphans of the hosts it ran on, newest first
+(files inside a directory before the directory), then forgets the `?` ones.
+
+- In a terminal it asks once: `Remove or put back N resource(s) that left the playbook? [y/N]`.
+  `--auto-approve` skips the question; without a terminal (CI, cron) apply goes ahead.
+- `--no-destroy` keeps them; plan keeps listing them.
+- Nothing is removed on a host where a task failed or was rolled back, nor in a partial run
+  (`--tags`, `--skip-tags`, `--start-at-task`, stopped or canceled).
+- A directory onigirazu created is removed only when empty; otherwise it is left in place and
+  forgotten.
+- A resource that could not be removed or put back stays an orphan and apply exits non-zero.
+
+```
+Managed state: resources that left the playbook
+  put back file /etc/ssh/sshd_config on web1
+  removed file /etc/app/extra.conf on web1
+  kept file /srv/data on web1: directory /srv/data is not empty
+```
+
 ## Commands
 
 ```
@@ -77,4 +96,4 @@ onigirazu state rm site.yml web1 file /etc/app.conf   # forget one; the host is 
   prevent_destroy: true
 ```
 
-Once such a task leaves the playbook, its resources are only forgotten.
+Once such a task leaves the playbook, its resources are only forgotten, never removed or put back.

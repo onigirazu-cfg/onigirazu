@@ -171,8 +171,28 @@ func (re *RollbackExecutor) executeRollbackOperation(ctx context.Context, resour
 	if !taskResult.Success {
 		return fmt.Errorf("rollback operation failed: %s", taskResult.Error)
 	}
+	if kept, _ := taskResult.Output["kept"].(string); kept != "" {
+		return &KeptError{Reason: kept}
+	}
 
 	return nil
+}
+
+// KeptError: the operation left the resource as it was on purpose (a
+// directory that is not empty)
+type KeptError struct{ Reason string }
+
+func (e *KeptError) Error() string { return "left in place: " + e.Reason }
+
+// Undo puts back what one changed task result did, from its before capture
+// (a managed resource that left the playbook). ok is false when there is no
+// previous state to go back to.
+func (re *RollbackExecutor) Undo(ctx context.Context, t types.TaskResult) (ok bool, err error) {
+	res, found := ResourceFromResult(t, t.Host, 1)
+	if !found || !res.Reversible || res.RollbackOp == nil {
+		return false, nil
+	}
+	return true, re.executeRollbackOperation(ctx, &res)
 }
 
 // DryRunRollback performs a dry-run of a rollback operation

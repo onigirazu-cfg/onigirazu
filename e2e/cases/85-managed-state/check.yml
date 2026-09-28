@@ -1,0 +1,19 @@
+- name: after the cleanup
+  hosts: all
+  become: true
+  tasks:
+    - name: created file removed
+      command: test ! -e /tmp/e2e-ms/created
+      changed_when: false
+    - name: adopted file put back
+      command: grep -qx original /tmp/e2e-ms/existing
+      changed_when: false
+    - name: no managed=1 line
+      command: sh -c '! grep -q managed=1 /tmp/e2e-ms/existing'
+      changed_when: false
+    - name: account removed
+      command: sh -c '! id e2ems'
+      changed_when: false
+    - name: kept file stays
+      command: test -f /tmp/e2e-ms/kept
+      changed_when: false

@@ -304,9 +304,10 @@ host first and checks it again after a soak. See [docs/SAFE_APPLY.md](docs/SAFE_
 ### Managed state
 
 apply records the files, packages, services, users and groups each task manages
-(`.onigirazu/<playbook>.state.json`). When a task leaves the playbook, `plan` lists its resources:
-the ones onigirazu created are to be removed, the ones it took over to be put back as they were.
-`onigirazu state resources site.yml` shows the records. See [docs/MANAGED_STATE.md](docs/MANAGED_STATE.md).
+(`.onigirazu/<playbook>.state.json`). When a task leaves the playbook, `plan` lists its resources and
+the next apply cleans up, like `terraform apply`: what onigirazu created is removed, what it took
+over is put back as it was (`--no-destroy` keeps them, `prevent_destroy: true` on a task only
+forgets them). `onigirazu state resources site.yml` shows the records. See [docs/MANAGED_STATE.md](docs/MANAGED_STATE.md).
 
 ### Failed hosts
 

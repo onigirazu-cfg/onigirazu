@@ -34,6 +34,9 @@ func ResourceFromResult(t types.TaskResult, host string, seq int) (ResourceSnaps
 	switch {
 	case kind == "absent":
 		args["path"], args["state"] = path, "absent"
+		if keep, _ := before["_keep_nonempty_dir"].(bool); keep {
+			args["_keep_nonempty_dir"] = true
+		}
 		r.RollbackOp = &RollbackOperation{Module: "file", Args: args, Order: seq}
 	case kind == "file" && before["content"] != nil:
 		args["dest"], args["content"] = path, before["content"]
