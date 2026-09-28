@@ -861,6 +861,9 @@ with variables) run first. Variables given with the role win over its own:</p>
     web_port: 9090
 </code></pre>
 
+<p>Roles are found, as in Ansible, in <code>roles/</code> next to the playbook, as a path relative to it, in
+<code>roles_path</code> (onigirazu.yml, <code>ANSIBLE_ROLES_PATH</code>, ansible.cfg), in <code>~/.ansible/roles</code>, and a
+<code>namespace.collection.role</code> in <code>collections_path</code> (<code>ansible_collections/&lt;ns&gt;/&lt;collection&gt;/roles/</code>).</p>
 <p><code>include_role</code> / <code>import_role</code> run a role as a task (<code>name</code>, <code>tasks_from</code>),
 on the hosts where its <code>when</code> holds; the task's <code>vars</code> are role parameters:</p>
 <pre class="codehilite"><code class="language-yaml">- include_role:
