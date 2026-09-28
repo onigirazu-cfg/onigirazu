@@ -306,7 +306,15 @@ tasks:
     debug:
       msg: "{{ undefined_var | default(enabled_by_default) }}"
     # Output: Value of enabled_by_default
+
+  - name: Leave an argument out when the variable is not set
+    docker_container:
+      name: app
+      memory: "{{ app_memory | default(omit) }}"
 ```
+
+A module argument that renders to `omit` is left out, in nested options and
+list items too.
 
 ### Filter Reference
 
