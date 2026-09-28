@@ -681,10 +681,12 @@ Manage system services.
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `name` | string | - | Service name (required) |
-| `state` | string | - | Service state |
+| `state` | string | - | Service state; without it the service is not started or stopped |
 | `enabled` | boolean | - | Enable at boot |
 | `daemon_reload` | boolean | `false` | Reload systemd daemon |
 | `scope` | string | `system` | Service scope |
+
+One of `state` or `enabled` is required.
 
 #### States
 
