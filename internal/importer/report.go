@@ -46,6 +46,13 @@ func WriteReport(path string, r *Report) error {
 			}
 		}
 	}
+	if len(r.SecretVars) > 0 {
+		b.WriteString("\n## Secret variables\n\nThe files use these variables instead of the values found on the hosts; " +
+			"provide them (host_vars, group_vars, `-e @secrets.yml`, a vault lookup). secrets.example.yml lists them:\n\n")
+		for _, v := range r.SecretVars {
+			fmt.Fprintf(&b, "- `%s`: %s line %d (%s)\n", v.Var, v.Path, v.Line, strings.Join(v.Hosts, ", "))
+		}
+	}
 	if len(r.Secrets) > 0 {
 		b.WriteString("\n## Secrets (not written)\n\nProvide these yourself, e.g. from a vault:\n\n")
 		for _, s := range r.Secrets {
@@ -86,6 +93,9 @@ func PrintSummary(w io.Writer, r *Report, dir string) {
 		fmt.Fprintf(w, "Roles: %s\n", strings.Join(roles, ", "))
 	}
 	fmt.Fprintf(w, "Playbook: %s/site.yml, report: %s/IMPORT_REPORT.md\n", dir, dir)
+	if len(r.SecretVars) > 0 {
+		fmt.Fprintf(w, "Secret variables to provide: %d (secrets.example.yml)\n", len(r.SecretVars))
+	}
 	if len(r.Secrets) > 0 {
 		fmt.Fprintf(w, "Secrets not written: %d (listed in the report)\n", len(r.Secrets))
 	}

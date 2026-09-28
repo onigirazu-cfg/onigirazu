@@ -43,11 +43,20 @@ type Report struct {
 	Counts  map[string]int
 	Skipped []Skip
 	Secrets []Skip
+	// SecretVars are the variables that stand for secret values
+	SecretVars []SecretVar
 	// Layers: the generated roles and their hosts
 	Layers []LayerInfo
 	// Verified: the new playbook was planned; Drift is what it would change
 	Verified bool
 	Drift    []Drift
+}
+
+// SecretVar is a variable the user provides for a secret value
+type SecretVar struct {
+	Var, Path string
+	Line      int
+	Hosts     []string
 }
 
 // LayerInfo describes one generated role
@@ -157,7 +166,51 @@ func GenerateWith(snaps []*Snapshot, dir string, opts Options) (*Report, error) 
 	if err := writeSite(dir, hosts, layers); err != nil {
 		return nil, err
 	}
+	if err := writeSecretsExample(dir, rep.SecretVars); err != nil {
+		return nil, err
+	}
 	return rep, nil
+}
+
+func (rep *Report) addSecretVar(sv SecretValue, path, host string) {
+	for i := range rep.SecretVars {
+		if rep.SecretVars[i].Var == sv.Var {
+			rep.SecretVars[i].Hosts = append(rep.SecretVars[i].Hosts, host)
+			return
+		}
+	}
+	rep.SecretVars = append(rep.SecretVars, SecretVar{Var: sv.Var, Path: path, Line: sv.Line, Hosts: []string{host}})
+}
+
+// writeSecretsExample lists the secret variables, without values, for the
+// user to fill (host_vars, group_vars, -e @secrets.yml or a vault lookup)
+func writeSecretsExample(dir string, vars []SecretVar) error {
+	if len(vars) == 0 {
+		return nil
+	}
+	m := &yaml.Node{Kind: yaml.MappingNode}
+	for _, v := range vars {
+		k := scalar(v.Var)
+		k.HeadComment = fmt.Sprintf("%s line %d (%s)", v.Path, v.Line, strings.Join(v.Hosts, ", "))
+		m.Content = append(m.Content, k, scalar(""))
+	}
+	return writeYAML(filepath.Join(dir, "secrets.example.yml"), m)
+}
+
+// SecretValues are each host's secret values, for the check run only
+func SecretValues(snaps []*Snapshot) map[string]map[string]string {
+	out := map[string]map[string]string{}
+	for _, s := range snaps {
+		for _, f := range s.Files {
+			for _, sv := range f.Secrets {
+				if out[s.Host] == nil {
+					out[s.Host] = map[string]string{}
+				}
+				out[s.Host][sv.Var] = sv.Value
+			}
+		}
+	}
+	return out
 }
 
 // roleName makes a role name out of a host name
@@ -204,6 +257,9 @@ func hostResources(s *Snapshot, rep *Report) []*resource {
 		if f.Secret != "" {
 			rep.Secrets = append(rep.Secrets, Skip{s.Host + ":" + f.Path, f.SecretReason})
 			continue
+		}
+		for _, sv := range f.Secrets {
+			rep.addSecretVar(sv, f.Path, s.Host)
 		}
 		stage := stageFiles
 		if repoPaths.MatchString(f.Path) || underAny(f.Path, localRepos) {
@@ -294,7 +350,7 @@ func fileResource(f File, stage int) *resource {
 		r.name, r.mod, r.count, r.file = "File "+f.Path, "copy", "files", &ff
 		// src is set when the layer is known
 		r.args = mapping("dest", scalar(f.Path), "owner", scalar(owner), "group", scalar(group), "mode", scalar(mode(f.Mode)))
-		sum := sha256.Sum256(f.Content)
+		sum := sha256.Sum256(contentOf(&ff))
 		r.value = "copy " + nodeString(r.args) + " " + hex.EncodeToString(sum[:])
 	}
 	return r
@@ -363,6 +419,15 @@ func sortedResources(m map[string]*resource) []*resource {
 		return out[i].key < out[j].key
 	})
 	return out
+}
+
+// contentOf is what a file resource compares and writes: the content with
+// its secrets masked
+func contentOf(f *File) []byte {
+	if f.Masked != nil {
+		return f.Masked
+	}
+	return f.Content
 }
 
 // fileURI finds the local directories repositories point at

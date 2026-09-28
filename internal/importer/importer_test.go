@@ -122,3 +122,46 @@ func TestGenerate(t *testing.T) {
 	assert.Contains(t, string(report), "/opt/bigapp")
 	assert.NotContains(t, string(report), "BEGIN PRIVATE KEY")
 }
+
+func TestSecrets(t *testing.T) {
+	f := File{Path: "/etc/app/app.conf", Kind: "file", Content: []byte(strings.Join([]string{
+		"[db]",
+		"host = db1",
+		"password = s3cr3t-value",
+		"# password = commented",
+		"password_policy strict",
+		`"api_key": "abcd1234",`,
+		"requirepass redispass",
+		"token = ${TOKEN}",
+		"secret: changeme",
+		"export DB_PASSWORD='quoted-pass'",
+		"",
+	}, "\n"))}
+	markSecret(&f)
+	var vals []string
+	for _, s := range f.Secrets {
+		vals = append(vals, s.Var+"="+s.Value)
+	}
+	assert.Equal(t, []string{
+		"secret_etc_app_app_conf_password=s3cr3t-value",
+		"secret_etc_app_app_conf_api_key=abcd1234",
+		"secret_etc_app_app_conf_requirepass=redispass",
+		"secret_etc_app_app_conf_db_password=quoted-pass",
+	}, vals)
+	out := string(unmark(f.Masked))
+	assert.Contains(t, out, "password = {{ secret_etc_app_app_conf_password }}\n")
+	assert.Contains(t, out, `"api_key": "{{ secret_etc_app_app_conf_api_key }}",`)
+	assert.Contains(t, out, "export DB_PASSWORD='{{ secret_etc_app_app_conf_db_password }}'")
+	assert.NotContains(t, out, "s3cr3t")
+
+	nss := File{Path: "/etc/nsswitch.conf", Kind: "file", Content: []byte("passwd: files systemd\n")}
+	markSecret(&nss)
+	assert.Empty(t, nss.Secrets)
+
+	key := File{Path: "/etc/k.pem", Kind: "file", Content: []byte("-----BEGIN RSA PRIVATE KEY-----\n")}
+	markSecret(&key)
+	assert.Equal(t, "private key", key.Secret)
+	jinja := File{Path: "/etc/j", Kind: "file", Content: []byte("password = abcdef\nx = {{ y }}\n")}
+	markSecret(&jinja)
+	assert.NotEmpty(t, jinja.Secret)
+}

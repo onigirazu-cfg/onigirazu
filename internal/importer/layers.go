@@ -43,6 +43,24 @@ func (l *layer) add(r *resource, perHost map[string][]byte) {
 	}
 	args := r.args
 	mod := r.mod
+	if r.file != nil && r.file.Masked != nil {
+		// a file with secrets is a template of its masked content
+		if perHost == nil {
+			l.addTemplate(r, r.file.Masked, nil)
+			return
+		}
+		src := strings.TrimPrefix(r.file.Path, "/") + ".j2"
+		if l.tmpls == nil {
+			l.tmpls = map[string][]byte{}
+		}
+		for h, c := range perHost {
+			l.tmpls[h+"/"+src] = unmark(c)
+		}
+		args = cloneMapping(r.args)
+		prependPair(args, "src", scalar("{{ inventory_hostname }}/"+src))
+		l.tasks = append(l.tasks, layerTask{r.stage, mapping("name", scalar(r.name), "template", args)})
+		return
+	}
 	if r.file != nil {
 		src := strings.TrimPrefix(r.file.Path, "/")
 		args = cloneMapping(r.args)
@@ -68,7 +86,7 @@ func (l *layer) addTemplate(r *resource, tmpl []byte, vars map[string]map[string
 	if l.tmpls == nil {
 		l.tmpls = map[string][]byte{}
 	}
-	l.tmpls[src] = tmpl
+	l.tmpls[src] = unmark(tmpl)
 	if l.vars == nil {
 		l.vars = map[string]map[string]string{}
 	}
@@ -116,7 +134,7 @@ func extract(name, kind string, hosts []string, perHost map[string]map[string]*r
 		case meta && r.file != nil:
 			contents := map[string][]byte{}
 			for _, h := range hosts {
-				contents[h] = perHost[h][r.key].file.Content
+				contents[h] = contentOf(perHost[h][r.key].file)
 			}
 			if tmpl, vars, ok := templateOf(contents, snaps); ok {
 				l.addTemplate(r, tmpl, vars)
@@ -171,7 +189,7 @@ func templateOf(contents map[string][]byte, snaps map[string]*Snapshot) ([]byte,
 			if len(v) < 3 || !strings.Contains(text, v) {
 				continue
 			}
-			text = strings.ReplaceAll(text, v, "{{ "+k+" }}")
+			text = replaceOutsideMarks(text, v, "{{ "+k+" }}")
 			used[k] = v
 		}
 		if len(used) == 0 {
@@ -193,6 +211,19 @@ func templateOf(contents map[string][]byte, snaps map[string]*Snapshot) ([]byte,
 		vars[h] = used
 	}
 	return []byte(tmpl), vars, true
+}
+
+// replaceOutsideMarks replaces old by new except inside secret marks
+func replaceOutsideMarks(text, old, new string) string {
+	var b strings.Builder
+	last := 0
+	for _, m := range secretMarks.FindAllStringIndex(text, -1) {
+		b.WriteString(strings.ReplaceAll(text[last:m[0]], old, new))
+		b.WriteString(text[m[0]:m[1]])
+		last = m[1]
+	}
+	b.WriteString(strings.ReplaceAll(text[last:], old, new))
+	return b.String()
 }
 
 // group is an inventory group of imported hosts

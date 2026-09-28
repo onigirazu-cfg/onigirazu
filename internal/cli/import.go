@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -69,7 +70,7 @@ a faithful import has nothing to change.`,
 			}
 			if !noVerify {
 				rep.Verified = true
-				rep.Drift, err = verifyImport(outDir, hosts)
+				rep.Drift, err = verifyImport(outDir, hosts, importer.SecretValues(snaps))
 				if err != nil {
 					return fmt.Errorf("verify: %w", err)
 				}
@@ -175,13 +176,49 @@ func collectHosts(ctx context.Context, hosts []types.Host, become bool, becomeUs
 
 // verifyImport plans the new playbook against the hosts; what it would
 // change is what the import got wrong
-func verifyImport(dir string, hosts []types.Host) ([]importer.Drift, error) {
+func verifyImport(dir string, hosts []types.Host, secrets map[string]map[string]string) ([]importer.Drift, error) {
 	names := make([]string, len(hosts))
 	for i, h := range hosts {
 		names[i] = h.Name
 	}
-	result, err := runPlaybook([]string{filepath.Join(dir, "site.yml"), "--check", "--diff",
-		"--limit", strings.Join(names, ","), "--lock=false"})
+	// secret values differ per host and exist only in memory: one run per
+	// host that has them, with its values as extra vars
+	runs := [][]string{}
+	var plain []string
+	for _, h := range names {
+		if len(secrets[h]) == 0 {
+			plain = append(plain, h)
+			continue
+		}
+		vals, err := json.Marshal(secrets[h])
+		if err != nil {
+			return nil, err
+		}
+		runs = append(runs, []string{"--limit", h, "-e", string(vals)})
+	}
+	if len(plain) > 0 {
+		runs = append(runs, []string{"--limit", strings.Join(plain, ",")})
+	}
+	var drift []importer.Drift
+	for _, extra := range runs {
+		d, err := planDrift(dir, extra)
+		if err != nil {
+			return nil, err
+		}
+		drift = append(drift, d...)
+	}
+	sort.Slice(drift, func(i, j int) bool {
+		if drift[i].Host != drift[j].Host {
+			return drift[i].Host < drift[j].Host
+		}
+		return drift[i].Task < drift[j].Task
+	})
+	return drift, nil
+}
+
+// planDrift plans the imported playbook with extra apply arguments
+func planDrift(dir string, extra []string) ([]importer.Drift, error) {
+	result, err := runPlaybook(append([]string{filepath.Join(dir, "site.yml"), "--check", "--diff", "--lock=false"}, extra...))
 	if err != nil {
 		return nil, err
 	}
@@ -198,11 +235,5 @@ func verifyImport(dir string, hosts []types.Host) ([]importer.Drift, error) {
 			}
 		}
 	}
-	sort.Slice(drift, func(i, j int) bool {
-		if drift[i].Host != drift[j].Host {
-			return drift[i].Host < drift[j].Host
-		}
-		return drift[i].Task < drift[j].Task
-	})
 	return drift, nil
 }

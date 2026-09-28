@@ -11,8 +11,10 @@ import (
 	"encoding/base64"
 	"fmt"
 	"sort"
+	"regexp"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/onigirazu-cfg/onigirazu/internal/executor"
 )
@@ -75,6 +77,16 @@ type File struct {
 	Content              []byte
 	Target               string // link
 	Secret, SecretReason string
+	// Secrets are values taken out of the file; Masked is the content with
+	// a mark where each was (see secretMark)
+	Secrets []SecretValue
+	Masked  []byte
+}
+
+// SecretValue is a password, token or key found in a configuration file
+type SecretValue struct {
+	Var, Value string
+	Line       int
 }
 
 // Mount is an /etc/fstab entry
@@ -209,16 +221,71 @@ func atoi(s string) int {
 }
 
 // markSecret flags files whose content must not be written into the
-// playbook: private keys and credential files
+// playbook (private keys: the whole file), and takes the values of
+// password, token and key settings out of the others
 func markSecret(f *File) {
 	if f.Kind != "file" {
 		return
 	}
 	c := string(f.Content)
-	switch {
-	case strings.Contains(c, "PRIVATE KEY-----"):
+	if strings.Contains(c, "PRIVATE KEY-----") {
 		f.Secret, f.SecretReason = "private key", "contains a private key"
-	case strings.HasSuffix(f.Path, "/debian.cnf") || strings.Contains(f.Path, "/.aws/credentials"):
-		f.Secret, f.SecretReason = "credentials", "credential file"
+		return
 	}
+	if !utf8.ValidString(c) || strings.ContainsRune(c, 0) || noSecretFiles[f.Path] {
+		return
+	}
+	lines := strings.SplitAfter(c, "\n")
+	used := map[string]int{}
+	for i, line := range lines {
+		m := secretLine.FindStringSubmatchIndex(line)
+		if m == nil {
+			continue
+		}
+		key, sep, value := line[m[4]:m[5]], line[m[6]:m[7]], line[m[8]:m[9]]
+		if !strings.ContainsAny(sep, "=:") && !spaceKeys[strings.ToLower(key)] {
+			continue
+		}
+		if len(value) < 4 || placeholderValue.MatchString(value) {
+			continue
+		}
+		name := "secret_" + safeName(strings.TrimPrefix(f.Path, "/")) + "_" + safeName(strings.ToLower(key))
+		used[name]++
+		if n := used[name]; n > 1 {
+			name = fmt.Sprintf("%s_%d", name, n)
+		}
+		f.Secrets = append(f.Secrets, SecretValue{Var: name, Value: value, Line: i + 1})
+		lines[i] = line[:m[8]] + secretMark + name + "\x00" + line[m[9]:]
+	}
+	if len(f.Secrets) == 0 {
+		return
+	}
+	if jinjaSyntax.MatchString(c) {
+		// a template of it would render its own braces
+		f.Secrets, f.Secret, f.SecretReason = nil, "credentials", "holds secrets and Jinja-like braces"
+		return
+	}
+	f.Masked = []byte(strings.Join(lines, ""))
 }
+
+// noSecretFiles name password databases, not passwords ("passwd: files")
+var noSecretFiles = map[string]bool{"/etc/nsswitch.conf": true, "/etc/login.defs": true}
+
+// secretMark starts the mark of a secret in File.Masked; a NUL ends it
+const secretMark = "\x00secret:"
+
+// secretLine finds "password = x", "api_key: x", "DB_PASS=x", "token x"
+var secretLine = regexp.MustCompile(`(?i)^(\s*(?:export\s+)?["']?)([\w.\-]*(?:password|passwd|secret|token|api[_-]?key|access[_-]?key|auth[_-]?key|credentials?|requirepass|masterauth)[\w.\-]*)(["']?\s*[=:]?\s*["']?)([^\s"'#;,]+)`)
+
+// spaceKeys are settings written "key value" (redis)
+var spaceKeys = map[string]bool{"requirepass": true, "masterauth": true}
+
+// placeholderValue: references and empty-ish values, not secrets
+var placeholderValue = regexp.MustCompile(`^(\$\{.*|\$\w+|%\(.*|<.*>|\*+|none|null|true|false|yes|no|changeme|required|optional|file:.*|/.*)$`)
+
+// unmark turns the secret marks into template variables
+func unmark(b []byte) []byte {
+	return secretMarks.ReplaceAll(b, []byte("{{ $1 }}"))
+}
+
+var secretMarks = regexp.MustCompile("\x00secret:([A-Za-z0-9_]+)\x00")
