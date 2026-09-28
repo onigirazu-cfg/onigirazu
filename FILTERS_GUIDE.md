@@ -375,7 +375,7 @@ loop: "{{ query('fileglob', 'files/conf.d/*.conf') }}"
 ### Expression Syntax
 
 - Inline if: `{{ 'big' if n > 3 else 'small' }}`
-- String concatenation: `{{ name ~ '-' ~ version }}`; `+` adds numbers and concatenates strings and lists (`(a | intersect(b) + ['Other']) | first`)
+- String concatenation: `{{ name ~ '-' ~ version }}`, also inside parentheses and lists (`when: ('version ' ~ v) not in out.stdout`); `+` adds numbers and concatenates strings and lists (`(a | intersect(b) + ['Other']) | first`)
 - `{% set name = expression %}` in templates, for the rest of the template (inside a for loop, for that iteration)
 - `True`, `False` and `None` as in Jinja; `and`, `or`, `not`, `in`
 - Dictionary methods `d.keys()` and `d.values()`
