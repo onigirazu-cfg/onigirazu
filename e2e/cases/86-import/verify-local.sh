@@ -2,7 +2,9 @@
 # has nothing to change (exit 0), and it holds what the playbook made
 set -e
 out="import-$HOST"
-"$BIN" import "$HOST" -i "$INVENTORY" -o "$out" --force > log 2>&1 || { tail -30 log; exit 1; }
+"$BIN" import "$HOST" -i "$INVENTORY" -o "$out" --force > log 2>&1 || {
+  # the tasks that still change, on the last line (the harness shows that one)
+  grep -E '^  ~ |^Error|failed' log | head -8 | paste -sd';' -; exit 1; }
 grep -q "nothing to change" log
 tasks="$out/roles/host_$(echo "$HOST" | tr -c 'A-Za-z0-9_\n' '_')/tasks/main.yml"
 grep -q "File /etc/onigirazu-import.conf" "$tasks"
