@@ -2,1123 +2,313 @@
 
 [![Release](https://img.shields.io/github/v/release/onigirazu-cfg/onigirazu)](https://github.com/onigirazu-cfg/onigirazu/releases/latest)
 
-Onigirazu is a modern, high-performance configuration management tool written in Go, inspired by Ansible. It provides a simple yet powerful way to automate infrastructure configuration, application deployment, and system administration tasks.
+Onigirazu is a configuration management tool in a single Go binary. It runs Ansible playbooks,
+roles and inventories over SSH, with nothing to install on the hosts (no Python, no agent), and
+adds what Ansible leaves to other tools: a plan before every change, drift checks, rollback of a
+run, Terraform-like managed state, canary rollouts with health checks, and import of running hosts
+into a playbook.
 
-## ✨ Key Highlights
+- **Ansible-compatible**: playbooks, roles, collections from git, `requirements.yml`,
+  `ansible.cfg`, INI/YAML/JSON inventories, dynamic inventory scripts, `group_vars`/`host_vars`,
+  Jinja expressions and filters, facts and magic variables, FQCN module names
+- **61 built-in modules** in Go: files, packages, services, users, containers, databases,
+  firewall, HTTP and more
+- **See before you change**: `plan` shows per host what `apply` would change, with file diffs
+- **Undo**: every run keeps a snapshot; `rollback` restores files, packages, services and accounts
+- **Managed state**: a task removed from the playbook has its resources cleaned up on the next run
+- **Safe rollouts**: `serial` batches, `--canary`, health checks, automatic rollback of an
+  unhealthy batch
+- **Drift detection**: scheduled checks with history, HTML reports and webhook notifications
+- **Import**: turns a running host into a playbook that recreates it
+- **Fast**: one SSH connection and one shell per host, commands framed over it
+  (see [Performance](#performance))
+- **Terminal dashboard**, ad-hoc commands (including plain English), JSON/YAML output for scripts
 
-- **🚀 Fast**: Written in Go for exceptional performance
-- **📝 Simple YAML Syntax**: Human-readable, clean playbook format
-- **🤖 Agentless**: SSH-based communication, no agent installation required
-- **⚡ Parallel Execution**: Concurrent task execution with configurable limits
-- **🔄 Idempotent**: Safe to run multiple times
-- **📊 State Management**: Track changes and system state with rollback support
-- **🎯 5 Ad-hoc Input Formats**: Including unique natural language support
-- **📚 44 Built-in Modules**: Complete automation capabilities with system control, archive, and more
-- **📖 Complete Documentation**: 2,500+ lines of guides for configuration, security, and testing
-- **🖥️ Interactive Mode (v1.54.0+)**: Real-time TUI dashboard with live logs, mode switching, and graceful control
-- **⚙️ Module Scaffolding Tool**: Rapidly generate new modules with boilerplate, tests, and best practices in seconds
+## Contents
 
-## Features
-
-### Core Features
-
-- **YAML-based Playbooks**: Clean, human-readable configuration format
-- **Agentless Architecture**: No agents needed on target hosts
-- **SSH-based Communication**: Secure remote execution with host key validation
-- **Parallel Execution**: Concurrent task execution with configurable concurrency
-- **Idempotent Operations**: Safe to run multiple times without side effects
-- **State Management**: Track changes and maintain system state
-- **Template Engine**: Jinja2-like templating for dynamic configurations
-- **Inline Host Inventory**: Specify hosts directly via `-i` flag without inventory files
-
-### Advanced Features
-
-- **Ad-hoc Commands**: Execute commands without playbooks (5 input formats including natural language)
-- **Rollback Support**: Automatic snapshots and one-command rollback
-- **Drift Detection**: Detect and automatically fix configuration drift
-- **Enhanced Logging**: Structured logging with multiple output formats
-- **Progress Tracking**: Real-time execution progress with visual indicators
-- **Interactive Mode**: Beautiful TUI dashboard with live log streaming, multi-mode display switching, and graceful shutdown
-- **Caching System**: Intelligent caching for improved performance (facts, templates, packages)
-- **Retry Logic**: Configurable retry mechanisms with exponential backoff
-- **Conditional Execution**: Skip tasks based on conditions
-- **Loop Support**: Iterate over lists and ranges
-- **Module System**: Extensible architecture with 44 built-in modules (sysctl, reboot, mount, archive, and 40 others)
-- **Plugin System**: Extensible plugin architecture (modules, callbacks, filters, inventory)
-- **Secrets Management**: Bitwarden integration for secure credential management
-- **Security Policies**: File operation restrictions and access control on control machine
-- **Flexible Inventory**: Multiple inventory formats (YAML, TOML, JSON, INI, text)
-- **Variable Interpolation**: Dynamic variable substitution
-- **Error Handling**: Comprehensive error handling and reporting
-- **Audit & Analytics**: Track execution history, performance metrics, and audit data with `audit` command
-- **Complete Configuration Reference**: 35+ configuration options fully documented
-- **Security Policy**: optional JSON policy (modules, hosts, paths, commands); nothing is restricted without one
-- **Module Scaffolding Tool**: Generate new modules with complete boilerplate, unit tests, idempotency tests, and benchmarks in seconds
+- [Installation](#installation)
+- [Quick start](#quick-start)
+- [Coming from Ansible](#coming-from-ansible)
+- [Playbooks](#playbooks)
+- [Seeing and controlling changes](#seeing-and-controlling-changes)
+- [Modules](#modules)
+- [Command reference](#command-reference)
+- [Ad-hoc commands](#ad-hoc-commands)
+- [Interactive mode](#interactive-mode)
+- [Automation and CI](#automation-and-ci)
+- [Configuration and security](#configuration-and-security)
+- [Performance](#performance)
+- [Documentation](#documentation)
+- [Development](#development)
 
 ## Installation
 
-### 📦 Pre-built Binaries (Recommended)
-
-Download the latest release for your platform:
+### Pre-built binaries
 
 ```bash
-# Linux x86_64
+# Linux x86_64 (also arm64, armv6, armv7, i386)
 curl -LO https://github.com/onigirazu-cfg/onigirazu/releases/latest/download/onigirazu_Linux_x86_64.tar.gz
 tar -xzf onigirazu_Linux_x86_64.tar.gz
 sudo mv onigirazu /usr/local/bin/
 
-# macOS (Intel)
-curl -LO https://github.com/onigirazu-cfg/onigirazu/releases/latest/download/onigirazu_Darwin_x86_64.tar.gz
-tar -xzf onigirazu_Darwin_x86_64.tar.gz
-sudo mv onigirazu /usr/local/bin/
-
-# macOS (Apple Silicon)
+# macOS (Apple Silicon; onigirazu_Darwin_x86_64.tar.gz for Intel)
 curl -LO https://github.com/onigirazu-cfg/onigirazu/releases/latest/download/onigirazu_Darwin_arm64.tar.gz
 tar -xzf onigirazu_Darwin_arm64.tar.gz
 sudo mv onigirazu /usr/local/bin/
 ```
 
-**Available for**: Linux (amd64, arm64, arm), macOS (amd64, arm64), Windows (amd64), FreeBSD, OpenBSD, NetBSD
+Every [release](https://github.com/onigirazu-cfg/onigirazu/releases) has archives for Linux,
+macOS, Windows, FreeBSD, OpenBSD and NetBSD, and `.deb`, `.rpm`, `.apk` and Arch
+(`.pkg.tar.zst`) packages.
 
-### 🐳 Docker
-
-```bash
-# Docker Hub
-docker run --rm onigirazu/onigirazu:latest --version
-
-# GitHub Container Registry
-docker run --rm ghcr.io/onigirazu-cfg/onigirazu:latest --version
-```
-
-### 📋 Package Managers
-
-- **Debian/Ubuntu**: Download `.deb` from [releases](https://github.com/onigirazu-cfg/onigirazu/releases)
-- **Red Hat/CentOS/Fedora**: Download `.rpm` from [releases](https://github.com/onigirazu-cfg/onigirazu/releases)
-- **Alpine Linux**: Download `.apk` from [releases](https://github.com/onigirazu-cfg/onigirazu/releases)
-- **Arch Linux**: Download `.pkg.tar.xz` from [releases](https://github.com/onigirazu-cfg/onigirazu/releases)
-
-### 🔧 From Source
+### Container image
 
 ```bash
-git clone https://github.com/onigirazu-cfg/onigirazu.git
-cd onigirazu
-make build
-make install  # optional
+docker run --rm ghcr.io/onigirazu-cfg/onigirazu:latest version
 ```
 
-### Using Go
+Images for `linux/amd64` and `linux/arm64`, tagged `latest`, `X.Y.Z`, `X.Y` and `X`.
+
+### From source
 
 ```bash
 go install github.com/onigirazu-cfg/onigirazu/cmd/onigirazu@latest
+# or
+git clone https://github.com/onigirazu-cfg/onigirazu.git && cd onigirazu && make build   # bin/onigirazu
 ```
 
-📚 **For detailed installation instructions, see [INSTALLATION.md](INSTALLATION.md)**
+See [INSTALLATION.md](INSTALLATION.md) for details.
 
-## Quick Start
+## Quick start
 
-### 1. Create an Inventory File
+An inventory, in Ansible's format:
 
-Create `inventory.yaml`:
+```ini
+# hosts.ini
+[web]
+web1 ansible_host=192.168.1.10
+web2 ansible_host=192.168.1.11
+
+[web:vars]
+ansible_user=ubuntu
+```
+
+A playbook:
 
 ```yaml
-groups:
-  webservers:
-    hosts:
-      web1:
-        address: "192.168.1.10"
-        user: "ubuntu"
-      web2:
-        address: "192.168.1.11"
-        user: "ubuntu"
+# site.yml
+- name: Web servers
+  hosts: web
+  become: true
+  tasks:
+    - name: Nginx installed
+      ansible.builtin.package:
+        name: nginx
+        state: present
+
+    - name: Site configuration
+      ansible.builtin.template:
+        src: site.conf.j2
+        dest: /etc/nginx/conf.d/site.conf
+      notify: Reload nginx
+
+    - name: Nginx running
+      ansible.builtin.service:
+        name: nginx
+        state: started
+        enabled: true
+
+  handlers:
+    - name: Reload nginx
+      ansible.builtin.service:
+        name: nginx
+        state: reloaded
 ```
 
-Variables can also live next to the inventory, as in Ansible:
-`group_vars/<group>.yml` (or a `group_vars/<group>/` directory of files, merged in
-name order; `all` applies to every host) and `host_vars/<host>.yml`. The same
-directories next to the playbook are read too and override the inventory's. A
-host gets, lowest first: `all`, parent groups, child groups, its own inventory
-variables, then `host_vars`.
-
-Or use inline inventory directly (no file needed):
+See what it would change, then apply it:
 
 ```bash
-onigirazu apply playbook.yml -i "ubuntu@web1,ubuntu@web2"
+onigirazu plan site.yml -i hosts.ini
+onigirazu apply site.yml -i hosts.ini
 ```
 
-### 2. Create a Playbook
+A host list works without an inventory file: `-i "ubuntu@web1,ubuntu@web2:2222"`.
 
-Create `playbook.yaml`:
+Onigirazu also has its own playbook format with a top-level `plays:` list and `vars:`; both
+formats can be used side by side. Examples: [docs/examples](docs/examples/README.md).
+
+## Coming from Ansible
+
+Existing Ansible content runs as it is in most cases. What is supported:
+
+- **Playbooks**: plays with `pre_tasks`, `tasks`, `post_tasks`, `handlers`, `roles`,
+  `vars`, `vars_files`, `environment`, `serial`, `max_fail_percentage`, `any_errors_fatal`,
+  `force_handlers`; `import_playbook`, `include_tasks`/`import_tasks`,
+  `include_role`/`import_role`, `block`/`rescue`/`always`
+- **Task keywords**: `when`, `loop` (also `with_items`, `with_list`, `with_dict`,
+  `with_sequence`), `loop_control`, `register`, `until`/`retries`/
+  `delay`, `changed_when`, `failed_when`, `ignore_errors`, `notify`/`listen`, `tags`,
+  `become`/`become_user`, `delegate_to`, `local_action`, `run_once`, `throttle`, `no_log`,
+  `check_mode`, `diff`, `vars`, `environment`, `action` (also with a templated module name)
+- **Short forms**: `command: make install chdir=/src`, `file: path=/etc/app state=directory`,
+  `args:`; argument aliases such as `apt: pkg:`, `file: dest:`, `systemd: unit:`
+- **Module names**: `ansible.builtin.*`, `ansible.legacy.*` and the collection modules
+  Onigirazu implements (`ansible.posix.sysctl`/`mount`/`authorized_key`,
+  `community.general.ufw`/`ini_file`/`timezone`/`archive`,
+  `community.docker.docker_container`/`docker_image`/`docker_compose_v2`/`docker_host_info`,
+  `community.mysql.*`, `community.postgresql.*`); `dnf` runs the `yum` module
+- **Roles and collections**: `roles/` next to the playbook, `roles_path` and `collections_path`
+  from `ansible.cfg`, `ANSIBLE_ROLES_PATH`, `ANSIBLE_COLLECTIONS_PATH`,
+  `namespace.collection.role`; `onigirazu galaxy install -r requirements.yml` installs roles
+  (git or Ansible Galaxy) and git collections
+- **Inventories**: INI and YAML, JSON, executable scripts (`--list`), directories, host lists,
+  `group_vars`/`host_vars` next to the inventory and the playbook, `ANSIBLE_INVENTORY`;
+  `onigirazu inventory --list --json` prints what `ansible-inventory --list` prints
+- **Connection variables**: `ansible_host`, `ansible_port`, `ansible_user`,
+  `ansible_password`, `ansible_ssh_private_key_file`, `ansible_become_password`,
+  `ansible_ssh_common_args`, `ansible_connection=local`; templated values and `-e` overrides
+- **Jinja**: filters (`default`, `map`, `select`/`selectattr`, `combine`, `regex_*`,
+  `to_json`/`from_yaml`, `ternary`, set operations, `password_hash`, ...), tests (`is defined`,
+  `is version`, `is success`/`failed`/`changed`/`skipped`, `is match`/`search`, ...), `~`,
+  inline `if`, `omit`, Python string/dict/list methods (`.split()`, `.get()`), lookups
+  (`env`, `file`, `pipe`, `template`, `fileglob`, `first_found`, ...), `{% set %}`
+- **Facts and variables**: `ansible_facts` and the `ansible_*` names (distribution, OS family,
+  hostname, IP, memory, virtualization, `ansible_pkg_mgr`, `ansible_local` from
+  `/etc/ansible/facts.d`), `setup`, `hostvars`, `groups`, `group_names`, `inventory_hostname`,
+  `ansible_check_mode`, `ansible_play_hosts`, `ansible_limit`; templated variables are
+  rendered per host when used, as in Ansible
+- **Command line**: `-i`, `-e` (also `@file`), `--limit`, `--tags`/`--skip-tags`, `--check`,
+  `--diff`, `-b`/`--become-user`, `-u`, `--private-key`, `--start-at-task`, `--list-hosts`,
+  `--list-tasks`, `--list-tags`, `--syntax-check`
+
+Not supported: Python modules and plugins from collections (Onigirazu has its own modules;
+`validate` names any module it lacks), Windows hosts (WinRM), and `ansible-vault` files.
+For Packer builds see [docs/PACKER.md](docs/PACKER.md).
+
+## Playbooks
+
+### Variables and templates
 
 ```yaml
-name: "Web Server Setup"
-plays:
-  - name: "Install and configure web servers"
-    hosts:
-      - "webservers"
-    tasks:
-      - name: "Install Nginx"
-        package:
-          name: nginx
-          state: present
-
-      - name: "Start Nginx service"
-        service:
-          name: nginx
-          state: started
-          enabled: true
-
-      - name: "Create web directory"
-        file:
-          path: /var/www/html
-          state: directory
-          mode: "0755"
-```
-
-### 3. Run the Playbook
-
-```bash
-onigirazu apply playbook.yaml -i inventory.yaml
-```
-
-📖 **For complete playbook format reference, see:**
-
-- **[Playbook Format Guide](docs/examples/README.md)** - Real playbook examples and patterns
-
-## 🖥️ Interactive Mode
-
-`--interactive` shows a terminal dashboard while the playbook runs: a live log, progress and
-statistics with every host's ok / changed / failed counts, and a browser for task results.
-
-```bash
-onigirazu apply playbook.yaml -i inventory.yaml --interactive
-```
-
-| Key | Action |
-|-----|--------|
-| **P** | Pause / resume the run (running tasks finish first) |
-| **G** | Stop gracefully: no new task starts |
-| **R** | Task results; **Enter** shows one (error, message, stdout, stderr, diff) |
-| **L** | Timeline: task marks per host; **Enter** shows a host's tasks over time |
-| **B** | Rollout batches: health, rollback, what was undone |
-| **N** / **V** / **D** | Detail: results and errors / + task output and log lines / + debug |
-| **↑↓**, **PgUp/PgDn**, **Home/End** | Scroll the log |
-| **F**, **/** | Filter (errors, warnings, tasks), search |
-| **S**, **H** | Statistics, help |
-| **X** | After the run: run it again on the failed hosts |
-| **Q**, **Ctrl+C** | Close; during the run it asks, and **Y** stops the run |
-
-When the dashboard closes, the usual summary is printed. Without a terminal `apply` runs with
-its normal output.
-
-📖 **For detailed interactive mode guide, see [docs/INTERACTIVE_MODE.md](docs/INTERACTIVE_MODE.md)**
-
-## Playbook Format
-
-Onigirazu uses a clean YAML format for playbooks. Here's the structure:
-
-```yaml
-# Optional global variables
-vars:
-  app_name: "myapp"
-  app_version: "1.0.0"
-
-# List of plays (each targets specific hosts)
-plays:
-  - name: "Play description"
-    hosts:
-      - "group_name"
-      - "single_host"
-
-    # Play-level variables (override global vars)
-    vars:
-      local_var: "value"
-
-    # Tasks to execute
-    tasks:
-      - name: "Task name"
-        module_name:
-          arg1: value1
-          arg2: value2
-
-    # Handlers (triggered by notify)
-    handlers:
-      - name: "Handler name"
-        service:
-          name: nginx
-          state: restarted
-```
-
-**Key features:**
-
-- ✅ Multiple plays targeting different host groups
-- ✅ Hierarchical variable scoping
-- ✅ Conditional execution with `when`
-- ✅ Loops with `loop`
-- ✅ Task notifications and handlers
-- ✅ Error handling with `ignore_errors` and `retries`
-
-Ansible short forms work too:
-
-```yaml
-- command: make install chdir=/src creates=/usr/local/bin/app
-- shell: ./configure
-  args: {chdir: /src}
-- file: path=/etc/app state=directory mode=0750
-- ping:
-- local_action: command make package   # delegate_to: localhost
-- action: copy src=app.conf dest=/etc/app.conf
-- action: "{{ ansible_pkg_mgr }} name={{ pkgs }} state=present"   # the module chosen when it runs
-```
-
-`dnf` runs the `yum` module (it works with whichever the host has).
-
-Fully qualified names work for the built-in modules (`ansible.builtin.copy`,
-`ansible.legacy.command`) and for collection modules Onigirazu implements
-(`ansible.posix.sysctl`, `ansible.posix.mount`, `ansible.posix.authorized_key`,
-`community.general.archive`, `community.docker.docker_container`/`docker_image`/`docker_compose`,
-`community.mysql.mysql_db`/`mysql_user`, `community.postgresql.postgresql_db`/`postgresql_user`).
-
-### Rolling updates: serial
-
-```yaml
-plays:
-  - name: Update web servers
-    hosts: "{{ target | default('webservers') }}"   # hosts may use -e and play vars
-    serial: [1, "30%"]    # a number, a percentage, or a list whose last entry repeats
-    tasks: ...
-```
-
-With `serial` the whole play (facts, tasks, handlers) runs on one batch of hosts after
-another.
-
-`throttle: N` on a task (a number or a template) limits how many hosts run that task at once,
-for tasks that hit a shared service:
-
-```yaml
-- name: Upload to the vault
-  command: ./vault.sh attach {{ item }}
-  delegate_to: localhost
-  throttle: "{{ vault_parallel }}"
-```
-
-### Safe apply: health checks and automatic rollback
-
-```yaml
-    serial: [1, "25%"]
-    health_check:
-      - uri: {url: "http://127.0.0.1:8080/health", status_code: 200}
-        retries: 10
-        delay: 3
-```
-
-After every batch the checks run on its hosts; an unhealthy batch is rolled back (its changes
-undone, newest first) and the rollout stops, exit code 5. `--canary 1 --canary-pause 5m` runs one
-host first and checks it again after a soak. See [docs/SAFE_APPLY.md](docs/SAFE_APPLY.md).
-
-### Import running hosts
-
-`onigirazu import web1 -i hosts.yml -o imported/` writes a playbook that recreates what the host
-has beyond a fresh install (packages installed by hand, services, accounts, configuration files,
-repositories), then plans it against the host: a faithful import has nothing to change. Private
-keys and credentials are left out and listed in the report. See [docs/IMPORT.md](docs/IMPORT.md).
-
-### Managed state
-
-apply records the files, packages, services, users and groups each task manages
-(`.onigirazu/<playbook>.state.json`). When a task leaves the playbook, `plan` lists its resources and
-the next apply cleans up, like `terraform apply`: what onigirazu created is removed, what it took
-over is put back as it was (`--no-destroy` keeps them, `prevent_destroy: true` on a task only
-forgets them). `onigirazu state resources site.yml` shows the records. See [docs/MANAGED_STATE.md](docs/MANAGED_STATE.md).
-
-### Failed hosts
-
-As in Ansible, a host whose task fails leaves the run (later tasks and plays skip it) and the
-other hosts go on; the run still ends with a non-zero exit code. The play stops at once with
-`any_errors_fatal: true`, when more than `max_fail_percentage` of a batch failed, or when no
-host is left. `force_handlers: true` runs notified handlers even on failed hosts.
-
-📚 **For detailed examples, see [docs/examples/README.md](docs/examples/README.md)**
-
-## CLI Commands
-
-### All Available Commands
-
-**Quick Reference:**
-
-| Command | Purpose | Use Case |
-|---------|---------|----------|
-| `apply` | Execute playbooks | Run your automation playbooks |
-| `run` | Ad-hoc commands | Quick one-off tasks without playbooks |
-| `plan` | Preview changes | Dry-run before executing |
-| `validate` | Check playbook syntax | Validate playbook structure |
-| `lint` | Check best practices | Find errors and style issues |
-| `fmt` | Format playbook files | Auto-format YAML |
-| `graph` | Visualize playbook | Show playbook structure |
-| `audit` | Audit & analytics | Track execution history |
-| `diff` | Show differences | Compare playbook vs current state |
-| `drift` | Detect & fix drift | Find and fix configuration drift |
-| `healthcheck` | Check host health | Verify inventory hosts are reachable |
-| `inventory` | Manage inventory | Query and manage hosts |
-| `state` | Manage state | View, clear, or export state |
-| `rollback` | Rollback changes | Revert to previous snapshots |
-| `completion` | Shell completion | Generate autocompletion script |
-
-### Core Commands
-
-#### `apply` - Execute playbooks
-
-```bash
-# Run a playbook
-onigirazu apply playbook.yml -i inventory.yml
-
-# Check mode (dry-run)
-onigirazu apply playbook.yml --check
-
-# With tags (run only specific tasks)
-onigirazu apply playbook.yml --tags=setup,config
-
-# Discover available tags
-onigirazu apply playbook.yml --list-tags
-
-# Preview which tasks would run
-onigirazu apply playbook.yml --list-tasks --tags=setup
-
-# Verbose output
-onigirazu apply playbook.yml -v
-```
-
-**Tag Discovery Options:**
-
-- `--list-tags` - List all available tags in the playbook
-- `--list-tasks` - Show which tasks would execute with current filters
-- `--list-tasks --tags TAG1,TAG2` - Preview specific task tags
-- `--list-tasks --skip-tags TAG1` - Preview with tag exclusion
-- `--list-tasks --verbose` - Detailed task information
-- `--list-hosts` - The hosts of every play (with `--limit`), as `ansible-playbook --list-hosts` prints them
-- `--syntax-check` - Parse and validate the playbook, then exit
-
-Listings print only the listing on stdout; messages go to stderr.
-
-📚 See [Tag and Task Discovery Guide](docs/LIST_TAGS_TASKS_GUIDE.md) for detailed examples
-
-#### `run` - Execute ad-hoc commands
-
-```bash
-# Simple ping
-onigirazu run all -m ping -i inventory.yml
-
-# Install package
-onigirazu run webservers -m package name=nginx state=present
-
-# Natural language command
-onigirazu run all "install nginx" -i inventory.yml
-
-# Run shell command
-onigirazu run all -m shell "ps aux | grep nginx"
-```
-
-📚 See [Ad-hoc Commands Guide](docs/ADHOC_GUIDE.md) for all 5 input formats
-
-#### `plan` - Preview changes
-
-```bash
-# Per host: every task that would change something, with diffs of files
-onigirazu plan playbook.yml -i inventory.yml
-onigirazu plan playbook.yml -i inventory.yml --limit web --format json
-```
-
-`plan` runs the playbook in check mode against the hosts; it is the same report
-as `drift`, but changes are not an error (exit code 0).
-
-#### `validate` - Validate playbook syntax
-
-```bash
-# Validate a playbook
-onigirazu validate playbook.yml
-
-# Validate with inventory
-onigirazu validate playbook.yml -i inventory.yml
-```
-
-Every module name is checked: tasks, pre and post tasks, handlers, and the
-tasks and handlers of the roles, included ones too. As in Ansible, an unknown
-module fails the playbook even when its task would be skipped. A role may name
-modules of other collections for other systems (`community.general.homebrew`
-under a `when`): those only warn, and the task fails if it runs.
-
-#### `diff` - Show differences
-
-```bash
-# Show differences between playbook and current state
-onigirazu diff playbook.yml -i inventory.yml
-
-# Verbose output
-onigirazu diff playbook.yml --verbose
-```
-
-#### `inventory` - Manage inventory
-
-```bash
-# List all hosts
-onigirazu inventory list -i inventory.yml
-
-# List specific group
-onigirazu inventory list webservers -i inventory.yml
-
-# Show host details
-onigirazu inventory host web1 -i inventory.yml
-```
-
-#### `state` - Manage state
-
-```bash
-# Show current state
-onigirazu state show
-
-# Clear state
-onigirazu state clear
-
-# Export state
-onigirazu state export > state-backup.json
-
-# Import state
-onigirazu state import < state-backup.json
-```
-
-### Development & Analysis Tools
-
-#### `fmt` - Format playbook files
-
-```bash
-# Format a playbook
-onigirazu fmt playbook.yml
-
-# Check without modifying
-onigirazu fmt --check playbook.yml
-
-# Format directory recursively
-onigirazu fmt --recursive playbooks/
-```
-
-#### `lint` - Check for errors and best practices
-
-```bash
-# Lint a playbook
-onigirazu lint playbook.yml
-
-# Strict mode (warnings as errors)
-onigirazu lint --strict playbook.yml
-
-# Lint directory
-onigirazu lint --recursive playbooks/
-```
-
-#### `graph` - Visualize playbook structure
-
-```bash
-# Generate ASCII graph
-onigirazu graph playbook.yml
-
-# Show variables and handlers
-onigirazu graph --show-vars --show-handlers playbook.yml
-
-# Generate Mermaid diagram
-onigirazu graph --format=mermaid playbook.yml
-```
-
-#### `audit` - Audit playbook executions
-
-```bash
-# View execution history
-onigirazu audit list
-
-# Show specific execution report
-onigirazu audit show <execution_id>
-
-# Export audit data
-onigirazu audit export > audit-report.json
-```
-
-
-### Advanced Features
-
-#### `drift` - Detect and fix configuration drift
-
-```bash
-# Detect drift
-onigirazu drift detect playbook.yml -i inventory.yml
-
-# Fix drift automatically
-onigirazu drift fix playbook.yml -i inventory.yml
-```
-
-#### `rollback` - Rollback changes
-
-```bash
-# List available snapshots
-onigirazu rollback list
-
-# Rollback to specific snapshot
-onigirazu rollback restore <snapshot_id>
-
-# Rollback to previous execution
-onigirazu rollback restore --previous
-```
-
-#### `healthcheck` - Check host health
-
-```bash
-# Check all hosts
-onigirazu healthcheck all -i inventory.yml
-
-# Check specific group
-onigirazu healthcheck webservers -i inventory.yml
-```
-
-### Utility Commands
-
-#### `completion` - Generate shell completion
-
-```bash
-# Generate bash completion
-onigirazu completion bash > ~/.bash_completion.d/onigirazu
-
-# Generate zsh completion
-onigirazu completion zsh > ~/.zsh/completions/_onigirazu
-
-# Generate fish completion
-onigirazu completion fish > ~/.config/fish/completions/onigirazu.fish
-```
-
-#### `version` - Show version information
-
-```bash
-# Display version
-onigirazu version
-```
-
-#### `help` - Get command help
-
-```bash
-# Show general help
-onigirazu help
-
-# Show help for specific command
-onigirazu apply --help
-onigirazu run --help
-```
-
-### Global Flags & Options
-
-These flags work with all commands:
-
-```bash
-# Configuration and inventory
--c, --config FILE        Path to configuration file
--i, --inventory FILE     Path to inventory file or inline hosts (e.g., "ubuntu@host1,ubuntu@host2")
--s, --state FILE         Path to state file (default: ".onigirazu-state")
-
-# Output control
--v, --verbose            Verbose output (show more details)
---show-debug            Show debug and info messages
---no-color              Disable colored output
-
-# Help and version
--h, --help              Show help for any command
---version               Show version information
-```
-
-**Example usage:**
-
-```bash
-# Run with custom config and verbose output
-onigirazu apply playbook.yml -c /etc/onigirazu/config.yaml -v
-
-# Run with inline inventory and debug output
-onigirazu run all -m ping -i "ubuntu@web1,ubuntu@web2" --show-debug
-
-# Run without colors (useful for logs/CI)
-onigirazu apply playbook.yml -i inventory.yml --no-color
-
-# Use custom state file location
-onigirazu apply playbook.yml -s /var/lib/onigirazu/state.json
-```
-
-## 🚀 Ad-hoc Commands
-
-Execute commands without creating playbooks using 5 different input formats:
-
-### Quick Examples
-
-```bash
-# Simple ping
-onigirazu run all -m ping -i inventory.yml
-
-# Install package (Ansible-like syntax)
-onigirazu run all -m package name=nginx state=present -i inventory.yml
-
-# Natural language (unique to Onigirazu!)
-onigirazu run all "install nginx package" -i inventory.yml
-
-# Inline host specification
-onigirazu run all -m ping -i "ubuntu@web1,ubuntu@web2"
-```
-
-### 5 Input Formats
-
-#### 1. **Ansible-like Syntax** (Familiar)
-
-```bash
-onigirazu run all -m package name=nginx state=present -i inventory.yml
-onigirazu run webservers -m service name=nginx state=started -i inventory.yml
-```
-
-#### 2. **Natural Language** (Unique! 🌟)
-
-```bash
-onigirazu run all "install nginx package" -i inventory.yml
-onigirazu run webservers "start nginx service" -i inventory.yml
-onigirazu run all "create file /tmp/test.txt" -i inventory.yml
-```
-
-#### 3. **Module:Args Format** (Compact)
-
-```bash
-onigirazu run all "package:name=nginx,state=present" -i inventory.yml
-```
-
-#### 4. **JSON Format** (Structured)
-
-```bash
-onigirazu run all '{"module":"package","args":{"name":"nginx","state":"present"}}' -i inventory.yml
-```
-
-#### 5. **YAML Format** (Readable)
-
-```bash
-onigirazu run all 'module: package
-args:
-  name: nginx
-  state: present' -i inventory.yml
-```
-
-### Output Formats
-
-```bash
-# Text (default, colored, human-readable)
-onigirazu run all -m ping -i inventory.yml
-
-# JSON (for scripting)
-onigirazu run all -m ping -i inventory.yml -o json
-
-# YAML (structured)
-onigirazu run all -m ping -i inventory.yml -o yaml
-
-# Table (compact view)
-onigirazu run all -m ping -i inventory.yml -o table
-```
-
-📚 **For detailed ad-hoc documentation, see [docs/ADHOC_GUIDE.md](docs/ADHOC_GUIDE.md)**
-
-## Modules
-
-Onigirazu includes 22+ built-in modules for common automation tasks:
-
-### System Modules
-
-- **file**: files, directories, `link`/`hard` links, `touch`, `absent`; without `state` it sets
-  mode/owner/group of an existing path; `recurse: true` for directories; `dest`/`name` alias `path`
-- **package**: Package management
-- **service**: Service management
-- **user**: creates a user or brings an existing one to the given `shell`, `home`, `uid`,
-  `group`, `groups` (list or comma separated; `append: true` only adds), `comment` and
-  `password` (hash); `state: absent` removes the home only with `remove: true`
-- **group**: `state` defaults to `present`
-- **command**: run a program without a shell (`chdir`, `creates`, `removes`); the result has
-  `rc`, `stdout`, `stderr` (trailing newline removed) and `*_lines`; a non-zero `rc` fails the task
-- **shell**: the same through `sh -c` (or `executable`)
-- **assert**: `that` (one expression or a list), `fail_msg`/`msg`, `success_msg`
-- **replace**: replace every match of `regexp` in a file (multiline, `\1` back references)
-- **include_vars**: variables from YAML files on the control machine (`file`, relative to the
-  playbook or the role's `vars/`; `dir`; `name` to put them under one key)
-
-### Configuration Modules
-
-- **template**: Template file processing with Jinja2
-- **git**: Git repository operations
-- **systemd**: Systemd service and unit management
-- **cron**: Cron job scheduling
-
-### Network & Firewall
-
-- **firewall**: Unified firewall management (UFW, firewalld, iptables)
-
-### Container Modules
-
-- **docker_container**: Docker container management
-- **docker_image**: Docker image management
-- **docker_compose**: Docker Compose application management
-- **podman**: Podman container management
-
-### Database Modules
-
-- **mysql_db**: MySQL database management
-- **mysql_user**: MySQL user management
-- **postgresql_db**: PostgreSQL database management
-- **postgresql_user**: PostgreSQL user management
-- **mongodb**: MongoDB management
-
-### Utility Modules
-
-- **debug**: Display debug messages
-- **set_fact**: Set variables
-
-### Module Usage Example
-
-```yaml
-tasks:
-  - name: "Install package"
-    package:
-      name: nginx
-      state: present
-
-  - name: "Start service"
-    service:
-      name: nginx
-      state: started
-      enabled: true
-
-  - name: "Create directory"
-    file:
-      path: /opt/myapp
-      state: directory
-      mode: "0755"
-
-  - name: "Generate config from template"
-    template:
-      src: app.conf.j2
-      dest: /etc/myapp/app.conf
-      backup: true
-```
-
-📚 **For complete modules reference, see [docs/modules/README.md](docs/modules/README.md)**
-
-## Advanced Features
-
-### Loops
-
-Execute tasks multiple times:
-
-```yaml
-- name: "Install multiple packages"
-  package:
-    name: "{{ item }}"
-    state: present
-  loop:
-    items:
-      - curl
-      - wget
-      - git
-```
-
-`loop:` also takes an expression (`"{{ result.stdout_lines }}"`). A dictionary
-is looped over as `{key, value}` items sorted by key, with `with_dict: "{{ d }}"`
-or `loop: "{{ d | dict2items }}"`; `items2dict` turns them back. `with_sequence:
-start=1 end=5 stride=1 format=web%02d` (or `count=`) gives numbered items.
-
-### Roles
-
-`roles:` in a play runs `roles/<name>` next to the playbook: `tasks/`,
-`handlers/`, `defaults/` and `vars/` (`main.yml`). A role's `template`, `copy`,
-`script` and `unarchive` tasks find a relative `src` in the role's
-`templates/` or `files/`. `meta/main.yml` dependencies (a name, or `role:`
-with variables) run first. Variables given with the role win over its own:
-
-```yaml
-roles:
-  - common
-  - role: web
-    web_port: 9090
-```
-
-Roles are found, as in Ansible, in `roles/` next to the playbook, as a path relative to it, in
-`roles_path` (onigirazu.yml, `ANSIBLE_ROLES_PATH`, ansible.cfg), in `~/.ansible/roles`, and a
-`namespace.collection.role` in `collections_path` (`ansible_collections/<ns>/<collection>/roles/`).
-
-`onigirazu galaxy install -r requirements.yml` installs, as `ansible-galaxy install -r` does,
-what onigirazu can use: collections from git (at their `version`, into
-`<collections_path>/ansible_collections/<ns>/<name>`), roles from git or from Ansible Galaxy
-(the newest release unless `version` is set). Galaxy collections of modules
-(`community.general`, `ansible.posix`, ...) are skipped: onigirazu has its own modules.
-
-`include_role` / `import_role` run a role as a task (`name`, `tasks_from`),
-on the hosts where its `when` holds; the task's `vars` are role parameters:
-
-```yaml
-- include_role:
-    name: web
-    tasks_from: upgrade
+- hosts: web
   vars:
-    web_port: 9090
-  when: upgrade | bool
+    app_dir: "/opt/{{ app_name }}"
+    backends: "{{ groups['app'] }}"
+  tasks:
+    - template:
+        src: haproxy.cfg.j2
+        dest: /etc/haproxy/haproxy.cfg
 ```
 
-`import_playbook` puts the plays of another playbook in its place, relative to the importing file;
-`vars` on the import go to its plays (their own vars win), `tags` are added to them. Roles, includes,
-`vars_files` and task sources of an imported play start at the directory of its own file:
-
-```yaml
-- import_playbook: playbooks/base.yml
-  vars: {env: prod}
-  tags: base
-- import_playbook: playbooks/web.yml
+```jinja
+{% for h in backends %}
+server {{ h }} {{ hostvars[h].ansible_default_ipv4.address }}:{{ app_port | default(8080) }} check
+{% endfor %}
 ```
 
-### Extra variables and limits
+An undefined variable fails the task; `default()` and `is defined` handle optional ones. An
+argument that is exactly `{{ var }}` keeps a list or map as it is. `-e` (`key=value`, JSON/YAML
+or `@file`) overrides everything. Precedence follows Ansible, from role defaults (lowest) to
+`-e` (highest).
 
-`-e` sets variables that override all others: `-e env=prod -e version=1.2`,
-`-e '{"replicas": 3}'` or `-e @vars.yml` (repeatable, later ones win).
-`--limit web1,db1` (or `--limit 'web:!web3'`) runs every play only on the
-matching hosts.
-`-b` (`--become`, `--become-user`) turns on privilege escalation in every play,
-`-u`/`--private-key` set the SSH user and key for every host, and
-`--start-at-task NAME` skips everything before that task.
+Guides: [variables](docs/VARIABLES_CHEATSHEET.md), [filters, tests and lookups](docs/FILTERS_GUIDE.md).
 
-### Task options
-
-Besides `when`, `loop`, `register` and friends, a task takes `environment`
-(variables for its commands, also under `become`), `vars` (variables of this
-task only), `no_log: true` (output and errors hidden from logs, state and
-`-o json`; `register` still gets them), `loop_control` (`loop_var`,
-`index_var`) and the older `with_items`. `command` and `shell` honour
-`creates` and `removes`.
-
-`environment` also works on a play and a block, `vars` on a block; the task's
-own values win. `become: false` on a task or block runs it without escalation
-in a play with `become: true`. Boolean keywords take `yes`/`no` as well.
-
-### Machine-readable output
-
-`onigirazu apply site.yml -o json` (or `-o yaml`) writes one document to
-stdout: status (`success`, `partial_success`, `failed`), totals, and every task
-with its result per host. Logs and progress go to stderr; the exit code is
-non-zero when the run failed.
-
-### Blocks
-
-`block` groups tasks; after the first failure the rest of the block is skipped
-and `rescue` runs, where `ansible_failed_task` (name, module) and
-`ansible_failed_result` describe the failure; `always` runs in any case. A
-failure handled by `rescue` does not fail the play.
-
-### Handlers and meta
-
-A task that changed something notifies its handlers (`notify:`, by name or
-`listen:`) for its host. Notified handlers run once, in the order they are
-defined (play handlers and role handlers together), only on the hosts that
-notified them: after `pre_tasks`, after roles and `tasks`, after `post_tasks`,
-and at `meta: flush_handlers`. `meta: end_host` stops a host for the rest of
-the play, `meta: end_play` stops all of them; `meta: noop` does nothing.
-
-### Check mode
-
-`onigirazu apply site.yml --check` runs every module that supports it in check
-mode: it reports what would change and changes nothing. Supported: `copy`,
-`template`, `file`, `lineinfile`, `blockinfile`, `apt`, `yum`, `package`,
-`service`, `user`, `group`, `cron`, `sysctl`, `systemd`, `git`, `get_url`,
-`mount`, `config`, `docker_container`, `docker_image`, `podman` and the read-only modules
-(`stat`, `find`, `debug`, `set_fact`, `ping`, `fail`, `wait_for`); other
-modules are skipped with a note. `check_mode: false` on a task runs it for real
-in a check run (e.g. a probe whose result later tasks use); `check_mode: true`
-checks a single task in a normal run.
-
-`--diff` (with or without `--check`) shows what `copy`, `template`,
-`lineinfile`, `blockinfile`, `replace` and file modes change, as unified
-diffs after the run; `drift` includes them in its report.
-
-### Conditionals
-
-`when`, `until`, `changed_when` and `failed_when` take an expression,
-evaluated per host with that host's facts and registered results:
+### Conditions, loops and retries
 
 ```yaml
-- name: "Install Docker on Debian"
-  package:
-    name: docker.io
-    state: present
-  when: onigirazu_os_family == "Debian"
-
-- name: "Wait for the app"
+- name: Wait for the app
   uri:
-    url: http://localhost:8080/health
+    url: http://127.0.0.1:8080/health
   register: health
   until: health.status == 200
   retries: 10
   delay: 3
 
-- name: "Probe"
-  command:
-    cmd: systemctl is-active app
-  register: app
-  changed_when: false
-  failed_when: app.rc is defined and app.rc > 3
+- name: Packages of this OS
+  package:
+    name: "{{ item }}"
+  loop: "{{ packages[ansible_os_family] }}"
+  when: ansible_os_family in packages
 ```
 
-Supported: `==`, `!=`, `<`, `>`, `and`, `or`, `not`, `in` (list item, dictionary
-key or substring), `is defined`,
-`is not defined`, `a if cond else b`, `~` and the filters listed under
-Templates. A list under `when` means all items must hold; `{{ }}` around
-the expression is optional. A condition that cannot be evaluated fails the task.
+`loop` takes a list or an expression; `with_items`, `with_list`, `with_dict`, `with_sequence`
+and `loop_control` (`loop_var`, `index_var`, `label`) work too; other `with_*` forms do not
+(use `loop` with filters such as `product` or `zip`). See
+[docs/LOOPS_GUIDE.md](docs/LOOPS_GUIDE.md).
 
-### Variables
-
-Use variables for dynamic configurations. An undefined variable fails the task;
-use `{{ var | default("x") }}` or `when: var is defined` for optional ones:
+### Roles, includes and imports
 
 ```yaml
-vars:
-  app_name: "myapp"
-  app_version: "1.0.0"
+- import_playbook: base.yml
 
-tasks:
-  - name: "Create app directory"
-    file:
-      path: "/opt/{{ app_name }}"
-      state: directory
+- hosts: web
+  roles:
+    - common
+    - role: web
+      web_port: 9090
+  tasks:
+    - include_role:
+        name: web
+        tasks_from: upgrade
+      when: upgrade | bool
 ```
 
-An argument that is exactly `{{ var }}` keeps a list or map value as it is, so
-`name: "{{ packages }}"` passes the whole list to `apt`. Other values render as text.
+A role's `tasks/`, `handlers/`, `defaults/`, `vars/`, `templates/`, `files/` and
+`meta/main.yml` dependencies are used as in Ansible.
 
-Always defined: `inventory_hostname`, `group_names`, `groups` (group → host names,
-with `all`) and `hostvars` (host → its variables, facts and registered results,
-as of the start of the task). Facts are gathered when a play starts (as in
-Ansible; `gather_facts: false` skips it) and are available
-as `onigirazu_*`, under their Ansible names (`ansible_os_family`,
-`ansible_distribution`, `ansible_distribution_major_version`, `ansible_hostname`,
-`ansible_fqdn`, `ansible_default_ipv4.address`, ...) and in `ansible_facts`:
+### Blocks, handlers and failures
 
-```jinja
-{% for h in groups['web'] %}
-server {{ h }} {{ hostvars[h].ansible_default_ipv4.address }}:80
-{% endfor %}
-```
+`block` with `rescue` (`ansible_failed_task`, `ansible_failed_result`) and `always`. Handlers run
+once per host at the end of each section and at `meta: flush_handlers`; `meta: end_host` and
+`meta: end_play` stop hosts. A host whose task fails leaves the run and the others go on; the play
+stops with `any_errors_fatal`, above `max_fail_percentage`, or when no host is left. See
+[docs/HANDLERS_GUIDE.md](docs/HANDLERS_GUIDE.md).
 
-### Templates
-
-Use Jinja2-like templates for configuration files:
+### Rollouts
 
 ```yaml
-- name: "Generate configuration"
-  template:
-    src: app.conf.j2
-    dest: /etc/myapp/app.conf
+- hosts: web
+  serial: [1, "30%"]          # batches: a number, a percentage, or a list
+  health_check:               # after every batch
+    - uri: {url: "http://127.0.0.1:8080/health"}
+      retries: 10
+      delay: 3
+  tasks:
+    - name: Upload to the shared service, two hosts at a time
+      command: ./upload.sh
+      throttle: 2
 ```
 
-Templates support `{{ expr }}` with filters, `{% if %}`/`{% elif %}`/`{% else %}`,
-`{% for x in list %}` and `{% for k, v in dict.items() %}` (with `loop.index`,
-`loop.first`, `loop.last`, `loop.length`), and `{%-`/`-%}` whitespace control.
-As in Ansible, the newline after a block tag is dropped:
+An unhealthy batch is rolled back and the rollout stops (exit code 5). `--canary 1 --canary-pause
+5m` runs one host first and checks it again after a soak; `--auto-rollback` rolls back a batch
+whose tasks fail. See [docs/SAFE_APPLY.md](docs/SAFE_APPLY.md).
 
-```jinja
-{% for b in backends %}
-server {{ b.name }} {{ b.ip }}:{{ b.port | default(80) }}
-{% endfor %}
-```
+### Check mode and diffs
 
-Filters: `default`, `length`/`count`, `lower`, `upper`, `capitalize`, `title`,
-`trim`, `replace`, `split`, `join`, `int`, `float`, `string`, `bool`, `first`,
-`last`, `sort`, `unique`, `reverse`, `flatten`, `sum`, `min`, `max`, `abs`,
-`round`, `list`, `keys`/`values` (sorted), `dict2items`, `items2dict`,
-`combine`, `map('filter')`, `map(attribute='x')`, `select`/`reject`,
-`selectattr`/`rejectattr` (tests `defined`, `equalto`, `match`, `search`,
-`in`, `>`, ...), `regex_replace`, `regex_search`, `regex_findall`, `to_json`,
-`to_nice_json`, `to_yaml`, `from_json`, `from_yaml`, `b64encode`,
-`b64decode`, `basename`, `dirname`, `quote`, `ternary`, `mandatory`,
-`password_hash('sha512'|'sha256', salt)` (crypt(3) hashes for `user`), and
-`range()`.
+`--check` runs every module that can predict its result without changing anything
+(files, packages, services, users, containers, ...); the others are skipped with a note.
+`--diff` shows unified diffs of files. `check_mode: false` on a task runs it anyway (a probe
+later tasks need).
 
-`lookup()` and `query()` run on the control machine, relative paths from the
-playbook directory: `env`, `file`, `pipe`, `lines`, `fileglob`,
-`first_found`, `dict`, `items`.
+## Seeing and controlling changes
 
-### Plugins
-
-`--plugins-config plugins.yml` (or a `plugins.yml` next to the playbook) loads
-Go plugins (`go build -buildmode=plugin`, exporting `NewPlugin() plugins.Plugin`):
-
-```yaml
-plugins_dir: ./plugins
-plugins:
-  - name: notify
-    type: callback     # module, callback or filter
-    path: notify.so
-    enabled: true
-    config: {}
-```
-
-Module plugins are used like built-in modules and cannot replace one. Callback
-plugins get playbook, play and per-host task start/end events; task events
-come from parallel host workers, and a callback error is only logged. Filter
-plugins add template filters.
-
-### Error Handling
-
-Control error behavior:
-
-```yaml
-- name: "Task that might fail"
-  command:
-    cmd: some-command
-  ignore_errors: true
-
-- name: "Task with retries"
-  command:
-    cmd: flaky-command
-  retries: 3
-  retry_delay: 5
-```
-
-## 🔄 State Management & Rollback
-
-Every `apply` (also a failed one) keeps a snapshot in `~/.onigirazu/snapshots`
-of what its file modules found before they changed something: `copy`,
-`template`, `lineinfile`, `blockinfile`, `replace` and `file` record the old
-content (text up to 1 MiB), mode, owner and group, or that the path did not
-exist. `rollback` puts that back, the latest change of a run first:
+### Plan
 
 ```bash
-onigirazu rollback --list
-onigirazu rollback --last --dry-run                 # what would be restored
-onigirazu rollback --snapshot <id> -i hosts.yml     # restore
-onigirazu rollback --cleanup --max-age 30d
+onigirazu plan site.yml -i hosts.ini                 # per host: what would change, with diffs
+onigirazu plan site.yml -i hosts.ini --format html --output plan.html
 ```
 
-```
-ORDER  HOST   RESOURCE        DETAILS
-1      web1   /etc/app.d      restore directory mode=0755 owner=root group=root
-2      web1   /etc/app.conf   restore content (812 bytes) mode=0644 owner=root group=root
-3      web1   /etc/app.new    remove (did not exist before)
-```
+`plan` runs the playbook in check mode and also lists resources that left the playbook (see
+Managed state). Formats: text, json, html.
 
-Packages installed by the run are removed again (and removed ones reinstalled),
-services get their previous running/enabled state, users and groups the run
-created are deleted (a home directory stays). Upgrades, changes to existing
-accounts, binary or larger files and other modules are listed as not
-reversible. Snapshots hold file contents (0600 files in your
-home); `no_log` tasks keep none.
-
-## 🎯 Drift Detection
-
-`drift` checks whether hosts still match a playbook: the playbook runs in check
-mode, and every task that would change a host is drift. Nothing is changed
-unless `--fix` is given.
+### Drift
 
 ```bash
-onigirazu drift site.yml -i hosts.yml                  # report
-onigirazu drift site.yml -i hosts.yml --format json    # for scripts
-onigirazu drift site.yml -i hosts.yml --format html --output drift.html   # one page to share
-onigirazu drift site.yml -i hosts.yml --fix            # apply when drift is found
+onigirazu drift site.yml -i hosts.ini                 # report; exit code 2 when a host drifted
+onigirazu drift site.yml -i hosts.ini --fix           # apply when drift is found
+onigirazu drift site.yml -i hosts.ini --notify "$WEBHOOK" --format html --output drift.html
+onigirazu drift site.yml --history                    # past checks
 ```
 
 ```
@@ -1128,171 +318,231 @@ web1
   ~ Config file (copy)
       --- before: /etc/app.conf
       +++ after: /etc/app.conf
-      @@ -1,2 +1,2 @@
       -port = 8081
       +port = 8080
-       workers = 4
 
 In sync: web2, db1
 ```
 
-Every check is kept in `~/.onigirazu/drift-history` (the newest 500): a
-drifting task shows since when it has drifted (`[since 3h]`, `since` in JSON),
-and `onigirazu drift site.yml --history` lists past checks.
+Every check is kept, so a drifting task shows since when it drifts. Exit codes: 0 in sync,
+2 drift, 1 a task could not be checked. `--notify` posts to Slack or
+Mattermost style webhooks. A systemd timer or CI schedule running `drift` watches a fleet.
 
-Exit code: 0 in sync, 2 drift, 1 a task could not be checked. `--limit`,
-`--tags`, `-e`, `-b`, `-u` and `--private-key` work as for `apply`, so a cron
-job or a CI schedule can watch a fleet.
+### Rollback
 
-`--notify URL` (repeatable) posts `{"text": ..., "report": ...}` to a Slack or
-Mattermost style webhook when drift or errors are found (`--notify-always`:
-also when in sync). A systemd timer that checks every hour:
+Every `apply` keeps a snapshot of what it changed: file contents (text up to 1 MiB), modes and
+owners, packages installed or removed, service states, users and groups it created.
 
-```ini
-# /etc/systemd/system/onigirazu-drift.service
-[Service]
-Type=oneshot
-WorkingDirectory=/srv/infra
-ExecStart=/usr/local/bin/onigirazu drift site.yml -i hosts.yml --notify ${WEBHOOK}
-EnvironmentFile=/etc/onigirazu/drift.env
-SuccessExitStatus=2
-
-# /etc/systemd/system/onigirazu-drift.timer
-[Timer]
-OnCalendar=hourly
-[Install]
-WantedBy=timers.target
+```bash
+onigirazu rollback --list
+onigirazu rollback --last --dry-run                   # what would be restored
+onigirazu rollback --snapshot <id> -i hosts.ini
+onigirazu rollback --cleanup --max-age 30d
 ```
 
-## Architecture
+What cannot be undone (upgrades, changes to existing accounts, large or binary files) is listed.
+See [docs/DRIFT_AND_ROLLBACK.md](docs/DRIFT_AND_ROLLBACK.md).
 
-Onigirazu follows a clean, modular architecture:
+### Managed state
 
-- **Execution Engine**: Orchestrates playbook execution
-- **Module Registry**: Manages available modules
-- **Inventory Manager**: Handles host and group management
-- **Template Engine**: Processes templates and variables
-- **State Manager**: Tracks system state and changes
-- **Cache Manager**: Provides intelligent caching
-- **Logger**: Structured logging with multiple formats
+`apply` records the files, packages, services, users and groups each task manages, in
+`.onigirazu/<playbook>.state.json` or an S3 bucket shared by the team, with a lock against
+concurrent runs. When a task leaves the playbook, `plan` lists its resources and the next `apply`
+cleans up like `terraform apply`: what Onigirazu created is removed, what it took over is put back
+as it was. `--no-destroy` keeps them; `prevent_destroy: true` on a task only forgets them.
 
-All components implement well-defined interfaces for:
+```bash
+onigirazu state resources site.yml       # what the playbook manages on each host
+onigirazu state rm site.yml web1 file /etc/app.conf   # forget one; the host is not touched
+onigirazu state unlock site.yml <lock-id>            # the lock of a run that is gone
+```
 
-- ✅ Testability
-- ✅ Extensibility
-- ✅ Maintainability
-- ✅ Configurability
+See [docs/MANAGED_STATE.md](docs/MANAGED_STATE.md).
 
-## 📚 Documentation
+### Import
+
+```bash
+onigirazu import web1 -i hosts.ini -o imported/ --baseline fresh1
+```
+
+Writes a playbook (roles shared between hosts, templates, `group_vars`) that recreates what the
+host has beyond a fresh install: packages installed by hand, services, accounts, configuration
+files, repositories. It then plans the playbook against the host; a faithful import has nothing
+to change. Secrets become variables with an example file. See [docs/IMPORT.md](docs/IMPORT.md).
+
+## Modules
+
+| Area | Modules |
+|------|---------|
+| Commands | `command`, `shell`, `script` |
+| Files | `file`, `copy`, `template`, `lineinfile`, `blockinfile`, `replace`, `ini_file`, `fetch`, `slurp`, `stat`, `find`, `archive`, `unarchive`, `get_url`, `config` (JSON/YAML/TOML keys) |
+| Packages | `package`, `apt`, `yum` (also `dnf`), `apt_repository`, `apt_key`, `pip` |
+| Services and system | `service`, `systemd`, `cron`, `sysctl`, `mount`, `hostname`, `timezone`, `reboot`, `user`, `group`, `authorized_key`, `getent` |
+| Network and firewall | `uri`, `wait_for`, `firewall` (ufw, firewalld, iptables), `ufw` |
+| Containers | `docker_container`, `docker_image`, `docker_compose` (v1 and v2), `docker_host_info`, `podman` |
+| Databases | `mysql_db`, `mysql_user`, `postgresql_db`, `postgresql_user`, `mongodb` |
+| Source control | `git` |
+| Flow and data | `debug`, `assert`, `fail`, `set_fact`, `include_vars`, `setup`/`gather_facts`, `pause`, `ping`, `meta`, `include_role`/`import_role` |
+
+Modules compare the host with the task first and report `changed` only when they changed
+something (`command` and `shell` always do, unless `changed_when`, `creates` or `removes` say
+otherwise). Arguments,
+return values and examples: [docs/modules/README.md](docs/modules/README.md). New modules:
+[docs/MODULE_DEVELOPMENT_GUIDE.md](docs/MODULE_DEVELOPMENT_GUIDE.md) and the generator in
+`scripts/module_scaffold`.
+
+## Command reference
+
+| Command | Purpose |
+|---------|---------|
+| `apply PLAYBOOK` | Run a playbook |
+| `plan PLAYBOOK` | Show what `apply` would change |
+| `drift PLAYBOOK` | Check that hosts still match a playbook; `--fix` applies |
+| `diff PLAYBOOK` | Compare a playbook with the last recorded run |
+| `rollback` | List, inspect and restore snapshots of runs |
+| `state` | Managed state: `resources`, `rm`, `unlock`; `list`, `show` |
+| `import HOST...` | Write a playbook from running hosts |
+| `run PATTERN ...` | Ad-hoc commands |
+| `validate PLAYBOOK` | Parse the playbook and check every module name, roles included |
+| `lint`, `fmt` | Best-practice checks; YAML formatting |
+| `graph PLAYBOOK` | Plays, tasks, handlers and variables as ASCII, DOT or Mermaid |
+| `inventory` | `--list`, `--host`, `--graph`, `--json` (as `ansible-inventory`) |
+| `galaxy install -r FILE` | Install roles and collections from a requirements file |
+| `healthcheck` | Reachability, disk, memory, CPU and services of the inventory hosts |
+| `audit` | History of runs: `list`, `show`, `host`, `stats`, `export`, `clear` |
+| `list-executions`, `show-execution`, `show-last-execution` | Results of `apply --background` runs |
+| `completion`, `version` | Shell completion; version |
+
+Frequently used `apply` flags:
+
+```bash
+onigirazu apply site.yml -i hosts.ini \
+  --limit 'web:!web3' --tags deploy -e version=1.4 -e @prod.yml \
+  -b -u deploy --private-key ~/.ssh/deploy \
+  --check --diff -f 20
+```
+
+`--list-hosts`, `--list-tasks`, `--list-tags` and `--syntax-check` print and exit;
+`--start-at-task` skips to a task; `-o json|yaml` prints a machine-readable result.
+Every command has `--help`. Global flags: `-i`, `-c` (config file), `-v`, `--show-debug`,
+`--no-color`, `--security-policy`.
+
+## Ad-hoc commands
+
+```bash
+onigirazu run web -m package -a "name=nginx state=present" -b -i hosts.ini   # Ansible style
+onigirazu run web "install nginx" -i hosts.ini                             # plain English
+onigirazu run web "package:name=nginx,state=present" -i hosts.ini          # module:args
+onigirazu run web '{"module": "service", "args": {"name": "nginx", "state": "restarted"}}' -i hosts.ini
+onigirazu run all -m ping -i "ubuntu@web1,ubuntu@web2" -o table
+```
+
+Output: text, json, yaml, table. See [docs/ADHOC_GUIDE.md](docs/ADHOC_GUIDE.md).
+
+## Interactive mode
+
+`apply --interactive` shows a terminal dashboard while the playbook runs: a live log, progress,
+per-host counts and a browser for task results.
+
+| Key | Action |
+|-----|--------|
+| **P** | Pause / resume (running tasks finish first) |
+| **G** | Stop gracefully: no new task starts |
+| **R** | Task results; **Enter** shows one (error, message, stdout, stderr, diff) |
+| **L** | Timeline per host |
+| **B** | Rollout batches: health, rollback, what was undone |
+| **N** / **V** / **D** | Detail levels |
+| **F**, **/** | Filter, search |
+| **S**, **H** | Statistics, help |
+| **X** | After the run: run again on the failed hosts |
+| **Q**, **Ctrl+C** | Close; during a run it asks before stopping |
+
+Without a terminal the normal output is used. See [docs/INTERACTIVE_MODE.md](docs/INTERACTIVE_MODE.md).
+
+## Automation and CI
+
+- `apply -o json` writes one document to stdout (status, totals, every task per host); logs go
+  to stderr. Exit codes: 0 success, 1 failure, 5 a batch was rolled back, 130 interrupted.
+- `drift` and `plan` have JSON and HTML reports; `drift --notify` posts to webhooks.
+- `apply --background` returns at once; `show-execution` reads the result later.
+- `audit` keeps the history of runs with per-host statistics.
+- Callback, filter and module plugins (Go plugins) hook into runs: see
+  [docs/PLUGIN_INTEGRATION.md](docs/PLUGIN_INTEGRATION.md).
+
+## Configuration and security
+
+- Settings live in `onigirazu.yml` (path from `-c`, next to the playbook, or
+  `/etc/onigirazu/onigirazu.yml`), overridable by `ONIGIRAZU_*` variables: parallelism,
+  timeouts, `roles_path`, the managed state backend, logging. See
+  [docs/CONFIGURATION_REFERENCE.md](docs/CONFIGURATION_REFERENCE.md).
+- SSH host keys are checked against `~/.ssh/known_hosts`: a new host is added, a changed key
+  fails the connection. Per host, `insecure_ignore_host_key` (or
+  `ansible_ssh_common_args: -o StrictHostKeyChecking=no`) turns the check off.
+- Passwords (`ansible_password`, `ansible_become_password`) never appear on command lines;
+  sudo reads them on stdin. `no_log: true` keeps a task's values out of logs, state and output.
+- An optional security policy restricts modules, hosts, paths and commands:
+  [docs/SECURITY_POLICY_GUIDE.md](docs/SECURITY_POLICY_GUIDE.md).
+- Work files on the hosts live in `~/.onigirazu/tmp` of the connecting user.
+
+## Performance
+
+One SSH connection per host, one long-lived shell on it with commands framed over it, and a
+single state capture reused by the file modules. A second (unchanged) run of a 20-task playbook
+on 10 hosts:
+
+| | Local network | 50 ms round trip |
+|---|---|---|
+| Ansible, defaults | 14.4 s | 70 s |
+| Ansible, forks=10 + pipelining | 7.0 s | 13.6 s |
+| Onigirazu | 0.8 s | 3.6 s |
+
+## Documentation
 
 All guides are listed in [docs/README.md](docs/README.md). Start with:
 
-- **[Quick Start](docs/QUICK_START_CONFIGURATION.md)** - inventory, playbook, plan, apply
-- **[Plan, drift, diff and rollback](docs/DRIFT_AND_ROLLBACK.md)** - see and control what a playbook changes
-- **[Import](docs/IMPORT.md)** - a playbook from running hosts
-- **[Managed state](docs/MANAGED_STATE.md)** - what a playbook manages on each host, and what happens once a task is removed
-- **[Modules Reference](docs/modules/README.md)** - every built-in module and its arguments
-- **[Playbook Examples](docs/examples/README.md)** - working playbooks
-- **[Inventory Formats](docs/INVENTORY_FORMATS.md)** - YAML, Ansible YAML/INI, TOML, JSON, scripts
-- **[Packer](docs/PACKER.md)** - run a playbook in an image build (shell-local)
-- **[Variables](docs/VARIABLES_CHEATSHEET.md)**, **[Filters and lookups](docs/FILTERS_GUIDE.md)**, **[Loops](docs/LOOPS_GUIDE.md)**, **[Handlers](docs/HANDLERS_GUIDE.md)**
-- **[Configuration Reference](docs/CONFIGURATION_REFERENCE.md)** and **[Security Policy](docs/SECURITY_POLICY_GUIDE.md)**
-- **[Contributing](CONTRIBUTING.md)**, **[Module Development](docs/MODULE_DEVELOPMENT_GUIDE.md)**
-
-## 🧪 Testing & Quality
-
-Onigirazu maintains high code quality through comprehensive testing:
-
-- **Test Coverage**: 65%+ overall, >80% for critical packages
-- **Race Detection**: Automated race condition detection
-- **CI/CD**: Continuous integration on every commit
-- **Code Quality**: golangci-lint, staticcheck, and gofmt
-
-### Running Tests
-
-```bash
-# Run all tests
-make test
-
-# Run tests with race detector
-make test-race
-
-# Run tests with coverage
-make test-coverage
-
-# Generate HTML coverage report
-make coverage-html
-```
+- [Quick start](docs/QUICK_START_CONFIGURATION.md) - inventory, playbook, plan, apply
+- [Plan, drift, diff and rollback](docs/DRIFT_AND_ROLLBACK.md)
+- [Safe apply](docs/SAFE_APPLY.md), [Managed state](docs/MANAGED_STATE.md), [Import](docs/IMPORT.md)
+- [Modules](docs/modules/README.md), [Playbook examples](docs/examples/README.md)
+- [Inventory formats](docs/INVENTORY_FORMATS.md), [Variables](docs/VARIABLES_CHEATSHEET.md),
+  [Filters and lookups](docs/FILTERS_GUIDE.md), [Loops](docs/LOOPS_GUIDE.md),
+  [Handlers](docs/HANDLERS_GUIDE.md), [Tags](docs/LIST_TAGS_TASKS_GUIDE.md)
+- [Packer](docs/PACKER.md), [Configuration](docs/CONFIGURATION_REFERENCE.md),
+  [Security policy](docs/SECURITY_POLICY_GUIDE.md)
 
 ## Development
 
-### Building from Source
-
 ```bash
-git clone https://github.com/onigirazu-cfg/onigirazu.git
-cd onigirazu
-
-# Install dependencies
-go mod download
-
-# Run tests
-make test
-
-# Build binary
-make build
-
-# Run with example
-./bin/onigirazu apply examples/playbook.yaml
+make build          # bin/onigirazu
+make test           # unit tests
+make test-race      # with the race detector
+make coverage       # coverage report
+make lint           # golangci-lint
+make run-example    # a playbook against localhost
 ```
 
-### Project Structure
+End-to-end tests (`e2e/`) run every case playbook twice against fresh Ubuntu 24.04 and 26.04
+virtual machines, check the result on the hosts and that the second run changes nothing; CI runs unit tests, lint, CodeQL and a coverage gate.
 
 ```
-onigirazu/
-├── cmd/onigirazu/           # Main application
-├── pkg/types/               # Core types and structures
-├── internal/
-│   ├── config/              # Configuration management
-│   ├── logger/              # Enhanced logging
-│   ├── cache/               # Caching system
-│   ├── template/            # Template engine
-│   ├── state/               # State management
-│   ├── execution/           # Parallel execution
-│   ├── progress/            # Progress tracking
-│   ├── modules/             # Built-in modules
-│   ├── parser/              # Playbook parsing (including inline inventory)
-│   ├── inventory/           # Inventory management
-│   ├── engine/              # Execution engine
-│   └── interfaces/          # Interface definitions
-├── examples/                # Example configurations
-├── templates/               # Template examples
-└── docs/                    # Documentation
+cmd/onigirazu/     entry point
+pkg/types/         playbook, task and inventory types, Ansible short forms and aliases
+internal/
+  cli/             commands
+  parser/          playbooks, roles, includes, imports
+  engine/          plays, batches, handlers, loops, facts, variables
+  expression/      Jinja expressions, filters and tests
+  template/        template rendering
+  modules/         built-in modules
+  inventory/       inventory formats and variables
+  ssh/, executor/  connections, the remote shell, become
+  managed/         managed state (local and S3)
+  rollback/, drift/, state/, audit/   snapshots, drift reports, run history
+  importer/        import of running hosts
+  galaxy/          requirements installation
+e2e/               end-to-end cases
+docs/              guides
 ```
 
-## Contributing
-
-We welcome contributions! Please:
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes and add tests
-4. Run tests: `make test`
-5. Run linting: `make lint`
-6. Submit a pull request
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
-
-## License
-
-MIT License - see [LICENSE](LICENSE) for details.
-
-## Support
-
-- 📖 **Documentation**: [Guide](docs/README.md)
-- 🐛 **Issues**: [GitHub Issues](https://github.com/onigirazu-cfg/onigirazu/issues)
-- 💬 **Discussions**: [GitHub Discussions](https://github.com/onigirazu-cfg/onigirazu/discussions)
-- 📝 **Contributing**: [Contributing Guide](CONTRIBUTING.md)
-
----
-
-**Onigirazu** - Modern configuration management made simple. Built with Go for performance. Inspired by Ansible for simplicity.
+Contributions: see [CONTRIBUTING.md](CONTRIBUTING.md). License: MIT, see [LICENSE](LICENSE).
+Issues: [GitHub Issues](https://github.com/onigirazu-cfg/onigirazu/issues).
