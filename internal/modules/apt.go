@@ -260,13 +260,15 @@ func (m *AptModule) Execute(ctx context.Context, host types.Host, args map[strin
 
 	// Autoclean if requested
 	if autoclean {
-		if err := m.autocleanPackages(ctx, host, args); err != nil {
+		out, err := m.autocleanPackages(ctx, host, args)
+		if err != nil {
 			result.Success = false
 			result.Error = fmt.Sprintf("failed to autoclean: %v", err)
 			result.Duration = time.Since(startTime)
 			return result, nil
 		}
-		result.Changed = true
+		// a change is a removed archive: apt-get prints "Del <pkg> ..."
+		result.Changed = result.Changed || autocleanChanged(out)
 	}
 
 	result.Output["state"] = state
@@ -369,9 +371,18 @@ func aptSummary(out string) string {
 	return "nothing to do"
 }
 
-func (m *AptModule) autocleanPackages(ctx context.Context, host types.Host, args map[string]interface{}) error {
-	_, err := aptGet(ctx, host, args, "autoclean")
-	return err
+func (m *AptModule) autocleanPackages(ctx context.Context, host types.Host, args map[string]interface{}) (string, error) {
+	return aptGet(ctx, host, args, "autoclean")
+}
+
+// autocleanChanged tells whether apt-get autoclean removed an archive
+func autocleanChanged(out string) bool {
+	for _, line := range strings.Split(out, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "Del ") {
+			return true
+		}
+	}
+	return false
 }
 
 func (m *AptModule) Validate(args map[string]interface{}) error {
