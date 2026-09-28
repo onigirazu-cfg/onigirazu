@@ -1722,10 +1722,26 @@ Manage Docker containers.
 | `volumes` | list | - | Volume mounts |
 | `env` | dict | - | Environment variables |
 | `restart_policy` | string | - | Restart policy |
+| `cpus` | number | - | CPU limit (e.g. `1.5`) |
+| `memory` | string | - | Memory limit (`512m`, `1g` or bytes) |
+
+The container is not compared with the other arguments: an existing container is
+kept as it is, so `comparisons` is accepted and has no effect. Only `cpus` and
+`memory` are compared and changed in place with `docker update`; the swap limit
+stays unlimited if it was, otherwise it becomes twice the memory, as docker sets
+for a new container.
 
 #### Examples
 
 ```yaml
+- name: "Cap a running container"
+  docker_container:
+    name: "myapp"
+    image: "nginx:latest"
+    state: present
+    cpus: 1
+    memory: 512m
+
 - name: "Create and run web container"
   docker_container:
     name: "myapp"
