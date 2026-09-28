@@ -1,0 +1,322 @@
+{
+  "version": 1,
+  "playbook": "",
+  "serial": 2,
+  "updated": "2026-09-28T14:28:44.452532Z",
+  "resources": [
+    {
+      "host": "r",
+      "type": "file",
+      "id": "/root/onigirazu-e2e-loop/a",
+      "tasks": [
+        "play:loops/tasks/Plain list"
+      ],
+      "task_name": "Plain list (item 1)",
+      "origin": "adopted",
+      "before": {
+        "_become": true,
+        "_become_method": "",
+        "_become_user": "",
+        "group": "root",
+        "kind": "directory",
+        "mode": "0755",
+        "owner": "root",
+        "path": "/root/onigirazu-e2e-loop/a"
+      },
+      "first_applied": "2026-09-28T13:40:52.522212Z",
+      "last_applied": "2026-09-28T14:28:44.452532Z"
+    },
+    {
+      "host": "r",
+      "type": "file",
+      "id": "/root/onigirazu-e2e-loop/b",
+      "tasks": [
+        "play:loops/tasks/Plain list"
+      ],
+      "task_name": "Plain list (item 2)",
+      "origin": "adopted",
+      "before": {
+        "_become": true,
+        "_become_method": "",
+        "_become_user": "",
+        "group": "root",
+        "kind": "directory",
+        "mode": "0755",
+        "owner": "root",
+        "path": "/root/onigirazu-e2e-loop/b"
+      },
+      "first_applied": "2026-09-28T13:40:52.522212Z",
+      "last_applied": "2026-09-28T14:28:44.452532Z"
+    },
+    {
+      "host": "r",
+      "type": "file",
+      "id": "/root/onigirazu-e2e-loop/nested",
+      "tasks": [
+        "play:loops/tasks/Nested templates in items"
+      ],
+      "task_name": "Nested templates in items (item 1)",
+      "origin": "created",
+      "before": {
+        "_become": true,
+        "_become_method": "",
+        "_become_user": "",
+        "kind": "absent",
+        "path": "/root/onigirazu-e2e-loop/nested"
+      },
+      "first_applied": "2026-09-28T13:40:52.522212Z",
+      "last_applied": "2026-09-28T14:28:44.452532Z"
+    },
+    {
+      "host": "r",
+      "type": "file",
+      "id": "/root/onigirazu-e2e-loop/results",
+      "tasks": [
+        "play:loops/tasks/Registered loop results"
+      ],
+      "task_name": "Registered loop results",
+      "origin": "adopted",
+      "before": {
+        "_become": true,
+        "_become_method": "",
+        "_become_user": "",
+        "content": "2\n",
+        "group": "root",
+        "kind": "file",
+        "mode": "0644",
+        "owner": "root",
+        "path": "/root/onigirazu-e2e-loop/results",
+        "sha256": "53c234e5e8472b6ac51c1ae1cab3fe06fad053beb8ebfd8977b010655bfdd3c3"
+      },
+      "first_applied": "2026-09-28T13:40:52.522212Z",
+      "last_applied": "2026-09-28T14:28:44.452532Z"
+    },
+    {
+      "host": "r",
+      "type": "file",
+      "id": "/root/onigirazu-e2e-loop/when-keep",
+      "tasks": [
+        "play:loops/tasks/when per item"
+      ],
+      "task_name": "when per item (item 1)",
+      "origin": "adopted",
+      "before": {
+        "_become": true,
+        "_become_method": "",
+        "_become_user": "",
+        "group": "root",
+        "kind": "directory",
+        "mode": "0755",
+        "owner": "root",
+        "path": "/root/onigirazu-e2e-loop/when-keep"
+      },
+      "first_applied": "2026-09-28T13:40:52.522212Z",
+      "last_applied": "2026-09-28T14:28:44.452532Z"
+    },
+    {
+      "host": "r",
+      "type": "file",
+      "id": "/root/onigirazu-e2e-loop/x.txt",
+      "tasks": [
+        "play:loops/tasks/Registered lines, custom variable, loop metadata"
+      ],
+      "task_name": "Registered lines, custom variable, loop metadata (item 1)",
+      "origin": "adopted",
+      "before": {
+        "_become": true,
+        "_become_method": "",
+        "_become_user": "",
+        "content": "1/2 x rocky\n",
+        "group": "root",
+        "kind": "file",
+        "mode": "0644",
+        "owner": "root",
+        "path": "/root/onigirazu-e2e-loop/x.txt",
+        "sha256": "ee5ccddc165356da725799e47c981a0396ce1edc86e6853d37c65ce327b745c4"
+      },
+      "first_applied": "2026-09-28T13:40:52.522212Z",
+      "last_applied": "2026-09-28T14:28:44.452532Z"
+    },
+    {
+      "host": "r",
+      "type": "file",
+      "id": "/root/onigirazu-e2e-loop/y.txt",
+      "tasks": [
+        "play:loops/tasks/Registered lines, custom variable, loop metadata"
+      ],
+      "task_name": "Registered lines, custom variable, loop metadata (item 2)",
+      "origin": "adopted",
+      "before": {
+        "_become": true,
+        "_become_method": "",
+        "_become_user": "",
+        "content": "2/2 y rocky\n",
+        "group": "root",
+        "kind": "file",
+        "mode": "0644",
+        "owner": "root",
+        "path": "/root/onigirazu-e2e-loop/y.txt",
+        "sha256": "a1c5b46a001203da168f689d2552e3e6f421d24338a9a279494656456b5e6c4b"
+      },
+      "first_applied": "2026-09-28T13:40:52.522212Z",
+      "last_applied": "2026-09-28T14:28:44.452532Z"
+    },
+    {
+      "host": "u",
+      "type": "file",
+      "id": "/root/onigirazu-e2e-loop/a",
+      "tasks": [
+        "play:loops/tasks/Plain list"
+      ],
+      "task_name": "Plain list (item 1)",
+      "origin": "adopted",
+      "before": {
+        "_become": true,
+        "_become_method": "",
+        "_become_user": "",
+        "group": "root",
+        "kind": "directory",
+        "mode": "0755",
+        "owner": "root",
+        "path": "/root/onigirazu-e2e-loop/a"
+      },
+      "first_applied": "2026-09-28T13:40:52.522212Z",
+      "last_applied": "2026-09-28T14:28:44.452532Z"
+    },
+    {
+      "host": "u",
+      "type": "file",
+      "id": "/root/onigirazu-e2e-loop/b",
+      "tasks": [
+        "play:loops/tasks/Plain list"
+      ],
+      "task_name": "Plain list (item 2)",
+      "origin": "adopted",
+      "before": {
+        "_become": true,
+        "_become_method": "",
+        "_become_user": "",
+        "group": "root",
+        "kind": "directory",
+        "mode": "0755",
+        "owner": "root",
+        "path": "/root/onigirazu-e2e-loop/b"
+      },
+      "first_applied": "2026-09-28T13:40:52.522212Z",
+      "last_applied": "2026-09-28T14:28:44.452532Z"
+    },
+    {
+      "host": "u",
+      "type": "file",
+      "id": "/root/onigirazu-e2e-loop/nested",
+      "tasks": [
+        "play:loops/tasks/Nested templates in items"
+      ],
+      "task_name": "Nested templates in items (item 1)",
+      "origin": "created",
+      "before": {
+        "_become": true,
+        "_become_method": "",
+        "_become_user": "",
+        "kind": "absent",
+        "path": "/root/onigirazu-e2e-loop/nested"
+      },
+      "first_applied": "2026-09-28T13:40:52.522212Z",
+      "last_applied": "2026-09-28T14:28:44.452532Z"
+    },
+    {
+      "host": "u",
+      "type": "file",
+      "id": "/root/onigirazu-e2e-loop/results",
+      "tasks": [
+        "play:loops/tasks/Registered loop results"
+      ],
+      "task_name": "Registered loop results",
+      "origin": "adopted",
+      "before": {
+        "_become": true,
+        "_become_method": "",
+        "_become_user": "",
+        "content": "2\n",
+        "group": "root",
+        "kind": "file",
+        "mode": "0644",
+        "owner": "root",
+        "path": "/root/onigirazu-e2e-loop/results",
+        "sha256": "53c234e5e8472b6ac51c1ae1cab3fe06fad053beb8ebfd8977b010655bfdd3c3"
+      },
+      "first_applied": "2026-09-28T13:40:52.522212Z",
+      "last_applied": "2026-09-28T14:28:44.452532Z"
+    },
+    {
+      "host": "u",
+      "type": "file",
+      "id": "/root/onigirazu-e2e-loop/when-keep",
+      "tasks": [
+        "play:loops/tasks/when per item"
+      ],
+      "task_name": "when per item (item 1)",
+      "origin": "adopted",
+      "before": {
+        "_become": true,
+        "_become_method": "",
+        "_become_user": "",
+        "group": "root",
+        "kind": "directory",
+        "mode": "0755",
+        "owner": "root",
+        "path": "/root/onigirazu-e2e-loop/when-keep"
+      },
+      "first_applied": "2026-09-28T13:40:52.522212Z",
+      "last_applied": "2026-09-28T14:28:44.452532Z"
+    },
+    {
+      "host": "u",
+      "type": "file",
+      "id": "/root/onigirazu-e2e-loop/x.txt",
+      "tasks": [
+        "play:loops/tasks/Registered lines, custom variable, loop metadata"
+      ],
+      "task_name": "Registered lines, custom variable, loop metadata (item 1)",
+      "origin": "adopted",
+      "before": {
+        "_become": true,
+        "_become_method": "",
+        "_become_user": "",
+        "content": "1/2 x ubuntu\n",
+        "group": "root",
+        "kind": "file",
+        "mode": "0644",
+        "owner": "root",
+        "path": "/root/onigirazu-e2e-loop/x.txt",
+        "sha256": "d2268824507024218f91afc66d35edfd299fd116cd232f5a085ed1f2b3cddd43"
+      },
+      "first_applied": "2026-09-28T13:40:52.522212Z",
+      "last_applied": "2026-09-28T14:28:44.452532Z"
+    },
+    {
+      "host": "u",
+      "type": "file",
+      "id": "/root/onigirazu-e2e-loop/y.txt",
+      "tasks": [
+        "play:loops/tasks/Registered lines, custom variable, loop metadata"
+      ],
+      "task_name": "Registered lines, custom variable, loop metadata (item 2)",
+      "origin": "adopted",
+      "before": {
+        "_become": true,
+        "_become_method": "",
+        "_become_user": "",
+        "content": "2/2 y ubuntu\n",
+        "group": "root",
+        "kind": "file",
+        "mode": "0644",
+        "owner": "root",
+        "path": "/root/onigirazu-e2e-loop/y.txt",
+        "sha256": "3f1369b0203642208299bf10fbcb443d18b5964c0a92f9a74be4a7e28bc05842"
+      },
+      "first_applied": "2026-09-28T13:40:52.522212Z",
+      "last_applied": "2026-09-28T14:28:44.452532Z"
+    }
+  ]
+}

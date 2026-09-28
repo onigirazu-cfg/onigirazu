@@ -34,11 +34,14 @@ func TestLoopItemsRenderNestedTemplates(t *testing.T) {
 		t.Errorf("scalar items = %v, %v", items[2], items[3])
 	}
 
-	fromVar, err := e.getLoopItems(context.Background(), &types.Loop{Expr: "items"}, vars)
+	// items from a variable are its value: a registered result keeps
+	// the braces of the command it ran
+	vars["results"] = []interface{}{map[string]interface{}{"cmd": "docker inspect --format '{{ .Id }}' x"}}
+	fromVar, err := e.getLoopItems(context.Background(), &types.Loop{Expr: "results"}, vars)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := fromVar[0].(map[string]interface{})["value"]; got != "2" {
+	if got := fromVar[0].(map[string]interface{})["cmd"]; got != "docker inspect --format '{{ .Id }}' x" {
 		t.Errorf("item from a variable = %v", got)
 	}
 }

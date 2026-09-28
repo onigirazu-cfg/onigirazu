@@ -1622,11 +1622,9 @@ func (e *ExecutionEngine) getLoopItems(ctx context.Context, loop *types.Loop, va
 		if err != nil {
 			return nil, fmt.Errorf("%q: %w", loop.Expr, err)
 		}
-		items, err := expression.Items(value)
-		if err != nil {
-			return nil, err
-		}
-		return e.renderLoopItems(ctx, items, variables)
+		// items from a variable are its value: templated variables are
+		// rendered before the task, registered results are data
+		return expression.Items(value)
 	}
 
 	if loop.Range != "" {
@@ -1636,9 +1634,8 @@ func (e *ExecutionEngine) getLoopItems(ctx context.Context, loop *types.Loop, va
 	return nil, fmt.Errorf("loop must specify either items or range")
 }
 
-// renderLoopItems renders the templates inside loop items, nested ones too:
-// Ansible templates the whole list, so {name: x, value: "{{ var }}"} gets
-// the value of var
+// renderLoopItems renders the templates inside the items written in the
+// loop, nested ones too: {name: x, value: "{{ var }}"} gets the value of var
 func (e *ExecutionEngine) renderLoopItems(ctx context.Context, items []interface{}, variables map[string]interface{}) ([]interface{}, error) {
 	out := make([]interface{}, len(items))
 	for i, item := range items {

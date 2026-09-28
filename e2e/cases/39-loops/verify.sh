@@ -9,3 +9,4 @@ test -d "$d/when-keep"
 test ! -e "$d/when-skip"
 case "$ID" in ubuntu) fam=debian ;; *) fam=redhat ;; esac
 test "$(cat "$d/nested")" = "$fam"
+test "$(cat "$d/braces")" = "{{ .Id }}"
