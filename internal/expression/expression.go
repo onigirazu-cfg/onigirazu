@@ -33,6 +33,7 @@ var (
 	lookupCall = regexp.MustCompile(`\b(lookup|query|q)\(`)
 	jinjaWord  = regexp.MustCompile(`\b(True|False|None)\b`)
 	jinjaWords = strings.NewReplacer("True", "true", "False", "false", "None", "nil")
+	omitWord   = regexp.MustCompile(`(^|[^.\w])omit\b`)
 	quoted     = regexp.MustCompile(`"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'`)
 )
 
@@ -201,8 +202,14 @@ func translateCode(code string) string {
 	return jinjaWordsIn(code)
 }
 
-// jinjaWordsIn replaces True/False/None only as whole words
+// Omit is the value of Ansible's omit: a module argument that renders to it
+// is left out
+const Omit = "__omit_place_holder__onigirazu"
+
+// jinjaWordsIn replaces True/False/None only as whole words, and omit with
+// its placeholder
 func jinjaWordsIn(code string) string {
+	code = omitWord.ReplaceAllString(code, `${1}"`+Omit+`"`)
 	return jinjaWord.ReplaceAllStringFunc(code, jinjaWords.Replace)
 }
 
