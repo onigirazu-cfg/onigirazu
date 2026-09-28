@@ -287,6 +287,16 @@ plays:
 With `serial` the whole play (facts, tasks, handlers) runs on one batch of hosts after
 another.
 
+`throttle: N` on a task (a number or a template) limits how many hosts run that task at once,
+for tasks that hit a shared service:
+
+```yaml
+- name: Upload to the vault
+  command: ./vault.sh attach {{ item }}
+  delegate_to: localhost
+  throttle: "{{ vault_parallel }}"
+```
+
 ### Safe apply: health checks and automatic rollback
 
 ```yaml

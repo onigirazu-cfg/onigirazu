@@ -224,6 +224,9 @@ type Task struct {
 	Vars map[string]interface{} `yaml:"vars,omitempty"`
 	// NoLog hides the task's arguments, output and errors from logs and state
 	NoLog bool `yaml:"no_log,omitempty"`
+	// Throttle limits how many hosts run the task at once (a number or a
+	// template of one)
+	Throttle string `yaml:"throttle,omitempty"`
 	// PreventDestroy: when the task leaves the playbook, its resources are
 	// forgotten, never removed or restored
 	PreventDestroy bool `yaml:"prevent_destroy,omitempty"`
@@ -281,6 +284,7 @@ func (t *Task) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		"vars":            true,
 		"no_log":          true,
 		"prevent_destroy": true,
+		"throttle":        true,
 		"loop_control":    true,
 		"with_items":      true,
 		"with_list":       true,
@@ -299,6 +303,9 @@ func (t *Task) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	}
 	if keep, ok := yamlBool(taskMap["prevent_destroy"]); ok {
 		t.PreventDestroy = keep
+	}
+	if v, ok := taskMap["throttle"]; ok && v != nil {
+		t.Throttle = fmt.Sprint(v)
 	}
 	// with_items / with_list: the old spelling of loop
 	for _, key := range []string{"with_items", "with_list"} {

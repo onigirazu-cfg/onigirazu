@@ -934,6 +934,10 @@ func (e *ExecutionEngine) executeTaskParallel(ctx context.Context, task *types.T
 	var wg sync.WaitGroup
 	var mutex sync.Mutex
 	var failed failures
+	slots, err := e.throttleSlots(ctx, task, variables)
+	if err != nil {
+		return err
+	}
 
 	for _, host := range hosts {
 		// Check for context cancellation before submitting new tasks
@@ -949,6 +953,7 @@ func (e *ExecutionEngine) executeTaskParallel(ctx context.Context, task *types.T
 		// Submit to execution pool
 		e.executionPool.Submit(func() {
 			defer wg.Done()
+			defer slots.acquire()()
 
 			if err := e.executeTaskOnHost(ctx, task, &host, variables, playResult); err != nil {
 				mutex.Lock()
@@ -1346,11 +1351,16 @@ func (e *ExecutionEngine) executeTaskWithLoop(ctx context.Context, task *types.T
 
 	var wg sync.WaitGroup
 	var mutex sync.Mutex
+	slots, err := e.throttleSlots(ctx, task, variables)
+	if err != nil {
+		return err
+	}
 	for i := range hosts {
 		host := &hosts[i]
 		wg.Add(1)
 		e.executionPool.Submit(func() {
 			defer wg.Done()
+			defer slots.acquire()()
 			if err := e.runLoopOnHost(ctx, task, host, variables, playResult); err != nil {
 				mutex.Lock()
 				failed.add(host.Name, err)
