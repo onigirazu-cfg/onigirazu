@@ -221,6 +221,12 @@ type Task struct {
 	Vars map[string]interface{} `yaml:"vars,omitempty"`
 	// NoLog hides the task's arguments, output and errors from logs and state
 	NoLog bool `yaml:"no_log,omitempty"`
+	// PreventDestroy: when the task leaves the playbook, its resources are
+	// forgotten, never removed or restored
+	PreventDestroy bool `yaml:"prevent_destroy,omitempty"`
+	// Key identifies the task across runs (play, role, block path and
+	// name); the engine assigns it
+	Key string `yaml:"-" json:"-"`
 }
 
 // UnmarshalYAML implements custom YAML unmarshaling for Task
@@ -235,44 +241,45 @@ func (t *Task) UnmarshalYAML(unmarshal func(interface{}) error) error {
 
 	// Define reserved field names that are not module arguments
 	reservedFields := map[string]bool{
-		"name":          true,
-		"module":        true,
-		"args":          true,
-		"when":          true,
-		"loop":          true,
-		"register":      true,
-		"ignore_errors": true,
-		"tags":          true,
-		"notify":        true,
-		"listen":        true,
-		"timeout":       true,
-		"retries":       true,
-		"delay":         true,
-		"until":         true,
-		"changed_when":  true,
-		"failed_when":   true,
-		"include":       true,
-		"include_tasks": true,
-		"import_tasks":  true,
-		"serial":        true,
-		"retry_delay":   true,
-		"become":        true,
-		"become_user":   true,
-		"become_method": true,
-		"run_once":      true,
-		"delegate_to":   true,
-		"block":         true,
-		"rescue":        true,
-		"always":        true,
-		"check_mode":    true,
-		"environment":   true,
-		"vars":          true,
-		"no_log":        true,
-		"loop_control":  true,
-		"with_items":    true,
-		"with_list":     true,
-		"with_dict":     true,
-		"with_sequence": true,
+		"name":            true,
+		"module":          true,
+		"args":            true,
+		"when":            true,
+		"loop":            true,
+		"register":        true,
+		"ignore_errors":   true,
+		"tags":            true,
+		"notify":          true,
+		"listen":          true,
+		"timeout":         true,
+		"retries":         true,
+		"delay":           true,
+		"until":           true,
+		"changed_when":    true,
+		"failed_when":     true,
+		"include":         true,
+		"include_tasks":   true,
+		"import_tasks":    true,
+		"serial":          true,
+		"retry_delay":     true,
+		"become":          true,
+		"become_user":     true,
+		"become_method":   true,
+		"run_once":        true,
+		"delegate_to":     true,
+		"block":           true,
+		"rescue":          true,
+		"always":          true,
+		"check_mode":      true,
+		"environment":     true,
+		"vars":            true,
+		"no_log":          true,
+		"prevent_destroy": true,
+		"loop_control":    true,
+		"with_items":      true,
+		"with_list":       true,
+		"with_dict":       true,
+		"with_sequence":   true,
 	}
 
 	if env, ok := taskMap["environment"].(map[string]interface{}); ok {
@@ -283,6 +290,9 @@ func (t *Task) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	}
 	if noLog, ok := yamlBool(taskMap["no_log"]); ok {
 		t.NoLog = noLog
+	}
+	if keep, ok := yamlBool(taskMap["prevent_destroy"]); ok {
+		t.PreventDestroy = keep
 	}
 	// with_items / with_list: the old spelling of loop
 	for _, key := range []string{"with_items", "with_list"} {
@@ -779,12 +789,29 @@ type TaskResult struct {
 	// Ignored: the task failed, but ignore_errors or a rescue section handled it
 	Ignored bool `json:"ignored,omitempty"`
 	// RolledBack: a failed batch's rollback has undone this change
-	RolledBack bool                   `json:"rolled_back,omitempty"`
-	Output     map[string]interface{} `json:"output"`
-	Error      string                 `json:"error,omitempty"`
-	Notify     []string               `json:"notify,omitempty"`
-	Duration   time.Duration          `json:"duration_ms"` // Store as milliseconds for JSON compatibility
-	Timestamp  time.Time              `json:"timestamp"`
+	RolledBack bool `json:"rolled_back,omitempty"`
+	// TaskKey is the task's Key; Resources are what the task manages on
+	// the host (the managed state registry)
+	TaskKey   string                 `json:"task_key,omitempty"`
+	Resources []ManagedResource      `json:"resources,omitempty"`
+	Output    map[string]interface{} `json:"output"`
+	Error     string                 `json:"error,omitempty"`
+	Notify    []string               `json:"notify,omitempty"`
+	Duration  time.Duration          `json:"duration_ms"` // Store as milliseconds for JSON compatibility
+	Timestamp time.Time              `json:"timestamp"`
+}
+
+// ManagedResource is something a task keeps in a state on the host: a file,
+// a package, a service, a user or a group
+type ManagedResource struct {
+	Type string `json:"type"`
+	ID   string `json:"id"`
+	// Absent: the task makes sure it is not there (it claims nothing)
+	Absent bool `json:"absent,omitempty"`
+	// PreventDestroy: never removed or restored, only forgotten
+	PreventDestroy bool `json:"prevent_destroy,omitempty"`
+	// Before is the resource as the task found it (nil in check mode)
+	Before map[string]interface{} `json:"-" yaml:"-"`
 }
 
 // MarshalJSON implements custom JSON marshaling for TaskResult
@@ -1061,6 +1088,18 @@ type PlaybookResult struct {
 	Rollout []BatchReport `json:"rollout,omitempty"`
 	// RolledBack: a batch was unhealthy and its changes were undone
 	RolledBack bool `json:"rolled_back,omitempty"`
+	// Orphans are managed resources no task of the playbook claims any more
+	Orphans []ManagedOrphan `json:"orphans,omitempty"`
+}
+
+// ManagedOrphan is a resource that left the playbook, with what happens to
+// it: destroy (onigirazu created it), restore (back to how it was) or forget
+type ManagedOrphan struct {
+	Host   string `json:"host"`
+	Type   string `json:"type"`
+	ID     string `json:"id"`
+	Task   string `json:"task,omitempty"`
+	Action string `json:"action"`
 }
 
 // BatchReport is how one batch of a rollout went

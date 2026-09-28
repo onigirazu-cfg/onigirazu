@@ -7,6 +7,7 @@ Start with the [Quick Start](QUICK_START_CONFIGURATION.md). The project
 
 - [Quick Start](QUICK_START_CONFIGURATION.md) — inventory, playbook, `plan` and `apply`, common flags
 - [Plan, drift, diff and rollback](DRIFT_AND_ROLLBACK.md) — preview changes, detect and fix drift, undo a run
+- [Managed state](MANAGED_STATE.md) — resources each playbook manages; orphans of removed tasks
 - [Tag filtering](TAG_FILTERING.md) — `--tags` and `--skip-tags`
 - [Listing tags and tasks](LIST_TAGS_TASKS_GUIDE.md) — `--list-tags` and `--list-tasks`
 - [Interactive mode](INTERACTIVE_MODE.md) — `apply --interactive`

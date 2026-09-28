@@ -301,6 +301,13 @@ After every batch the checks run on its hosts; an unhealthy batch is rolled back
 undone, newest first) and the rollout stops, exit code 5. `--canary 1 --canary-pause 5m` runs one
 host first and checks it again after a soak. See [docs/SAFE_APPLY.md](docs/SAFE_APPLY.md).
 
+### Managed state
+
+apply records the files, packages, services, users and groups each task manages
+(`.onigirazu/<playbook>.state.json`). When a task leaves the playbook, `plan` lists its resources:
+the ones onigirazu created are to be removed, the ones it took over to be put back as they were.
+`onigirazu state resources site.yml` shows the records. See [docs/MANAGED_STATE.md](docs/MANAGED_STATE.md).
+
 ### Failed hosts
 
 As in Ansible, a host whose task fails leaves the run (later tasks and plays skip it) and the
@@ -1129,6 +1136,7 @@ All guides are listed in [docs/README.md](docs/README.md). Start with:
 
 - **[Quick Start](docs/QUICK_START_CONFIGURATION.md)** - inventory, playbook, plan, apply
 - **[Plan, drift, diff and rollback](docs/DRIFT_AND_ROLLBACK.md)** - see and control what a playbook changes
+- **[Managed state](docs/MANAGED_STATE.md)** - what a playbook manages on each host, and what happens once a task is removed
 - **[Modules Reference](docs/modules/README.md)** - every built-in module and its arguments
 - **[Playbook Examples](docs/examples/README.md)** - working playbooks
 - **[Inventory Formats](docs/INVENTORY_FORMATS.md)** - YAML, Ansible YAML/INI, TOML, JSON, scripts

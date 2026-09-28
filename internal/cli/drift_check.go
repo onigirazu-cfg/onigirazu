@@ -55,6 +55,8 @@ type DriftReport struct {
 	Fixed      bool                   `json:"fixed,omitempty"`
 	Plan       bool                   `json:"plan,omitempty"`
 	DriftTasks int                    `json:"drift_tasks"`
+	// Orphans are managed resources no task claims any more
+	Orphans []types.ManagedOrphan `json:"orphans,omitempty"`
 }
 
 type driftCheckOptions struct {
@@ -130,8 +132,13 @@ func buildDriftReport(playbook string, result *types.PlaybookResult) *DriftRepor
 		}
 	}
 	report.Hosts = len(hosts)
+	report.Orphans = result.Orphans
+	orphaned := map[string]bool{}
+	for _, o := range result.Orphans {
+		orphaned[o.Host] = true
+	}
 	for h := range hosts {
-		if len(report.Drift[h]) == 0 && len(report.Errors[h]) == 0 {
+		if len(report.Drift[h]) == 0 && len(report.Errors[h]) == 0 && !orphaned[h] {
 			report.InSync = append(report.InSync, h)
 		}
 	}
@@ -159,6 +166,7 @@ func writeDriftText(w io.Writer, r *DriftReport) {
 	}
 	sort.Strings(names)
 	switch {
+	case len(r.Drift) == 0 && len(r.Errors) == 0 && len(r.Orphans) > 0:
 	case len(r.Drift) == 0 && len(r.Errors) == 0 && r.Plan:
 		fmt.Fprintf(w, "No changes: %d host(s) already match %s\n", r.Hosts, r.Playbook)
 	case len(r.Drift) == 0 && len(r.Errors) == 0:
@@ -189,6 +197,7 @@ func writeDriftText(w io.Writer, r *DriftReport) {
 			}
 		}
 	}
+	printOrphans(w, r.Orphans)
 	if len(r.Errors) > 0 {
 		fmt.Fprintf(w, "\nCould not check:\n")
 		for h, items := range r.Errors {
@@ -260,7 +269,7 @@ func runDriftCheck(cmd *cobra.Command, playbook string, o driftCheckOptions) err
 	switch {
 	case len(report.Errors) > 0:
 		return &ExitError{Code: 1}
-	case len(report.Drift) > 0 && !report.Fixed && !o.plan:
+	case (len(report.Drift) > 0 || len(report.Orphans) > 0) && !report.Fixed && !o.plan:
 		return &ExitError{Code: 2}
 	}
 	return nil

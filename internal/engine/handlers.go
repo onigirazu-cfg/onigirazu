@@ -199,9 +199,16 @@ func (e *ExecutionEngine) runIncludedRole(ctx context.Context, task *types.Task,
 			}
 		}
 	}
+	if len(targets) < len(hosts) {
+		// some hosts skip the role: keep what it manages
+		e.keepScope(task.Key)
+	}
 	if len(targets) == 0 {
 		return nil
 	}
+	parent := e.scope
+	e.scope = task.Key
+	defer func() { e.scope = parent }()
 	role := *task.IncludedRole
 	role.Params = e.mergeVariables(role.Params, task.Vars)
 	return e.executeRoleWithDependencies(ctx, &role, targets, variables, playResult)

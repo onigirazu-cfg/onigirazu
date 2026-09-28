@@ -47,6 +47,12 @@ type ExecutionEngine struct {
 	startAt   string
 	startedAt bool
 
+	// managed state: task keys assigned in this run, scopes skipped whole,
+	// and the scope roles are keyed under (the play, or an include_role)
+	taskKeys   map[string]bool
+	keptScopes []string
+	scope      string
+
 	config            interfaces.Config
 	logger            interfaces.Logger
 	stateManager      interfaces.StateManager
@@ -286,7 +292,10 @@ func (e *ExecutionEngine) ExecutePlaybook(ctx context.Context, playbook *types.P
 	e.failedHosts = nil
 	e.rolloutApplied = nil
 	e.rolloutReports = nil
+	e.taskKeys = nil
+	e.keptScopes = nil
 	e.mutex.Unlock()
+	scopes := playScopes(playbook.Plays)
 
 	// Record playbook execution start
 	e.metricsManager.IncrementPlaybooksExecuted()
@@ -344,6 +353,7 @@ func (e *ExecutionEngine) ExecutePlaybook(ctx context.Context, playbook *types.P
 		// Record play execution start
 		e.metricsManager.IncrementPlaysExecuted()
 
+		e.scope = scopes[i]
 		playResult, err := e.executePlay(ctx, &play)
 		if err != nil && playResult != nil {
 			// keep what the failed play did: the tasks that ran and failed
@@ -571,6 +581,11 @@ func (e *ExecutionEngine) executePlayOn(ctx context.Context, play *types.Play, h
 		e.mutex.Unlock()
 	}()
 	playVars = e.mergeVariables(playVars, e.extraVars)
+	playScope := e.scope
+	e.assignKeys(play.PreTasks, playScope+"/pre_tasks")
+	e.assignKeys(play.Tasks, playScope+"/tasks")
+	e.assignKeys(play.PostTasks, playScope+"/post_tasks")
+	e.assignKeys(play.Handlers, playScope+"/handlers")
 	e.startPlayHandlers(hosts, play.Handlers, playVars)
 	e.inheritedTags = play.Tags
 	defer func() { e.inheritedTags = nil }()
@@ -629,6 +644,7 @@ func (e *ExecutionEngine) executePlayOn(ctx context.Context, play *types.Play, h
 					return result, fmt.Errorf("role '%s': %w", roleRef.Name, err)
 				} else if !holds {
 					e.logger.Debug("Skipping role '%s' due to condition", roleRef.Name)
+					e.keepScope(playScope + "/role:" + roleRef.Name)
 					continue
 				}
 			}
@@ -643,6 +659,7 @@ func (e *ExecutionEngine) executePlayOn(ctx context.Context, play *types.Play, h
 				role, err = e.roleLoader.LoadRole(ctx, roleRef)
 				if err != nil {
 					e.logger.Error("Failed to load role '%s': %v", roleRef.Name, err)
+					e.keepScope(playScope + "/role:" + roleRef.Name)
 					if !play.IgnoreErrors {
 						return result, fmt.Errorf("failed to load role '%s': %w", roleRef.Name, err)
 					}
@@ -658,6 +675,7 @@ func (e *ExecutionEngine) executePlayOn(ctx context.Context, play *types.Play, h
 				role = &withParams
 			}
 			e.inheritedTags = append(append([]string{}, play.Tags...), roleRef.Tags...)
+			e.scope = playScope
 			err := e.executeRoleWithDependencies(ctx, role, hosts, playVars, result)
 			e.inheritedTags = play.Tags
 			if err != nil {
@@ -1160,6 +1178,12 @@ func (e *ExecutionEngine) finishTask(task *types.Task, host *types.Host, result 
 	playResult *types.PlayResult) error {
 	// no_log: register and set_fact get the real result; logs, the play
 	// result, state and the returned error get a placeholder
+	result.TaskKey = task.Key
+	if task.PreventDestroy {
+		for i := range result.Resources {
+			result.Resources[i].PreventDestroy = true
+		}
+	}
 	real := result
 	if task.NoLog {
 		result = censored(result)
@@ -1684,6 +1708,7 @@ func (e *ExecutionEngine) executeRole(ctx context.Context, role *types.Role, hos
 	}
 
 	e.logger.Debug("Starting role execution: %s", role.Name)
+	e.assignRoleKeys(role, e.scope)
 
 	// Merge role variables with play variables
 	// Priority: RoleVars > PlayVars > Defaults (handled by roleLoader)
@@ -2198,6 +2223,14 @@ const noLogMessage = "the output has been hidden due to no_log: true"
 func censored(result types.TaskResult) types.TaskResult {
 	result.Output = map[string]interface{}{"censored": noLogMessage}
 	result.Before = nil // no content of a no_log task goes into a snapshot
+	if len(result.Resources) > 0 {
+		kept := make([]types.ManagedResource, len(result.Resources))
+		for i, r := range result.Resources {
+			r.Before = nil
+			kept[i] = r
+		}
+		result.Resources = kept
+	}
 	if result.Error != "" {
 		result.Error = noLogMessage
 	}
