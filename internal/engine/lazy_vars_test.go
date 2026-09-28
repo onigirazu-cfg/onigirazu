@@ -21,6 +21,8 @@ func TestRenderLazyVars(t *testing.T) {
 		"registered": "{{ keep }}",
 		"cli":        "{{ keep }}",
 		"broken":     "{{ .Names }}",
+		"versions":   []interface{}{"3.12", "3.11"},
+		"global":     "{{ versions }}",
 	}
 	e.renderLazyVars(context.Background(), "h", vars)
 	if vars["port"] != "2222" || vars["chained"] != "p2222" {
@@ -31,6 +33,9 @@ func TestRenderLazyVars(t *testing.T) {
 	}
 	if vars["registered"] != "{{ keep }}" || vars["cli"] != "{{ keep }}" {
 		t.Errorf("runtime and -e values must stay: %v, %v", vars["registered"], vars["cli"])
+	}
+	if got, ok := vars["global"].([]interface{}); !ok || len(got) != 2 {
+		t.Errorf("a whole-expression list must stay a list: %#v", vars["global"])
 	}
 	if vars["broken"] != "{{ .Names }}" {
 		t.Errorf("a value that does not render stays: %v", vars["broken"])

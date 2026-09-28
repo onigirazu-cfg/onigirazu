@@ -986,14 +986,15 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 
 	taskVars := e.hostVariables(host, variables)
 	e.renderLazyVars(ctx, host.Name, taskVars)
-	// task vars come last; string values may use other variables
+	// task vars come last; their values may use other variables, nested in
+	// lists and maps too, and "{{ a_list }}" stays a list
 	for k, v := range task.Vars {
-		if str, ok := v.(string); ok && strings.Contains(str, "{{") {
-			if rendered, err := e.templateEngine.Render(ctx, str, taskVars); err == nil {
-				v = rendered
-			} else {
+		if hasTemplate(v) {
+			rendered, err := e.templateEngine.RenderTaskArgs(ctx, map[string]interface{}{"v": v}, taskVars)
+			if err != nil {
 				return failed(fmt.Errorf("task var %s: %w", k, err))
 			}
+			v = rendered["v"]
 		}
 		taskVars[k] = v
 	}
@@ -2423,13 +2424,7 @@ func (e *ExecutionEngine) renderLazyVars(ctx context.Context, host string, vars 
 			if _, fromCLI := e.extraVars[key]; fromCLI || runtime[key] || notLazy[key] || !hasTemplate(value) {
 				continue
 			}
-			if str, ok := value.(string); ok {
-				if rendered, err := e.templateEngine.Render(ctx, str, vars); err == nil && rendered != str {
-					vars[key] = rendered
-					changed = true
-				}
-				continue
-			}
+			// through RenderTaskArgs: "{{ a_list }}" stays a list
 			rendered, err := e.templateEngine.RenderTaskArgs(ctx, map[string]interface{}{"v": value}, vars)
 			if err == nil && !reflect.DeepEqual(rendered["v"], value) {
 				vars[key] = rendered["v"]
