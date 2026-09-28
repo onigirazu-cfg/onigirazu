@@ -34,6 +34,11 @@ func (m *ModuleSyntaxValidator) ValidateTaskModule(task *types.Task, playIndex, 
 	// Extract base module name (remove any underscore variations)
 	moduleName := strings.TrimSpace(task.Module)
 
+	// an action whose module is a template is known only when it runs
+	if moduleName == types.DynamicAction {
+		return nil
+	}
+
 	// Check if module exists
 	if !m.validModules[moduleName] {
 		return &ModuleSyntaxError{

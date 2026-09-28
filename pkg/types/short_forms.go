@@ -26,6 +26,9 @@ func (t *Task) applyShortForm(taskMap map[string]interface{}, reserved map[strin
 	if local, ok := taskMap["local_action"]; ok {
 		return t.applyLocalAction(local)
 	}
+	if action, ok := taskMap["action"]; ok && (t.Module == "" || t.Module == "action") {
+		return t.applyAction(action, "action")
+	}
 	if t.Module != "" {
 		return nil
 	}
@@ -165,29 +168,66 @@ func splitWords(s string) ([]string, error) {
 // "local_action: {module: copy, ...}": the module runs on the control
 // machine, as with delegate_to: localhost
 func (t *Task) applyLocalAction(v interface{}) error {
+	if err := t.applyAction(v, "local_action"); err != nil {
+		return err
+	}
+	t.DelegateTo = "localhost"
+	return nil
+}
+
+// DynamicAction is the module of an action whose module name is a template
+// ("action: '{{ ansible_pkg_mgr }} name=git'"): the module registry reads
+// the rendered _action (or _module) when the task runs
+const DynamicAction = "action"
+
+// applyAction reads "action: copy src=a dest=b" or "action: {module: copy,
+// ...}" (keyword is the key, for messages)
+func (t *Task) applyAction(v interface{}, keyword string) error {
 	switch a := v.(type) {
 	case string:
-		module, rest, _ := strings.Cut(strings.TrimSpace(a), " ")
+		line := strings.TrimSpace(a)
+		if strings.HasPrefix(line, "{{") {
+			// the module name is a template: its key=value options are
+			// parsed now, so each value renders on its own ("{{ pkgs }}"
+			// stays a list), and the module is read when the task runs
+			end := strings.Index(line, "}}")
+			if end < 0 {
+				return fmt.Errorf("%s: unterminated template in %q", keyword, line)
+			}
+			module, rest := line[:end+2], strings.TrimSpace(line[end+2:])
+			args, err := shortFormArgs("", rest)
+			if err != nil {
+				t.Module, t.Args = DynamicAction, map[string]interface{}{"_action": line}
+				return nil //nolint:nilerr // not key=value: rendered and parsed whole when it runs
+			}
+			args["_module"] = module
+			t.Module, t.Args = DynamicAction, args
+			return nil
+		}
+		module, rest, _ := strings.Cut(line, " ")
 		args, err := shortFormArgs(module, strings.TrimSpace(rest))
 		if err != nil {
-			return fmt.Errorf("local_action: %w", err)
+			return fmt.Errorf("%s: %w", keyword, err)
 		}
-		t.Module, t.Args = module, args
+		t.Module, t.Args = ShortModuleName(module), args
 	case map[string]interface{}:
 		module, _ := a["module"].(string)
 		if module == "" {
-			return fmt.Errorf("local_action: module is required")
+			return fmt.Errorf("%s: module is required", keyword)
 		}
-		t.Module, t.Args = module, map[string]interface{}{}
+		t.Module, t.Args = ShortModuleName(module), map[string]interface{}{}
+		if strings.Contains(module, "{{") {
+			t.Module = DynamicAction
+			t.Args["_module"] = module
+		}
 		for k, val := range a {
 			if k != "module" {
 				t.Args[k] = val
 			}
 		}
 	default:
-		return fmt.Errorf("local_action: expected a string or a map, got %T", v)
+		return fmt.Errorf("%s: expected a string or a map, got %T", keyword, v)
 	}
-	t.DelegateTo = "localhost"
 	return nil
 }
 

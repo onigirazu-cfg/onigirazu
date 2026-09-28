@@ -23,8 +23,17 @@ var collectionModules = map[string]string{
 func ShortModuleName(name string) string {
 	for _, prefix := range []string{"ansible.builtin.", "ansible.legacy."} {
 		if short, ok := strings.CutPrefix(name, prefix); ok {
-			return short
+			name = short
+			break
 		}
+	}
+	// dnf is yum's successor with the same arguments; the yum module runs
+	// whichever the host has
+	if name == "dnf" || name == "dnf5" {
+		return "yum"
+	}
+	if !strings.Contains(name, ".") {
+		return name
 	}
 	if short, ok := collectionModules[name]; ok {
 		return short
