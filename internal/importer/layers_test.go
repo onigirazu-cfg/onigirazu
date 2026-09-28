@@ -119,3 +119,23 @@ func TestTemplateOfRefusesJinja(t *testing.T) {
 	assert.True(t, ok)
 	assert.Equal(t, "host {{ import_hostname }}", string(tmpl))
 }
+
+func TestBaseline(t *testing.T) {
+	host := snap("web1", "10.0.0.1", "PKG\tnginx")
+	base := snap("clean", "10.0.0.9")
+	dir := t.TempDir()
+	rep, err := GenerateWith([]*Snapshot{host}, dir, Options{Baseline: base})
+	require.NoError(t, err)
+	names := taskNames(roleTasks(t, dir, "host_web1"))
+	assert.NotContains(t, names, "File /etc/motd.local", "the baseline has it too")
+	assert.Contains(t, names, "File /etc/app.conf", "differs from the baseline")
+	pkgs := roleTasks(t, dir, "host_web1")
+	var got []interface{}
+	for _, task := range pkgs {
+		if a, ok := task["apt"].(map[string]interface{}); ok {
+			got = a["name"].([]interface{})
+		}
+	}
+	assert.Equal(t, []interface{}{"nginx"}, got)
+	assert.Equal(t, 2, rep.Counts["same as the baseline"])
+}

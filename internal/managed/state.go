@@ -221,7 +221,7 @@ type Run struct {
 	// Adopt: a check run records the resources that exist (adopted) and
 	// leaves the missing ones to the first apply
 	Adopt bool
-	Now      time.Time
+	Now   time.Time
 }
 
 // Untargeted are the hosts with records that no play of a complete,

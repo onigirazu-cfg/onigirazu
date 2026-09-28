@@ -25,8 +25,31 @@ Left out, and listed in `IMPORT_REPORT.md`: files over 1 MiB, directories under 
 a host without systemd, and host identity and generated files (ssh host keys, machine-id,
 hostname, resolv.conf, CA bundles, systemd enablement links, cloud-init files, ...).
 
-Private keys and credential files are never written; the report lists them to be provided from a
-vault.
+## Secrets
+
+Values of settings like `password = ...`, `api_key: ...`, `DB_PASSWORD=...`, `requirepass ...` are
+taken out: the file becomes a template with `{{ secret_<file>_<key> }}` in their place, and the
+values are written nowhere. `secrets.example.yml` lists the variables (file, line, hosts) with empty
+values; provide them in host_vars/group_vars, with `-e @secrets.yml` or a vault lookup. The check
+run gets each host's values in memory only. Files with private keys (and files that hold secrets
+and Jinja-like braces) are not written at all; the report lists them.
+
+## Baseline
+
+```
+onigirazu import web1 -i hosts.yml -o imported/ --baseline clean1
+```
+
+`clean1` is a fresh install of the same system (a new VM from the same image). What it has too,
+the same, is not imported: packages the image brings, its default files, its accounts. What is
+left is what was done to the host.
+
+## Adopt
+
+`--adopt` records every imported resource that exists in the new playbook's managed state as
+adopted (see [MANAGED_STATE.md](MANAGED_STATE.md)): removing a task from the playbook later puts
+the resource back as it was on import instead of removing it. It is the same check run, with
+`apply --check --adopt`.
 
 ## Many hosts: shared roles
 
@@ -78,3 +101,5 @@ that picks the role's hosts (`'web' in group_names`, `inventory_hostname == 'db1
 | `-o DIR` | where to write (must be empty, or `--force`) |
 | `--no-verify` | do not plan the new playbook against the hosts |
 | `--no-become`, `--become-user` | collect as the login user / another user |
+| `--baseline HOST` | leave out what a fresh host of the same system has too |
+| `--adopt` | record the imported resources as adopted in the managed state |
