@@ -43,6 +43,7 @@ plays:
       - name: A command with literal braces
         command: "echo '{{ '{{' }} .Id {{ '}}' }}'"
         register: braces
+        changed_when: false
         loop: [one]
       - name: Loop over the registered results
         copy:
