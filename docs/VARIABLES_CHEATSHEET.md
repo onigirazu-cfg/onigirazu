@@ -74,6 +74,14 @@ Every fact exists under two names: `onigirazu_*` and the Ansible name `ansible_*
 {{ ansible_virtualization_role }}     # guest, or NA
 ```
 
+### Local facts
+
+```yaml
+{{ ansible_local.myapp.version }}     # /etc/ansible/facts.d/myapp.fact (JSON or INI)
+```
+
+Gathered with the other facts; `setup` reads them again after a task wrote one.
+
 ### User & Environment
 
 ```yaml

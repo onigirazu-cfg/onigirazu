@@ -2073,6 +2073,26 @@ Tags of the task are added to the role's tasks.
     tasks_from: install
 ```
 
+### setup
+
+Gathers the facts of the host again (also `gather_facts`), e.g. after a task
+wrote a local fact. The host's variables get the new facts; the result's
+`ansible_facts` holds those `filter` selects.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `filter` | string/list | all | Fact names or globs, e.g. `ansible_local`, `ansible_distribution*` |
+| `fact_path` | string | `/etc/ansible/facts.d` | Directory of the local facts |
+
+Local facts (`ansible_local`) are the `*.fact` files of `fact_path` by name:
+JSON, else INI sections, else text; an executable file is run and its output
+read. `gather_subset` is accepted and has no effect.
+
+```yaml
+- ansible.builtin.setup:
+    filter: ansible_local
+```
+
 ### meta
 
 Engine actions.

@@ -12,6 +12,7 @@ import (
 
 	"github.com/onigirazu-cfg/onigirazu/internal/expression"
 
+	"github.com/onigirazu-cfg/onigirazu/internal/cache"
 	"github.com/onigirazu-cfg/onigirazu/internal/facts"
 	"github.com/onigirazu-cfg/onigirazu/internal/interfaces"
 	"github.com/onigirazu-cfg/onigirazu/internal/metrics"
@@ -78,6 +79,7 @@ type ExecutionEngine struct {
 	// Execution context
 	variables map[string]interface{}
 	facts     map[string]map[string]interface{} // host -> facts
+	factsMu   sync.RWMutex
 	// host -> variables set at run time by register and set_fact
 	hostVars map[string]map[string]interface{}
 	mutex    sync.RWMutex
@@ -1046,6 +1048,9 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 	if err != nil {
 		return failed(fmt.Errorf("failed to render task arguments: %w", err))
 	}
+	if task.Module == "setup" || task.Module == "gather_facts" {
+		return e.runSetup(ctx, task, host, renderedArgs, playResult)
+	}
 
 	// Perform security validation
 	taskForValidation := types.Task{
@@ -1068,7 +1073,7 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 		Host:      host,
 		Task:      task,
 		Variables: taskVars,
-		Facts:     e.facts[host.Name],
+		Facts:     nil,
 	}
 
 	// environment: rendered with the task's variables
@@ -1511,66 +1516,16 @@ func (e *ExecutionEngine) gatherFacts(ctx context.Context, hosts []types.Host) e
 		if err != nil {
 			e.logger.Warn("Failed to gather facts from %s: %v", host.Name, err)
 			// Continue with basic facts on error
-			e.facts[host.Name] = map[string]interface{}{
+			e.setFacts(host.Name, map[string]interface{}{
 				"onigirazu_hostname": host.Name,
 				"onigirazu_host":     host.Address,
 				"onigirazu_port":     host.Port,
 				"onigirazu_user":     host.User,
-			}
+			})
 			continue
 		}
 
-		// Get current time for date_time facts
-		now := time.Now()
-
-		// Store facts in Onigirazu format
-		e.facts[host.Name] = map[string]interface{}{
-			// Basic host info
-			"onigirazu_hostname": host.Name,
-			"onigirazu_host":     host.Address,
-			"onigirazu_port":     host.Port,
-			"onigirazu_user":     host.User,
-
-			// System facts
-			"onigirazu_os_family":            systemFacts.OSFamily,
-			"onigirazu_distribution":         systemFacts.Distribution,
-			"onigirazu_distribution_version": systemFacts.OSVersion,
-			"onigirazu_architecture":         systemFacts.Architecture,
-			"onigirazu_kernel":               systemFacts.Kernel,
-			"onigirazu_kernel_version":       systemFacts.KernelVersion,
-			"onigirazu_fqdn":                 systemFacts.FQDN,
-			"onigirazu_processor_cores":      systemFacts.CPUCores,
-			"onigirazu_memtotal_mb":          systemFacts.MemTotalMB,
-			"onigirazu_default_ipv4": map[string]interface{}{
-				"address": systemFacts.DefaultIPv4,
-			},
-
-			// Date and time facts
-			"onigirazu_date_time": map[string]interface{}{
-				"iso8601":        now.Format(time.RFC3339),
-				"date":           now.Format("2006-01-02"),
-				"time":           now.Format("15:04:05"),
-				"year":           now.Year(),
-				"month":          int(now.Month()),
-				"day":            now.Day(),
-				"hour":           now.Hour(),
-				"minute":         now.Minute(),
-				"second":         now.Second(),
-				"epoch":          now.Unix(),
-				"weekday":        now.Weekday().String(),
-				"weekday_number": int(now.Weekday()),
-			},
-
-			// User and environment facts
-			"onigirazu_user_id": systemFacts.Username,
-			"onigirazu_env": map[string]interface{}{
-				"HOME": systemFacts.HomeDir,
-				"PATH": systemFacts.Path,
-			},
-		}
-		for k, v := range ansibleFacts(systemFacts, e.facts[host.Name]) {
-			e.facts[host.Name][k] = v
-		}
+		e.setFacts(host.Name, hostFacts(host, systemFacts))
 	}
 
 	// Log cache statistics
@@ -1581,6 +1536,78 @@ func (e *ExecutionEngine) gatherFacts(ctx context.Context, hosts []types.Host) e
 	}
 
 	return nil
+}
+
+// hostFacts are the variables the gathered facts of a host give: the
+// onigirazu_ names and the Ansible ones
+func hostFacts(host types.Host, systemFacts *cache.SystemFacts) map[string]interface{} {
+	// Get current time for date_time facts
+	now := time.Now()
+
+	// Store facts in Onigirazu format
+	facts := map[string]interface{}{
+		// Basic host info
+		"onigirazu_hostname": host.Name,
+		"onigirazu_host":     host.Address,
+		"onigirazu_port":     host.Port,
+		"onigirazu_user":     host.User,
+
+		// System facts
+		"onigirazu_os_family":            systemFacts.OSFamily,
+		"onigirazu_distribution":         systemFacts.Distribution,
+		"onigirazu_distribution_version": systemFacts.OSVersion,
+		"onigirazu_architecture":         systemFacts.Architecture,
+		"onigirazu_kernel":               systemFacts.Kernel,
+		"onigirazu_kernel_version":       systemFacts.KernelVersion,
+		"onigirazu_fqdn":                 systemFacts.FQDN,
+		"onigirazu_processor_cores":      systemFacts.CPUCores,
+		"onigirazu_memtotal_mb":          systemFacts.MemTotalMB,
+		"onigirazu_default_ipv4": map[string]interface{}{
+			"address": systemFacts.DefaultIPv4,
+		},
+
+		// Date and time facts
+		"onigirazu_date_time": map[string]interface{}{
+			"iso8601":        now.Format(time.RFC3339),
+			"date":           now.Format("2006-01-02"),
+			"time":           now.Format("15:04:05"),
+			"year":           now.Year(),
+			"month":          int(now.Month()),
+			"day":            now.Day(),
+			"hour":           now.Hour(),
+			"minute":         now.Minute(),
+			"second":         now.Second(),
+			"epoch":          now.Unix(),
+			"weekday":        now.Weekday().String(),
+			"weekday_number": int(now.Weekday()),
+		},
+
+		// User and environment facts
+		"onigirazu_user_id": systemFacts.Username,
+		"onigirazu_env": map[string]interface{}{
+			"HOME": systemFacts.HomeDir,
+			"PATH": systemFacts.Path,
+		},
+	}
+	for k, v := range ansibleFacts(systemFacts, facts) {
+		facts[k] = v
+	}
+	return facts
+}
+
+// setFacts replaces the facts of a host; setup runs on hosts in parallel
+func (e *ExecutionEngine) setFacts(host string, facts map[string]interface{}) {
+	e.factsMu.Lock()
+	e.facts[host] = facts
+	e.factsMu.Unlock()
+}
+
+// hostFactsOf returns the facts of a host, if gathered
+func (e *ExecutionEngine) hostFactsOf(host string) (map[string]interface{}, bool) {
+	e.factsMu.RLock()
+	defer e.factsMu.RUnlock()
+	facts, ok := e.facts[host]
+	return facts, ok
 }
 
 // getLoopItems gets items for loop execution
@@ -2176,8 +2203,8 @@ func (e *ExecutionEngine) hostVariables(host *types.Host, variables map[string]i
 	if _, ok := vars["onigirazu_host"]; !ok {
 		vars["onigirazu_host"] = host.Address
 	}
-	if hostFacts, exists := e.facts[host.Name]; exists {
-		vars = e.mergeVariables(vars, map[string]interface{}{"onigirazu_facts": hostFacts}, hostFacts)
+	if facts, exists := e.hostFactsOf(host.Name); exists {
+		vars = e.mergeVariables(vars, map[string]interface{}{"onigirazu_facts": facts}, facts)
 	}
 	return e.mergeVariables(vars, e.hostVars[host.Name], e.extraVars)
 }
