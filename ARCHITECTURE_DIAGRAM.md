@@ -236,6 +236,14 @@ Cons: Must remember defer exec.Close()
 └─────────────────┴────────────────┴────────────────┘
 ```
 
+### Work files on the host
+
+Commands run through a shell kept open on each connection. It keeps the
+output of each command in `~/.onigirazu/tmp/sh.XXXXXX` of the connecting user
+(as Ansible uses `~/.ansible/tmp`), removed when the connection closes. A task
+that cleans `/tmp` does not see these files; if something removes them anyway,
+the directory is created again for the next command.
+
 ### Performance Impact
 
 ```
