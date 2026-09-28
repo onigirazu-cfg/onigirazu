@@ -43,6 +43,7 @@ func (m *DockerComposeModule) Execute(ctx context.Context, host types.Host, args
 	}
 	defer exec.Close()
 
+	composeV2Args(args)
 	projectDir, ok := args["project_dir"].(string)
 	if !ok || projectDir == "" {
 		result.Success = false
@@ -261,4 +262,30 @@ func (m *DockerComposeModule) composeBuild(ctx context.Context, exec *executor.C
 	}
 
 	return nil
+}
+
+// composeV2Args reads the arguments of community.docker.docker_compose_v2:
+// project_src for project_dir, files for file, build and pull as policies
+// (always / missing / policy / never) instead of booleans
+func composeV2Args(args map[string]interface{}) {
+	if _, ok := args["project_dir"]; !ok {
+		if src, ok := args["project_src"].(string); ok {
+			args["project_dir"] = src
+		}
+	}
+	if files, ok := args["files"].([]interface{}); ok && len(files) > 0 {
+		if _, set := args["file"]; !set {
+			args["file"] = fmt.Sprint(files[0])
+		}
+	}
+	for _, key := range []string{"build", "pull"} {
+		if policy, ok := args[key].(string); ok {
+			switch policy {
+			case "always":
+				args[key] = true
+			case "never", "policy", "missing":
+				args[key] = false
+			}
+		}
+	}
 }

@@ -23,6 +23,7 @@ const maxCaptureSize = 1 << 20
 var captureModules = map[string][]string{
 	"copy": {"dest"}, "template": {"dest"}, "lineinfile": {"path", "dest", "name"},
 	"blockinfile": {"path", "dest", "name"}, "replace": {"path", "dest", "name"}, "file": {"path", "dest", "name"},
+	"ini_file": {"path", "dest"},
 }
 
 // captureBefore describes the target of a file module on the host before the
