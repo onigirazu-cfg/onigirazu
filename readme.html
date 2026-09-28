@@ -871,6 +871,15 @@ on the hosts where its <code>when</code> holds; the task's <code>vars</code> are
   when: upgrade | bool
 </code></pre>
 
+<p><code>import_playbook</code> puts the plays of another playbook in its place, relative to the importing file;
+<code>vars</code> on the import go to its plays (their own vars win), <code>tags</code> are added to them. Roles, includes,
+<code>vars_files</code> and task sources of an imported play start at the directory of its own file:</p>
+<pre class="codehilite"><code class="language-yaml">- import_playbook: playbooks/base.yml
+  vars: {env: prod}
+  tags: base
+- import_playbook: playbooks/web.yml
+</code></pre>
+
 <h3>Extra variables and limits</h3>
 <p><code>-e</code> sets variables that override all others: <code>-e env=prod -e version=1.2</code>,
 <code>-e '{"replicas": 3}'</code> or <code>-e @vars.yml</code> (repeatable, later ones win).
