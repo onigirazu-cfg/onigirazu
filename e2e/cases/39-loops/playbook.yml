@@ -32,3 +32,10 @@ plays:
           state: directory
         loop: [keep, skip]
         when: item != "skip"
+      # templates inside the items render, as Ansible templates the whole list
+      - name: Nested templates in items
+        copy:
+          content: "{{ item.value }}\n"
+          dest: "/root/onigirazu-e2e-loop/{{ item.name }}"
+        loop:
+          - {name: nested, value: "{{ ansible_os_family | lower }}"}

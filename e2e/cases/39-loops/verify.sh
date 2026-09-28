@@ -7,3 +7,5 @@ test "$(cat "$d/y.txt")" = "2/2 y $ID"
 test "$(cat "$d/results")" = 2
 test -d "$d/when-keep"
 test ! -e "$d/when-skip"
+case "$ID" in ubuntu) fam=debian ;; *) fam=redhat ;; esac
+test "$(cat "$d/nested")" = "$fam"
