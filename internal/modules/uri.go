@@ -165,11 +165,35 @@ func (m *URIModule) Execute(ctx context.Context, host types.Host, args map[strin
 		curl = append(curl, "--data-binary", "@-")
 		input = "printf '%s' " + shellQuote(body) + " | "
 	}
+	validateCerts := getBoolArg(args, "validate_certs", true)
+	if !validateCerts {
+		curl = append(curl, "-k")
+	}
 	curl = append(curl, shellQuote(url))
-	script := fmt.Sprintf(`b=$(mktemp); h=$(mktemp); trap 'rm -f "$b" "$h" %s' EXIT
-code=$(%s%s) || exit $?
-printf '%%s\n' "$code"; base64 < "$h" | tr -d '\n'; echo; base64 < "$b" | tr -d '\n'`,
-		shellQuote(credFile), input, strings.Join(curl, " "))
+	// without curl the request goes through the host's Python, as Ansible's
+	// uri does; it reads its parameters from a JSON file
+	pyParams, _ := json.Marshal(map[string]interface{}{"url": url, "method": method, "headers": headers,
+		"timeout": timeout, "cred": credFile, "body": body != "", "validate": validateCerts})
+	// the parameters go through a 0600 file like the credentials, not the
+	// command line
+	paramsFile := remoteTempName(".onigirazu-uri-p-", "")
+	if err := putPrivateFile(ctx, host, paramsFile, pyParams); err != nil {
+		result.Success = false
+		result.Error = fmt.Sprintf("failed to prepare the request: %v", err)
+		result.Duration = time.Since(startTime)
+		return result, nil
+	}
+	// the body reaches curl or Python on stdin, piped into the whole block
+	script := fmt.Sprintf(`b=$(mktemp); h=$(mktemp); trap 'rm -f "$b" "$h" %s %s' EXIT
+%s{ if command -v curl >/dev/null 2>&1; then
+code=$(%s) || exit $?
+printf '%%s\n' "$code"; base64 < "$h" | tr -d '\n'; echo; base64 < "$b" | tr -d '\n'
+else
+py=$(command -v python3 || command -v python) || { echo "uri needs curl or python3 on the host" >&2; exit 127; }
+"$py" -c %s %s
+fi; }`,
+		shellQuote(credFile), shellQuote(paramsFile), input, strings.Join(curl, " "),
+		shellQuote(uriPython), shellQuote(paramsFile))
 	out, err := runShellOnHost(ctx, host, args, script)
 	if err != nil {
 		result.Success = false
@@ -216,6 +240,9 @@ printf '%%s\n' "$code"; base64 < "$h" | tr -d '\n'; echo; base64 < "$b" | tr -d 
 	result.Output["status"] = statusCode
 	result.Output["url"] = url
 	result.Output["text"] = string(respBody)
+	if getBoolArg(args, "return_content", false) {
+		result.Output["content"] = string(respBody)
+	}
 	result.Output["headers"] = respHeaders
 	result.Output["elapsed"] = time.Since(startTime).Seconds()
 
@@ -234,6 +261,30 @@ func (m *URIModule) Validate(args map[string]interface{}) error {
 
 	return nil
 }
+
+// uriPython makes the request with urllib when the host has no curl and
+// prints what the curl branch prints: status, base64 headers, base64 body.
+// Credentials come from the same 0600 file as for curl.
+const uriPython = `import sys, json, base64, re, ssl, urllib.request, urllib.error
+p = json.load(open(sys.argv[1]))
+data = sys.stdin.buffer.read() if p["body"] else None
+req = urllib.request.Request(p["url"], data=data, method=p["method"])
+for k, v in p["headers"].items():
+    req.add_header(k, v)
+if p["cred"]:
+    m = re.search(r'user = "((?:[^"\\]|\\.)*)"', open(p["cred"]).read())
+    up = re.sub(r'\\(.)', r'\1', m.group(1))
+    req.add_header("Authorization", "Basic " + base64.b64encode(up.encode()).decode())
+ctx = None if p["validate"] else ssl._create_unverified_context()
+try:
+    r = urllib.request.urlopen(req, timeout=p["timeout"], context=ctx)
+    code, hdr, body = r.status, str(r.headers), r.read()
+except urllib.error.HTTPError as e:
+    code, hdr, body = e.code, str(e.headers), e.read()
+print(code)
+print(base64.b64encode(hdr.encode()).decode())
+print(base64.b64encode(body).decode())
+`
 
 // curlConfigEscape escapes a value for a double-quoted curl config string
 func curlConfigEscape(s string) string {
