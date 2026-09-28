@@ -507,7 +507,10 @@ onigirazu apply playbook.yml -v
 <li><code>--list-tasks --tags TAG1,TAG2</code> - Preview specific task tags</li>
 <li><code>--list-tasks --skip-tags TAG1</code> - Preview with tag exclusion</li>
 <li><code>--list-tasks --verbose</code> - Detailed task information</li>
+<li><code>--list-hosts</code> - The hosts of every play (with <code>--limit</code>), as <code>ansible-playbook --list-hosts</code> prints them</li>
+<li><code>--syntax-check</code> - Parse and validate the playbook, then exit</li>
 </ul>
+<p>Listings print only the listing on stdout; messages go to stderr.</p>
 <p>📚 See <a href="docs/LIST_TAGS_TASKS_GUIDE.md">Tag and Task Discovery Guide</a> for detailed examples</p>
 <h4><code>run</code> - Execute ad-hoc commands</h4>
 <pre class="codehilite"><code class="language-bash"># Simple ping
