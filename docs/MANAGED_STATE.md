@@ -105,6 +105,7 @@ ID); a second apply of the same playbook fails at once, or waits with `--lock-ti
 In S3 the lock is an object per run under `<state>.lock/`: a run holds it when a listing right
 after its write shows no other. It needs no conditional writes (Garage ignores `If-None-Match`),
 only read-after-write consistency, which AWS, Garage and MinIO have.
+`scripts/garage-s3-test.sh` checks the S3 store and its lock against a throwaway Garage (CI runs it).
 `plan` and `drift` do not lock. A lock left by a run that died:
 
 ```
