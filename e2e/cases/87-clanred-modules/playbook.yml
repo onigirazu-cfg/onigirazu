@@ -77,3 +77,20 @@
         that:
           - e2e_alias.stat.exists
           - e2e_alias.stat.mode == '0640'
+
+    - name: Root account from getent
+      ansible.builtin.getent:
+        database: passwd
+        key: root
+
+    - name: getent fact
+      ansible.builtin.assert:
+        that:
+          - getent_passwd.root[1] == '0'
+          - getent_passwd.root | length == 6
+
+    - name: A missing key fails unless fail_key is off
+      ansible.builtin.getent:
+        database: passwd
+        key: onigirazu-no-such-user
+        fail_key: false

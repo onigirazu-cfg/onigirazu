@@ -102,3 +102,10 @@ func TestPipSpec(t *testing.T) {
 	assert.Equal(t, "2.0", m[4])
 	assert.Equal(t, "zope-interface", normalizePip("Zope.Interface"))
 }
+
+func TestParseGetent(t *testing.T) {
+	got := parseGetent("root:x:0:0:root:/root:/bin/bash\n", "passwd", "")
+	assert.Equal(t, []interface{}{"x", "0", "0", "root", "/root", "/bin/bash"}, got["root"])
+	hosts := parseGetent("127.0.0.1       localhost ip6-localhost\n", "hosts", "")
+	assert.Equal(t, []interface{}{"localhost", "ip6-localhost"}, hosts["127.0.0.1"])
+}

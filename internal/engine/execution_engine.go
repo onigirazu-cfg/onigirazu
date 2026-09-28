@@ -1316,7 +1316,7 @@ func (e *ExecutionEngine) finishTask(task *types.Task, host *types.Host, result 
 			e.setHostVar(host.Name, prefix+"_failed_result", failedResult)
 		}
 	}
-	if (task.Module == "set_fact" || task.Module == "include_vars") && !real.Failed {
+	if (task.Module == "set_fact" || task.Module == "include_vars" || task.Module == "getent") && !real.Failed {
 		if facts, ok := real.Output["onigirazu_facts"].(map[string]interface{}); ok {
 			for key, value := range facts {
 				e.setHostVar(host.Name, key, value)
