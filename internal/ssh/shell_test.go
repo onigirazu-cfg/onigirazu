@@ -112,3 +112,32 @@ func TestExecOnClosedClient(t *testing.T) {
 		t.Fatal("Exec did not return")
 	}
 }
+
+// the work files live under ~/.onigirazu/tmp, not in /tmp, and a command
+// that removes them does not break the next one
+func TestRemoteShellWorkDir(t *testing.T) {
+	home := t.TempDir()
+	cmd := exec.Command("sh", "-c", shellScript)
+	cmd.Env = append(cmd.Environ(), "HOME="+home)
+	stdin, err := cmd.StdinPipe()
+	require.NoError(t, err)
+	out, err := cmd.StdoutPipe()
+	require.NoError(t, err)
+	require.NoError(t, cmd.Start())
+	defer func() { _ = stdin.Close(); _ = cmd.Wait() }()
+	s := &remoteShell{stdin: stdin, stdout: bufio.NewReader(out)}
+	_, err = s.stdout.ReadString('\n')
+	require.NoError(t, err)
+
+	o, _, _, err := s.run("ls \"$HOME/.onigirazu/tmp\" | grep -c '^sh\\.'", false)
+	require.NoError(t, err)
+	assert.Equal(t, "1\n", string(o))
+
+	_, _, rc, err := s.run("rm -rf \"$HOME/.onigirazu\"", false)
+	require.NoError(t, err)
+	assert.Equal(t, 0, rc)
+	o, _, rc, err = s.run("echo after", false)
+	require.NoError(t, err)
+	assert.Equal(t, 0, rc)
+	assert.Equal(t, "after\n", string(o))
+}
