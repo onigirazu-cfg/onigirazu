@@ -1627,11 +1627,35 @@ func (e *ExecutionEngine) getLoopItems(ctx context.Context, loop *types.Loop, va
 		return expression.Items(value)
 	}
 
+	if loop.Lookup != "" {
+		return e.lookupLoopItems(ctx, loop, variables)
+	}
+
 	if loop.Range != "" {
 		return e.parseRange(ctx, loop.Range)
 	}
 
 	return nil, fmt.Errorf("loop must specify either items or range")
+}
+
+// lookupLoopItems runs the lookup of a with_<lookup> loop: its terms are
+// rendered with the host's variables ("{{ a_list }}" stays a list), a
+// single term is a list of one, and relative paths start at playbook_dir
+func (e *ExecutionEngine) lookupLoopItems(ctx context.Context, loop *types.Loop, variables map[string]interface{}) ([]interface{}, error) {
+	rendered, err := e.templateEngine.RenderTaskArgs(ctx, map[string]interface{}{"terms": loop.Terms}, variables)
+	if err != nil {
+		return nil, fmt.Errorf("with_%s: %w", loop.Lookup, err)
+	}
+	terms, ok := rendered["terms"].([]interface{})
+	if !ok {
+		terms = []interface{}{rendered["terms"]}
+	}
+	dir, _ := variables["playbook_dir"].(string)
+	items, err := expression.LookupItems(dir, variables, loop.Lookup, terms)
+	if err != nil {
+		return nil, fmt.Errorf("with_%s: %w", loop.Lookup, err)
+	}
+	return items, nil
 }
 
 // renderLoopItems renders the templates inside the items written in the

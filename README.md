@@ -145,8 +145,8 @@ Existing Ansible content runs as it is in most cases. What is supported:
   `vars`, `vars_files`, `environment`, `serial`, `max_fail_percentage`, `any_errors_fatal`,
   `force_handlers`; `import_playbook`, `include_tasks`/`import_tasks`,
   `include_role`/`import_role`, `block`/`rescue`/`always`
-- **Task keywords**: `when`, `loop` (also `with_items`, `with_list`, `with_dict`,
-  `with_sequence`), `loop_control`, `register`, `until`/`retries`/
+- **Task keywords**: `when`, `loop` and `with_*` (items, list, dict, sequence, nested,
+  together, subelements, indexed_items, file, fileglob, first_found, lines, ...), `loop_control`, `register`, `until`/`retries`/
   `delay`, `changed_when`, `failed_when`, `ignore_errors`, `notify`/`listen`, `tags`,
   `become`/`become_user`, `delegate_to`, `local_action`, `run_once`, `throttle`, `no_log`,
   `check_mode`, `diff`, `vars`, `environment`, `action` (also with a templated module name)
@@ -231,10 +231,11 @@ Guides: [variables](docs/VARIABLES_CHEATSHEET.md), [filters, tests and lookups](
   when: ansible_os_family in packages
 ```
 
-`loop` takes a list or an expression; `with_items`, `with_list`, `with_dict`, `with_sequence`
-and `loop_control` (`loop_var`, `index_var`, `label`) work too; other `with_*` forms do not
-(use `loop` with filters such as `product` or `zip`). See
-[docs/LOOPS_GUIDE.md](docs/LOOPS_GUIDE.md).
+`loop` takes a list or an expression. The `with_*` forms work as in Ansible: `with_items`,
+`with_list`, `with_dict`, `with_sequence`, and `with_<lookup>` for `nested`, `together`,
+`subelements`, `indexed_items`, `random_choice`, `file`, `fileglob`, `first_found`, `lines`,
+`pipe`, `env`, `template`; an unknown `with_*` is an error. `loop_control` takes `loop_var`
+and `index_var` (`label` is accepted and ignored). See [docs/LOOPS_GUIDE.md](docs/LOOPS_GUIDE.md).
 
 ### Roles, includes and imports
 

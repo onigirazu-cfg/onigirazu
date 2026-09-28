@@ -10,3 +10,4 @@ test ! -e "$d/when-skip"
 case "$ID" in ubuntu) fam=debian ;; *) fam=redhat ;; esac
 test "$(cat "$d/nested")" = "$fam"
 test "$(cat "$d/braces")" = "{{ .Id }}"
+test "$(cat "$d/with")" = "$(printf '%s\n' 'combinations 4' 'nested 1-a' 'nested 1-b' 'nested 2-a' 'nested 2-b' 'together a-1' 'together b-2' 'sub ann-k1' 'sub ann-k2' 'sub bob-k3' 'indexed 0-x' 'indexed 1-y')"
