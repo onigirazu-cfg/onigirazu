@@ -384,3 +384,23 @@ func TestValidatePlayTasksCoversRolesAndSections(t *testing.T) {
 		t.Errorf("clean play: %v", err)
 	}
 }
+
+func TestRoleCollectionModulesWarn(t *testing.T) {
+	v := NewModuleSyntaxValidator([]string{"debug"})
+	role := &types.Role{Name: "r", Tasks: []types.Task{{Name: "mac", Module: "community.general.homebrew"}}}
+	pb := &types.Playbook{Plays: []types.Play{{RoleObjects: []*types.Role{role}}}}
+	if err := v.ValidatePlaybookModules(pb); err != nil {
+		t.Fatalf("a collection module in a role must only warn: %v", err)
+	}
+	if len(v.Warnings) != 1 {
+		t.Errorf("warnings = %v", v.Warnings)
+	}
+	role.Tasks[0].Module = "copyy"
+	if err := v.ValidatePlaybookModules(pb); err == nil {
+		t.Error("a misspelled module in a role is an error")
+	}
+	play := &types.Playbook{Plays: []types.Play{{Tasks: []types.Task{{Module: "community.general.homebrew"}}}}}
+	if err := v.ValidatePlaybookModules(play); err == nil {
+		t.Error("in the playbook itself it stays an error")
+	}
+}

@@ -116,6 +116,9 @@ func (p *EnhancedParser) ParsePlaybook(ctx context.Context, filePath string) (*t
 		if err := p.moduleSyntaxValidator.ValidatePlaybookModules(&playbook); err != nil {
 			return nil, fmt.Errorf("module syntax validation failed: %w", err)
 		}
+		for _, w := range p.moduleSyntaxValidator.Warnings {
+			p.logger.Warn("%s", w)
+		}
 	}
 
 	p.logger.Info("Successfully parsed playbook: %s (%d plays)", filePath, len(playbook.Plays))

@@ -10,6 +10,10 @@ import (
 // ModuleSyntaxValidator validates module syntax and existence
 type ModuleSyntaxValidator struct {
 	validModules map[string]bool
+	// Warnings of the last ValidatePlaybookModules: collection modules a
+	// role uses that onigirazu lacks; the task fails only if it runs
+	Warnings  []string
+	roleDepth int
 }
 
 // NewModuleSyntaxValidator creates a new module syntax validator
@@ -77,6 +81,8 @@ func (m *ModuleSyntaxValidator) validateRole(role *types.Role, playIndex int) er
 	if role == nil {
 		return nil
 	}
+	m.roleDepth++
+	defer func() { m.roleDepth-- }()
 	for _, list := range [][]types.Task{role.Tasks, role.Handlers} {
 		if err := m.validateTaskList(list, playIndex); err != nil {
 			return fmt.Errorf("role %s: %w", role.Name, err)
@@ -98,7 +104,13 @@ func (m *ModuleSyntaxValidator) validateTaskList(tasks []types.Task, playIndex i
 			continue
 		}
 		if err := m.ValidateTaskModule(task, playIndex, i); err != nil {
-			return err
+			// a role written for many systems names collection modules for
+			// the others (community.general.homebrew under a when): Ansible
+			// has the collection installed, onigirazu fails the task if it runs
+			if m.roleDepth == 0 || !isCollectionModule(task.Module) {
+				return err
+			}
+			m.Warnings = append(m.Warnings, fmt.Sprintf("task %q uses %s, which onigirazu lacks; it fails if it runs", task.Name, task.Module))
 		}
 		if err := m.validateRole(task.IncludedRole, playIndex); err != nil {
 			return err
@@ -107,8 +119,15 @@ func (m *ModuleSyntaxValidator) validateTaskList(tasks []types.Task, playIndex i
 	return nil
 }
 
+// isCollectionModule tells a namespace.collection.module name of a
+// collection other than ansible.builtin
+func isCollectionModule(name string) bool {
+	return strings.Count(name, ".") >= 2 && !strings.HasPrefix(name, "ansible.builtin.") && !strings.HasPrefix(name, "ansible.legacy.")
+}
+
 // ValidatePlaybookModules validates all modules in playbook
 func (m *ModuleSyntaxValidator) ValidatePlaybookModules(playbook *types.Playbook) error {
+	m.Warnings = nil
 	for i, play := range playbook.Plays {
 		if err := m.ValidatePlayTasks(&play, i); err != nil {
 			return err
