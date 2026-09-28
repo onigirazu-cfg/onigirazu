@@ -70,6 +70,8 @@ Every fact exists under two names: `onigirazu_*` and the Ansible name `ansible_*
 ```yaml
 {{ ansible_processor_vcpus }}         # 16 (also ansible_processor_cores, onigirazu_processor_cores)
 {{ onigirazu_memtotal_mb }}           # 15970 (also ansible_memtotal_mb)
+{{ ansible_virtualization_type }}     # docker, podman, lxc, kvm, VMware, ... or NA
+{{ ansible_virtualization_role }}     # guest, or NA
 ```
 
 ### User & Environment

@@ -22,6 +22,10 @@ type SystemFacts struct {
 	MemTotalMB  int    `json:"memtotal_mb"`
 	OSCodename  string `json:"os_codename"`
 
+	// Virtualization, with Ansible's values: docker, kvm, VMware, ... or NA
+	VirtualizationType string `json:"virtualization_type"`
+	VirtualizationRole string `json:"virtualization_role"`
+
 	// Network
 	FQDN        string `json:"fqdn"`
 	DefaultIPv4 string `json:"default_ipv4"`

@@ -67,6 +67,8 @@ func (g *Gatherer) GatherFacts(ctx context.Context, host types.Host) (*cache.Sys
 		return nil, fmt.Errorf("failed to gather hardware info: %w", err)
 	}
 
+	g.gatherVirtualization(client, facts)
+
 	// Gather network information
 	if err := g.gatherNetworkInfo(client, facts); err != nil {
 		return nil, fmt.Errorf("failed to gather network info: %w", err)
@@ -308,6 +310,51 @@ func (g *Gatherer) gatherHardwareInfo(client commandRunner, facts *cache.SystemF
 	}
 
 	return nil
+}
+
+// virtScript prints what the host runs in: container markers first, as
+// Ansible checks them, then systemd-detect-virt
+const virtScript = `if [ -f /.dockerenv ] || grep -qa docker /proc/1/cgroup 2>/dev/null; then echo docker
+elif [ -f /run/.containerenv ]; then echo podman
+elif grep -qa 'container=lxc' /proc/1/environ 2>/dev/null; then echo lxc
+elif command -v systemd-detect-virt >/dev/null 2>&1; then systemd-detect-virt 2>/dev/null || echo none
+else echo none; fi`
+
+// gatherVirtualization sets ansible_virtualization_type and _role; a host
+// without a hypervisor or container gets NA, as in Ansible
+func (g *Gatherer) gatherVirtualization(client commandRunner, facts *cache.SystemFacts) {
+	facts.VirtualizationType, facts.VirtualizationRole = "NA", "NA"
+	if facts.Kernel != "Linux" {
+		return
+	}
+	out, err := client.ExecuteCommand(virtScript)
+	if err != nil {
+		return
+	}
+	if kind := virtualizationType(strings.TrimSpace(out)); kind != "" {
+		facts.VirtualizationType, facts.VirtualizationRole = kind, "guest"
+	}
+}
+
+// virtualizationType maps systemd-detect-virt names to Ansible's
+func virtualizationType(name string) string {
+	switch name {
+	case "", "none":
+		return ""
+	case "vmware":
+		return "VMware"
+	case "oracle":
+		return "virtualbox"
+	case "microsoft":
+		return "hyperv"
+	case "xen", "xen-hvm":
+		return "xen"
+	case "lxc", "lxc-libvirt":
+		return "lxc"
+	case "systemd-nspawn":
+		return "systemd-nspawn"
+	}
+	return name
 }
 
 // gatherNetworkInfo collects network information

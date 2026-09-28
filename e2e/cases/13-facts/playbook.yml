@@ -22,3 +22,7 @@ plays:
         copy:
           content: "{{ onigirazu_distribution }} {{ onigirazu_distribution_version }} {{ onigirazu_os_family }}\n"
           dest: /root/onigirazu-e2e-gathered
+      - name: Write virtualization facts
+        copy:
+          content: "{{ ansible_virtualization_type }} {{ ansible_virtualization_role }}\n"
+          dest: /root/onigirazu-e2e-virt
