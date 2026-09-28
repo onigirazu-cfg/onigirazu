@@ -360,3 +360,27 @@ func stringContains(s, substr string) bool {
 	}
 	return false
 }
+
+func TestValidatePlayTasksCoversRolesAndSections(t *testing.T) {
+	v := NewModuleSyntaxValidator([]string{"debug", "include_role"})
+	bad := types.Task{Name: "bad", Module: "no_such_module"}
+	ok := types.Task{Name: "ok", Module: "debug"}
+	cases := map[string]types.Play{
+		"pre_tasks":     {PreTasks: []types.Task{bad}},
+		"post_tasks":    {PostTasks: []types.Task{bad}},
+		"handlers":      {Handlers: []types.Task{bad}},
+		"role tasks":    {RoleObjects: []*types.Role{{Name: "r", Tasks: []types.Task{ok, bad}}}},
+		"role handlers": {RoleObjects: []*types.Role{{Name: "r", Handlers: []types.Task{bad}}}},
+		"include_role": {Tasks: []types.Task{{Module: "include_role",
+			IncludedRole: &types.Role{Name: "inc", Tasks: []types.Task{bad}}}}},
+	}
+	for name, play := range cases {
+		if err := v.ValidatePlayTasks(&play, 0); err == nil {
+			t.Errorf("%s: unknown module not reported", name)
+		}
+	}
+	clean := types.Play{Tasks: []types.Task{ok}, RoleObjects: []*types.Role{{Name: "r", Tasks: []types.Task{ok}}}}
+	if err := v.ValidatePlayTasks(&clean, 0); err != nil {
+		t.Errorf("clean play: %v", err)
+	}
+}

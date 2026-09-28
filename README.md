@@ -440,6 +440,10 @@ onigirazu validate playbook.yml
 onigirazu validate playbook.yml -i inventory.yml
 ```
 
+Every module name is checked: tasks, pre and post tasks, handlers, and the
+tasks and handlers of the roles, included ones too. As in Ansible, an unknown
+module fails the playbook even when its task would be skipped.
+
 #### `diff` - Show differences
 
 ```bash
