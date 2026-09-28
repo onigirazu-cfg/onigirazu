@@ -13,7 +13,7 @@ func TestResolveDynamicAction(t *testing.T) {
 	task, err := resolveDynamicAction(&types.Task{Name: "x", Module: types.DynamicAction,
 		Args: map[string]interface{}{"_action": `dnf name="gcc make" state=present`}})
 	require.NoError(t, err)
-	assert.Equal(t, "dnf", task.Module)
+	assert.Equal(t, "yum", task.Module, "dnf runs the yum module")
 	assert.Equal(t, "gcc make", task.Args["name"])
 	assert.Equal(t, "present", task.Args["state"])
 
