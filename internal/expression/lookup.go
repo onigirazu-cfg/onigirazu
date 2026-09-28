@@ -37,7 +37,7 @@ func lookupItems(base, varsArg interface{}, args []interface{}) ([]interface{}, 
 	}
 	plugin, terms := fmt.Sprint(args[0]), args[1:]
 	// lookup('ansible.builtin.env', ...) is lookup('env', ...)
-	plugin = strings.TrimPrefix(plugin, "ansible.builtin.")
+	plugin = strings.TrimPrefix(strings.TrimPrefix(plugin, "ansible.builtin."), "community.general.")
 	var out []interface{}
 	switch plugin {
 	case "env":
@@ -147,6 +147,8 @@ func lookupItems(base, varsArg interface{}, args []interface{}) ([]interface{}, 
 			return []interface{}{}, nil
 		}
 		return []interface{}{items[rand.IntN(len(items))]}, nil // #nosec G404 -- not for security
+	case "bitwarden":
+		return bitwardenLookup(terms)
 	default:
 		return nil, fmt.Errorf("lookup plugin %q is not supported", plugin)
 	}

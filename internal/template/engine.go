@@ -182,7 +182,7 @@ func (e *Engine) Render(ctx context.Context, templateStr string, variables map[s
 	if opts.trim {
 		templateStr = blockTagNewline.ReplaceAllString(templateStr, "$1")
 	}
-	templateStr, values := evalBlocks(templateStr, variables)
+	templateStr, values, exprErr := evalBlocks(templateStr, variables)
 	if !strings.Contains(templateStr, "{{") && !strings.Contains(templateStr, "{%") {
 		return restoreLoops(restoreBlocks(templateStr, values), loops), nil
 	}
@@ -196,6 +196,11 @@ func (e *Engine) Render(ctx context.Context, templateStr string, variables map[s
 	// Get or parse template from cache
 	tmpl, err := e.templateCache.GetOrParse(ctx, converted, e.funcMap)
 	if err != nil {
+		// the expression's own error says more (a locked vault, a
+		// missing file) than the fallback's
+		if exprErr != nil {
+			return "", exprErr
+		}
 		return "", fmt.Errorf("failed to parse template: %w", err)
 	}
 
@@ -204,6 +209,9 @@ func (e *Engine) Render(ctx context.Context, templateStr string, variables map[s
 	defer bufferpool.PutBytesBuffer(buf)
 
 	if err := tmpl.Execute(buf, variables); err != nil {
+		if exprErr != nil {
+			return "", exprErr
+		}
 		return "", fmt.Errorf("failed to execute template: %w", err)
 	}
 
@@ -300,10 +308,11 @@ func exprBlockEnd(text string, from int) int {
 // output is never parsed as a template. Blocks the evaluator cannot handle,
 // such as Go template syntax ({{ .var }}, {{ add .a 1 }}) or undefined
 // names, stay for the Go template path. For loops are expanded before this.
-func evalBlocks(text string, variables map[string]interface{}) (string, []string) {
+func evalBlocks(text string, variables map[string]interface{}) (string, []string, error) {
 	if !strings.Contains(text, "{{") && !strings.Contains(text, "{%") {
-		return text, nil
+		return text, nil, nil
 	}
+	var firstErr error
 	// {% if %} / {% elif %} conditions become literals the Go path accepts
 	text = ifBlock.ReplaceAllStringFunc(text, func(block string) string {
 		m := ifBlock.FindStringSubmatch(block)
@@ -321,13 +330,16 @@ func evalBlocks(text string, variables map[string]interface{}) (string, []string
 			return block
 		}
 		value, err := expression.Eval(inner, variables)
+		if err != nil && firstErr == nil {
+			firstErr = fmt.Errorf("%s: %w", inner, err)
+		}
 		if err != nil || value == nil {
 			return block
 		}
 		values = append(values, formatValue(value))
 		return fmt.Sprintf("\x00%d\x00", len(values)-1)
 	})
-	return out, values
+	return out, values, firstErr
 }
 
 func restoreBlocks(text string, values []string) string {

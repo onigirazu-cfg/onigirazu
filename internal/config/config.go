@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/onigirazu-cfg/onigirazu/internal/secrets"
+
 	"gopkg.in/yaml.v3"
 )
 
@@ -87,6 +89,10 @@ type Config struct {
 
 	// ManagedState is where each playbook's managed state lives
 	ManagedState ManagedStateConfig `yaml:"managed_state" json:"managed_state"`
+
+	// Secrets configures the secret providers templates read with
+	// bitwarden(), vault() and secret(); credentials come from the environment
+	Secrets secrets.Config `yaml:"secrets" json:"secrets"`
 
 	// Warnings about the file: unknown keys, keys that have no effect
 	Warnings []string `yaml:"-" json:"-"`

@@ -19,6 +19,7 @@ type VaultClient struct {
 	client    *api.Client
 	cache     *secretCache
 	namespace string
+	mount     string
 }
 
 // secretCache holds cached secrets with TTL
@@ -55,6 +56,11 @@ func NewVaultClient(config map[string]interface{}) (*VaultClient, error) {
 
 	// Optional namespace
 	namespace, _ := config["namespace"].(string)
+	// the KV version 2 engine the secrets are read from
+	mount, _ := config["mount"].(string)
+	if mount == "" {
+		mount = "secret"
+	}
 
 	// Create Vault API client
 	vaultConfig := &api.Config{
@@ -101,6 +107,7 @@ func NewVaultClient(config map[string]interface{}) (*VaultClient, error) {
 		token:     token,
 		client:    client,
 		namespace: namespace,
+		mount:     mount,
 		cache: &secretCache{
 			data:   make(map[string]cachedSecret),
 			ttl:    cacheTTL,
@@ -125,7 +132,7 @@ func (vc *VaultClient) GetSecret(ctx context.Context, path, field string) (strin
 	}
 
 	// Read secret from Vault
-	secret, err := vc.client.KVv2("secret").Get(ctx, path)
+	secret, err := vc.client.KVv2(vc.mount).Get(ctx, path)
 	if err != nil {
 		return "", &ProviderError{
 			Provider: "vault",

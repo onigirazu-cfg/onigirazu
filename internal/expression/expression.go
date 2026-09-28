@@ -26,7 +26,7 @@ var (
 	// map(attribute='x') has a keyword argument, which expr does not
 	mapAttribute = regexp.MustCompile(`\bmap\(\s*attribute\s*=\s*`)
 	// keyword arguments of random/shuffle become "name", value pairs
-	randomKeyword = regexp.MustCompile(`\b(seed|start|step|default)\s*=([^=]|$)`)
+	randomKeyword = regexp.MustCompile(`\b(seed|start|step|default|field)\s*=([^=]|$)`)
 	// d.keys() and d.values() are Python methods
 	dictMethod = regexp.MustCompile(`\.(keys|values)\(\)`)
 	// lookup() and query() get the playbook directory as their first argument
@@ -89,6 +89,32 @@ func compile(expression string) (*vm.Program, error) {
 		expr.Patch(inPatch{}),
 		expr.Patch(methodPatch{}),
 		expr.Function("jinja_method", callMethod),
+		expr.Function("bitwarden", func(params ...interface{}) (interface{}, error) {
+			if len(params) == 0 {
+				return nil, fmt.Errorf("bitwarden(item, field) needs an item")
+			}
+			field := "password"
+			if len(params) > 1 {
+				field = fmt.Sprint(params[1])
+			}
+			return secretValue("bitwarden", fmt.Sprint(params[0]), field)
+		}),
+		expr.Function("vault", func(params ...interface{}) (interface{}, error) {
+			if len(params) == 0 {
+				return nil, fmt.Errorf("vault(path, field) needs a path")
+			}
+			field := ""
+			if len(params) > 1 {
+				field = fmt.Sprint(params[1])
+			}
+			return secretValue("vault", fmt.Sprint(params[0]), field)
+		}),
+		expr.Function("secret", func(params ...interface{}) (interface{}, error) {
+			if len(params) < 3 {
+				return nil, fmt.Errorf("secret(provider, item, field) needs three arguments")
+			}
+			return secretValue(fmt.Sprint(params[0]), fmt.Sprint(params[1]), fmt.Sprint(params[2]))
+		}),
 		expr.Function("jinja_in", func(params ...interface{}) (interface{}, error) {
 			return contains(params[1], params[0]), nil
 		}),

@@ -10,6 +10,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/onigirazu-cfg/onigirazu/internal/expression"
+	"github.com/onigirazu-cfg/onigirazu/internal/secrets"
+
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 	"gopkg.in/yaml.v2"
@@ -190,6 +193,9 @@ Examples:
 				return fmt.Errorf("failed to load configuration: %w", err)
 			}
 			parser.SetRoleSearch(cfg.RolesPath, cfg.CollectionsPath)
+			secretResolver := secrets.NewResolver(cfg.Secrets)
+			expression.SecretLookup = secretResolver.Get
+			defer func() { _ = secretResolver.Close() }()
 
 			// Override config with command line flags
 			if verbose {

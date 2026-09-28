@@ -171,7 +171,8 @@ Existing Ansible content runs as it is in most cases. What is supported:
   `to_json`/`from_yaml`, `ternary`, set operations, `password_hash`, ...), tests (`is defined`,
   `is version`, `is success`/`failed`/`changed`/`skipped`, `is match`/`search`, ...), `~`,
   inline `if`, `omit`, Python string/dict/list methods (`.split()`, `.get()`), lookups
-  (`env`, `file`, `pipe`, `template`, `fileglob`, `first_found`, ...), `{% set %}`
+  (`env`, `file`, `pipe`, `template`, `fileglob`, `first_found`, `community.general.bitwarden`,
+  ...), `{% set %}`
 - **Facts and variables**: `ansible_facts` and the `ansible_*` names (distribution, OS family,
   hostname, IP, memory, virtualization, `ansible_pkg_mgr`, `ansible_local` from
   `/etc/ansible/facts.d`), `setup`, `hostvars`, `groups`, `group_names`, `inventory_hostname`,
@@ -481,6 +482,9 @@ Without a terminal the normal output is used. See [docs/INTERACTIVE_MODE.md](doc
   `ansible_ssh_common_args: -o StrictHostKeyChecking=no`) turns the check off.
 - Passwords (`ansible_password`, `ansible_become_password`) never appear on command lines;
   sudo reads them on stdin. `no_log: true` keeps a task's values out of logs, state and output.
+- Secrets come from Bitwarden/Vaultwarden (`bw` CLI, `BW_SESSION`) or HashiCorp Vault when a
+  template uses them: `{{ bitwarden('app-db') }}`, `{{ vault('app/db', 'password') }}`,
+  `lookup('community.general.bitwarden', ...)`. See [docs/BITWARDEN_INTEGRATION.md](docs/BITWARDEN_INTEGRATION.md).
 - An optional security policy restricts modules, hosts, paths and commands:
   [docs/SECURITY_POLICY_GUIDE.md](docs/SECURITY_POLICY_GUIDE.md).
 - Work files on the hosts live in `~/.onigirazu/tmp` of the connecting user.
