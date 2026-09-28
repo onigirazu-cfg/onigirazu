@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/onigirazu-cfg/onigirazu/internal/interfaces"
+	"github.com/onigirazu-cfg/onigirazu/internal/template"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
@@ -725,7 +726,7 @@ func (m *Manager) hostView(host *types.Host) types.Host {
 	for k, v := range host.Vars {
 		hostCopy.Vars[k] = v
 	}
-	applyGroupConnectionVars(&hostCopy, host, merged)
+	applyGroupConnectionVars(&hostCopy, host, renderConnectionVars(merged, hostCopy.Vars))
 	if len(m.connOverrides) > 0 {
 		empty := types.Host{Name: host.Name, Vars: map[string]interface{}{}}
 		applyGroupConnectionVars(&hostCopy, &empty, m.connOverrides)
@@ -1157,4 +1158,35 @@ func (m *Manager) SetConnectionOverrides(extraVars map[string]interface{}) {
 			m.connOverrides[name] = v
 		}
 	}
+}
+
+// connectionTemplates renders the templated connection variables
+// (ansible_port: "{{ ssh_port }}")
+var connectionTemplates = template.NewEngine()
+
+// renderConnectionVars returns vars with its templated connection variables
+// rendered with the host's variables; the rest is left as it is
+func renderConnectionVars(vars, hostVars map[string]interface{}) map[string]interface{} {
+	var out map[string]interface{}
+	for _, name := range connectionVarNames {
+		s, ok := vars[name].(string)
+		if !ok || !strings.Contains(s, "{{") {
+			continue
+		}
+		rendered, err := connectionTemplates.Render(context.Background(), s, hostVars)
+		if err != nil {
+			continue
+		}
+		if out == nil {
+			out = make(map[string]interface{}, len(vars))
+			for k, v := range vars {
+				out[k] = v
+			}
+		}
+		out[name] = strings.TrimSpace(rendered)
+	}
+	if out == nil {
+		return vars
+	}
+	return out
 }

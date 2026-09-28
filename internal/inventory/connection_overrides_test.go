@@ -54,3 +54,29 @@ func TestConnectionVars(t *testing.T) {
 	assert.Equal(t, "bp", become)
 	assert.Equal(t, 2222, port)
 }
+
+func TestTemplatedConnectionVars(t *testing.T) {
+	dir := t.TempDir()
+	writeFiles(t, dir, map[string]string{"hosts.yml": `all:
+  vars:
+    ssh_port: 22582
+    ansible_port: "{{ ssh_port }}"
+    admin: usx
+    ansible_user: "{{ admin }}"
+  hosts:
+    h1: {ansible_host: 10.0.0.1}
+    h2: {ansible_host: 10.0.0.2, ssh_port: 22}
+`})
+	p := parser.NewEnhancedParser(nil, &mockLogger{})
+	inv, err := NewMultiSourceLoader(p, &mockLogger{}, newMockCache(), 0).
+		LoadFromMultipleSources(context.Background(), []string{filepath.Join(dir, "hosts.yml")})
+	require.NoError(t, err)
+	m := NewManager(p, &mockLogger{}, newMockCache())
+	require.NoError(t, m.SetInventory(inv))
+	for name, port := range map[string]int{"h1": 22582, "h2": 22} {
+		h, err := m.GetHosts(name)
+		require.NoError(t, err)
+		assert.Equal(t, port, h[0].Port, name)
+		assert.Equal(t, "usx", h[0].User, name)
+	}
+}
