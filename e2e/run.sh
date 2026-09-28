@@ -246,7 +246,7 @@ for c in $cases; do
     [ "$ran" != 0 ] || { record "$c" "$h" FAIL "second apply: no task ran"; continue; }
     changed="$(jq -r --arg h "$h" 'select(.host == $h and .changed == true) | .task' "$WORK/events.jsonl")"
     failed="$(jq -r --arg h "$h" 'select(.host == $h and .success != true) | .task' "$WORK/events.jsonl" | expected_failures_out "$dir")"
-    if [ -n "$failed" ]; then record "$c" "$h" FAIL "second apply failed: $(echo "$failed" | paste -sd, -)"
+    if [ -n "$failed" ]; then record "$c" "$h" FAIL "second apply failed: $(echo "$failed" | paste -sd, -)"; apply_errors
     elif [ -n "$changed" ]; then record "$c" "$h" FAIL "not idempotent: $(echo "$changed" | paste -sd, -)"
     else record "$c" "$h" PASS "idempotent"; fi
   done
