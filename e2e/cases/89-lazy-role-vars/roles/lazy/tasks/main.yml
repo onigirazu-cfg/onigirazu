@@ -1,0 +1,10 @@
+- name: Only when the port is still the default
+  copy:
+    content: "port {{ lazy_port }} {{ lazy_items[0].value }}\n"
+    dest: /root/onigirazu-e2e-lazy
+  when: (lazy_port | string) == '22'
+- name: Never, the port is 22
+  copy:
+    content: "wrong\n"
+    dest: /root/onigirazu-e2e-lazy-wrong
+  when: (lazy_port | string) != '22'

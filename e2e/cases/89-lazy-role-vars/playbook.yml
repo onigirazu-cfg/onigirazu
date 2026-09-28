@@ -1,0 +1,6 @@
+plays:
+  - name: role defaults with templates
+    hosts: all
+    become: true
+    roles:
+      - lazy

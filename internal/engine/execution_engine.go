@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -100,8 +101,6 @@ type ExecutionEngine struct {
 	playEnvironment map[string]interface{}
 	// showDiff asks modules for before/after of their changes (--diff)
 	showDiff bool
-	// lazyVars are the play vars rendered per host at task time
-	lazyVars map[string]bool
 	// inheritedTags are the tags of the play and of the roles: entry that
 	// every task under them has too
 	inheritedTags []string
@@ -600,22 +599,8 @@ func (e *ExecutionEngine) executePlayOn(ctx context.Context, play *types.Play, h
 	// Set play variables - merge with facts if available
 	playVars := e.mergeVariables(e.variables, play.Vars)
 
-	// play vars with templates are rendered per host when a task runs (as
-	// Ansible does): "/backup/{{ inventory_hostname }}" differs per host
-	lazy := map[string]bool{}
-	for key, value := range play.Vars {
-		if str, ok := value.(string); ok && strings.Contains(str, "{{") {
-			lazy[key] = true
-		}
-	}
-	e.mutex.Lock()
-	e.lazyVars = lazy
-	e.mutex.Unlock()
-	defer func() {
-		e.mutex.Lock()
-		e.lazyVars = nil
-		e.mutex.Unlock()
-	}()
+	// templated vars are rendered per host when a task runs (as Ansible
+	// does): "/backup/{{ inventory_hostname }}" differs per host
 	playVars = e.mergeVariables(playVars, e.extraVars)
 	playScope := e.scope
 	e.assignKeys(play.PreTasks, playScope+"/pre_tasks")
@@ -1002,15 +987,16 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 	}
 
 	taskVars := e.hostVariables(host, variables)
-	e.renderLazyVars(ctx, taskVars)
-	// task vars come last; string values may use other variables
+	e.renderLazyVars(ctx, host.Name, taskVars)
+	// task vars come last; their values may use other variables, nested in
+	// lists and maps too, and "{{ a_list }}" stays a list
 	for k, v := range task.Vars {
-		if str, ok := v.(string); ok && strings.Contains(str, "{{") {
-			if rendered, err := e.templateEngine.Render(ctx, str, taskVars); err == nil {
-				v = rendered
-			} else {
+		if hasTemplate(v) {
+			rendered, err := e.templateEngine.RenderTaskArgs(ctx, map[string]interface{}{"v": v}, taskVars)
+			if err != nil {
 				return failed(fmt.Errorf("task var %s: %w", k, err))
 			}
+			v = rendered["v"]
 		}
 		taskVars[k] = v
 	}
@@ -2442,24 +2428,33 @@ func mergeMaps(a, b map[string]interface{}) map[string]interface{} {
 	return out
 }
 
-// renderLazyVars renders the templated play vars with one host's variables;
-// a few passes let them refer to each other. -e values are never rendered.
-func (e *ExecutionEngine) renderLazyVars(ctx context.Context, vars map[string]interface{}) {
+// notLazy are the variables renderLazyVars leaves alone: other hosts'
+// variables and the gathered facts
+var notLazy = map[string]bool{"hostvars": true, "groups": true, "ansible_facts": true, "onigirazu_facts": true}
+
+// renderLazyVars renders the templated variables with one host's variables,
+// as Ansible templates variables when they are used: play vars, role
+// defaults and vars, inventory and vars_files values ("{{ ssh_port |
+// default(22) }}"), nested in lists and maps too. A few passes let them refer
+// to each other. -e values and what register/set_fact stored are data and
+// never rendered; a value that does not render stays as it is.
+func (e *ExecutionEngine) renderLazyVars(ctx context.Context, host string, vars map[string]interface{}) {
 	e.mutex.RLock()
-	lazy := e.lazyVars
+	runtime := make(map[string]bool, len(e.hostVars[host]))
+	for key := range e.hostVars[host] {
+		runtime[key] = true
+	}
 	e.mutex.RUnlock()
-	for pass := 0; pass < 3 && len(lazy) > 0; pass++ {
+	for pass := 0; pass < 3; pass++ {
 		changed := false
-		for key := range lazy {
-			if _, fromCLI := e.extraVars[key]; fromCLI {
+		for key, value := range vars {
+			if _, fromCLI := e.extraVars[key]; fromCLI || runtime[key] || notLazy[key] || !hasTemplate(value) {
 				continue
 			}
-			str, ok := vars[key].(string)
-			if !ok || !strings.Contains(str, "{{") {
-				continue
-			}
-			if rendered, err := e.templateEngine.Render(ctx, str, vars); err == nil && rendered != str {
-				vars[key] = rendered
+			// through RenderTaskArgs: "{{ a_list }}" stays a list
+			rendered, err := e.templateEngine.RenderTaskArgs(ctx, map[string]interface{}{"v": value}, vars)
+			if err == nil && !reflect.DeepEqual(rendered["v"], value) {
+				vars[key] = rendered["v"]
 				changed = true
 			}
 		}
