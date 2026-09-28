@@ -238,7 +238,10 @@ plays:
 
 Play `vars` with templates are rendered per host when a task uses them:
 `backup_dir: "/backup/{{ ansible_hostname }}"` is each host's own directory. Play vars may
-refer to each other. Task `vars` work the same way for a single task.
+refer to each other. Task `vars` work the same way for a single task, and so do role
+defaults and vars, inventory and `vars_files` values, also inside lists and maps
+(`ssh_port: "{{ custom_port | default(22) }}"` in a role's defaults). `-e` values and what
+`register`/`set_fact` stored are data and are not rendered again.
 
 ```yaml
 plays:
