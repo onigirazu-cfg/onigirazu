@@ -30,11 +30,12 @@ func (p *EnhancedParser) loadIncludedRole(ctx context.Context, task *types.Task,
 		if role.Tasks, err = p.loadIncludedTasks(ctx, path); err != nil {
 			return fmt.Errorf("%s %s: %w", task.Module, name, err)
 		}
-		resolveRoleFiles(role.Tasks, role.Path)
 	}
 	if role.Tasks, err = p.expandIncludes(ctx, role.Tasks, filepath.Join(role.Path, "tasks"), depth+1); err != nil {
 		return fmt.Errorf("%s %s: %w", task.Module, name, err)
 	}
+	// after the expansion, so imported task files find the role's files too
+	resolveRoleFiles(role.Tasks, role.Path)
 	if len(task.Tags) > 0 {
 		tasks := make([]types.Task, len(role.Tasks))
 		for i, t := range role.Tasks {
