@@ -167,3 +167,12 @@ func TestAptModuleChangedFlagAccuracy(t *testing.T) {
 		t.Logf("   Run 2: Changed=%v", result2.Changed)
 	}
 }
+
+func TestAutocleanChanged(t *testing.T) {
+	if autocleanChanged("Reading package lists...\nBuilding dependency tree...\n") {
+		t.Error("nothing removed must not be a change")
+	}
+	if !autocleanChanged("Reading package lists...\nDel libfoo 1.0 [120 kB]\n") {
+		t.Error("a removed archive is a change")
+	}
+}
