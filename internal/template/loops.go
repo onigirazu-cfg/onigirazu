@@ -151,7 +151,7 @@ func applySets(text string, variables map[string]interface{}, trim bool) (string
 	if !setTag.MatchString(text) {
 		return text, variables, nil
 	}
-	vars := make(map[string]interface{}, len(variables)+2)
+	vars := make(map[string]interface{}, len(variables))
 	for k, v := range variables {
 		vars[k] = v
 	}

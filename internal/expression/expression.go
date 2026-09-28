@@ -64,7 +64,7 @@ func Eval(expression string, variables map[string]interface{}) (interface{}, err
 	if err != nil {
 		return nil, err
 	}
-	env := make(map[string]interface{}, len(variables)+1)
+	env := make(map[string]interface{}, len(variables))
 	for k, v := range variables {
 		env[k] = v
 	}
