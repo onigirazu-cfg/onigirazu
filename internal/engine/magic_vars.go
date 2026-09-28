@@ -103,3 +103,35 @@ func ansibleDistribution(id string) string {
 	}
 	return id
 }
+
+// addMagicVars sets the Ansible variables about the run itself; the caller
+// holds the read lock
+func (e *ExecutionEngine) addMagicVars(vars map[string]interface{}) {
+	vars["ansible_check_mode"] = e.checkMode
+	vars["ansible_diff_mode"] = e.showDiff
+	if e.limit != "" {
+		vars["ansible_limit"] = e.limit
+	}
+	list := func(names []string, skipFailed bool) []interface{} {
+		out := make([]interface{}, 0, len(names))
+		for _, n := range names {
+			if skipFailed && e.failedHosts[n] {
+				continue
+			}
+			out = append(out, n)
+		}
+		return out
+	}
+	batch := e.batchHosts
+	if len(batch) == 0 {
+		batch = e.playHosts
+	}
+	vars["ansible_play_hosts_all"] = list(e.playHosts, false)
+	vars["ansible_play_batch"] = list(batch, true)
+	vars["ansible_play_hosts"] = list(batch, true)
+}
+
+// SetCheckMode tells the run it is a check (ansible_check_mode)
+func (e *ExecutionEngine) SetCheckMode(check bool) {
+	e.checkMode = check
+}

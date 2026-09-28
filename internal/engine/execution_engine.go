@@ -105,7 +105,13 @@ type ExecutionEngine struct {
 	inheritedTags []string
 	// failedHosts have left the run (a task failed on them); policy is how
 	// the running play treats failures
-	failedHosts   map[string]bool
+	failedHosts map[string]bool
+	// playHosts are all hosts of the running play, batchHosts those of its
+	// current serial batch (ansible_play_hosts_all, ansible_play_batch)
+	playHosts  []string
+	batchHosts []string
+	// checkMode is --check for this run (ansible_check_mode)
+	checkMode     bool
 	policy        failurePolicy
 	forceHandlers bool
 	// control pauses and stops the run between tasks (interactive mode)
@@ -505,8 +511,10 @@ func (e *ExecutionEngine) executePlay(ctx context.Context, play *types.Play) (*t
 	if e.targetedHosts == nil {
 		e.targetedHosts = map[string]bool{}
 	}
+	e.playHosts = e.playHosts[:0]
 	for _, h := range hosts {
 		e.targetedHosts[h.Name] = true
+		e.playHosts = append(e.playHosts, h.Name)
 	}
 	e.playsTargeted++
 	e.mutex.Unlock()
@@ -554,6 +562,12 @@ func (e *ExecutionEngine) executePlay(ctx context.Context, play *types.Play) (*t
 // executePlayOn runs a play on the given hosts
 func (e *ExecutionEngine) executePlayOn(ctx context.Context, play *types.Play, hosts []types.Host) (*types.PlayResult, error) {
 	defer e.enterPlay(play)()
+	e.mutex.Lock()
+	e.batchHosts = make([]string, len(hosts))
+	for i, h := range hosts {
+		e.batchHosts[i] = h.Name
+	}
+	e.mutex.Unlock()
 
 	if len(hosts) == 0 {
 		e.logger.Warn("No hosts found for play '%s'", play.Name)
@@ -2099,6 +2113,7 @@ func (e *ExecutionEngine) hostVariables(host *types.Host, variables map[string]i
 	vars := e.mergeVariables(variables, e.variables, host.Vars)
 	// always defined, facts or not
 	vars["inventory_hostname"] = host.Name
+	e.addMagicVars(vars)
 	if _, ok := vars["onigirazu_hostname"]; !ok {
 		vars["onigirazu_hostname"] = host.Name
 	}

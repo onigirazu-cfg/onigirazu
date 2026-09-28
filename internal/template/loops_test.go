@@ -58,3 +58,20 @@ func TestRender_WhitespaceControl(t *testing.T) {
 		assert.Equal(t, want, got, in)
 	}
 }
+
+func TestSetTag(t *testing.T) {
+	e := NewEngine()
+	vars := map[string]interface{}{"group_names": []interface{}{"es", "fleet"}, "lists": map[string]interface{}{"es": []interface{}{"a.es"}, "Other": []interface{}{}}}
+	out, err := e.Render(context.Background(), "{% set x = 2 %}\n{% for i in range(x) %}{{ i }}{% endfor %}\nv={{ x }}\n", vars)
+	if err != nil || out != "01v=2\n" {
+		t.Fatalf("got %q, %v", out, err)
+	}
+	out, err = e.Render(context.Background(), "{% set c = (group_names | intersect(lists.keys()) + ['Other']) | first %}{{ c }}", vars)
+	if err != nil || out != "es" {
+		t.Fatalf("got %q, %v", out, err)
+	}
+	out, err = e.Render(context.Background(), "{% for i in [1,2] %}{% set y = i * 10 %}{{ y }} {% endfor %}", vars)
+	if err != nil || out != "10 20 " {
+		t.Fatalf("got %q, %v", out, err)
+	}
+}

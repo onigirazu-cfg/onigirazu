@@ -26,7 +26,7 @@ var (
 	// map(attribute='x') has a keyword argument, which expr does not
 	mapAttribute = regexp.MustCompile(`\bmap\(\s*attribute\s*=\s*`)
 	// keyword arguments of random/shuffle become "name", value pairs
-	randomKeyword = regexp.MustCompile(`\b(seed|start|step)\s*=\s*([^=\s])`)
+	randomKeyword = regexp.MustCompile(`\b(seed|start|step|default)\s*=([^=]|$)`)
 	// d.keys() and d.values() are Python methods
 	dictMethod = regexp.MustCompile(`\.(keys|values)\(\)`)
 	// lookup() and query() get the playbook directory as their first argument
@@ -68,6 +68,8 @@ func Eval(expression string, variables map[string]interface{}) (interface{}, err
 	for k, v := range variables {
 		env[k] = v
 	}
+	// lookup('template') renders with the task's variables
+	env[lookupVars] = variables
 	return expr.Run(program, env)
 }
 
@@ -96,6 +98,12 @@ func compile(expression string) (*vm.Program, error) {
 		expr.Function("bool", func(params ...interface{}) (interface{}, error) {
 			return Truthy(params[0]), nil
 		}),
+		// + as in Jinja: numbers add, strings and lists concatenate, also
+		// when a side comes out of a filter (untyped for the checker)
+		expr.Function("jinja_add", func(params ...interface{}) (interface{}, error) {
+			return jinjaAdd(params[0], params[1])
+		}, new(func(interface{}, interface{}) interface{})),
+		expr.Operator("+", "jinja_add"),
 		expr.Function("jinja_index", func(params ...interface{}) (interface{}, error) {
 			return jinjaIndex(params[0], params[1]), nil
 		}),
@@ -186,9 +194,9 @@ func translateCode(code string) string {
 	code = dictMethod.ReplaceAllString(code, " | $1()")
 	code = lookupCall.ReplaceAllStringFunc(code, func(m string) string {
 		if strings.HasPrefix(m, "lookup") {
-			return "jinja_lookup(playbook_dir, "
+			return "jinja_lookup(playbook_dir, " + lookupVars + ", "
 		}
-		return "jinja_query(playbook_dir, "
+		return "jinja_query(playbook_dir, " + lookupVars + ", "
 	})
 	return jinjaWordsIn(code)
 }
@@ -405,4 +413,41 @@ func jinjaIndex(container, key interface{}) interface{} {
 		return v.Interface()
 	}
 	return nil
+}
+
+// jinjaAdd is Jinja's +
+func jinjaAdd(a, b interface{}) (interface{}, error) {
+	switch x := a.(type) {
+	case string:
+		if y, ok := b.(string); ok {
+			return x + y, nil
+		}
+	case []interface{}:
+		if y, err := Items(b); err == nil {
+			return append(append([]interface{}{}, x...), y...), nil
+		}
+	}
+	if ai, ok := asInt(a); ok {
+		if bi, ok := asInt(b); ok {
+			return ai + bi, nil
+		}
+	}
+	if af, ok := number(a); ok {
+		if bf, ok := number(b); ok {
+			return af + bf, nil
+		}
+	}
+	return nil, fmt.Errorf("cannot add %T and %T", a, b)
+}
+
+func asInt(v interface{}) (int, bool) {
+	switch n := v.(type) {
+	case int:
+		return n, true
+	case int64:
+		return int(n), true
+	case int32:
+		return int(n), true
+	}
+	return 0, false
 }

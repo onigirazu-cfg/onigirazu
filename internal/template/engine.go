@@ -28,6 +28,13 @@ type Engine struct {
 }
 
 // NewEngine creates a new template engine
+func init() {
+	// lookup('template', ...) in expressions renders with this engine
+	expression.RenderTemplate = func(text string, vars map[string]interface{}) (string, error) {
+		return NewEngine().Render(context.Background(), text, vars)
+	}
+}
+
 func NewEngine() *Engine {
 	engine := &Engine{
 		funcMap: template.FuncMap{
@@ -162,6 +169,10 @@ func (e *Engine) Render(ctx context.Context, templateStr string, variables map[s
 	templateStr = trimBefore.ReplaceAllString(templateStr, "$1")
 	templateStr = trimAfter.ReplaceAllString(templateStr, "$1")
 
+	templateStr, variables, err := applySets(templateStr, variables, opts.trim)
+	if err != nil {
+		return "", err
+	}
 	templateStr, loops, err := e.expandLoops(ctx, templateStr, variables)
 	if err != nil {
 		return "", err
