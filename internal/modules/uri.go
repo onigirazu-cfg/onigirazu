@@ -183,7 +183,7 @@ py=$(command -v python3 || command -v python) || { echo "uri needs curl or pytho
 %s"$py" -c %s %s
 fi`,
 		shellQuote(credFile), input, strings.Join(curl, " "),
-		input, shellQuote(uriPython), base64.StdEncoding.EncodeToString(pyParams))
+		input, shellQuote(uriPython), shellQuote(base64.StdEncoding.EncodeToString(pyParams)))
 	out, err := runShellOnHost(ctx, host, args, script)
 	if err != nil {
 		result.Success = false
