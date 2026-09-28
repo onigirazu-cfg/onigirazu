@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
@@ -684,4 +686,14 @@ func TestCommandExecutor_ExecuteLocal_WithSpecialChars(t *testing.T) {
 			_, _ = executor.executeLocal(tt.command, tt.args...)
 		})
 	}
+}
+
+func TestWrapWithBecomePassword(t *testing.T) {
+	e := &CommandExecutor{}
+	e.SetBecome(true, "root", "sudo")
+	assert.Equal(t, "sudo -n sh -c 'id'", e.wrapWithBecome("id"))
+	e.becomePassword = "p'w"
+	assert.Equal(t, `printf '%s\n' 'p'\''w' | sudo -S -p '' sh -c 'id'`, e.wrapWithBecome("id"))
+	e.SetBecome(true, "app", "sudo")
+	assert.Equal(t, `printf '%s\n' 'p'\''w' | sudo -S -p '' -u 'app' sh -c 'id'`, e.wrapWithBecome("id"))
 }

@@ -160,12 +160,17 @@ Existing Ansible inventory scripts work unchanged. As in Ansible, a host that is
 | `onigirazu_user` / `ansible_user` (`user`) | SSH user | the local `$USER`, as in Ansible |
 | `onigirazu_ssh_private_key_file` / `ansible_ssh_private_key_file` (`key_file`) | private key | — |
 | `onigirazu_password` / `ansible_password` (`password`) | SSH password | — |
+| `onigirazu_become_password` / `ansible_become_password` (`ansible_become_pass`) | sudo password for `become` (passed on stdin, never on a command line) | — (`sudo -n`) |
+| `ansible_ssh_common_args` | `-o StrictHostKeyChecking=no` in it skips the host key check; other options are ignored | — |
 | any other key | host variable for templates | — |
 
 These variables also work as group variables (`all: vars: ansible_user: deploy`, group_vars
 files): a host takes them unless it sets its own.
 
 `apply -u USER` and `--private-key FILE` (`run -u`/`-k`) override user and key for every host.
+As in Ansible, these variables given with `-e` override the inventory for every host
+(`-e ansible_user=ansible`, `-e @bootstrap.yml` with `ansible_password` and
+`ansible_become_password`).
 
 ## group_vars and host_vars
 

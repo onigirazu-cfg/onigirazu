@@ -426,6 +426,8 @@ func (p *InventoryParser) parseAnsibleHost(hostName string, hostData interface{}
 			if v, ok := value.(string); ok {
 				host.Password = v
 			}
+		case "ansible_become_password", "ansible_become_pass", "ansible_sudo_pass", "onigirazu_become_password":
+			host.BecomePassword = fmt.Sprint(value)
 		case "ansible_ssh_host_key_checking":
 			if v, ok := value.(bool); ok && !v {
 				host.InsecureIgnoreHostKey = true
@@ -723,6 +725,8 @@ func (p *InventoryParser) parseIniHostLine(line string, lineNum int) *types.Host
 				host.KeyFile = value
 			case "ansible_password", "onigirazu_password":
 				host.Password = value
+			case "ansible_become_password", "ansible_become_pass", "onigirazu_become_password":
+				host.BecomePassword = value
 			default:
 				host.Vars[key] = value
 			}
