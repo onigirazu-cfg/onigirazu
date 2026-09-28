@@ -16,6 +16,12 @@ grep -F -- "- user e2ems on $HOST: remove" out
 # plan leaves the state alone
 "$BIN" state resources playbook.yml | grep -E "^$HOST +file +/tmp/e2e-ms/created +created +created file"
 
+# a lock left by a dead run stops apply until state unlock
+printf '{"id":"deadbeef","who":"e2e@ci","pid":1,"operation":"apply","created":"2026-01-01T00:00:00Z"}' > .onigirazu/playbook.state.json.lock
+! "$BIN" apply playbook.yml -i "$INVENTORY" --limit "$HOST" > out 2>&1
+grep -F "lock ID deadbeef" out
+"$BIN" state unlock playbook.yml deadbeef
+
 "$BIN" apply playbook.yml -i "$INVENTORY" --limit "$HOST" --no-destroy > out 2>&1
 "$BIN" state resources playbook.yml | grep -E "^$HOST +file +/tmp/e2e-ms/created .*orphan: destroy"
 

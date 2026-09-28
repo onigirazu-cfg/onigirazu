@@ -81,11 +81,24 @@ Managed state: resources that left the playbook
   kept file /srv/data on web1: directory /srv/data is not empty
 ```
 
+## Locking
+
+apply locks the playbook's managed state for the run (`<state>.lock`, with who, pid and a lock
+ID); a second apply of the same playbook fails at once, or waits with `--lock-timeout 5m`.
+`plan` and `drift` do not lock. A lock left by a run that died:
+
+```
+onigirazu state unlock site.yml 3f2a9c1d0b7e4a55   # the ID from the error
+```
+
+`--lock=false` runs without it.
+
 ## Commands
 
 ```
 onigirazu state resources site.yml          # table; --json for the records
 onigirazu state rm site.yml web1 file /etc/app.conf   # forget one; the host is not touched
+onigirazu state unlock site.yml LOCK_ID               # remove a dead run's lock
 ```
 
 ## prevent_destroy

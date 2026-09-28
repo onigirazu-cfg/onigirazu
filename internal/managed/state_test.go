@@ -140,3 +140,23 @@ func TestSortForDestroyAndUndoResult(t *testing.T) {
 	res = UndoResult(&Record{Type: "file", Origin: OriginAdopted, Before: map[string]interface{}{"kind": "file"}})
 	assert.Nil(t, res.Before["_keep_nonempty_dir"])
 }
+
+func TestLock(t *testing.T) {
+	path := Path(filepath.Join(t.TempDir(), "site.yml"))
+	l, err := AcquireLock(path, "apply", 0)
+	require.NoError(t, err)
+	_, err = AcquireLock(path, "apply", 0)
+	var locked *LockedError
+	require.ErrorAs(t, err, &locked)
+	assert.Equal(t, l.info.ID, locked.Info.ID)
+	assert.Contains(t, err.Error(), "state unlock")
+
+	assert.Error(t, ForceUnlock(path, "wrong"))
+	require.NoError(t, ForceUnlock(path, l.info.ID))
+	assert.Error(t, l.Release(), "the lock is gone")
+
+	l2, err := AcquireLock(path, "apply", 0)
+	require.NoError(t, err)
+	require.NoError(t, l2.Release())
+	assert.Error(t, ForceUnlock(path, l2.info.ID))
+}
