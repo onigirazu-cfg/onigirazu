@@ -55,9 +55,34 @@ func (m *ModuleSyntaxValidator) ValidateTaskModule(task *types.Task, playIndex, 
 	return nil
 }
 
-// ValidatePlayTasks validates all tasks in a play
+// ValidatePlayTasks validates all tasks in a play: pre_tasks, tasks,
+// post_tasks, handlers and the tasks of its loaded roles
 func (m *ModuleSyntaxValidator) ValidatePlayTasks(play *types.Play, playIndex int) error {
-	return m.validateTaskList(play.Tasks, playIndex)
+	for _, list := range [][]types.Task{play.PreTasks, play.Tasks, play.PostTasks, play.Handlers} {
+		if err := m.validateTaskList(list, playIndex); err != nil {
+			return err
+		}
+	}
+	for _, role := range play.RoleObjects {
+		if err := m.validateRole(role, playIndex); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateRole validates the tasks and handlers of a role, naming it in
+// the error
+func (m *ModuleSyntaxValidator) validateRole(role *types.Role, playIndex int) error {
+	if role == nil {
+		return nil
+	}
+	for _, list := range [][]types.Task{role.Tasks, role.Handlers} {
+		if err := m.validateTaskList(list, playIndex); err != nil {
+			return fmt.Errorf("role %s: %w", role.Name, err)
+		}
+	}
+	return nil
 }
 
 // validateTaskList validates tasks, descending into block/rescue/always
@@ -73,6 +98,9 @@ func (m *ModuleSyntaxValidator) validateTaskList(tasks []types.Task, playIndex i
 			continue
 		}
 		if err := m.ValidateTaskModule(task, playIndex, i); err != nil {
+			return err
+		}
+		if err := m.validateRole(task.IncludedRole, playIndex); err != nil {
 			return err
 		}
 	}

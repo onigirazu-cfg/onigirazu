@@ -93,7 +93,7 @@ func runValidate(cmd *cobra.Command, args []string) error {
 		// For now, we just validate that module names are not empty
 		for _, play := range playbook.Plays {
 			for _, task := range play.Tasks {
-				if task.Module == "" {
+				if task.Module == "" && len(task.Block) == 0 {
 					return fmt.Errorf("task '%s' has no module specified", task.Name)
 				}
 			}
