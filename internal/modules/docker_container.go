@@ -26,6 +26,9 @@ type ContainerState struct {
 	Env           []string          `json:"env"`
 	Networks      []string          `json:"networks"`
 	RestartPolicy string            `json:"restart_policy"`
+	NanoCPUs      int64             `json:"nano_cpus"`
+	Memory        int64             `json:"memory"`
+	MemorySwap    int64             `json:"memory_swap"`
 }
 
 func NewDockerContainerModule() *DockerContainerModule {
@@ -76,14 +79,41 @@ func (m *DockerContainerModule) Execute(ctx context.Context, host types.Host, ar
 		return result, err
 	}
 
+	limits, err := containerLimits(args)
+	if err != nil {
+		result.Success = false
+		result.Error = err.Error()
+		return result, err
+	}
+	var update []string
+	if exists && state != "absent" {
+		update = limits.updateArgs(currentState)
+	}
+
 	if inCheckMode(args) {
 		running := exists && currentState.Running
 		if action := plannedContainerAction(state, exists, running); action != "" {
 			result.Changed = true
 			result.Output["action"] = action
 		}
+		if len(update) > 0 {
+			result.Changed = true
+			result.Output["updated"] = true
+		}
 		result.Duration = time.Since(startTime)
 		return result, nil
+	}
+
+	// cpu and memory limits change in place, the way docker_container does it
+	if len(update) > 0 {
+		cmd := shellJoin(append(append([]string{"docker", "update"}, update...), name)...)
+		if _, err := exec.Execute(cmd); err != nil {
+			result.Success = false
+			result.Error = fmt.Sprintf("failed to update container limits: %v", err)
+			return result, err
+		}
+		result.Changed = true
+		result.Output["updated"] = true
 	}
 
 	switch state {
@@ -190,6 +220,17 @@ func (m *DockerContainerModule) getContainerState(ctx context.Context, exec *exe
 		state.Status, _ = stateMap["Status"].(string)
 		state.State = state.Status
 	}
+	if hostConfig, ok := container["HostConfig"].(map[string]interface{}); ok {
+		if v, ok := hostConfig["NanoCpus"].(float64); ok {
+			state.NanoCPUs = int64(v)
+		}
+		if v, ok := hostConfig["Memory"].(float64); ok {
+			state.Memory = int64(v)
+		}
+		if v, ok := hostConfig["MemorySwap"].(float64); ok {
+			state.MemorySwap = int64(v)
+		}
+	}
 
 	return state, true, nil
 }
@@ -230,6 +271,12 @@ func (m *DockerContainerModule) createContainer(ctx context.Context, exec *execu
 		cmdParts = append(cmdParts, "--restart", restart)
 	}
 
+	limits, err := containerLimits(args)
+	if err != nil {
+		return err
+	}
+	cmdParts = append(cmdParts, limits.runArgs()...)
+
 	cmdParts = append(cmdParts, image)
 	// the command is split into words like a shell would, then each is quoted
 	if command, ok := args["command"].(string); ok && command != "" {
@@ -241,8 +288,7 @@ func (m *DockerContainerModule) createContainer(ctx context.Context, exec *execu
 	}
 
 	cmd := shellJoin(cmdParts...)
-	_, err := exec.Execute(cmd)
-	if err != nil {
+	if _, err := exec.Execute(cmd); err != nil {
 		return fmt.Errorf("failed to create container: %s", err.Error())
 	}
 

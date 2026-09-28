@@ -17,3 +17,27 @@ plays:
           image: alpine:3.20
           command: sleep 3600
           state: present
+      # the docker_resource_limits pattern: limits on a running container change in place
+      - name: Limits on the running container
+        docker_container:
+          name: onigirazu-e2e
+          image: alpine:3.20
+          state: present
+          comparisons:
+            image: ignore
+          cpus: "0.5"
+          memory: 64m
+        register: limited
+      - name: Limits applied once
+        docker_container:
+          name: onigirazu-e2e
+          image: alpine:3.20
+          state: present
+          cpus: 0.5
+          memory: 64M
+        register: again
+      - name: Second pass changes nothing
+        assert:
+          that:
+            - limited is changed
+            - again is not changed
