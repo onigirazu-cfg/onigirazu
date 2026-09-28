@@ -360,11 +360,11 @@ func inlineIf(code string) (string, string, string, bool) {
 	return parts[0], cond, otherwise, true
 }
 
-// nestedConcat turns ~ inside parentheses and square brackets into
-// jinja_concat calls, as translate does for the top level:
-// "('v ' ~ x) in y" becomes "(jinja_concat('v ', x)) in y"
+// nestedConcat turns ~ and inline ifs inside parentheses and square
+// brackets into jinja_concat calls and ?:, as translate does for the top
+// level: "('v ' ~ x) in y" becomes "(jinja_concat('v ', x)) in y"
 func nestedConcat(code string) string {
-	if !strings.Contains(code, "~") {
+	if !strings.Contains(code, "~") && !strings.Contains(code, " if ") {
 		return code
 	}
 	var b strings.Builder
@@ -390,9 +390,7 @@ func nestedConcat(code string) string {
 			}
 			pieces := splitTop(nestedConcat(code[i+1:end]), ",")
 			for k, piece := range pieces {
-				if parts := splitTop(piece, "~"); len(parts) > 1 {
-					pieces[k] = "jinja_concat(" + strings.Join(parts, ", ") + ")"
-				}
+				pieces[k] = bracketPiece(piece)
 			}
 			b.WriteByte(c)
 			b.WriteString(strings.Join(pieces, ","))
@@ -403,6 +401,18 @@ func nestedConcat(code string) string {
 		b.WriteByte(c)
 	}
 	return b.String()
+}
+
+// bracketPiece rewrites an inline if and ~ in one argument or item inside
+// brackets, as translate does for the whole expression
+func bracketPiece(piece string) string {
+	if value, cond, otherwise, ok := inlineIf(piece); ok {
+		return "bool(" + bracketPiece(cond) + ") ? (" + bracketPiece(value) + ") : (" + bracketPiece(otherwise) + ")"
+	}
+	if parts := splitTop(piece, "~"); len(parts) > 1 {
+		return "jinja_concat(" + strings.Join(parts, ", ") + ")"
+	}
+	return piece
 }
 
 // closingBracket is the index of the bracket that closes the one at open,
