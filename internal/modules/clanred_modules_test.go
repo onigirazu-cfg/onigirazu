@@ -91,6 +91,7 @@ func TestComposeV2Args(t *testing.T) {
 	assert.Equal(t, "c.yml", args["file"])
 	assert.Equal(t, "docker_compose", types.ShortModuleName("community.docker.docker_compose_v2"))
 	assert.Equal(t, "ufw", types.ShortModuleName("community.general.ufw"))
+	assert.Equal(t, "timezone", types.ShortModuleName("community.general.timezone"))
 }
 
 func TestPipSpec(t *testing.T) {

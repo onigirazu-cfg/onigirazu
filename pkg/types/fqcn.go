@@ -16,6 +16,7 @@ var collectionModules = map[string]string{
 	"community.docker.docker_host_info":    "docker_host_info",
 	"community.general.ufw":                "ufw",
 	"community.general.ini_file":           "ini_file",
+	"community.general.timezone":           "timezone",
 	"community.mysql.mysql_db":             "mysql_db",
 	"community.mysql.mysql_user":           "mysql_user",
 	"community.postgresql.postgresql_db":   "postgresql_db",

@@ -1144,7 +1144,7 @@ the archive is extracted over it. Zip archives need `unzip` on the host.
 | `name` | string | - | IANA time zone, e.g. `Europe/Madrid`, `UTC` |
 
 Uses `timedatectl` when systemd runs, else links `/etc/localtime` (and writes
-`/etc/timezone` where it exists).
+`/etc/timezone` where it exists). Also `community.general.timezone`.
 
 ## 📦 Package Modules
 
