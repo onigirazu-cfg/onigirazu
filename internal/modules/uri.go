@@ -171,10 +171,19 @@ func (m *URIModule) Execute(ctx context.Context, host types.Host, args map[strin
 	}
 	curl = append(curl, shellQuote(url))
 	// without curl the request goes through the host's Python, as Ansible's
-	// uri does; its parameters travel as one base64 JSON argument
+	// uri does; it reads its parameters from a JSON file
 	pyParams, _ := json.Marshal(map[string]interface{}{"url": url, "method": method, "headers": headers,
 		"timeout": timeout, "cred": credFile, "body": body != "", "validate": validateCerts})
-	script := fmt.Sprintf(`b=$(mktemp); h=$(mktemp); trap 'rm -f "$b" "$h" %s' EXIT
+	// the parameters go through a 0600 file like the credentials, not the
+	// command line
+	paramsFile := remoteTempName(".onigirazu-uri-p-", "")
+	if err := putPrivateFile(ctx, host, paramsFile, pyParams); err != nil {
+		result.Success = false
+		result.Error = fmt.Sprintf("failed to prepare the request: %v", err)
+		result.Duration = time.Since(startTime)
+		return result, nil
+	}
+	script := fmt.Sprintf(`b=$(mktemp); h=$(mktemp); trap 'rm -f "$b" "$h" %s %s' EXIT
 if command -v curl >/dev/null 2>&1; then
 code=$(%s%s) || exit $?
 printf '%%s\n' "$code"; base64 < "$h" | tr -d '\n'; echo; base64 < "$b" | tr -d '\n'
@@ -182,8 +191,8 @@ else
 py=$(command -v python3 || command -v python) || { echo "uri needs curl or python3 on the host" >&2; exit 127; }
 %s"$py" -c %s %s
 fi`,
-		shellQuote(credFile), input, strings.Join(curl, " "),
-		input, shellQuote(uriPython), shellQuote(base64.StdEncoding.EncodeToString(pyParams)))
+		shellQuote(credFile), shellQuote(paramsFile), input, strings.Join(curl, " "),
+		input, shellQuote(uriPython), shellQuote(paramsFile))
 	out, err := runShellOnHost(ctx, host, args, script)
 	if err != nil {
 		result.Success = false
@@ -256,7 +265,7 @@ func (m *URIModule) Validate(args map[string]interface{}) error {
 // prints what the curl branch prints: status, base64 headers, base64 body.
 // Credentials come from the same 0600 file as for curl.
 const uriPython = `import sys, json, base64, re, ssl, urllib.request, urllib.error
-p = json.loads(base64.b64decode(sys.argv[1]))
+p = json.load(open(sys.argv[1]))
 data = sys.stdin.buffer.read() if p["body"] else None
 req = urllib.request.Request(p["url"], data=data, method=p["method"])
 for k, v in p["headers"].items():
