@@ -116,6 +116,17 @@ onigirazu state unlock site.yml 3f2a9c1d0b7e4a55   # the ID from the error
 
 `--lock=false` runs without it.
 
+## Adopting existing hosts
+
+```
+onigirazu apply site.yml -i hosts.yml --check --adopt
+```
+
+A check run that records what the playbook manages and already exists as `adopted` (with its
+current state as "before"), and changes nothing on the hosts; what does not exist yet is recorded
+as `created` by the first real apply. Like `terraform import` for a playbook written for hosts
+that were set up by hand (`onigirazu import --adopt` does it for the playbook it writes).
+
 ## Commands
 
 ```

@@ -25,19 +25,74 @@ Left out, and listed in `IMPORT_REPORT.md`: files over 1 MiB, directories under 
 a host without systemd, and host identity and generated files (ssh host keys, machine-id,
 hostname, resolv.conf, CA bundles, systemd enablement links, cloud-init files, ...).
 
-Private keys and credential files are never written; the report lists them to be provided from a
-vault.
+## Secrets
+
+Values of settings like `password = ...`, `api_key: ...`, `DB_PASSWORD=...`, `requirepass ...` are
+taken out: the file becomes a template with `{{ secret_<file>_<key> }}` in their place, and the
+values are written nowhere. `secrets.example.yml` lists the variables (file, line, hosts) with empty
+values; provide them in host_vars/group_vars, with `-e @secrets.yml` or a vault lookup. The check
+run gets each host's values in memory only. Files with private keys (and files that hold secrets
+and Jinja-like braces) are not written at all; the report lists them.
+
+## Baseline
+
+```
+onigirazu import web1 -i hosts.yml -o imported/ --baseline clean1
+```
+
+`clean1` is a fresh install of the same system (a new VM from the same image). What it has too,
+the same, is not imported: packages the image brings, its default files, its accounts. What is
+left is what was done to the host.
+
+## Adopt
+
+`--adopt` records every imported resource that exists in the new playbook's managed state as
+adopted (see [MANAGED_STATE.md](MANAGED_STATE.md)): removing a task from the playbook later puts
+the resource back as it was on import instead of removing it. It is the same check run, with
+`apply --check --adopt`.
+
+## Many hosts: shared roles
+
+```
+onigirazu import web1 web2 db1 -i hosts.yml -o imported/
+onigirazu import all -i hosts.yml -o imported/
+```
+
+What the hosts have in common goes into shared roles, the rest into a role per host:
+
+| Role | Holds |
+|---|---|
+| `common` | what every imported host has, the same |
+| one per inventory group (`web`) | what all imported hosts of the group share (the biggest group first) |
+| `<service>_hosts` | hosts in no group, clustered when they share at least half of their packages and services; named after a service, a server package or the distribution |
+| `host_<name>` | what is left for one host |
+
+A file with the same path, mode and owner everywhere joins the shared role even when its content
+differs:
+
+- when it differs only by the hosts' own names and addresses, it becomes a template;
+  `host_vars/<host>.yml` holds `import_hostname`, `import_fqdn`, `import_ip`. Rendering gives back
+  each host's file byte for byte; files that already contain Jinja syntax are not templated.
+- otherwise every host gets its own copy: `files/<host>/<path>`, `src: "{{ inventory_hostname }}/..."`.
+
+An account with another uid on some hosts stays in the host roles.
 
 ## Output
 
 ```
 imported/
-  site.yml                 one play per host
-  roles/host_web1/
-    tasks/main.yml         repositories, accounts, packages, files, timezone, mounts, services
-    files/etc/...          the files, by their path on the host
-  IMPORT_REPORT.md
+  site.yml                 one play per stage over all hosts: repositories, accounts,
+                           packages, files, system (timezone, mounts), services
+  roles/<role>/
+    tasks/<stage>.yml      the role's tasks of a stage; main.yml imports them all
+    files/, templates/
+  host_vars/<host>.yml     template variables
+  IMPORT_REPORT.md         roles and their hosts, what was left out, secrets, the check
 ```
+
+Each stage runs on all hosts before the next, so a file of a shared role can belong to an
+account of a host role. Every play runs the stage of each role with `include_role` and a `when`
+that picks the role's hosts (`'web' in group_names`, `inventory_hostname == 'db1'`).
 
 ## Flags
 
@@ -46,3 +101,5 @@ imported/
 | `-o DIR` | where to write (must be empty, or `--force`) |
 | `--no-verify` | do not plan the new playbook against the hosts |
 | `--no-become`, `--become-user` | collect as the login user / another user |
+| `--baseline HOST` | leave out what a fresh host of the same system has too |
+| `--adopt` | record the imported resources as adopted in the managed state |
