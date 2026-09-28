@@ -87,6 +87,8 @@ func compile(expression string) (*vm.Program, error) {
 		expr.Env(map[string]interface{}{}),
 		expr.AllowUndefinedVariables(),
 		expr.Patch(inPatch{}),
+		expr.Patch(methodPatch{}),
+		expr.Function("jinja_method", callMethod),
 		expr.Function("jinja_in", func(params ...interface{}) (interface{}, error) {
 			return contains(params[1], params[0]), nil
 		}),
