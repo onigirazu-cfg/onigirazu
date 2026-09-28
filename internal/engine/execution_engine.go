@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"path/filepath"
@@ -1193,7 +1194,16 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 				delay = 1 * time.Second
 			}
 
-			e.logger.Retry(task.Name, host.Name, attempt, maxAttempts, delay, err)
+			// the reason: the error, else the task's own failure (an until
+			// condition not met leaves err nil)
+			reason := err
+			if reason == nil {
+				reason = errors.New(result.Error)
+				if result.Error == "" {
+					reason = errors.New("task failed")
+				}
+			}
+			e.logger.Retry(task.Name, host.Name, attempt, maxAttempts, delay, reason)
 
 			select {
 			case <-ctx.Done():
