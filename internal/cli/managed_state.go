@@ -201,6 +201,13 @@ var orphanMarks = map[string]string{
 	managed.ActionDestroy: "-", managed.ActionRestore: "<", managed.ActionForget: "?",
 }
 
+// orphanText says what happens to an orphan
+var orphanText = map[string]string{
+	managed.ActionDestroy: "remove (onigirazu created it)",
+	managed.ActionRestore: "put back as it was",
+	managed.ActionForget:  "forget (left as it is)",
+}
+
 // printOrphans lists the resources that left the playbook
 func printOrphans(w io.Writer, orphans []types.ManagedOrphan) {
 	if len(orphans) == 0 {
@@ -208,11 +215,7 @@ func printOrphans(w io.Writer, orphans []types.ManagedOrphan) {
 	}
 	fmt.Fprintf(w, "\nNo longer in the playbook: %d resource(s)\n", len(orphans))
 	for _, o := range orphans {
-		what := map[string]string{
-			managed.ActionDestroy: "remove (onigirazu created it)",
-			managed.ActionRestore: "put back as it was",
-			managed.ActionForget:  "forget (left as it is)",
-		}[o.Action]
+		what := orphanText[o.Action]
 		fmt.Fprintf(w, "  %s %s %s on %s: %s", orphanMarks[o.Action], o.Type, o.ID, o.Host, what)
 		if o.Task != "" {
 			fmt.Fprintf(w, " [was: %s]", o.Task)
