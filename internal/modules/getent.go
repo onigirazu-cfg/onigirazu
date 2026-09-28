@@ -25,7 +25,9 @@ func NewGetentModule() *GetentModule {
 	return &GetentModule{BaseModule: NewBaseModule("getent")}
 }
 
-func (m *GetentModule) GetDescription() string { return "Read a getent database (passwd, group, hosts, ...)" }
+func (m *GetentModule) GetDescription() string {
+	return "Read a getent database (passwd, group, hosts, ...)"
+}
 
 func (m *GetentModule) Validate(args map[string]interface{}) error {
 	if !getentDatabase.MatchString(getStringArg(args, "database", "")) {
