@@ -183,16 +183,17 @@ func (m *URIModule) Execute(ctx context.Context, host types.Host, args map[strin
 		result.Duration = time.Since(startTime)
 		return result, nil
 	}
+	// the body reaches curl or Python on stdin, piped into the whole block
 	script := fmt.Sprintf(`b=$(mktemp); h=$(mktemp); trap 'rm -f "$b" "$h" %s %s' EXIT
-if command -v curl >/dev/null 2>&1; then
-code=$(%s%s) || exit $?
+%s{ if command -v curl >/dev/null 2>&1; then
+code=$(%s) || exit $?
 printf '%%s\n' "$code"; base64 < "$h" | tr -d '\n'; echo; base64 < "$b" | tr -d '\n'
 else
 py=$(command -v python3 || command -v python) || { echo "uri needs curl or python3 on the host" >&2; exit 127; }
-%s"$py" -c %s %s
-fi`,
+"$py" -c %s %s
+fi; }`,
 		shellQuote(credFile), shellQuote(paramsFile), input, strings.Join(curl, " "),
-		input, shellQuote(uriPython), shellQuote(paramsFile))
+		shellQuote(uriPython), shellQuote(paramsFile))
 	out, err := runShellOnHost(ctx, host, args, script)
 	if err != nil {
 		result.Success = false
