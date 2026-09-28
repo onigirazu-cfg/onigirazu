@@ -139,6 +139,11 @@ func levenshteinDistance(a, b string) int {
 	if a == b {
 		return 0
 	}
+	// module names are short; a long string is simply not similar
+	const maxLen = 128
+	if len(a) > maxLen || len(b) > maxLen {
+		return maxLen
+	}
 
 	d := make([][]int, len(a)+1)
 	for i := range d {
