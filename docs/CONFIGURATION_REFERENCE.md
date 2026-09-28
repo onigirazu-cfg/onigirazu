@@ -37,6 +37,8 @@ Environment variables only change the defaults; a key in `onigirazu.yml` wins ov
 | `log_level` | `ONIGIRAZU_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error`. `apply -l` and `-v` override it. |
 | `log_format` | `ONIGIRAZU_LOG_FORMAT` | `text` | `text` or `json`. `apply --log-format` overrides it. |
 | `state_file` | `ONIGIRAZU_STATE_FILE` | `.onigirazu-state` | State file. `-s` overrides it. |
+| `roles_path` | `ANSIBLE_ROLES_PATH` | - | Directories searched for roles after `roles/` next to the playbook (list; relative to the config file). ansible.cfg `roles_path` is read too. |
+| `collections_path` | `ANSIBLE_COLLECTIONS_PATH` | `~/.ansible/collections` | Where `namespace.collection.role` roles are found (`ansible_collections/<ns>/<coll>/roles/<role>`). ansible.cfg `collections_path` is read too. |
 | `managed_state` | - | file next to the playbook | Where the managed state lives: `backend: file` or `s3` with `bucket`, `prefix`, `endpoint`, `region`, `insecure`, `path_style`. See [MANAGED_STATE.md](MANAGED_STATE.md). |
 | `dry_run` | `ONIGIRAZU_DRY_RUN` | `false` | Tasks run in check mode. Prefer `apply --check`. |
 | `color_output` | `ONIGIRAZU_COLOR_OUTPUT` | `true` | Colored output. `--no-color` overrides it. |

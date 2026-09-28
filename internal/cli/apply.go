@@ -186,6 +186,7 @@ Examples:
 			if err != nil {
 				return fmt.Errorf("failed to load configuration: %w", err)
 			}
+			parser.SetRoleSearch(cfg.RolesPath, cfg.CollectionsPath)
 
 			// Override config with command line flags
 			if verbose {

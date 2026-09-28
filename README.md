@@ -817,6 +817,10 @@ roles:
     web_port: 9090
 ```
 
+Roles are found, as in Ansible, in `roles/` next to the playbook, as a path relative to it, in
+`roles_path` (onigirazu.yml, `ANSIBLE_ROLES_PATH`, ansible.cfg), in `~/.ansible/roles`, and a
+`namespace.collection.role` in `collections_path` (`ansible_collections/<ns>/<collection>/roles/`).
+
 `include_role` / `import_role` run a role as a task (`name`, `tasks_from`),
 on the hosts where its `when` holds; the task's `vars` are role parameters:
 

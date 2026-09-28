@@ -79,6 +79,12 @@ type Config struct {
 	PreferredModuleSyntax string `yaml:"preferred_module_syntax" json:"preferred_module_syntax"` // "flat", "nested"
 	EnforceModuleSyntax   bool   `yaml:"enforce_module_syntax" json:"enforce_module_syntax"`
 
+	// RolesPath and CollectionsPath are searched for roles after roles/ next
+	// to the playbook (as Ansible's roles_path and collections_path);
+	// relative entries start at the config file
+	RolesPath       []string `yaml:"roles_path" json:"roles_path"`
+	CollectionsPath []string `yaml:"collections_path" json:"collections_path"`
+
 	// ManagedState is where each playbook's managed state lives
 	ManagedState ManagedStateConfig `yaml:"managed_state" json:"managed_state"`
 
@@ -326,6 +332,14 @@ func LoadConfigWithDiscovery(path, playbookDir string) (*Config, error) {
 	}
 	if err := config.checkKeys(data); err != nil {
 		return nil, fmt.Errorf("failed to parse config file: %w", err)
+	}
+	base := filepath.Dir(configPath)
+	for _, list := range []*[]string{&config.RolesPath, &config.CollectionsPath} {
+		for i, p := range *list {
+			if !filepath.IsAbs(p) && !strings.HasPrefix(p, "~") {
+				(*list)[i] = filepath.Join(base, p)
+			}
+		}
 	}
 	for i, w := range config.Warnings {
 		config.Warnings[i] = configPath + ": " + w

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/onigirazu-cfg/onigirazu/internal/interfaces"
 	"github.com/onigirazu-cfg/onigirazu/internal/validator"
@@ -40,11 +41,12 @@ func (rl *RoleLoader) LoadRole(ctx context.Context, roleRef types.RoleReference)
 	// Determine role path
 	rolePath := roleRef.Path
 	if rolePath == "" {
-		rolePath = filepath.Join(rl.rolesPath, roleRef.Name)
-	}
-
-	// Verify role directory exists
-	if _, err := os.Stat(rolePath); os.IsNotExist(err) {
+		found, tried := findRole(roleRef.Name, rl.rolesPath)
+		if found == "" {
+			return nil, fmt.Errorf("role not found: %s (searched in %s)", roleRef.Name, strings.Join(tried, ", "))
+		}
+		rolePath = found
+	} else if _, err := os.Stat(rolePath); os.IsNotExist(err) {
 		return nil, fmt.Errorf("role not found: %s (searched in %s)", roleRef.Name, rolePath)
 	}
 
