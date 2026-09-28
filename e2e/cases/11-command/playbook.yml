@@ -11,3 +11,7 @@ plays:
         command:
           cmd: "sh -c 'echo ok > /root/onigirazu-e2e-omit'"
           chdir: "{{ onigirazu_unset_dir | default(omit) }}"
+      # {{ '{{' }} writes literal braces, e.g. for docker --format
+      - name: Literal braces
+        command: >-
+          sh -c "echo '{{ '{{' }} .Field {{ '}}' }}' > /root/onigirazu-e2e-braces"

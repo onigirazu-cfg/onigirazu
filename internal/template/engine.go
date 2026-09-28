@@ -246,7 +246,54 @@ func blockOptionsFrom(ctx context.Context) blockOptions {
 
 var ifBlock = regexp.MustCompile(`\{%-?\s*(if|elif)\s+(.+?)\s*-?%\}`)
 
-var exprBlock = regexp.MustCompile(`\{\{((?:[^{}]|\{[^{]|\}[^}])*?)\}\}`)
+// replaceExprBlocks calls fn for every {{ }} block of text and puts in what
+// it returns. Quoted strings and braces inside a block do not end it, so
+// {{ '{{' }} and {{ {'a': {'b': 1}} }} are one block each.
+func replaceExprBlocks(text string, fn func(block string) string) string {
+	var b strings.Builder
+	for {
+		start := strings.Index(text, "{{")
+		if start < 0 {
+			b.WriteString(text)
+			return b.String()
+		}
+		end := exprBlockEnd(text, start+2)
+		if end < 0 {
+			b.WriteString(text)
+			return b.String()
+		}
+		b.WriteString(text[:start])
+		b.WriteString(fn(text[start:end]))
+		text = text[end:]
+	}
+}
+
+// exprBlockEnd is the index just past the }} that closes a block whose
+// content starts at from, or -1
+func exprBlockEnd(text string, from int) int {
+	depth := 0
+	var quote byte
+	for i := from; i < len(text); i++ {
+		c := text[i]
+		switch {
+		case quote != 0:
+			if c == '\\' {
+				i++
+			} else if c == quote {
+				quote = 0
+			}
+		case c == '\'' || c == '"':
+			quote = c
+		case c == '{':
+			depth++
+		case c == '}' && depth > 0:
+			depth--
+		case c == '}' && i+1 < len(text) && text[i+1] == '}':
+			return i + 2
+		}
+	}
+	return -1
+}
 
 // evalBlocks evaluates {{ }} blocks as Jinja expressions (comparisons,
 // filters, nested attributes) and swaps them for placeholders, so their
@@ -268,7 +315,7 @@ func evalBlocks(text string, variables map[string]interface{}) (string, []string
 	})
 
 	var values []string
-	out := exprBlock.ReplaceAllStringFunc(text, func(block string) string {
+	out := replaceExprBlocks(text, func(block string) string {
 		inner := strings.TrimSpace(block[2 : len(block)-2])
 		if inner == "" || strings.HasPrefix(inner, ".") {
 			return block
