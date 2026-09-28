@@ -112,3 +112,28 @@ func TestIncludeRole_LoadsTheRole(t *testing.T) {
 	require.Len(t, extra.Tasks, 1)
 	assert.Equal(t, "nested", extra.Tasks[0].Name, "tasks_from with its own includes")
 }
+
+func TestIncludeRole_ImportedTasksFindRoleFiles(t *testing.T) {
+	dir := t.TempDir()
+	files := map[string]string{
+		"site.yml":                 "plays:\n  - name: p\n    hosts: all\n    tasks:\n      - include_role: {name: web}\n",
+		"roles/web/tasks/main.yml": "- import_tasks: sub.yml\n",
+		"roles/web/tasks/sub.yml": "- template: {src: templates/b.j2, dest: /tmp/b}\n" +
+			"- template: {src: b.j2, dest: /tmp/c}\n",
+		"roles/web/templates/b.j2": "x",
+	}
+	for name, content := range files {
+		path := filepath.Join(dir, name)
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
+	}
+	p := NewEnhancedParser(&mockTemplateEngine{}, &mockLogger{})
+	pb, err := p.ParsePlaybook(context.Background(), filepath.Join(dir, "site.yml"))
+	require.NoError(t, err)
+	role := pb.Plays[0].Tasks[0].IncludedRole
+	require.NotNil(t, role)
+	require.Len(t, role.Tasks, 2)
+	want := filepath.Join(dir, "roles/web/templates/b.j2")
+	assert.Equal(t, want, role.Tasks[0].Args["src"], "templates/ relative to the role")
+	assert.Equal(t, want, role.Tasks[1].Args["src"])
+}
