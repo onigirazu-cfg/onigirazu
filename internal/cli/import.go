@@ -31,6 +31,8 @@ func newImportCmd() *cobra.Command {
 		noBecome   bool
 		becomeUser string
 		force      bool
+		baseline   string
+		adopt      bool
 	)
 	cmd := &cobra.Command{
 		Use:   "import HOST_PATTERN... -i INVENTORY -o DIR",
@@ -59,21 +61,35 @@ a faithful import has nothing to change.`,
 				return err
 			}
 			out := cmd.OutOrStdout()
-			fmt.Fprintf(out, "Collecting %d host(s)...\n", len(hosts))
-			snaps, err := collectHosts(cmd.Context(), hosts, !noBecome, becomeUser)
+			collect := hosts
+			if baseline != "" {
+				base, _, err := importHosts(cmd.Context(), []string{baseline})
+				if err != nil {
+					return fmt.Errorf("--baseline: %w", err)
+				}
+				collect = append(append([]types.Host(nil), hosts...), base[0])
+			}
+			fmt.Fprintf(out, "Collecting %d host(s)...\n", len(collect))
+			snaps, err := collectHosts(cmd.Context(), collect, !noBecome, becomeUser)
 			if err != nil {
 				return err
 			}
-			rep, err := importer.GenerateWith(snaps, outDir, importer.Options{Groups: groups})
+			opts := importer.Options{Groups: groups}
+			if baseline != "" {
+				opts.Baseline, snaps = snaps[len(snaps)-1], snaps[:len(snaps)-1]
+			}
+			rep, err := importer.GenerateWith(snaps, outDir, opts)
 			if err != nil {
 				return err
 			}
-			if !noVerify {
-				rep.Verified = true
-				rep.Drift, err = verifyImport(outDir, hosts, importer.SecretValues(snaps))
+			if !noVerify || adopt {
+				// --adopt records, in the same check run, what exists as
+				// adopted in the new playbook's managed state
+				drift, err := verifyImport(outDir, hosts, importer.SecretValues(snaps), adopt)
 				if err != nil {
 					return fmt.Errorf("verify: %w", err)
 				}
+				rep.Verified, rep.Drift, rep.Adopted = true, drift, adopt
 			}
 			if err := importer.WriteReport(filepath.Join(outDir, "IMPORT_REPORT.md"), rep); err != nil {
 				return err
@@ -90,6 +106,8 @@ a faithful import has nothing to change.`,
 	cmd.Flags().BoolVar(&noBecome, "no-become", false, "Collect as the login user (root-only files are missed)")
 	cmd.Flags().StringVar(&becomeUser, "become-user", "root", "User to collect as")
 	cmd.Flags().BoolVar(&force, "force", false, "Write into a directory that is not empty")
+	cmd.Flags().StringVar(&baseline, "baseline", "", "A fresh host of the same system: what it has too is not imported")
+	cmd.Flags().BoolVar(&adopt, "adopt", false, "Record the imported resources as adopted in the new playbook's managed state")
 	return cmd
 }
 
@@ -176,7 +194,7 @@ func collectHosts(ctx context.Context, hosts []types.Host, become bool, becomeUs
 
 // verifyImport plans the new playbook against the hosts; what it would
 // change is what the import got wrong
-func verifyImport(dir string, hosts []types.Host, secrets map[string]map[string]string) ([]importer.Drift, error) {
+func verifyImport(dir string, hosts []types.Host, secrets map[string]map[string]string, adopt bool) ([]importer.Drift, error) {
 	names := make([]string, len(hosts))
 	for i, h := range hosts {
 		names[i] = h.Name
@@ -201,6 +219,9 @@ func verifyImport(dir string, hosts []types.Host, secrets map[string]map[string]
 	}
 	var drift []importer.Drift
 	for _, extra := range runs {
+		if adopt {
+			extra = append(extra, "--adopt")
+		}
 		d, err := planDrift(dir, extra)
 		if err != nil {
 			return nil, err

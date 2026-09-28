@@ -50,6 +50,8 @@ type Report struct {
 	// Verified: the new playbook was planned; Drift is what it would change
 	Verified bool
 	Drift    []Drift
+	// Adopted: the check run recorded the resources in the managed state
+	Adopted bool
 }
 
 // SecretVar is a variable the user provides for a secret value
@@ -70,6 +72,9 @@ type LayerInfo struct {
 type Options struct {
 	// Groups: host -> its inventory groups
 	Groups map[string][]string
+	// Baseline is a fresh host of the same system: what it has too is not
+	// imported
+	Baseline *Snapshot
 }
 
 // resource is one thing a host has, with the task that recreates it
@@ -111,6 +116,21 @@ func GenerateWith(snaps []*Snapshot, dir string, opts Options) (*Report, error) 
 		perHost[s.Host] = res
 	}
 	rep.Hosts = hosts
+	if opts.Baseline != nil {
+		base := map[string]string{}
+		for _, r := range hostResources(opts.Baseline, &Report{Counts: map[string]int{}}) {
+			base[r.key] = r.value
+		}
+		for _, h := range hosts {
+			for k, r := range perHost[h] {
+				if v, ok := base[k]; ok && v == r.value {
+					delete(perHost[h], k)
+					rep.Counts[r.count]--
+					rep.Counts["same as the baseline"]++
+				}
+			}
+		}
+	}
 
 	var layers []*layer
 	if l := extract("common", "common", hosts, perHost, byName); l != nil {

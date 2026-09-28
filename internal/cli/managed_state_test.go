@@ -50,11 +50,11 @@ func TestDestroyOrphans(t *testing.T) {
 		types.TaskResult{TaskKey: "p/b", Success: true, Resources: []types.ManagedResource{created("/b")}},
 		types.TaskResult{TaskKey: "p/c", Success: true, Resources: []types.ManagedResource{created("/c")}})
 	keys := engine.ManagedScopes{Keys: map[string]bool{"p/a": true, "p/b": true, "p/c": true}}
-	updateManagedState(context.Background(), store, first, keys, true, false, false, log)
+	updateManagedState(context.Background(), store, first, keys, true, false, false, false, log)
 
 	// p/b and p/c left the playbook; /c cannot be removed
 	second := runOf("h", types.TaskResult{TaskKey: "p/a", Success: true, Resources: []types.ManagedResource{created("/a")}})
-	m := updateManagedState(context.Background(), store, second, engine.ManagedScopes{Keys: map[string]bool{"p/a": true}}, true, false, false, log)
+	m := updateManagedState(context.Background(), store, second, engine.ManagedScopes{Keys: map[string]bool{"p/a": true}}, true, false, false, false, log)
 	require.Len(t, second.Orphans, 2)
 	u := &fakeUndo{errs: map[string]error{"/c": errors.New("busy")}}
 	var out bytes.Buffer
@@ -92,7 +92,7 @@ func TestDestroyOrphansOfUntargetedHost(t *testing.T) {
 		{Host: "gone", Tasks: []types.TaskResult{{TaskKey: "p/a", Success: true, Resources: []types.ManagedResource{res}}}},
 	}}}}
 	scopes := engine.ManagedScopes{Keys: map[string]bool{"p/a": true}, Hosts: map[string]bool{"web": true, "old": true, "gone": true}, AllPlays: true}
-	updateManagedState(context.Background(), store, both, scopes, true, true, false, log)
+	updateManagedState(context.Background(), store, both, scopes, true, true, false, false, log)
 
 	// the play matches only web now; "gone" left the inventory too
 	one := &types.PlaybookResult{Plays: []types.PlayResult{{Hosts: []types.HostResult{
@@ -100,9 +100,9 @@ func TestDestroyOrphansOfUntargetedHost(t *testing.T) {
 	}}}}
 	scopes.Hosts = map[string]bool{"web": true}
 	// with --limit nothing is untargeted
-	updateManagedState(context.Background(), store, one, scopes, true, false, true, log)
+	updateManagedState(context.Background(), store, one, scopes, true, false, true, false, log)
 	assert.Empty(t, one.Orphans)
-	m := updateManagedState(context.Background(), store, one, scopes, true, true, false, log)
+	m := updateManagedState(context.Background(), store, one, scopes, true, true, false, false, log)
 	assert.Len(t, one.Orphans, 2)
 	u := &fakeUndo{}
 	var out bytes.Buffer

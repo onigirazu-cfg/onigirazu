@@ -106,6 +106,9 @@ func PrintSummary(w io.Writer, r *Report, dir string) {
 	case !r.Verified:
 	case len(r.Drift) == 0:
 		fmt.Fprintln(w, "Check: plan of the new playbook against the hosts has nothing to change")
+		if r.Adopted {
+			fmt.Fprintln(w, "Adopted: the resources are in the new playbook's managed state (state resources)")
+		}
 	default:
 		fmt.Fprintf(w, "Check: the new playbook would still change %d task(s):\n", len(r.Drift))
 		for i, d := range r.Drift {
