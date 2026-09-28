@@ -106,16 +106,19 @@ func (p *EnhancedParser) ParsePlaybook(ctx context.Context, filePath string) (*t
 		return nil, fmt.Errorf("playbook validation failed for %s: %w", filePath, err)
 	}
 
-	// Validate module syntax if validator is available
+	// Load roles for each play (NEW v1.42.0)
+	if err := p.processRoles(ctx, &playbook, filepath.Dir(filePath)); err != nil {
+		return nil, fmt.Errorf("failed to process roles in playbook %s: %w", filePath, err)
+	}
+
+	// Validate module syntax if validator is available, the roles' tasks too
 	if p.moduleSyntaxValidator != nil {
 		if err := p.moduleSyntaxValidator.ValidatePlaybookModules(&playbook); err != nil {
 			return nil, fmt.Errorf("module syntax validation failed: %w", err)
 		}
-	}
-
-	// Load roles for each play (NEW v1.42.0)
-	if err := p.processRoles(ctx, &playbook, filepath.Dir(filePath)); err != nil {
-		return nil, fmt.Errorf("failed to process roles in playbook %s: %w", filePath, err)
+		for _, w := range p.moduleSyntaxValidator.Warnings {
+			p.logger.Warn("%s", w)
+		}
 	}
 
 	p.logger.Info("Successfully parsed playbook: %s (%d plays)", filePath, len(playbook.Plays))
