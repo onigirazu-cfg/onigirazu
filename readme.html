@@ -218,7 +218,8 @@ formats can be used side by side. Examples: <a href="docs/examples/README.md">do
   <code>to_json</code>/<code>from_yaml</code>, <code>ternary</code>, set operations, <code>password_hash</code>, ...), tests (<code>is defined</code>,
   <code>is version</code>, <code>is success</code>/<code>failed</code>/<code>changed</code>/<code>skipped</code>, <code>is match</code>/<code>search</code>, ...), <code>~</code>,
   inline <code>if</code>, <code>omit</code>, Python string/dict/list methods (<code>.split()</code>, <code>.get()</code>), lookups
-  (<code>env</code>, <code>file</code>, <code>pipe</code>, <code>template</code>, <code>fileglob</code>, <code>first_found</code>, ...), <code>{% set %}</code></li>
+  (<code>env</code>, <code>file</code>, <code>pipe</code>, <code>template</code>, <code>fileglob</code>, <code>first_found</code>, <code>community.general.bitwarden</code>,
+  ...), <code>{% set %}</code></li>
 <li><strong>Facts and variables</strong>: <code>ansible_facts</code> and the <code>ansible_*</code> names (distribution, OS family,
   hostname, IP, memory, virtualization, <code>ansible_pkg_mgr</code>, <code>ansible_local</code> from
   <code>/etc/ansible/facts.d</code>), <code>setup</code>, <code>hostvars</code>, <code>groups</code>, <code>group_names</code>, <code>inventory_hostname</code>,
@@ -606,6 +607,9 @@ per-host counts and a browser for task results.</p>
   <code>ansible_ssh_common_args: -o StrictHostKeyChecking=no</code>) turns the check off.</li>
 <li>Passwords (<code>ansible_password</code>, <code>ansible_become_password</code>) never appear on command lines;
   sudo reads them on stdin. <code>no_log: true</code> keeps a task's values out of logs, state and output.</li>
+<li>Secrets come from Bitwarden/Vaultwarden (<code>bw</code> CLI, <code>BW_SESSION</code>) or HashiCorp Vault when a
+  template uses them: <code>{{ bitwarden('app-db') }}</code>, <code>{{ vault('app/db', 'password') }}</code>,
+  <code>lookup('community.general.bitwarden', ...)</code>. See <a href="docs/BITWARDEN_INTEGRATION.md">docs/BITWARDEN_INTEGRATION.md</a>.</li>
 <li>An optional security policy restricts modules, hosts, paths and commands:
   <a href="docs/SECURITY_POLICY_GUIDE.md">docs/SECURITY_POLICY_GUIDE.md</a>.</li>
 <li>Work files on the hosts live in <code>~/.onigirazu/tmp</code> of the connecting user.</li>
