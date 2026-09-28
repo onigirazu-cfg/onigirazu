@@ -1293,7 +1293,10 @@ RedHat/CentOS package management.
 
 ### uri
 
-Interact with HTTP/HTTPS services.
+Interact with HTTP/HTTPS services. The request is made from the host with
+curl, or with the host's Python (`python3`, then `python`) where curl is
+missing. With `return_content: true` the result has `content`;
+`validate_certs: false` skips TLS verification.
 
 #### Parameters
 
