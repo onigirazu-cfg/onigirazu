@@ -273,7 +273,7 @@ func (p *EnhancedParser) validateTask(task *types.Task, context string) error {
 // validateLoop validates loop syntax
 func (p *EnhancedParser) validateLoop(loop *types.Loop, context string) error {
 	sources := 0
-	for _, set := range []bool{loop.Items != nil, loop.Expr != "", loop.Range != ""} {
+	for _, set := range []bool{loop.Items != nil, loop.Expr != "", loop.Range != "", loop.Lookup != ""} {
 		if set {
 			sources++
 		}

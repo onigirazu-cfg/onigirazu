@@ -3,6 +3,11 @@ plays:
     hosts: all
     become: true
     gather_facts: true
+    vars:
+      e2e_users:
+        - {name: ann, keys: [k1, k2]}
+        - {name: bob, keys: [k3]}
+        - {name: cid}
     tasks:
       - name: Plain list
         file:
@@ -50,3 +55,31 @@ plays:
           content: "{{ item.stdout }}\n"
           dest: /root/onigirazu-e2e-loop/braces
         loop: "{{ braces.results }}"
+      # with_<lookup> loops, as in Ansible
+      - name: query('nested') gives the same combinations
+        lineinfile:
+          path: /root/onigirazu-e2e-loop/with
+          line: "{{ item }}"
+          create: true
+        loop:
+          - "combinations {{ query('nested', [1, 2], ['a', 'b']) | length }}"
+      - name: with_nested
+        lineinfile:
+          path: /root/onigirazu-e2e-loop/with
+          line: "nested {{ item[0] }}-{{ item[1] }}"
+        with_nested: [[1, 2], [a, b]]
+      - name: with_together
+        lineinfile:
+          path: /root/onigirazu-e2e-loop/with
+          line: "together {{ item[0] }}-{{ item[1] }}"
+        with_together: [[a, b], [1, 2]]
+      - name: with_subelements
+        lineinfile:
+          path: /root/onigirazu-e2e-loop/with
+          line: "sub {{ item[0].name }}-{{ item[1] }}"
+        with_subelements: ["{{ e2e_users }}", keys, {skip_missing: true}]
+      - name: with_indexed_items
+        lineinfile:
+          path: /root/onigirazu-e2e-loop/with
+          line: "indexed {{ item[0] }}-{{ item[1] }}"
+        with_indexed_items: [x, y]

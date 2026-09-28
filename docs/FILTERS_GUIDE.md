@@ -374,6 +374,11 @@ loop: "{{ packages | select('match', '^python3-') | list }}"
 | `first_found` | First existing path of a list |
 | `dict` | `{key, value}` items of a dictionary |
 | `items`, `list` | The terms as a list |
+| `nested` | Every combination of the lists |
+| `together` | The lists zipped by position |
+| `subelements` | `[element, subitem]` for a list of dicts and a key (`{skip_missing: true}` as third term) |
+| `indexed_items` | `[index, item]` |
+| `random_choice` | One of the terms |
 
 ```yaml
 key: "{{ lookup('file', 'files/id_ed25519.pub') }}"

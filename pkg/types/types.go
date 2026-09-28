@@ -291,6 +291,11 @@ func (t *Task) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		"with_dict":       true,
 		"with_sequence":   true,
 	}
+	for key := range taskMap {
+		if strings.HasPrefix(key, "with_") {
+			reservedFields[key] = true
+		}
+	}
 
 	if env, ok := taskMap["environment"].(map[string]interface{}); ok {
 		t.Environment = env
@@ -343,6 +348,19 @@ func (t *Task) UnmarshalYAML(unmarshal func(interface{}) error) error {
 			inner = strings.TrimSpace(inner[2 : len(inner)-2])
 		}
 		t.Loop = &Loop{Expr: "(" + inner + ") | dict2items"}
+	}
+
+	// with_<lookup>: the items of that lookup, as in Ansible; an unknown
+	// with_ is an error, not a task that silently runs once
+	for key, value := range taskMap {
+		name, ok := strings.CutPrefix(key, "with_")
+		if !ok || name == "items" || name == "list" || name == "dict" || name == "sequence" {
+			continue
+		}
+		if !WithLookups[name] {
+			return fmt.Errorf("%s is not supported; use loop, or with_items, with_list, with_dict, with_sequence, with_%s", key, strings.Join(sortedKeys(WithLookups), ", with_"))
+		}
+		t.Loop = &Loop{Lookup: name, Terms: value}
 	}
 
 	// check_mode: false runs the task for real in a check run; true checks
@@ -772,9 +790,14 @@ type Playbook struct {
 // 1. Structured: name: ..., plays: [...]
 // 2. Direct list: [- hosts: ..., name: ..., tasks: ...]
 func (pb *Playbook) UnmarshalYAML(unmarshal func(interface{}) error) error {
-	// Try to unmarshal as a list of plays (Ansible format)
+	// A list is the Ansible format: its errors are the playbook's errors
+	// (an unknown with_ in a task), not a reason to try the other format
 	var plays []Play
-	if err := unmarshal(&plays); err == nil && len(plays) > 0 {
+	var list []interface{}
+	isList := unmarshal(&list) == nil
+	if err := unmarshal(&plays); isList && err != nil {
+		return err
+	} else if err == nil && len(plays) > 0 {
 		// Successfully unmarshaled as list - generate playbook name from first play
 		pb.Plays = plays
 		if plays[0].Name != "" {
@@ -1177,6 +1200,19 @@ type Loop struct {
 	// Expr is an expression that yields the items, evaluated per host:
 	// loop: "{{ result.stdout_lines }}"
 	Expr string `yaml:"expr,omitempty" json:"expr,omitempty"`
+	// Lookup and Terms: with_<lookup> takes its items from that lookup
+	// with these terms, rendered per host (with_nested, with_file, ...)
+	Lookup string      `yaml:"lookup,omitempty" json:"lookup,omitempty"`
+	Terms  interface{} `yaml:"terms,omitempty" json:"terms,omitempty"`
+}
+
+// WithLookups are the with_<name> loops besides with_items, with_list,
+// with_dict and with_sequence: each takes its items from the lookup of
+// that name
+var WithLookups = map[string]bool{
+	"nested": true, "together": true, "subelements": true, "indexed_items": true,
+	"random_choice": true, "file": true, "fileglob": true, "first_found": true,
+	"lines": true, "env": true, "template": true, "pipe": true,
 }
 
 // Group represents a host group
@@ -1555,4 +1591,14 @@ func tagsAsList(value *yaml.Node) {
 		}
 		value.Content[i+1] = list
 	}
+}
+
+// sortedKeys is the keys of a set in order
+func sortedKeys(set map[string]bool) []string {
+	keys := make([]string, 0, len(set))
+	for k := range set {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }

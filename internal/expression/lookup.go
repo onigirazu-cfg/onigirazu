@@ -3,6 +3,7 @@ package expression
 import (
 	"context"
 	"fmt"
+	"math/rand/v2"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -130,8 +131,149 @@ func lookupItems(base, varsArg interface{}, args []interface{}) ([]interface{}, 
 				out = append(out, t)
 			}
 		}
+	case "nested":
+		return nestedItems(terms)
+	case "together":
+		return togetherItems(terms)
+	case "subelements":
+		return subelementItems(terms)
+	case "indexed_items":
+		for i, item := range flattenTerms(terms) {
+			out = append(out, []interface{}{i, item})
+		}
+	case "random_choice":
+		items := flattenTerms(terms)
+		if len(items) == 0 {
+			return []interface{}{}, nil
+		}
+		return []interface{}{items[rand.IntN(len(items))]}, nil // #nosec G404 -- not for security
 	default:
 		return nil, fmt.Errorf("lookup plugin %q is not supported", plugin)
+	}
+	return out, nil
+}
+
+// LookupItems runs a lookup as query() does: with_<plugin> loops get their
+// items from it. dir is where relative paths start.
+func LookupItems(dir string, vars map[string]interface{}, plugin string, terms []interface{}) ([]interface{}, error) {
+	return lookupItems(dir, vars, append([]interface{}{plugin}, terms...))
+}
+
+// flattenTerms is the terms with lists opened one level
+func flattenTerms(terms []interface{}) []interface{} {
+	var out []interface{}
+	for _, t := range terms {
+		if isListValue(t) {
+			items, _ := Items(t)
+			out = append(out, items...)
+		} else {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// termLists reads every term as a list (a single value is a list of one)
+func termLists(terms []interface{}) [][]interface{} {
+	lists := make([][]interface{}, len(terms))
+	for i, t := range terms {
+		if isListValue(t) {
+			lists[i], _ = Items(t)
+		} else {
+			lists[i] = []interface{}{t}
+		}
+	}
+	return lists
+}
+
+// nestedItems is every combination of the lists, the first list outermost
+func nestedItems(terms []interface{}) ([]interface{}, error) {
+	lists := termLists(terms)
+	if len(lists) == 0 {
+		return nil, fmt.Errorf("lookup nested: no lists")
+	}
+	combos := [][]interface{}{{}}
+	for _, list := range lists {
+		var next [][]interface{}
+		for _, c := range combos {
+			for _, v := range list {
+				next = append(next, append(append([]interface{}{}, c...), v))
+			}
+		}
+		combos = next
+	}
+	out := make([]interface{}, len(combos))
+	for i, c := range combos {
+		out[i] = c
+	}
+	return out, nil
+}
+
+// togetherItems zips the lists; a shorter list gives none (nil)
+func togetherItems(terms []interface{}) ([]interface{}, error) {
+	lists := termLists(terms)
+	longest := 0
+	for _, l := range lists {
+		longest = max(longest, len(l))
+	}
+	out := make([]interface{}, 0, longest)
+	for i := 0; i < longest; i++ {
+		row := make([]interface{}, len(lists))
+		for j, l := range lists {
+			if i < len(l) {
+				row[j] = l[i]
+			}
+		}
+		out = append(out, row)
+	}
+	return out, nil
+}
+
+// subelementItems pairs every element of a list of dicts with each item of
+// one of its lists: [element, subitem]. A third term {skip_missing: true}
+// skips elements without the key.
+func subelementItems(terms []interface{}) ([]interface{}, error) {
+	if len(terms) < 2 {
+		return nil, fmt.Errorf("lookup subelements: needs a list and a key")
+	}
+	elements, err := Items(terms[0])
+	if err != nil {
+		return nil, fmt.Errorf("lookup subelements: %w", err)
+	}
+	key := fmt.Sprint(terms[1])
+	skipMissing := false
+	if len(terms) > 2 {
+		if flags, ok := terms[2].(map[string]interface{}); ok {
+			skipMissing = Truthy(flags["skip_missing"])
+		}
+	}
+	var out []interface{}
+	for _, e := range elements {
+		value := interface{}(nil)
+		if m, ok := e.(map[string]interface{}); ok {
+			value = m
+			for _, part := range strings.Split(key, ".") {
+				mm, ok := value.(map[string]interface{})
+				if !ok {
+					value = nil
+					break
+				}
+				value = mm[part]
+			}
+		}
+		if value == nil {
+			if skipMissing {
+				continue
+			}
+			return nil, fmt.Errorf("lookup subelements: %q is missing in an element", key)
+		}
+		subs, err := Items(value)
+		if err != nil {
+			return nil, fmt.Errorf("lookup subelements: %q is not a list", key)
+		}
+		for _, sub := range subs {
+			out = append(out, []interface{}{e, sub})
+		}
 	}
 	return out, nil
 }
