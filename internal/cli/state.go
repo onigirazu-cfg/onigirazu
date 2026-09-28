@@ -27,8 +27,10 @@ The state file tracks:
 - File checksums
 
 Subcommands:
-  list  - List all resources in state
-  show  - Show detailed information about a resource`,
+  list      - List all resources in state
+  show      - Show detailed information about a resource
+  resources - List the resources a playbook manages on its hosts (managed state)
+  rm        - Forget a managed resource without touching the host`,
 		Example: `  # List all resources
   onigirazu state list
 
@@ -42,6 +44,8 @@ Subcommands:
 	// Add subcommands
 	cmd.AddCommand(newStateListCmd())
 	cmd.AddCommand(newStateShowCmd())
+	cmd.AddCommand(newStateResourcesCmd())
+	cmd.AddCommand(newStateRmCmd())
 
 	return cmd
 }

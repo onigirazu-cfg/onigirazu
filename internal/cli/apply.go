@@ -821,6 +821,13 @@ Examples:
 			saveCtx, saveCancel := context.WithTimeout(context.WithoutCancel(ctx), time.Minute)
 			defer saveCancel()
 			runResult, runStart = result, startTime
+			if result != nil {
+				complete := tags == "" && skipTags == "" && startAtTask == "" && ctx.Err() == nil && !runControl.Stopped()
+				updateManagedState(playbookPath, result, executionEngine.ManagedScopes(), complete, cfg.IsCheckMode(), log)
+				if onResult == nil && outputFormat != "json" && outputFormat != "yaml" {
+					printOrphans(resultOut, result.Orphans)
+				}
+			}
 			if diff && onResult == nil && result != nil && outputFormat != "json" && outputFormat != "yaml" {
 				printDiffs(resultOut, result)
 			}

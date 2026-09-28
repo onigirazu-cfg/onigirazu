@@ -87,3 +87,21 @@ func TestCaptureBefore(t *testing.T) {
 	assert.Empty(t, pkgs["installed"])
 	assert.Nil(t, captureBefore(context.Background(), host, "debug", map[string]interface{}{"msg": "x"}))
 }
+
+func TestDeclaredResources(t *testing.T) {
+	res := declaredResources("apt", map[string]interface{}{"name": []interface{}{"a", "b"}},
+		map[string]interface{}{"kind": "packages", "installed": []interface{}{"b"}})
+	assert.Len(t, res, 2)
+	assert.Equal(t, "a", res[0].ID)
+	assert.Empty(t, res[0].Before["installed"])
+	assert.Equal(t, []interface{}{"b"}, res[1].Before["installed"])
+
+	res = declaredResources("file", map[string]interface{}{"path": "/x", "state": "absent"}, nil)
+	assert.True(t, res[0].Absent)
+	res = declaredResources("lineinfile", map[string]interface{}{"path": "/x", "state": "absent"}, nil)
+	assert.False(t, res[0].Absent)
+	res = declaredResources("user", map[string]interface{}{"name": "u", "state": "absent"}, nil)
+	assert.True(t, res[0].Absent)
+	assert.Nil(t, declaredResources("copy", map[string]interface{}{"dest": "/x"}, map[string]interface{}{"error": "x"})[0].Before)
+	assert.Nil(t, declaredResources("debug", map[string]interface{}{"msg": "x"}, nil))
+}

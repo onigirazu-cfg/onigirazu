@@ -242,6 +242,9 @@ func (r *Registry) ExecuteTask(ctx context.Context, task *types.Task, host types
 	if result.TaskName == "" {
 		result.TaskName = task.Name
 	}
+	if err == nil && !result.Skipped && !result.Failed && result.Success {
+		result.Resources = declaredResources(task.Module, args, before)
+	}
 	// Modules report some failures only through Success=false; the engine
 	// looks at Failed, so without this a failed apt-get counted as success
 	if err == nil && !result.Success && !result.Skipped && !result.Failed {

@@ -1,0 +1,15 @@
+- name: managed state
+  hosts: all
+  become: true
+  tasks:
+    - name: kept file
+      copy: {dest: /tmp/e2e-ms/kept, content: "kept\n"}
+    - name: created file
+      copy: {dest: /tmp/e2e-ms/created, content: "created\n"}
+    - name: adopted file
+      lineinfile: {path: /tmp/e2e-ms/existing, line: "managed=1"}
+    - name: account
+      user: {name: e2ems, create_home: false}
+    - name: skipped
+      copy: {dest: /tmp/e2e-ms/skipped, content: "x"}
+      when: false

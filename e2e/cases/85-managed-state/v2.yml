@@ -1,0 +1,9 @@
+- name: managed state
+  hosts: all
+  become: true
+  tasks:
+    - name: kept file
+      copy: {dest: /tmp/e2e-ms/kept, content: "kept\n"}
+    - name: skipped
+      copy: {dest: /tmp/e2e-ms/skipped, content: "x"}
+      when: false
