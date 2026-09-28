@@ -45,7 +45,7 @@ jobs:
     env:
       GOVC_VERSION: v0.56.0
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-go@v6
         with:
@@ -98,7 +98,7 @@ jobs:
     env:
       GOVC_VERSION: v0.56.0
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install govc
         run: |
