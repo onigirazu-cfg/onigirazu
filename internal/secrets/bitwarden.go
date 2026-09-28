@@ -258,7 +258,7 @@ func (bc *BitwardenClient) GetSecret(ctx context.Context, itemName, field string
 		if err != nil {
 			return "", &ProviderError{
 				Provider: "bitwarden",
-				Message:  fmt.Sprintf("failed to get item '%s'", itemName),
+				Message:  fmt.Sprintf("failed to get item %q", itemName),
 				Err:      err,
 			}
 		}

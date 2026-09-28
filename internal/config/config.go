@@ -2,7 +2,6 @@ package config
 
 import (
 	"fmt"
-	"github.com/onigirazu-cfg/onigirazu/internal/secrets"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -10,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/onigirazu-cfg/onigirazu/internal/secrets"
 
 	"gopkg.in/yaml.v3"
 )
