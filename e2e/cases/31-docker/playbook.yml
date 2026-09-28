@@ -36,8 +36,8 @@ plays:
           cpus: 0.5
           memory: 64M
         register: again
+      # the case runs twice, so only the second task can be asserted
       - name: Second pass changes nothing
         assert:
           that:
-            - limited is changed
             - again is not changed
