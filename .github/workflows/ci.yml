@@ -202,9 +202,25 @@ jobs:
         cache-from: type=gha
         cache-to: type=gha,mode=max
 
+  s3-state:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v6
+
+    - name: Set up Go
+      uses: actions/setup-go@v6
+      with:
+        go-version: '1.26'
+        cache: true
+        cache-dependency-path: go.sum
+
+    - name: Managed state in S3 (Garage)
+      run: scripts/garage-s3-test.sh
+
   quality-gate:
     runs-on: ubuntu-latest
-    needs: [test, build, lint, integration-tests]
+    needs: [test, build, lint, integration-tests, s3-state]
     if: always()
 
     steps:
@@ -213,6 +229,7 @@ jobs:
         if [[ "${{ needs.test.result }}" != "success" ||
               "${{ needs.build.result }}" != "success" ||
               "${{ needs.lint.result }}" != "success" ||
+              "${{ needs.s3-state.result }}" != "success" ||
               ("${{ needs.integration-tests.result }}" != "success" && "${{ needs.integration-tests.result }}" != "skipped") ]]; then
           echo "Quality gate failed!"
           exit 1
