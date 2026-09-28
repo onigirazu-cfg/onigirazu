@@ -16,7 +16,7 @@
 
 ## Introduction
 
-A loop runs the same task once per item. Onigirazu supports the Ansible loop keywords (`loop`, `with_items`, `with_list`, `with_dict`, `with_sequence`, `loop_control`) and its own map form with `items` and `range`.
+A loop runs the same task once per item. Onigirazu supports the Ansible loop keywords (`loop`, `with_items`, `with_list`, `with_dict`, `with_sequence`, the `with_<lookup>` forms, `loop_control`) and its own map form with `items` and `range`.
 
 ---
 
@@ -120,6 +120,32 @@ tasks:
     path: /srv/{{ item }}
     state: directory
   with_sequence: start=1 end=3 format=web%02d    # web01, web02, web03
+```
+
+### with_nested, with_subelements and other lookups
+
+`with_<name>` takes its items from the lookup of that name, as in Ansible; the terms may use
+variables (`"{{ users }}"` stays a list). File lookups run on the control machine, relative to
+the playbook directory. An unknown `with_*` is an error.
+
+| Keyword | Items |
+|---------|-------|
+| `with_nested: [[a, b], [1, 2]]` | every combination: `[a, 1]`, `[a, 2]`, `[b, 1]`, `[b, 2]` |
+| `with_together: [[a, b], [1, 2]]` | pairs by position: `[a, 1]`, `[b, 2]` (a shorter list gives none) |
+| `with_subelements: ["{{ users }}", keys]` | `[user, key]` for every key of every user; a third term `{skip_missing: true}` skips users without `keys` |
+| `with_indexed_items: [x, y]` | `[0, x]`, `[1, y]` |
+| `with_random_choice: [a, b]` | one of them |
+| `with_file`, `with_fileglob`, `with_first_found`, `with_lines`, `with_pipe`, `with_env`, `with_template` | what the lookup returns |
+
+```yaml
+- name: Authorized keys of every user
+  authorized_key:
+    user: "{{ item[0].name }}"
+    key: "{{ item[1] }}"
+  with_subelements:
+    - "{{ users }}"
+    - keys
+    - {skip_missing: true}
 ```
 
 ### loop_control
@@ -380,6 +406,7 @@ Only `shell` runs through a shell. In `command` (which quotes each word), `copy`
 | `with_items`, `with_list` | list or expression string |
 | `with_dict` | dictionary or expression string |
 | `with_sequence` | `start= end= stride= count= format=` |
+| `with_<lookup>` | the lookup's terms: a list, or one value |
 | `loop_control` | `loop_var`, `index_var` |
 
 ## Related Documentation

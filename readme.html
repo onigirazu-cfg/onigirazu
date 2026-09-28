@@ -192,8 +192,8 @@ formats can be used side by side. Examples: <a href="docs/examples/README.md">do
   <code>vars</code>, <code>vars_files</code>, <code>environment</code>, <code>serial</code>, <code>max_fail_percentage</code>, <code>any_errors_fatal</code>,
   <code>force_handlers</code>; <code>import_playbook</code>, <code>include_tasks</code>/<code>import_tasks</code>,
   <code>include_role</code>/<code>import_role</code>, <code>block</code>/<code>rescue</code>/<code>always</code></li>
-<li><strong>Task keywords</strong>: <code>when</code>, <code>loop</code> (also <code>with_items</code>, <code>with_list</code>, <code>with_dict</code>,
-  <code>with_sequence</code>), <code>loop_control</code>, <code>register</code>, <code>until</code>/<code>retries</code>/
+<li><strong>Task keywords</strong>: <code>when</code>, <code>loop</code> and <code>with_*</code> (items, list, dict, sequence, nested,
+  together, subelements, indexed_items, file, fileglob, first_found, lines, ...), <code>loop_control</code>, <code>register</code>, <code>until</code>/<code>retries</code>/
   <code>delay</code>, <code>changed_when</code>, <code>failed_when</code>, <code>ignore_errors</code>, <code>notify</code>/<code>listen</code>, <code>tags</code>,
   <code>become</code>/<code>become_user</code>, <code>delegate_to</code>, <code>local_action</code>, <code>run_once</code>, <code>throttle</code>, <code>no_log</code>,
   <code>check_mode</code>, <code>diff</code>, <code>vars</code>, <code>environment</code>, <code>action</code> (also with a templated module name)</li>
@@ -269,10 +269,11 @@ or <code>@file</code>) overrides everything. Precedence follows Ansible, from ro
   when: ansible_os_family in packages
 </code></pre>
 
-<p><code>loop</code> takes a list or an expression; <code>with_items</code>, <code>with_list</code>, <code>with_dict</code>, <code>with_sequence</code>
-and <code>loop_control</code> (<code>loop_var</code>, <code>index_var</code>, <code>label</code>) work too; other <code>with_*</code> forms do not
-(use <code>loop</code> with filters such as <code>product</code> or <code>zip</code>). See
-<a href="docs/LOOPS_GUIDE.md">docs/LOOPS_GUIDE.md</a>.</p>
+<p><code>loop</code> takes a list or an expression. The <code>with_*</code> forms work as in Ansible: <code>with_items</code>,
+<code>with_list</code>, <code>with_dict</code>, <code>with_sequence</code>, and <code>with_&lt;lookup&gt;</code> for <code>nested</code>, <code>together</code>,
+<code>subelements</code>, <code>indexed_items</code>, <code>random_choice</code>, <code>file</code>, <code>fileglob</code>, <code>first_found</code>, <code>lines</code>,
+<code>pipe</code>, <code>env</code>, <code>template</code>; an unknown <code>with_*</code> is an error. <code>loop_control</code> takes <code>loop_var</code>
+and <code>index_var</code> (<code>label</code> is accepted and ignored). See <a href="docs/LOOPS_GUIDE.md">docs/LOOPS_GUIDE.md</a>.</p>
 <h3>Roles, includes and imports</h3>
 <pre class="codehilite"><code class="language-yaml">- import_playbook: base.yml
 
