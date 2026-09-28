@@ -119,3 +119,24 @@ func TestSaveLoad(t *testing.T) {
 	assert.True(t, back.Remove("h", "file", "/a"))
 	assert.False(t, back.Remove("h", "file", "/a"))
 }
+
+func TestSortForDestroyAndUndoResult(t *testing.T) {
+	recs := []*Record{
+		{Type: "user", ID: "u"},
+		{Type: "file", ID: "/d"},
+		{Type: "file", ID: "/d/f"},
+		{Type: "package", ID: "p"},
+	}
+	SortForDestroy(recs)
+	var got []string
+	for _, r := range recs {
+		got = append(got, r.ID)
+	}
+	assert.Equal(t, []string{"/d/f", "/d", "p", "u"}, got)
+
+	res := UndoResult(&Record{Host: "h", Type: "file", Origin: OriginCreated, Before: map[string]interface{}{"kind": "absent"}})
+	assert.Equal(t, true, res.Before["_keep_nonempty_dir"])
+	assert.True(t, res.Changed)
+	res = UndoResult(&Record{Type: "file", Origin: OriginAdopted, Before: map[string]interface{}{"kind": "file"}})
+	assert.Nil(t, res.Before["_keep_nonempty_dir"])
+}

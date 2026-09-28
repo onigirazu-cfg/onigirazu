@@ -1,25 +1,41 @@
 package cli
 
 import (
+	"bufio"
+	"context"
+	"errors"
 	"fmt"
 	"io"
+	"os"
+	"strings"
+
+	"golang.org/x/term"
 
 	"github.com/onigirazu-cfg/onigirazu/internal/engine"
 	"github.com/onigirazu-cfg/onigirazu/internal/interfaces"
 	"github.com/onigirazu-cfg/onigirazu/internal/managed"
+	"github.com/onigirazu-cfg/onigirazu/internal/rollback"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
+
+// managedRun is the managed state of a run, between the update after the
+// plays and the destroy step
+type managedRun struct {
+	path            string
+	st              *managed.State
+	check, complete bool
+}
 
 // updateManagedState records what the run's tasks manage in the playbook's
 // managed state and puts the orphans into the result. In check mode the
 // state file is left as it is.
 func updateManagedState(playbookPath string, result *types.PlaybookResult, scopes engine.ManagedScopes,
-	complete, check bool, log interfaces.Logger) {
+	complete, check bool, log interfaces.Logger) *managedRun {
 	path := managed.Path(playbookPath)
 	st, err := managed.Load(path)
 	if err != nil {
 		log.Warn("Managed state not updated: %v", err)
-		return
+		return nil
 	}
 	if check {
 		st = st.Clone()
@@ -31,11 +47,111 @@ func updateManagedState(playbookPath string, result *types.PlaybookResult, scope
 		result.Orphans = append(result.Orphans, types.ManagedOrphan{Host: r.Host, Type: r.Type, ID: r.ID,
 			Task: r.TaskName, Action: r.Action()})
 	}
-	if check {
-		return
+	m := &managedRun{path: path, st: st, check: check, complete: complete}
+	if !check {
+		m.save(log)
 	}
-	if err := st.Save(path); err != nil {
-		log.Warn("Failed to save managed state %s: %v", path, err)
+	return m
+}
+
+func (m *managedRun) save(log interfaces.Logger) {
+	if err := m.st.Save(m.path); err != nil {
+		log.Warn("Failed to save managed state %s: %v", m.path, err)
+	}
+}
+
+// undoer puts one resource back from its before capture
+type undoer interface {
+	Undo(ctx context.Context, t types.TaskResult) (bool, error)
+}
+
+// destroyOrphans removes the orphans onigirazu created, puts back the ones
+// it adopted and forgets the rest, on the hosts of the run that had no
+// failure. confirm is asked once, with the number of resources the host
+// changes touch.
+func (m *managedRun) destroyOrphans(ctx context.Context, u undoer, result *types.PlaybookResult,
+	confirm func(n int) bool, w io.Writer, log interfaces.Logger) error {
+	if m == nil || m.check {
+		return nil
+	}
+	var act, forget []*managed.Record
+	for _, r := range m.st.Orphans() {
+		if !managed.HostRan(result, r.Host) || managed.HostFailed(result, r.Host) {
+			continue
+		}
+		if r.Action() == managed.ActionForget {
+			forget = append(forget, r)
+		} else {
+			act = append(act, r)
+		}
+	}
+	if len(act)+len(forget) == 0 {
+		return nil
+	}
+	if !m.complete {
+		fmt.Fprintf(w, "\nManaged state: %d resource(s) left the playbook; a partial run (--tags, --skip-tags, --start-at-task) leaves them, a full apply cleans up\n", len(act)+len(forget))
+		return nil
+	}
+	if len(act) > 0 && !confirm(len(act)) {
+		fmt.Fprintf(w, "\nManaged state: %d resource(s) kept for later (plan lists them)\n", len(act))
+		act = nil
+	}
+	managed.SortForDestroy(act)
+	var done, kept, failed []string
+	for _, r := range act {
+		ok, err := u.Undo(ctx, managed.UndoResult(r))
+		var keptErr *rollback.KeptError
+		switch {
+		case errors.As(err, &keptErr):
+			kept = append(kept, fmt.Sprintf("%s %s on %s: %s", r.Type, r.ID, r.Host, keptErr.Reason))
+		case err != nil:
+			failed = append(failed, fmt.Sprintf("%s %s on %s: %v", r.Type, r.ID, r.Host, err))
+			continue
+		case !ok:
+			kept = append(kept, fmt.Sprintf("%s %s on %s: no previous state", r.Type, r.ID, r.Host))
+		default:
+			verb := "removed"
+			if r.Action() == managed.ActionRestore {
+				verb = "put back"
+			}
+			done = append(done, fmt.Sprintf("%s %s %s on %s", verb, r.Type, r.ID, r.Host))
+		}
+		m.st.Remove(r.Host, r.Type, r.ID)
+	}
+	for _, r := range forget {
+		kept = append(kept, fmt.Sprintf("%s %s on %s: forgotten, left as it is", r.Type, r.ID, r.Host))
+		m.st.Remove(r.Host, r.Type, r.ID)
+	}
+	m.save(log)
+	if len(done)+len(kept)+len(failed) > 0 {
+		fmt.Fprintf(w, "\nManaged state: resources that left the playbook\n")
+		for _, l := range done {
+			fmt.Fprintf(w, "  %s\n", l)
+		}
+		for _, l := range kept {
+			fmt.Fprintf(w, "  kept %s\n", l)
+		}
+		for _, l := range failed {
+			fmt.Fprintf(w, "  failed %s\n", l)
+		}
+	}
+	if len(failed) > 0 {
+		return fmt.Errorf("managed state: %d resource(s) could not be removed or put back", len(failed))
+	}
+	return nil
+}
+
+// confirmDestroy asks once in a terminal; without one (CI, cron) or with
+// --auto-approve apply goes ahead, as the plan showed
+func confirmDestroy(autoApprove bool) func(int) bool {
+	return func(n int) bool {
+		if autoApprove || !term.IsTerminal(int(os.Stdin.Fd())) || !term.IsTerminal(int(os.Stderr.Fd())) {
+			return true
+		}
+		fmt.Fprintf(os.Stderr, "\nRemove or put back %d resource(s) that left the playbook? [y/N] ", n)
+		answer, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+		answer = strings.ToLower(strings.TrimSpace(answer))
+		return answer == "y" || answer == "yes"
 	}
 }
 

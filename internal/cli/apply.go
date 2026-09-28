@@ -72,6 +72,8 @@ func newApplyCommand(onResult func(*types.PlaybookResult)) *cobra.Command {
 		canary         string
 		canaryPause    time.Duration
 		autoRollback   bool
+		noDestroy      bool
+		autoApprove    bool
 		rollbackScope  string
 		tags           string
 		skipTags       string
@@ -821,9 +823,10 @@ Examples:
 			saveCtx, saveCancel := context.WithTimeout(context.WithoutCancel(ctx), time.Minute)
 			defer saveCancel()
 			runResult, runStart = result, startTime
+			var mrun *managedRun
 			if result != nil {
 				complete := tags == "" && skipTags == "" && startAtTask == "" && ctx.Err() == nil && !runControl.Stopped()
-				updateManagedState(playbookPath, result, executionEngine.ManagedScopes(), complete, cfg.IsCheckMode(), log)
+				mrun = updateManagedState(playbookPath, result, executionEngine.ManagedScopes(), complete, cfg.IsCheckMode(), log)
 				if onResult == nil && outputFormat != "json" && outputFormat != "yaml" {
 					printOrphans(resultOut, result.Orphans)
 				}
@@ -850,6 +853,17 @@ Examples:
 					os.Exit(130)
 				}
 				return fmt.Errorf("playbook execution failed: %w", err)
+			}
+
+			// resources that left the playbook: removed or put back
+			if !noDestroy && result != nil && !result.Failed {
+				out := resultOut
+				if outputFormat == "json" || outputFormat == "yaml" {
+					out = os.Stderr
+				}
+				if err := mrun.destroyOrphans(saveCtx, restorer, result, confirmDestroy(autoApprove), out, log); err != nil {
+					return err
+				}
 			}
 
 			// Display results
@@ -1150,6 +1164,8 @@ Examples:
 	cmd.Flags().StringVar(&canary, "canary", "", "Run the first batch on this many hosts (N or P%) and check it before the rest")
 	cmd.Flags().DurationVar(&canaryPause, "canary-pause", 0, "After a healthy canary batch, wait this long and check its health again")
 	cmd.Flags().BoolVar(&autoRollback, "auto-rollback", false, "Roll back a batch whose tasks or health checks failed, and stop")
+	cmd.Flags().BoolVar(&noDestroy, "no-destroy", false, "Keep the resources that left the playbook (plan keeps listing them)")
+	cmd.Flags().BoolVar(&autoApprove, "auto-approve", false, "Remove or put back the resources that left the playbook without asking")
 	cmd.Flags().StringVar(&rollbackScope, "rollback-scope", "batch", "What a rollback undoes: batch (the unhealthy batch) or run (every batch so far)")
 	cmd.Flags().StringVar(&tags, "tags", "", "Only run tasks with these tags (comma-separated). Use 'tagged' for tasks with any tag, 'untagged' for tasks without tags, 'all' for default behavior")
 	cmd.Flags().StringVar(&skipTags, "skip-tags", "", "Skip tasks with these tags (comma-separated)")

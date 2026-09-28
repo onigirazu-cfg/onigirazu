@@ -703,3 +703,29 @@ func TestCapturedExists(t *testing.T) {
 		}
 	}
 }
+
+func TestFileAbsentKeepsFullDirectory(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "d")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "data"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	host := types.Host{Name: "localhost", Address: "127.0.0.1"}
+	args := map[string]interface{}{"path": dir, "state": "absent", "_keep_nonempty_dir": true}
+	result, err := NewFileModule().Execute(context.Background(), host, args)
+	if err != nil || !result.Success || result.Changed || result.Output["kept"] == nil {
+		t.Fatalf("expected the directory kept, got %+v, %v", result, err)
+	}
+	if err := os.Remove(filepath.Join(dir, "data")); err != nil {
+		t.Fatal(err)
+	}
+	result, _ = NewFileModule().Execute(context.Background(), host, args)
+	if !result.Changed {
+		t.Fatalf("expected the empty directory removed, got %+v", result)
+	}
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
+		t.Error("directory still there")
+	}
+}

@@ -86,7 +86,7 @@ func (m *FileModule) Execute(ctx context.Context, host types.Host, args map[stri
 	case "present":
 		result, err = m.ensureFilePresent(exec, path, result, startTime, args)
 	case "absent":
-		return m.ensureFileAbsent(exec, path, result, startTime, inCheckMode(args))
+		return m.ensureFileAbsent(exec, path, result, startTime, inCheckMode(args), getBoolArg(args, "_keep_nonempty_dir", false))
 	case "directory":
 		result, err = m.ensureDirectory(exec, path, result, startTime, inCheckMode(args))
 	case "touch":
@@ -373,7 +373,9 @@ func (m *FileModule) ensureFilePresent(exec *executor.CommandExecutor, path stri
 	return result, nil
 }
 
-func (m *FileModule) ensureFileAbsent(exec *executor.CommandExecutor, path string, result types.TaskResult, startTime time.Time, check bool) (types.TaskResult, error) {
+// With keepFull (the managed state removing a directory it created) a
+// directory that is not empty is left in place and reported as kept.
+func (m *FileModule) ensureFileAbsent(exec *executor.CommandExecutor, path string, result types.TaskResult, startTime time.Time, check, keepFull bool) (types.TaskResult, error) {
 	// Check if file exists
 	checkCmd := fmt.Sprintf(`test -e %s && echo exists || echo notexists`, shellQuote(path))
 	output, err := exec.Execute(checkCmd)
@@ -390,6 +392,17 @@ func (m *FileModule) ensureFileAbsent(exec *executor.CommandExecutor, path strin
 
 	if check {
 		return wouldChange(result, startTime, fmt.Sprintf("%s would be removed", path))
+	}
+
+	if keepFull {
+		q := shellQuote(path)
+		out, _ := exec.Execute(fmt.Sprintf(`test -d %s && test ! -L %s && ls -A %s | head -1`, q, q, q))
+		if strings.TrimSpace(out) != "" {
+			result.Success = true
+			result.Output = map[string]interface{}{"kept": fmt.Sprintf("directory %s is not empty", path)}
+			result.Duration = time.Since(startTime)
+			return result, nil
+		}
 	}
 
 	// Remove file

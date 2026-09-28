@@ -366,3 +366,63 @@ func originOf(res types.ManagedResource) string {
 	}
 	return OriginAdopted
 }
+
+// HostRan tells whether the run has results for host
+func HostRan(result *types.PlaybookResult, host string) bool {
+	for _, play := range result.Plays {
+		for _, h := range play.Hosts {
+			if h.Host == host {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// HostFailed tells whether a task failed (not ignored) or was rolled back on
+// host
+func HostFailed(result *types.PlaybookResult, host string) bool {
+	for _, play := range result.Plays {
+		for _, h := range play.Hosts {
+			if h.Host != host {
+				continue
+			}
+			for _, t := range h.Tasks {
+				if (t.Failed && !t.Ignored) || t.RolledBack {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+// SortForDestroy orders orphans for removal: newest first, deeper paths
+// before their directories, files before packages and accounts
+func SortForDestroy(records []*Record) {
+	rank := map[string]int{"file": 0, "service": 1, "package": 2, "user": 3, "group": 4}
+	sort.SliceStable(records, func(i, j int) bool {
+		a, b := records[i], records[j]
+		if !a.FirstApplied.Equal(b.FirstApplied) {
+			return a.FirstApplied.After(b.FirstApplied)
+		}
+		if rank[a.Type] != rank[b.Type] {
+			return rank[a.Type] < rank[b.Type]
+		}
+		return len(a.ID) > len(b.ID)
+	})
+}
+
+// UndoResult is the task result whose rollback removes or puts back an
+// orphan
+func UndoResult(r *Record) types.TaskResult {
+	before := make(map[string]interface{}, len(r.Before)+1)
+	for k, v := range r.Before {
+		before[k] = v
+	}
+	if r.Type == "file" && r.Origin == OriginCreated {
+		// a directory onigirazu made may hold data someone else put there
+		before["_keep_nonempty_dir"] = true
+	}
+	return types.TaskResult{Host: r.Host, TaskName: r.TaskName, Module: r.Type, Changed: true, Before: before}
+}
