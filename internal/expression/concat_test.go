@@ -28,3 +28,20 @@ func TestNestedConcat(t *testing.T) {
 		}
 	}
 }
+
+func TestInlineIfInsideBrackets(t *testing.T) {
+	vars := map[string]interface{}{"auth": false, "out": "passwordauthentication no\n", "n": 2}
+	cases := map[string]bool{
+		"('passwordauthentication ' ~ ('yes' if auth | bool else 'no')) in out": true,
+		"('yes' if auth else 'no') == 'no'":                                     true,
+		"['a' if n > 1 else 'b'][0] == 'a'":                                     true,
+		"(n if n > 5 else 0) == 0":                                              true,
+		"('x' if auth) == ''":                                                   true,
+	}
+	for cond, want := range cases {
+		got, err := Condition(cond, vars)
+		if err != nil || got != want {
+			t.Errorf("%s = %v, %v; want %v", cond, got, err, want)
+		}
+	}
+}
