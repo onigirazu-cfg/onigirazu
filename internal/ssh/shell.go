@@ -64,7 +64,9 @@ type remoteShell struct {
 
 func (s *remoteShell) close() {
 	_ = s.stdin.Close()
-	_ = s.session.Close()
+	if s.session != nil {
+		_ = s.session.Close()
+	}
 }
 
 // shellPool holds the idle shells of a connection
@@ -160,6 +162,9 @@ func (c *Client) Exec(ctx context.Context, command string, combined bool) ([]byt
 	case a := <-done:
 		if a.err != nil {
 			shell.close() // the shell is out of step or gone
+			if c.closed.Load() {
+				return nil, nil, 0, fmt.Errorf("%w: %v", ErrClosed, a.err)
+			}
 			return nil, nil, 0, a.err
 		}
 		c.returnShell(shell)

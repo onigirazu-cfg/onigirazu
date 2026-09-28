@@ -2,12 +2,14 @@ package ssh
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
 	"os"
 	"path/filepath"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"github.com/pkg/sftp"
@@ -31,7 +33,14 @@ type Client struct {
 	host   types.Host
 	logger Logger
 	shells shellPool
+	// closed: Close was called (the run stops); commands still running
+	// then fail with ErrClosed instead of a bare EOF
+	closed atomic.Bool
 }
+
+// ErrClosed: the connection was closed by onigirazu while a command ran
+// (the run was stopped: Ctrl-C, --timeout, a signal)
+var ErrClosed = errors.New("connection closed while the command ran (the run was stopped)")
 
 // NewClient creates a new SSH client for the given host
 func NewClient(host types.Host) (*Client, error) {
@@ -158,6 +167,7 @@ func (c *Client) GetClient() *ssh.Client {
 
 // Close closes the SSH connection
 func (c *Client) Close() error {
+	c.closed.Store(true)
 	c.closeShells()
 	if c.client != nil {
 		return c.client.Close()

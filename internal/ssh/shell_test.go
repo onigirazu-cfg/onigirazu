@@ -2,9 +2,11 @@ package ssh
 
 import (
 	"bufio"
+	"context"
 	"os/exec"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -77,4 +79,36 @@ func TestRemoteShellBackgroundChild(t *testing.T) {
 	o, _, _, err := s.run("sleep 0.6; echo mine", false)
 	require.NoError(t, err)
 	assert.Equal(t, "mine\n", string(o))
+}
+
+// A run that is stopped closes the connections: a command still running
+// then fails with ErrClosed, not with the bare EOF of the dead shell
+func TestExecOnClosedClient(t *testing.T) {
+	cmd := exec.Command("sh", "-c", shellScript)
+	stdin, err := cmd.StdinPipe()
+	require.NoError(t, err)
+	out, err := cmd.StdoutPipe()
+	require.NoError(t, err)
+	require.NoError(t, cmd.Start())
+	s := &remoteShell{stdin: stdin, stdout: bufio.NewReader(out)}
+	_, err = s.stdout.ReadString('\n')
+	require.NoError(t, err)
+
+	c := &Client{}
+	c.shells.idle = []*remoteShell{s}
+	done := make(chan error, 1)
+	go func() {
+		_, _, _, err := c.Exec(context.Background(), "sleep 10", true)
+		done <- err
+	}()
+	time.Sleep(300 * time.Millisecond)
+	require.NoError(t, c.Close())
+	_ = cmd.Process.Kill() // what closing the connection does to the shell
+	_ = cmd.Wait()
+	select {
+	case err := <-done:
+		assert.ErrorIs(t, err, ErrClosed)
+	case <-time.After(5 * time.Second):
+		t.Fatal("Exec did not return")
+	}
 }
