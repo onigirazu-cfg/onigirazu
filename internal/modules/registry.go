@@ -58,6 +58,12 @@ func NewRegistry() *Registry {
 	registry.RegisterModule(NewAssertModule())
 	registry.RegisterModule(NewReplaceModule())
 	registry.RegisterModule(NewMetaModule())
+	registry.RegisterModule(NewSlurpModule())
+	registry.RegisterModule(NewHostnameModule())
+	registry.RegisterModule(NewIniFileModule())
+	registry.RegisterModule(NewPipModule())
+	registry.RegisterModule(NewUfwModule())
+	registry.RegisterModule(NewDockerHostInfoModule())
 	registry.RegisterModule(NewIncludeRoleModule("include_role"))
 	registry.RegisterModule(NewIncludeRoleModule("import_role"))
 	registry.RegisterModule(NewIncludeVarsModule())
@@ -262,11 +268,13 @@ var checkModeModules = map[string]bool{
 	// read only
 	"ping": true, "debug": true, "set_fact": true, "stat": true, "find": true,
 	"fail": true, "wait_for": true, "assert": true, "include_vars": true,
+	"slurp": true, "docker_host_info": true,
 	// compare, then change
 	"file": true, "copy": true, "template": true, "lineinfile": true, "blockinfile": true,
 	"apt": true, "yum": true, "package": true, "service": true, "user": true, "group": true,
 	"cron": true, "sysctl": true, "get_url": true, "git": true, "systemd": true,
 	"mount": true, "config": true, "replace": true, "timezone": true, "unarchive": true, "apt_repository": true, "apt_key": true, "docker_container": true, "podman": true, "docker_image": true,
+	"hostname": true, "ini_file": true, "pip": true, "ufw": true,
 }
 
 // dataArgModules take their arguments as data whose types are kept:

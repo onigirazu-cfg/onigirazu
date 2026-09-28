@@ -1,0 +1,57 @@
+- name: modules the ClanRed playbooks use
+  hosts: all
+  become: true
+  tasks:
+    - name: INI option
+      community.general.ini_file:
+        path: /etc/onigirazu-e2e.ini
+        section: domain/e2e.example
+        option: dyndns_update
+        value: "True"
+        mode: "0640"
+
+    - name: Read the host name file
+      ansible.builtin.slurp:
+        src: /etc/hostname
+      register: e2e_hostname
+
+    - name: Host name stays what it is
+      ansible.builtin.hostname:
+        name: "{{ e2e_hostname.content | b64decode | trim }}"
+
+    - name: Python venv support on Debian
+      ansible.builtin.apt:
+        name: python3-venv
+        state: present
+      when: ansible_os_family == 'Debian'
+
+    - name: A package in a virtualenv
+      ansible.builtin.pip:
+        name: six==1.16.0
+        virtualenv: /opt/onigirazu-e2e-venv
+
+    - name: ufw rule (the firewall stays as it is)
+      community.general.ufw:
+        rule: allow
+        port: "22022"
+        proto: tcp
+        comment: onigirazu e2e
+      when: ansible_os_family == 'Debian'
+
+    - name: Docker present?
+      ansible.builtin.stat:
+        path: /usr/bin/docker
+      register: e2e_docker
+
+    - name: Docker host info
+      community.docker.docker_host_info:
+        containers: true
+        containers_filters:
+          name: [onigirazu]
+      register: e2e_docker_info
+      when: e2e_docker.stat.exists
+
+    - name: Containers list is a list
+      ansible.builtin.assert:
+        that: e2e_docker_info.containers is sequence
+      when: e2e_docker.stat.exists

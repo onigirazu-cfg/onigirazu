@@ -2163,21 +2163,68 @@ Fail execution with custom message.
   when: "database_check.rc != 0"
 ```
 
+### slurp
+
+Read a file from the host; `content` is base64 (`{{ r.content | b64decode }}`).
+Parameters: `src` (required).
+
+### hostname
+
+Set the host name (`hostnamectl`, else /etc/hostname). Parameters: `name` (required).
+
+### ini_file
+
+One option of an INI file. Also `community.general.ini_file`.
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `path` | - | File (created unless `create: false`) |
+| `section` | - | Section; none: before the first section |
+| `option`, `value` | - | Option and value; without option `present` makes sure the section exists, `absent` removes it |
+| `state` | `present` | `present` or `absent` |
+| `no_extra_spaces` | `false` | `key=value` instead of `key = value` |
+| `backup`, `mode` | - | Backup copy; file mode |
+
+Other lines of the option in the section are removed (Ansible's `exclusive`).
+
+### pip
+
+Python packages. Parameters: `name` (list; `pkg==1.2` pins), `version`, `state`
+(`present`, `absent`, `latest`, `forcereinstall`), `requirements`, `virtualenv` (created with
+`virtualenv_command`, default `python3 -m venv`), `executable`, `extra_args`.
+
+### ufw
+
+The Uncomplicated Firewall (`community.general.ufw`): `state` (`enabled`, `disabled`, `reloaded`,
+`reset`), `policy` with `direction`, `logging`, and rules: `rule` (`allow`, `deny`, `limit`,
+`reject`) with `port`, `proto`, `src`/`from_ip`, `dest`/`to_ip`, `from_port`, `interface`,
+`direction`, `route`, `delete`, `insert`, `comment`. A rule that exists is not added again.
+
+### docker_host_info
+
+Docker host information (`community.docker.docker_host_info`); with `containers: true` the
+containers as the Docker API lists them (`Id`, `Names` with the leading `/`, `Image`, `State`),
+filtered by `containers_filters` (`name: [a, b]`), `containers_all` for stopped ones too.
+
+`community.docker.docker_compose_v2` runs `docker_compose`: `project_src`, `files`, and `build`/
+`pull` policies (`always`, `missing`, `policy`, `never`) are understood.
+
 ## 📚 Complete Module List
 
-All 50 modules:
+All 56 modules:
 
 **Execution**: command, shell, script
+**Files on the host**: slurp, ini_file
 **Connectivity and Utilities**: ping, debug, set_fact, assert, fail, wait_for, pause
 **Playbook Control**: include_vars, include_role, import_role, meta
 **File Management**: file, copy, fetch, find, template, lineinfile, blockinfile, replace, stat, archive
-**Package Management**: package, apt, yum
+**Package Management**: package, apt, yum, pip
 **Service Management**: service, systemd, cron, reboot
-**System Control**: sysctl, mount
-**Security & Firewall**: firewall, authorized_key
+**System Control**: sysctl, mount, hostname, timezone
+**Security & Firewall**: firewall, ufw, authorized_key
 **Version Control**: git
 **Configuration**: config
-**Containers**: docker_container, docker_image, docker_compose, podman
+**Containers**: docker_container, docker_image, docker_compose, docker_host_info, podman
 **Databases**: mysql_db, mysql_user, postgresql_db, postgresql_user, mongodb
 **Network**: get_url, uri
 **User Management**: user, group
