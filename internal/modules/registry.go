@@ -169,6 +169,14 @@ func (r *Registry) Unregister(name string) error {
 
 // ExecuteTask executes task using appropriate module
 func (r *Registry) ExecuteTask(ctx context.Context, task *types.Task, host types.Host, variables map[string]interface{}) (types.TaskResult, error) {
+	if task.Module == types.DynamicAction {
+		resolved, err := resolveDynamicAction(task)
+		if err != nil {
+			return types.TaskResult{TaskName: task.Name, Host: host.Name, Module: task.Module, Failed: true,
+				Error: err.Error(), Timestamp: time.Now()}, nil
+		}
+		task = resolved
+	}
 	module, err := r.GetModule(task.Module)
 	if err != nil {
 		return types.TaskResult{}, err
@@ -302,4 +310,31 @@ func normalizeArgs(args map[string]interface{}) {
 			args[key] = strconv.FormatFloat(v, 'f', -1, 64)
 		}
 	}
+}
+
+// resolveDynamicAction reads the module of an action whose module name was
+// a template, now that its arguments are rendered
+func resolveDynamicAction(task *types.Task) (*types.Task, error) {
+	resolved := *task
+	if line, ok := task.Args["_action"].(string); ok {
+		name, rest, _ := strings.Cut(strings.TrimSpace(line), " ")
+		args, err := types.ShortFormArgs(name, strings.TrimSpace(rest))
+		if err != nil {
+			return nil, fmt.Errorf("action: %w", err)
+		}
+		resolved.Module, resolved.Args = types.ShortModuleName(name), args
+		return &resolved, nil
+	}
+	name, _ := task.Args["_module"].(string)
+	if name == "" || strings.Contains(name, "{{") {
+		return nil, fmt.Errorf("action: the module name did not render (%q)", name)
+	}
+	resolved.Module = types.ShortModuleName(strings.TrimSpace(name))
+	resolved.Args = make(map[string]interface{}, len(task.Args))
+	for k, v := range task.Args {
+		if k != "_module" {
+			resolved.Args[k] = v
+		}
+	}
+	return &resolved, nil
 }

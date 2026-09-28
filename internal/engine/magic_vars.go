@@ -2,6 +2,7 @@ package engine
 
 import (
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/onigirazu-cfg/onigirazu/internal/cache"
@@ -30,6 +31,7 @@ func ansibleFacts(sf *cache.SystemFacts, onigirazu map[string]interface{}) map[s
 		"memtotal_mb":                sf.MemTotalMB,
 		"default_ipv4":               map[string]interface{}{"address": sf.DefaultIPv4},
 		"user_id":                    sf.Username,
+		"pkg_mgr":                    packageManager(sf.OSFamily, sf.Distribution, major),
 		"date_time":                  onigirazu["onigirazu_date_time"],
 		"env":                        onigirazu["onigirazu_env"],
 	}
@@ -134,4 +136,27 @@ func (e *ExecutionEngine) addMagicVars(vars map[string]interface{}) {
 // SetCheckMode tells the run it is a check (ansible_check_mode)
 func (e *ExecutionEngine) SetCheckMode(check bool) {
 	e.checkMode = check
+}
+
+// packageManager is Ansible's ansible_pkg_mgr from the OS family
+func packageManager(family, distribution, major string) string {
+	switch strings.ToLower(family) {
+	case "debian":
+		return "apt"
+	case "redhat":
+		if strings.EqualFold(distribution, "fedora") {
+			return "dnf"
+		}
+		if n, err := strconv.Atoi(major); err == nil && n < 8 {
+			return "yum"
+		}
+		return "dnf"
+	case "suse":
+		return "zypper"
+	case "archlinux":
+		return "pacman"
+	case "alpine":
+		return "apk"
+	}
+	return "unknown"
 }

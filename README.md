@@ -266,7 +266,11 @@ Ansible short forms work too:
 - file: path=/etc/app state=directory mode=0750
 - ping:
 - local_action: command make package   # delegate_to: localhost
+- action: copy src=app.conf dest=/etc/app.conf
+- action: "{{ ansible_pkg_mgr }} name={{ pkgs }} state=present"   # the module chosen when it runs
 ```
+
+`dnf` runs the `yum` module (it works with whichever the host has).
 
 Fully qualified names work for the built-in modules (`ansible.builtin.copy`,
 `ansible.legacy.command`) and for collection modules Onigirazu implements

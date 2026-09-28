@@ -54,6 +54,7 @@ Every fact exists under two names: `onigirazu_*` and the Ansible name `ansible_*
 
 ```yaml
 {{ ansible_os_family }}                    # Debian, RedHat, Darwin
+{{ ansible_pkg_mgr }}                      # apt, dnf, yum, zypper, pacman, apk
 {{ ansible_distribution }}                 # Ubuntu, Rocky, RedHat (Ansible spelling)
 {{ onigirazu_distribution }}               # ubuntu, rocky, rhel (os-release ID)
 {{ ansible_distribution_version }}         # 24.04, 9.4
