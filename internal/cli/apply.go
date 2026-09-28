@@ -22,7 +22,6 @@ import (
 	"github.com/onigirazu-cfg/onigirazu/internal/interfaces"
 	"github.com/onigirazu-cfg/onigirazu/internal/inventory"
 	"github.com/onigirazu-cfg/onigirazu/internal/logger"
-	"github.com/onigirazu-cfg/onigirazu/internal/managed"
 	"github.com/onigirazu-cfg/onigirazu/internal/metrics"
 	"github.com/onigirazu-cfg/onigirazu/internal/modules"
 	"github.com/onigirazu-cfg/onigirazu/internal/output"
@@ -820,8 +819,12 @@ Examples:
 			}
 
 			// one apply of a playbook at a time: its managed state
+			mstore, err := managedStore(cfg, playbookPath)
+			if err != nil {
+				return err
+			}
 			if !cfg.IsCheckMode() && stateLock {
-				lock, err := managed.AcquireLock(managed.Path(playbookPath), "apply", lockTimeout)
+				lock, err := mstore.Lock(ctx, "apply", lockTimeout)
 				if err != nil {
 					return err
 				}
@@ -842,7 +845,7 @@ Examples:
 			var mrun *managedRun
 			if result != nil {
 				complete := tags == "" && skipTags == "" && startAtTask == "" && ctx.Err() == nil && !runControl.Stopped()
-				mrun = updateManagedState(playbookPath, result, executionEngine.ManagedScopes(), complete, cfg.IsCheckMode(), log)
+				mrun = updateManagedState(saveCtx, mstore, result, executionEngine.ManagedScopes(), complete, cfg.IsCheckMode(), log)
 				if onResult == nil && outputFormat != "json" && outputFormat != "yaml" {
 					printOrphans(resultOut, result.Orphans)
 				}

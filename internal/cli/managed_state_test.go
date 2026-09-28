@@ -39,6 +39,7 @@ func runOf(host string, tasks ...types.TaskResult) *types.PlaybookResult {
 func TestDestroyOrphans(t *testing.T) {
 	log := logger.NewWithWriter(false, io.Discard)
 	playbook := filepath.Join(t.TempDir(), "site.yml")
+	store := managed.NewFileStore(playbook)
 	created := func(path string) types.ManagedResource {
 		return types.ManagedResource{Type: "file", ID: path, Before: map[string]interface{}{"path": path, "kind": "absent"}}
 	}
@@ -47,11 +48,11 @@ func TestDestroyOrphans(t *testing.T) {
 		types.TaskResult{TaskKey: "p/b", Success: true, Resources: []types.ManagedResource{created("/b")}},
 		types.TaskResult{TaskKey: "p/c", Success: true, Resources: []types.ManagedResource{created("/c")}})
 	keys := engine.ManagedScopes{Keys: map[string]bool{"p/a": true, "p/b": true, "p/c": true}}
-	updateManagedState(playbook, first, keys, true, false, log)
+	updateManagedState(context.Background(), store, first, keys, true, false, log)
 
 	// p/b and p/c left the playbook; /c cannot be removed
 	second := runOf("h", types.TaskResult{TaskKey: "p/a", Success: true, Resources: []types.ManagedResource{created("/a")}})
-	m := updateManagedState(playbook, second, engine.ManagedScopes{Keys: map[string]bool{"p/a": true}}, true, false, log)
+	m := updateManagedState(context.Background(), store, second, engine.ManagedScopes{Keys: map[string]bool{"p/a": true}}, true, false, log)
 	require.Len(t, second.Orphans, 2)
 	u := &fakeUndo{errs: map[string]error{"/c": errors.New("busy")}}
 	var out bytes.Buffer

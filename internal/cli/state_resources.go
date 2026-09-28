@@ -23,7 +23,11 @@ and whether onigirazu created it or took it over. Resources no task claims any m
 are marked "orphan".`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			st, err := managed.Load(managed.Path(args[0]))
+			store, err := playbookStore(args[0])
+			if err != nil {
+				return err
+			}
+			st, err := store.Load(cmd.Context())
 			if err != nil {
 				return err
 			}
@@ -70,21 +74,24 @@ func newStateRmCmd() *cobra.Command {
   onigirazu state rm site.yml web1 package nginx`,
 		Args: cobra.ExactArgs(4),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			path := managed.Path(args[0])
-			lock, err := managed.AcquireLock(path, "state rm", 0)
+			store, err := playbookStore(args[0])
+			if err != nil {
+				return err
+			}
+			lock, err := store.Lock(cmd.Context(), "state rm", 0)
 			if err != nil {
 				return err
 			}
 			defer func() { _ = lock.Release() }()
-			st, err := managed.Load(path)
+			st, err := store.Load(cmd.Context())
 			if err != nil {
 				return err
 			}
 			host, typ, id := args[1], strings.ToLower(args[2]), args[3]
 			if !st.Remove(host, typ, id) {
-				return fmt.Errorf("no managed %s %s on %s in %s", typ, id, host, path)
+				return fmt.Errorf("no managed %s %s on %s in %s", typ, id, host, store)
 			}
-			if err := st.Save(path); err != nil {
+			if err := store.Save(cmd.Context(), st); err != nil {
 				return err
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Forgot %s %s on %s\n", typ, id, host)
@@ -103,7 +110,11 @@ behind. The lock ID is in the error of the apply that found the state locked. Ma
 apply of the playbook is still running: two at once can lose records.`,
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := managed.ForceUnlock(managed.Path(args[0]), args[1]); err != nil {
+			store, err := playbookStore(args[0])
+			if err != nil {
+				return err
+			}
+			if err := store.ForceUnlock(cmd.Context(), args[1]); err != nil {
 				return err
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Unlocked the managed state of %s\n", args[0])

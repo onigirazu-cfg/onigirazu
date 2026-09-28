@@ -7,10 +7,12 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"golang.org/x/term"
 
+	"github.com/onigirazu-cfg/onigirazu/internal/config"
 	"github.com/onigirazu-cfg/onigirazu/internal/engine"
 	"github.com/onigirazu-cfg/onigirazu/internal/interfaces"
 	"github.com/onigirazu-cfg/onigirazu/internal/managed"
@@ -21,7 +23,7 @@ import (
 // managedRun is the managed state of a run, between the update after the
 // plays and the destroy step
 type managedRun struct {
-	path            string
+	store           managed.Store
 	st              *managed.State
 	check, complete bool
 }
@@ -29,10 +31,12 @@ type managedRun struct {
 // updateManagedState records what the run's tasks manage in the playbook's
 // managed state and puts the orphans into the result. In check mode the
 // state file is left as it is.
-func updateManagedState(playbookPath string, result *types.PlaybookResult, scopes engine.ManagedScopes,
+func updateManagedState(ctx context.Context, store managed.Store, result *types.PlaybookResult, scopes engine.ManagedScopes,
 	complete, check bool, log interfaces.Logger) *managedRun {
-	path := managed.Path(playbookPath)
-	st, err := managed.Load(path)
+	if store == nil {
+		return nil
+	}
+	st, err := store.Load(ctx)
 	if err != nil {
 		log.Warn("Managed state not updated: %v", err)
 		return nil
@@ -47,17 +51,40 @@ func updateManagedState(playbookPath string, result *types.PlaybookResult, scope
 		result.Orphans = append(result.Orphans, types.ManagedOrphan{Host: r.Host, Type: r.Type, ID: r.ID,
 			Task: r.TaskName, Action: r.Action()})
 	}
-	m := &managedRun{path: path, st: st, check: check, complete: complete}
+	m := &managedRun{store: store, st: st, check: check, complete: complete}
 	if !check {
-		m.save(log)
+		m.save(ctx, log)
 	}
 	return m
 }
 
-func (m *managedRun) save(log interfaces.Logger) {
-	if err := m.st.Save(m.path); err != nil {
-		log.Warn("Failed to save managed state %s: %v", m.path, err)
+func (m *managedRun) save(ctx context.Context, log interfaces.Logger) {
+	if err := m.store.Save(ctx, m.st); err != nil {
+		log.Warn("Failed to save managed state %s: %v", m.store, err)
 	}
+}
+
+// managedStore is the managed state of a playbook, where the config puts it
+func managedStore(cfg *config.Config, playbook string) (managed.Store, error) {
+	switch ms := cfg.ManagedState; ms.Backend {
+	case "", "file":
+		return managed.NewFileStore(playbook), nil
+	case "s3":
+		return managed.NewS3Store(managed.S3Config{Bucket: ms.Bucket, Prefix: ms.Prefix, Endpoint: ms.Endpoint,
+			Region: ms.Region, Insecure: ms.Insecure, PathStyle: ms.PathStyle}, playbook)
+	default:
+		return nil, fmt.Errorf("managed_state: unknown backend %q (file, s3)", ms.Backend)
+	}
+}
+
+// playbookStore is the store of a playbook for the state commands: the
+// config is looked up next to the playbook, as apply does
+func playbookStore(playbook string) (managed.Store, error) {
+	cfg, err := config.LoadConfigWithDiscovery("", filepath.Dir(playbook))
+	if err != nil {
+		return nil, err
+	}
+	return managedStore(cfg, playbook)
 }
 
 // undoer puts one resource back from its before capture
@@ -122,7 +149,7 @@ func (m *managedRun) destroyOrphans(ctx context.Context, u undoer, result *types
 		kept = append(kept, fmt.Sprintf("%s %s on %s: forgotten, left as it is", r.Type, r.ID, r.Host))
 		m.st.Remove(r.Host, r.Type, r.ID)
 	}
-	m.save(log)
+	m.save(ctx, log)
 	if len(done)+len(kept)+len(failed) > 0 {
 		fmt.Fprintf(w, "\nManaged state: resources that left the playbook\n")
 		for _, l := range done {

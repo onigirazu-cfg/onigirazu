@@ -79,10 +79,25 @@ type Config struct {
 	PreferredModuleSyntax string `yaml:"preferred_module_syntax" json:"preferred_module_syntax"` // "flat", "nested"
 	EnforceModuleSyntax   bool   `yaml:"enforce_module_syntax" json:"enforce_module_syntax"`
 
+	// ManagedState is where each playbook's managed state lives
+	ManagedState ManagedStateConfig `yaml:"managed_state" json:"managed_state"`
+
 	// Warnings about the file: unknown keys, keys that have no effect
 	Warnings []string `yaml:"-" json:"-"`
 	// keys written in the file
 	setKeys map[string]bool
+}
+
+// ManagedStateConfig selects the managed state backend: file (next to the
+// playbook, the default) or s3 (a bucket shared by everyone who applies)
+type ManagedStateConfig struct {
+	Backend   string `yaml:"backend" json:"backend"`
+	Bucket    string `yaml:"bucket" json:"bucket"`
+	Prefix    string `yaml:"prefix" json:"prefix"`
+	Endpoint  string `yaml:"endpoint" json:"endpoint"`
+	Region    string `yaml:"region" json:"region"`
+	Insecure  bool   `yaml:"insecure" json:"insecure"`
+	PathStyle bool   `yaml:"path_style" json:"path_style"`
 }
 
 // noEffect are the keys that are parsed but that nothing reads

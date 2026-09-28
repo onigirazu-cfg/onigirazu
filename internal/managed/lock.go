@@ -141,3 +141,16 @@ func whoAmI() string {
 	host, _ := os.Hostname()
 	return name + "@" + host
 }
+
+// randomInt is a random number below n (backoff jitter)
+func randomInt(n int64) int64 {
+	b := make([]byte, 8)
+	if _, err := rand.Read(b); err != nil {
+		return 0
+	}
+	var v uint64
+	for _, x := range b {
+		v = v<<8 | uint64(x)
+	}
+	return int64(v % uint64(n))
+}
