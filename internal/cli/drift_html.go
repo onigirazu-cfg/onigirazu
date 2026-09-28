@@ -15,10 +15,14 @@ func writeDriftHTML(w io.Writer, r *DriftReport) error {
 		DriftItem
 		Lines []line
 	}
+	type orphan struct {
+		Mark, Class, Text string
+	}
 	type host struct {
-		Name   string
-		Items  []item
-		Errors []DriftItem
+		Name    string
+		Items   []item
+		Errors  []DriftItem
+		Orphans []orphan
 	}
 	var hosts []host
 	names := map[string]bool{}
@@ -28,8 +32,18 @@ func writeDriftHTML(w io.Writer, r *DriftReport) error {
 	for h := range r.Errors {
 		names[h] = true
 	}
+	orphans := map[string][]orphan{}
+	for _, o := range r.Orphans {
+		names[o.Host] = true
+		text := o.Type + " " + o.ID + ": " + orphanText[o.Action]
+		if o.Task != "" {
+			text += " (was: " + o.Task + ")"
+		}
+		orphans[o.Host] = append(orphans[o.Host], orphan{orphanMarks[o.Action], map[string]string{
+			"destroy": "del", "restore": "hunk"}[o.Action], text})
+	}
 	for h := range names {
-		entry := host{Name: h, Errors: r.Errors[h]}
+		entry := host{Name: h, Errors: r.Errors[h], Orphans: orphans[h]}
 		for _, it := range r.Drift[h] {
 			var lines []line
 			for _, l := range strings.Split(strings.TrimRight(it.Diff, "\n"), "\n") {
@@ -82,12 +96,14 @@ pre span{display:block;padding:0 6px}.add{background:var(--add)}.del{background:
 <div>{{.R.Hosts}} host(s)</div>
 <div class="{{if .R.Drift}}warn{{else}}ok{{end}}">{{len .R.Drift}} with changes, {{.R.DriftTasks}} task(s)</div>
 <div class="ok">{{len .R.InSync}} in sync</div>
+{{if .R.Orphans}}<div class="warn">{{len .R.Orphans}} resource(s) left the playbook</div>{{end}}
 {{if .R.Errors}}<div class="bad">{{len .R.Errors}} could not be checked</div>{{end}}
 {{if .R.Fixed}}<div class="ok">fixed: the playbook was applied</div>{{end}}
 </div>
 {{range .Hosts}}<section><h2>{{.Name}}</h2>
 {{range .Items}}<div class="task"><strong>{{.Task}}</strong>{{if .Module}} <span class="muted">({{.Module}})</span>{{end}}{{if .Since}} <span class="muted">· since {{.Since.Local.Format "2006-01-02 15:04"}}</span>{{end}}{{if and .Detail (not .Lines)}} — {{.Detail}}{{end}}
 {{if .Lines}}<pre>{{range .Lines}}<span class="{{.Class}}">{{.Text}}</span>{{end}}</pre>{{end}}</div>{{end}}
+{{if .Orphans}}<div class="task"><strong>No longer in the playbook</strong><pre>{{range .Orphans}}<span class="{{.Class}}">{{.Mark}} {{.Text}}</span>{{end}}</pre></div>{{end}}
 {{range .Errors}}<div class="task bad"><strong>{{.Task}}</strong>: {{.Detail}}</div>{{end}}
 </section>{{end}}
 {{if .R.InSync}}<p class="muted">In sync: {{range $i, $h := .R.InSync}}{{if $i}}, {{end}}{{$h}}{{end}}</p>{{end}}

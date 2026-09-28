@@ -81,6 +81,15 @@ func TestWriteDriftHTML(t *testing.T) {
 	assert.Contains(t, html, "conf &lt;x&gt;", "task names are escaped")
 	assert.Contains(t, html, "unreachable")
 	assert.Contains(t, html, "In sync: db1")
+
+	r.Orphans = []types.ManagedOrphan{{Host: "old1", Type: "file", ID: "/etc/x", Task: "x", Action: "destroy"},
+		{Host: "old1", Type: "file", ID: "/etc/y", Action: "restore"}}
+	out.Reset()
+	assert.NoError(t, writeDriftHTML(&out, r))
+	html = out.String()
+	assert.Contains(t, html, "2 resource(s) left the playbook")
+	assert.Contains(t, html, `<span class="del">- file /etc/x: remove (onigirazu created it) (was: x)</span>`)
+	assert.Contains(t, html, `<span class="hunk">&lt; file /etc/y: put back as it was</span>`)
 }
 
 func TestAnnotateSince(t *testing.T) {
