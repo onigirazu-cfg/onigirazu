@@ -169,8 +169,9 @@ apply() {  # case_dir -> writes task_end events to $WORK/events.jsonl
   local dir="$1" state
   state="$WORK/state-$(basename "$1")"
   # Run from the case's own directory so relative paths (src, script) work
+  APPLY_RC=0
   (cd "$dir" && timeout 1200 "$BIN" apply playbook.yml -i "$INVENTORY" --state "$state" \
-    --log-format json --no-color >"$WORK/apply.log" 2>&1) || true
+    --log-format json --no-color >"$WORK/apply.log" 2>&1) || APPLY_RC=$?
   records | jq -c 'select(.fields.type == "task_end") | .fields' > "$WORK/events.jsonl" || true
 }
 
@@ -185,6 +186,9 @@ apply_errors() {
 expected_failures_out() {
   if [ -f "$1/EXPECTED_FAILED_TASKS" ]; then grep -vxF -f "$1/EXPECTED_FAILED_TASKS" || true; else cat; fi
 }
+
+# timeout(1) ended the last apply: its tasks failed because the run was stopped
+timed_out() { [ "${APPLY_RC:-0}" = 124 ] && echo " (apply timed out after 1200s)" || true; }
 
 record() { printf '%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4" >> "$RESULTS"; echo "  [$3] $1 / $2 ${4:+- $4}"; }
 
@@ -224,7 +228,7 @@ for c in $cases; do
       continue
     fi
     if [ -n "$failed" ]; then
-      record "$c" "$h" FAIL "apply failed: $(echo "$failed" | paste -sd, -)"
+      record "$c" "$h" FAIL "apply failed: $(echo "$failed" | paste -sd, -)$(timed_out)"
       apply_errors
       continue
     fi
@@ -246,7 +250,7 @@ for c in $cases; do
     [ "$ran" != 0 ] || { record "$c" "$h" FAIL "second apply: no task ran"; continue; }
     changed="$(jq -r --arg h "$h" 'select(.host == $h and .changed == true) | .task' "$WORK/events.jsonl")"
     failed="$(jq -r --arg h "$h" 'select(.host == $h and .success != true) | .task' "$WORK/events.jsonl" | expected_failures_out "$dir")"
-    if [ -n "$failed" ]; then record "$c" "$h" FAIL "second apply failed: $(echo "$failed" | paste -sd, -)"; apply_errors
+    if [ -n "$failed" ]; then record "$c" "$h" FAIL "second apply failed: $(echo "$failed" | paste -sd, -)$(timed_out)"; apply_errors
     elif [ -n "$changed" ]; then record "$c" "$h" FAIL "not idempotent: $(echo "$changed" | paste -sd, -)"
     else record "$c" "$h" PASS "idempotent"; fi
   done
