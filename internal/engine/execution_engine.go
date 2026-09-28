@@ -1591,18 +1591,7 @@ func (e *ExecutionEngine) gatherFacts(ctx context.Context, hosts []types.Host) e
 //   - "0-3" -> [0, 1, 2, 3]
 func (e *ExecutionEngine) getLoopItems(ctx context.Context, loop *types.Loop, variables map[string]interface{}) ([]interface{}, error) {
 	if loop.Items != nil {
-		items := make([]interface{}, len(loop.Items))
-		for i, item := range loop.Items {
-			if str, ok := item.(string); ok && strings.Contains(str, "{{") {
-				rendered, err := e.templateEngine.Render(ctx, str, variables)
-				if err != nil {
-					return nil, fmt.Errorf("item %d: %w", i+1, err)
-				}
-				item = rendered
-			}
-			items[i] = item
-		}
-		return items, nil
+		return e.renderLoopItems(ctx, loop.Items, variables)
 	}
 
 	if loop.Expr != "" {
@@ -1610,7 +1599,11 @@ func (e *ExecutionEngine) getLoopItems(ctx context.Context, loop *types.Loop, va
 		if err != nil {
 			return nil, fmt.Errorf("%q: %w", loop.Expr, err)
 		}
-		return expression.Items(value)
+		items, err := expression.Items(value)
+		if err != nil {
+			return nil, err
+		}
+		return e.renderLoopItems(ctx, items, variables)
 	}
 
 	if loop.Range != "" {
@@ -1618,6 +1611,54 @@ func (e *ExecutionEngine) getLoopItems(ctx context.Context, loop *types.Loop, va
 	}
 
 	return nil, fmt.Errorf("loop must specify either items or range")
+}
+
+// renderLoopItems renders the templates inside loop items, nested ones too:
+// Ansible templates the whole list, so {name: x, value: "{{ var }}"} gets
+// the value of var
+func (e *ExecutionEngine) renderLoopItems(ctx context.Context, items []interface{}, variables map[string]interface{}) ([]interface{}, error) {
+	out := make([]interface{}, len(items))
+	for i, item := range items {
+		if !hasTemplate(item) {
+			out[i] = item
+			continue
+		}
+		if str, ok := item.(string); ok {
+			rendered, err := e.templateEngine.Render(ctx, str, variables)
+			if err != nil {
+				return nil, fmt.Errorf("item %d: %w", i+1, err)
+			}
+			out[i] = rendered
+			continue
+		}
+		rendered, err := e.templateEngine.RenderTaskArgs(ctx, map[string]interface{}{"item": item}, variables)
+		if err != nil {
+			return nil, fmt.Errorf("item %d: %w", i+1, err)
+		}
+		out[i] = rendered["item"]
+	}
+	return out, nil
+}
+
+// hasTemplate tells whether a value holds a template string at any depth
+func hasTemplate(value interface{}) bool {
+	switch v := value.(type) {
+	case string:
+		return strings.Contains(v, "{{") || strings.Contains(v, "{%")
+	case map[string]interface{}:
+		for _, x := range v {
+			if hasTemplate(x) {
+				return true
+			}
+		}
+	case []interface{}:
+		for _, x := range v {
+			if hasTemplate(x) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // parseRange parses range string and returns items
