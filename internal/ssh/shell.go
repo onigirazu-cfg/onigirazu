@@ -40,7 +40,8 @@ func (e *ExitStatusError) ExitStatus() int { return e.Status }
 // behind writes to a removed file, not into the next command's output.
 // The files live in ~/.onigirazu/tmp, as Ansible keeps its own in
 // ~/.ansible/tmp: a task that cleans /tmp neither sees nor removes them, and
-// the directory comes back if something removes it anyway.
+// the directory comes back if something removes it anyway (a command that
+// removed its own output files reports empty output).
 const shellScript = `r="$HOME/.onigirazu/tmp"
 d=$( (mkdir -p -m 700 "$r" && mktemp -d "$r/sh.XXXXXX") 2>/dev/null || mktemp -d 2>/dev/null) || exit 97
 trap 'rm -rf "$d"' EXIT
@@ -54,8 +55,9 @@ while IFS= read -r l; do
   printf '%s' "$l" | base64 -d > "$d/c" 2>/dev/null || { printf 'ONIGIRAZU 255 0 0\n'; continue; }
   if [ "$m" = C ]; then sh "$d/c" </dev/null >"$o" 2>&1; rc=$?; : >"$e"
   else sh "$d/c" </dev/null >"$o" 2>"$e"; rc=$?; fi
-  printf 'ONIGIRAZU %d %d %d\n' "$rc" $(($(wc -c <"$o"))) $(($(wc -c <"$e")))
-  cat "$o" "$e"
+  so=$(wc -c <"$o" 2>/dev/null) || so=0; se=$(wc -c <"$e" 2>/dev/null) || se=0
+  printf 'ONIGIRAZU %d %d %d\n' "$rc" $((so)) $((se))
+  cat "$o" "$e" 2>/dev/null
   rm -f "$o" "$e"
 done
 `
