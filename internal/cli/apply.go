@@ -845,7 +845,8 @@ Examples:
 			var mrun *managedRun
 			if result != nil {
 				complete := tags == "" && skipTags == "" && startAtTask == "" && ctx.Err() == nil && !runControl.Stopped()
-				mrun = updateManagedState(saveCtx, mstore, result, executionEngine.ManagedScopes(), complete, cfg.IsCheckMode(), log)
+				mrun = updateManagedState(saveCtx, mstore, result, executionEngine.ManagedScopes(), complete, limit == "",
+					cfg.IsCheckMode(), log)
 				if onResult == nil && outputFormat != "json" && outputFormat != "yaml" {
 					printOrphans(resultOut, result.Orphans)
 				}
@@ -880,7 +881,11 @@ Examples:
 				if outputFormat == "json" || outputFormat == "yaml" {
 					out = os.Stderr
 				}
-				if err := mrun.destroyOrphans(saveCtx, restorer, result, confirmDestroy(autoApprove), out, log); err != nil {
+				known := func(host string) bool {
+					hosts, err := inventoryManager.GetHosts(host)
+					return err == nil && len(hosts) > 0
+				}
+				if err := mrun.destroyOrphans(saveCtx, restorer, result, known, confirmDestroy(autoApprove), out, log); err != nil {
 					return err
 				}
 			}
