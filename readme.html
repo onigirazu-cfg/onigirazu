@@ -367,9 +367,10 @@ undone, newest first) and the rollout stops, exit code 5. <code>--canary 1 --can
 host first and checks it again after a soak. See <a href="docs/SAFE_APPLY.md">docs/SAFE_APPLY.md</a>.</p>
 <h3>Managed state</h3>
 <p>apply records the files, packages, services, users and groups each task manages
-(<code>.onigirazu/&lt;playbook&gt;.state.json</code>). When a task leaves the playbook, <code>plan</code> lists its resources:
-the ones onigirazu created are to be removed, the ones it took over to be put back as they were.
-<code>onigirazu state resources site.yml</code> shows the records. See <a href="docs/MANAGED_STATE.md">docs/MANAGED_STATE.md</a>.</p>
+(<code>.onigirazu/&lt;playbook&gt;.state.json</code>). When a task leaves the playbook, <code>plan</code> lists its resources and
+the next apply cleans up, like <code>terraform apply</code>: what onigirazu created is removed, what it took
+over is put back as it was (<code>--no-destroy</code> keeps them, <code>prevent_destroy: true</code> on a task only
+forgets them). <code>onigirazu state resources site.yml</code> shows the records. See <a href="docs/MANAGED_STATE.md">docs/MANAGED_STATE.md</a>.</p>
 <h3>Failed hosts</h3>
 <p>As in Ansible, a host whose task fails leaves the run (later tasks and plays skip it) and the
 other hosts go on; the run still ends with a non-zero exit code. The play stops at once with
