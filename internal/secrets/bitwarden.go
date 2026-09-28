@@ -17,8 +17,11 @@ type BitwardenClient struct {
 	email        string
 	password     string
 	sessionToken string
-	cache        *SecretCache
-	mu           sync.RWMutex
+	// loggedIn: the client logged in itself, so Close locks the vault; a
+	// session the user unlocked stays open
+	loggedIn bool
+	cache    *SecretCache
+	mu       sync.RWMutex
 }
 
 // BitwardenItem represents a Bitwarden vault item
@@ -143,8 +146,15 @@ func NewBitwardenClient(config map[string]interface{}) (*BitwardenClient, error)
 	password, _ := config["password"].(string)
 
 	cacheTTL := 5 * time.Minute
-	if ttl, ok := config["cache_ttl"].(int); ok {
+	switch ttl := config["cache_ttl"].(type) {
+	case int:
 		cacheTTL = time.Duration(ttl) * time.Second
+	case time.Duration:
+		cacheTTL = ttl
+	case string:
+		if d, err := time.ParseDuration(ttl); err == nil {
+			cacheTTL = d
+		}
 	}
 
 	client := &BitwardenClient{
@@ -208,7 +218,16 @@ func (bc *BitwardenClient) authenticate(config map[string]interface{}) error {
 	}
 
 	bc.sessionToken = strings.TrimSpace(string(output))
+	bc.loggedIn = true
 	return nil
+}
+
+// bwCommand runs the bw CLI with the session in its environment, not on
+// the command line where the process list would show it
+func (bc *BitwardenClient) bwCommand(ctx context.Context, sessionToken string, args ...string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, "bw", args...) // #nosec G204 -- fixed subcommands, the item name is an argument
+	cmd.Env = append(os.Environ(), "BW_SESSION="+sessionToken, "BW_NOINTERACTION=true")
+	return cmd
 }
 
 // GetSecret retrieves a secret from Bitwarden
@@ -231,16 +250,22 @@ func (bc *BitwardenClient) GetSecret(ctx context.Context, itemName, field string
 	}
 
 	// Get item from Bitwarden
-	// #nosec G204 -- itemName is validated and sessionToken is from authentication
-	cmd := exec.CommandContext(ctx, "bw", "get", "item", itemName, "--session", sessionToken)
-	output, err := cmd.Output()
-	if err != nil {
-		return "", &ProviderError{
-			Provider: "bitwarden",
-			Message:  fmt.Sprintf("failed to get item '%s'", itemName),
-			Err:      err,
+	// the item is read once; its other fields come from the cache
+	itemKey := "item\x00" + itemName
+	raw, found := bc.cache.Get(itemKey)
+	if !found {
+		out, err := bc.bwCommand(ctx, sessionToken, "get", "item", itemName).Output()
+		if err != nil {
+			return "", &ProviderError{
+				Provider: "bitwarden",
+				Message:  fmt.Sprintf("failed to get item '%s'", itemName),
+				Err:      err,
+			}
 		}
+		raw = string(out)
+		bc.cache.Set(itemKey, raw)
 	}
+	output := []byte(raw)
 
 	// Parse JSON response
 	var item BitwardenItem
@@ -312,9 +337,7 @@ func (bc *BitwardenClient) ListSecrets(ctx context.Context, filter string) ([]st
 	}
 
 	// List all items
-	// #nosec G204 -- sessionToken is from authentication
-	cmd := exec.CommandContext(ctx, "bw", "list", "items", "--session", sessionToken)
-	output, err := cmd.Output()
+	output, err := bc.bwCommand(ctx, sessionToken, "list", "items").Output()
 	if err != nil {
 		return nil, &ProviderError{
 			Provider: "bitwarden",
@@ -352,9 +375,8 @@ func (bc *BitwardenClient) Close() error {
 	bc.mu.Lock()
 	defer bc.mu.Unlock()
 
-	if bc.sessionToken != "" {
-		cmd := exec.Command("bw", "lock")
-		_ = cmd.Run() // Ignore errors on lock
+	if bc.loggedIn && bc.sessionToken != "" {
+		_ = bc.bwCommand(context.Background(), bc.sessionToken, "lock").Run() // Ignore errors on lock
 	}
 
 	return nil

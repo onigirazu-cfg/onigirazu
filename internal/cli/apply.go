@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/onigirazu-cfg/onigirazu/internal/expression"
+	"github.com/onigirazu-cfg/onigirazu/internal/secrets"
 	"io"
 	"os"
 	"path/filepath"
@@ -190,6 +192,9 @@ Examples:
 				return fmt.Errorf("failed to load configuration: %w", err)
 			}
 			parser.SetRoleSearch(cfg.RolesPath, cfg.CollectionsPath)
+			secretResolver := secrets.NewResolver(cfg.Secrets)
+			expression.SecretLookup = secretResolver.Get
+			defer func() { _ = secretResolver.Close() }()
 
 			// Override config with command line flags
 			if verbose {

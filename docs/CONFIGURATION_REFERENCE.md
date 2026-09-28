@@ -39,6 +39,7 @@ Environment variables only change the defaults; a key in `onigirazu.yml` wins ov
 | `state_file` | `ONIGIRAZU_STATE_FILE` | `.onigirazu-state` | State file. `-s` overrides it. |
 | `roles_path` | `ANSIBLE_ROLES_PATH` | - | Directories searched for roles after `roles/` next to the playbook (list; relative to the config file). ansible.cfg `roles_path` is read too. |
 | `collections_path` | `ANSIBLE_COLLECTIONS_PATH` | `~/.ansible/collections` | Where `namespace.collection.role` roles are found (`ansible_collections/<ns>/<coll>/roles/<role>`). ansible.cfg `collections_path` is read too. |
+| `secrets` | - | - | Secret providers for templates: `cache_ttl` (default `5m`), `vault` with `address` (default `VAULT_ADDR`), `namespace`, `mount` (default `secret`). Credentials come from the environment. See [BITWARDEN_INTEGRATION.md](BITWARDEN_INTEGRATION.md). |
 | `managed_state` | - | file next to the playbook | Where the managed state lives: `backend: file` or `s3` with `bucket`, `prefix`, `endpoint`, `region`, `insecure`, `path_style`. See [MANAGED_STATE.md](MANAGED_STATE.md). |
 | `dry_run` | `ONIGIRAZU_DRY_RUN` | `false` | Tasks run in check mode. Prefer `apply --check`. |
 | `color_output` | `ONIGIRAZU_COLOR_OUTPUT` | `true` | Colored output. `--no-color` overrides it. |
@@ -73,7 +74,7 @@ These keys are parsed but nothing reads them; a file that sets one gets a warnin
 `enable_caching`, `cache_ttl`, `enable_checksum`, `enable_parallel`,
 `parallel_strategy`, `progress_bar`, `metrics_path` (the path is always `/metrics`), `enable_profiling`,
 `ssh_keepalive`, `ssh_max_sessions`, `connection_reuse`,
-`default_insecure_ignore_host_key`, `vault_enabled`, `vault_address`, `vault_token`,
+`default_insecure_ignore_host_key`, `vault_enabled`, `vault_address`, `vault_token` (use `secrets.vault`),
 `preferred_module_syntax`, `enforce_module_syntax`.
 
 Use command-line flags instead: `--profile`; task-level `retries`/`delay` for retries.
