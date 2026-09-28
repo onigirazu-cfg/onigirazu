@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/big"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -140,4 +141,13 @@ func whoAmI() string {
 	}
 	host, _ := os.Hostname()
 	return name + "@" + host
+}
+
+// randomInt is a random number below n (backoff jitter)
+func randomInt(n int64) int64 {
+	v, err := rand.Int(rand.Reader, big.NewInt(n))
+	if err != nil {
+		return 0
+	}
+	return v.Int64()
 }

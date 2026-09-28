@@ -37,6 +37,7 @@ Environment variables only change the defaults; a key in `onigirazu.yml` wins ov
 | `log_level` | `ONIGIRAZU_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error`. `apply -l` and `-v` override it. |
 | `log_format` | `ONIGIRAZU_LOG_FORMAT` | `text` | `text` or `json`. `apply --log-format` overrides it. |
 | `state_file` | `ONIGIRAZU_STATE_FILE` | `.onigirazu-state` | State file. `-s` overrides it. |
+| `managed_state` | - | file next to the playbook | Where the managed state lives: `backend: file` or `s3` with `bucket`, `prefix`, `endpoint`, `region`, `insecure`, `path_style`. See [MANAGED_STATE.md](MANAGED_STATE.md). |
 | `dry_run` | `ONIGIRAZU_DRY_RUN` | `false` | Tasks run in check mode. Prefer `apply --check`. |
 | `color_output` | `ONIGIRAZU_COLOR_OUTPUT` | `true` | Colored output. `--no-color` overrides it. |
 | `ssh_strict_host_key` | `ONIGIRAZU_SSH_STRICT_HOST_KEY` | `false` | Reject hosts whose key is not in the known_hosts file. |
