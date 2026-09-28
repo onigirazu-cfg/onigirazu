@@ -365,6 +365,11 @@ another.</p>
 <p>After every batch the checks run on its hosts; an unhealthy batch is rolled back (its changes
 undone, newest first) and the rollout stops, exit code 5. <code>--canary 1 --canary-pause 5m</code> runs one
 host first and checks it again after a soak. See <a href="docs/SAFE_APPLY.md">docs/SAFE_APPLY.md</a>.</p>
+<h3>Managed state</h3>
+<p>apply records the files, packages, services, users and groups each task manages
+(<code>.onigirazu/&lt;playbook&gt;.state.json</code>). When a task leaves the playbook, <code>plan</code> lists its resources:
+the ones onigirazu created are to be removed, the ones it took over to be put back as they were.
+<code>onigirazu state resources site.yml</code> shows the records. See <a href="docs/MANAGED_STATE.md">docs/MANAGED_STATE.md</a>.</p>
 <h3>Failed hosts</h3>
 <p>As in Ansible, a host whose task fails leaves the run (later tasks and plays skip it) and the
 other hosts go on; the run still ends with a non-zero exit code. The play stops at once with
@@ -1122,6 +1127,7 @@ WantedBy=timers.target
 <ul>
 <li><strong><a href="docs/QUICK_START_CONFIGURATION.md">Quick Start</a></strong> - inventory, playbook, plan, apply</li>
 <li><strong><a href="docs/DRIFT_AND_ROLLBACK.md">Plan, drift, diff and rollback</a></strong> - see and control what a playbook changes</li>
+<li><strong><a href="docs/MANAGED_STATE.md">Managed state</a></strong> - what a playbook manages on each host, and what happens once a task is removed</li>
 <li><strong><a href="docs/modules/README.md">Modules Reference</a></strong> - every built-in module and its arguments</li>
 <li><strong><a href="docs/examples/README.md">Playbook Examples</a></strong> - working playbooks</li>
 <li><strong><a href="docs/INVENTORY_FORMATS.md">Inventory Formats</a></strong> - YAML, Ansible YAML/INI, TOML, JSON, scripts</li>
