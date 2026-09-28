@@ -339,6 +339,9 @@ func (e *Engine) RenderTaskArgs(ctx context.Context, args map[string]interface{}
 		if err != nil {
 			return nil, fmt.Errorf("failed to render arg %s: %w", key, err)
 		}
+		if renderedValue == expression.Omit {
+			continue
+		}
 		result[key] = renderedValue
 	}
 
@@ -368,17 +371,24 @@ func (e *Engine) renderValue(ctx context.Context, value interface{}, variables m
 			if err != nil {
 				return nil, err
 			}
+			// omit drops the key, in nested options too
+			if renderedVal == expression.Omit {
+				continue
+			}
 			result[k] = renderedVal
 		}
 		return result, nil
 	case []interface{}:
-		result := make([]interface{}, len(v))
-		for i, val := range v {
+		result := make([]interface{}, 0, len(v))
+		for _, val := range v {
 			renderedVal, err := e.renderValue(ctx, val, variables)
 			if err != nil {
 				return nil, err
 			}
-			result[i] = renderedVal
+			if renderedVal == expression.Omit {
+				continue
+			}
+			result = append(result, renderedVal)
 		}
 		return result, nil
 	default:

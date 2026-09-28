@@ -6,3 +6,8 @@ plays:
       - name: Run a command as root
         command:
           command: "sh -c 'id -u > /root/onigirazu-e2e-uid'"
+      # an argument that renders to omit is left out: chdir falls back to the default
+      - name: Omitted argument
+        command:
+          cmd: "sh -c 'echo ok > /root/onigirazu-e2e-omit'"
+          chdir: "{{ onigirazu_unset_dir | default(omit) }}"
