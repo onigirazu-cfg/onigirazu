@@ -4,6 +4,11 @@ This document provides comprehensive documentation for all built-in modules in O
 
 > 📑 **Looking for a specific module?** Check the [Alphabetical Index](INDEX.md) for a quick reference of all 50 modules.
 
+Arguments also take Ansible's aliases: `pkg`/`package` for apt and yum `name`,
+`dest`/`name` for the `path` of file, stat, lineinfile, blockinfile and replace,
+`service`/`unit` for service and systemd `name`, `key`/`val` for sysctl, and the
+dashed apt/systemd forms (`update-cache`, `daemon-reload`).
+
 ## 📋 Table of Contents
 
 - [Module Overview](#module-overview)
