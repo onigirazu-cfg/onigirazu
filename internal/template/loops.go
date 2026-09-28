@@ -139,3 +139,51 @@ func restoreLoops(text string, loops []string) string {
 	}
 	return text
 }
+
+// setTag is {% set name = expression %}
+var setTag = regexp.MustCompile(`\{%-?\s*set\s+(\w+)\s*=\s*(.+?)\s*-?%\}`)
+
+// applySets evaluates the {% set %} tags of the top level in order and
+// removes them; the variables they set hold for the rest of the text (for
+// loops included). Tags inside a for loop belong to its body, which is
+// rendered on its own for every item.
+func applySets(text string, variables map[string]interface{}, trim bool) (string, map[string]interface{}, error) {
+	if !setTag.MatchString(text) {
+		return text, variables, nil
+	}
+	vars := make(map[string]interface{}, len(variables)+2)
+	for k, v := range variables {
+		vars[k] = v
+	}
+	var out strings.Builder
+	for {
+		set := setTag.FindStringSubmatchIndex(text)
+		loop := forTag.FindStringIndex(text)
+		if set == nil {
+			out.WriteString(text)
+			return out.String(), vars, nil
+		}
+		if len(loop) == 2 && loop[0] < set[0] {
+			// keep the loop as it is: its sets are its own
+			_, afterEnd, err := matchEndfor(text, loop[1])
+			if err != nil {
+				return "", nil, err
+			}
+			out.WriteString(text[:afterEnd])
+			text = text[afterEnd:]
+			continue
+		}
+		name, source := text[set[2]:set[3]], text[set[4]:set[5]]
+		value, err := expression.Eval(source, vars)
+		if err != nil {
+			return "", nil, fmt.Errorf("set %s: %w", name, err)
+		}
+		vars[name] = value
+		out.WriteString(text[:set[0]])
+		end := set[1]
+		if trim && end < len(text) && text[end] == '\n' {
+			end++
+		}
+		text = text[end:]
+	}
+}

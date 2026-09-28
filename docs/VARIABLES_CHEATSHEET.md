@@ -30,6 +30,12 @@ Every fact exists under two names: `onigirazu_*` and the Ansible name `ansible_*
 {{ groups['webservers'] }}            # ["web01", "web02"]
 {{ hostvars['web02'].ansible_host }}  # variables of another host
 {{ playbook_dir }}                    # directory of the playbook
+{{ ansible_check_mode }}              # true under --check
+{{ ansible_diff_mode }}               # true under --diff
+{{ ansible_limit }}                   # the --limit pattern (defined only with --limit)
+{{ ansible_play_hosts }}              # hosts of the play's current batch still running
+{{ ansible_play_batch }}              # same as ansible_play_hosts
+{{ ansible_play_hosts_all }}          # every host of the play
 ```
 
 ### Basic Host Info

@@ -313,12 +313,13 @@ tasks:
 | Group | Filters |
 |-------|---------|
 | Strings | `upper`, `lower`, `title`, `capitalize`, `trim`, `replace(old, new)`, `split(sep)`, `quote` (shell quoting), `basename`, `dirname` |
-| Regular expressions | `regex_replace(pattern, repl)` (`\1` back references), `regex_search(pattern)` (match or none), `regex_findall(pattern)` |
+| Regular expressions | `regex_replace(pattern, repl)` (`\1` back references), `regex_search(pattern)` (match or none), `regex_findall(pattern)`, `regex_escape` |
 | Conversion | `int`, `float`, `string`, `bool`, `list`, `abs`, `round` |
 | Data formats | `to_json`, `to_nice_json`, `from_json`, `to_yaml`, `to_nice_yaml`, `from_yaml`, `b64encode`, `b64decode` |
-| Lists | `length`/`count`, `first`, `last`, `join(sep)`, `unique`, `sort`, `reverse`, `flatten`, `sum`, `min`, `max`, `range(n)` |
+| Lists | `length`/`count`, `first`, `last`, `join(sep)`, `unique`, `sort`, `reverse`, `flatten`, `sum`, `min`, `max`, `range(n)`, `zip(other...)`, `product(other...)` |
+| Sets | `intersect(other)`, `difference(other)`, `union(other)`, `symmetric_difference(other)` (order of the first list, no duplicates) |
 | Selection | `select(test, arg)`, `reject(test, arg)`, `selectattr(attr, test, arg)`, `rejectattr(attr, test, arg)`; without a test an item is kept when it is truthy |
-| Mapping | `map(attribute='x')`, `map('filter', args...)`, `map('extract', container, key)` |
+| Mapping | `map(attribute='x')`, `map(attribute='x', default=d)`, `map('filter', args...)`, `map('extract', container, key)` |
 | Dictionaries | `keys`, `values`, `dict2items`, `items2dict`, `combine(other, ...)` (shallow merge) |
 | Random | `random` (an item of a list, or for a number N one of `start`, `start+step`, ... below N: `60 \| random(seed=inventory_hostname)`), `shuffle`; the same `seed` gives the same result, but not the numbers Ansible would pick |
 | Other | `default(value)`, `mandatory` (error when undefined), `ternary(if_true, if_false)`, `password_hash('sha512' or 'sha256', salt)` |
@@ -342,6 +343,8 @@ Not available: `hash`, `default(value, true)` (the second argument is ignored; `
 
 Tests work in any expression (`x is test(args)`, `x is not test(args)`) and in `select`, `reject`, `selectattr` and `rejectattr`: `defined`, `undefined`, `none`, `truthy`, `falsy`, `equalto`/`==`/`eq`, `!=`/`ne`, `>`, `<`, `>=`, `<=` (also `gt`, `lt`, `ge`, `le`), `in`, `contains`, `match`/`search`/`regex`, `string`, `number`.
 
+Ansible tests: task results `success`/`succeeded`, `failed`/`failure`, `changed`, `skipped`, `unreachable` (`until: r is success`); `version(other, op)` (loose comparison as Ansible's default: `'22.04' is version('20.04', '>=')`); `mapping`, `sequence`/`iterable`, `boolean`, `integer`, `float`, `lower`, `upper`, `even`, `odd`, `divisibleby(n)`, `subset(list)`, `superset(list)`; paths on the control machine `exists`, `file`, `directory`, `link`, `abs`.
+
 ```yaml
 when: my_var is defined and my_var | length > 0
 when: version is match('^2\\.')
@@ -350,11 +353,12 @@ loop: "{{ packages | select('match', '^python3-') | list }}"
 
 ### Lookups
 
-`lookup(plugin, terms...)` returns one value (several are joined with commas); `query(...)`/`q(...)` returns a list. They run on the control machine; relative paths start at the playbook directory.
+`lookup(plugin, terms...)` returns one value (plugins can be written `ansible.builtin.env` too) (several are joined with commas); `query(...)`/`q(...)` returns a list. They run on the control machine; relative paths start at the playbook directory.
 
 | Plugin | Returns |
 |--------|---------|
 | `env` | Environment variable |
+| `template` | A template file rendered with the task's variables |
 | `file` | File content |
 | `pipe` | Output of a shell command |
 | `lines` | Output of a command, one item per line |
@@ -371,7 +375,8 @@ loop: "{{ query('fileglob', 'files/conf.d/*.conf') }}"
 ### Expression Syntax
 
 - Inline if: `{{ 'big' if n > 3 else 'small' }}`
-- String concatenation: `{{ name ~ '-' ~ version }}`
+- String concatenation: `{{ name ~ '-' ~ version }}`; `+` adds numbers and concatenates strings and lists (`(a | intersect(b) + ['Other']) | first`)
+- `{% set name = expression %}` in templates, for the rest of the template (inside a for loop, for that iteration)
 - `True`, `False` and `None` as in Jinja; `and`, `or`, `not`, `in`
 - Dictionary methods `d.keys()` and `d.values()`
 - Precedence as in Jinja: a filter applies to the operand right before it

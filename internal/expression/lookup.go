@@ -15,7 +15,15 @@ import (
 // result with commas; query() (and q()) returns the list. Relative paths
 // start from playbook_dir.
 
-func lookupItems(base interface{}, args []interface{}) ([]interface{}, error) {
+// lookupVars names the variables a lookup sees in the expression env
+const lookupVars = "__lookup_vars"
+
+// RenderTemplate renders a Jinja template with variables; the template
+// package sets it (lookup('template'))
+var RenderTemplate func(text string, vars map[string]interface{}) (string, error)
+
+func lookupItems(base, varsArg interface{}, args []interface{}) ([]interface{}, error) {
+	vars, _ := varsArg.(map[string]interface{})
 	if len(args) == 0 {
 		return nil, fmt.Errorf("lookup needs a plugin name")
 	}
@@ -27,11 +35,28 @@ func lookupItems(base interface{}, args []interface{}) ([]interface{}, error) {
 		return filepath.Join(dir, p)
 	}
 	plugin, terms := fmt.Sprint(args[0]), args[1:]
+	// lookup('ansible.builtin.env', ...) is lookup('env', ...)
+	plugin = strings.TrimPrefix(plugin, "ansible.builtin.")
 	var out []interface{}
 	switch plugin {
 	case "env":
 		for _, t := range terms {
 			out = append(out, os.Getenv(fmt.Sprint(t)))
+		}
+	case "template":
+		if RenderTemplate == nil {
+			return nil, fmt.Errorf("lookup template: no template engine")
+		}
+		for _, t := range terms {
+			data, err := os.ReadFile(resolve(fmt.Sprint(t))) // #nosec G304 -- the playbook's own template
+			if err != nil {
+				return nil, fmt.Errorf("lookup template: %w", err)
+			}
+			text, err := RenderTemplate(string(data), vars)
+			if err != nil {
+				return nil, fmt.Errorf("lookup template %s: %w", t, err)
+			}
+			out = append(out, text)
 		}
 	case "file":
 		for _, t := range terms {
@@ -124,7 +149,7 @@ func fileExists(p string) bool {
 
 // jinjaLookup is lookup(): one value, or the values joined with commas
 func jinjaLookup(p ...interface{}) (interface{}, error) {
-	items, err := lookupItems(p[0], p[1:])
+	items, err := lookupItems(p[0], p[1], p[2:])
 	if err != nil {
 		return nil, err
 	}
@@ -139,5 +164,5 @@ func jinjaLookup(p ...interface{}) (interface{}, error) {
 }
 
 func jinjaQuery(p ...interface{}) (interface{}, error) {
-	return lookupItems(p[0], p[1:])
+	return lookupItems(p[0], p[1], p[2:])
 }

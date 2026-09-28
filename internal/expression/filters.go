@@ -242,12 +242,76 @@ func filterFunctions() []expr.Option {
 			if err != nil {
 				return nil, err
 			}
+			// map(attribute='x', default=d): "default", d after the name
+			var def interface{}
+			hasDef := len(p) > 3 && str(p[2]) == "default"
+			if hasDef {
+				def = p[3]
+			}
 			out := make([]interface{}, 0, len(items))
 			for _, item := range items {
-				out = append(out, attribute(item, str(p[1])))
+				v := attribute(item, str(p[1]))
+				if v == nil && hasDef {
+					v = def
+				}
+				out = append(out, v)
 			}
 			return out, nil
 		}),
+		fn("intersect", func(p ...interface{}) (interface{}, error) { return setOp(p, "intersect") }),
+		fn("difference", func(p ...interface{}) (interface{}, error) { return setOp(p, "difference") }),
+		fn("union", func(p ...interface{}) (interface{}, error) { return setOp(p, "union") }),
+		fn("symmetric_difference", func(p ...interface{}) (interface{}, error) { return setOp(p, "symmetric_difference") }),
+		fn("product", func(p ...interface{}) (interface{}, error) {
+			// Ansible's product: the cartesian product of the lists, as lists
+			lists := make([][]interface{}, 0, len(p))
+			for _, x := range p {
+				items, err := Items(x)
+				if err != nil {
+					return nil, err
+				}
+				lists = append(lists, items)
+			}
+			rows := [][]interface{}{{}}
+			for _, l := range lists {
+				var next [][]interface{}
+				for _, prefix := range rows {
+					for _, x := range l {
+						next = append(next, append(append([]interface{}{}, prefix...), x))
+					}
+				}
+				rows = next
+			}
+			out := make([]interface{}, len(rows))
+			for i, r := range rows {
+				out[i] = r
+			}
+			return out, nil
+		}),
+		fn("zip", func(p ...interface{}) (interface{}, error) {
+			lists := make([][]interface{}, 0, len(p))
+			n := -1
+			for _, x := range p {
+				items, err := Items(x)
+				if err != nil {
+					return nil, err
+				}
+				lists = append(lists, items)
+				if n < 0 || len(items) < n {
+					n = len(items)
+				}
+			}
+			out := make([]interface{}, 0, n)
+			for i := 0; i < n; i++ {
+				row := make([]interface{}, len(lists))
+				for j, l := range lists {
+					row[j] = l[i]
+				}
+				out = append(out, row)
+			}
+			return out, nil
+		}),
+		fn("regex_escape", func(p ...interface{}) (interface{}, error) { return regexp.QuoteMeta(str(p[0])), nil }),
 		fn("select", func(p ...interface{}) (interface{}, error) { return selectItems(p, false, false) }),
 		fn("reject", func(p ...interface{}) (interface{}, error) { return selectItems(p, true, false) }),
 		fn("selectattr", func(p ...interface{}) (interface{}, error) { return selectItems(p, false, true) }),
@@ -357,6 +421,9 @@ func jinjaTest(v interface{}, args []interface{}) (bool, error) {
 	if len(args) > 1 {
 		arg = args[1]
 	}
+	if ok, handled, err := ansibleTest(test, v, args[1:]); handled {
+		return ok, err
+	}
 	switch test {
 	case "defined":
 		return v != nil, nil
@@ -421,4 +488,56 @@ func index(container, key interface{}) interface{} {
 		}
 	}
 	return nil
+}
+
+// setOp is Ansible's intersect, difference, union and symmetric_difference:
+// the order of the first list, no duplicates
+func setOp(p []interface{}, op string) (interface{}, error) {
+	if len(p) < 2 {
+		return nil, fmt.Errorf("%s needs a second list", op)
+	}
+	a, err := Items(p[0])
+	if err != nil {
+		return nil, err
+	}
+	b, err := Items(p[1])
+	if err != nil {
+		return nil, err
+	}
+	out := []interface{}{}
+	add := func(x interface{}) {
+		if !contains(out, x) {
+			out = append(out, x)
+		}
+	}
+	switch op {
+	case "intersect":
+		for _, x := range a {
+			if contains(b, x) {
+				add(x)
+			}
+		}
+	case "difference":
+		for _, x := range a {
+			if !contains(b, x) {
+				add(x)
+			}
+		}
+	case "union":
+		for _, x := range append(append([]interface{}{}, a...), b...) {
+			add(x)
+		}
+	case "symmetric_difference":
+		for _, x := range a {
+			if !contains(b, x) {
+				add(x)
+			}
+		}
+		for _, x := range b {
+			if !contains(a, x) {
+				add(x)
+			}
+		}
+	}
+	return out, nil
 }

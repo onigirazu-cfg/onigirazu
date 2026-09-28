@@ -828,6 +828,7 @@ Examples:
 				return fmt.Errorf("--adopt goes with --check: it records what exists and changes nothing")
 			}
 			executionEngine.SetAdopt(adopt)
+			executionEngine.SetCheckMode(cfg.IsCheckMode())
 			if (!cfg.IsCheckMode() || adopt) && stateLock {
 				lock, err := mstore.Lock(ctx, "apply", lockTimeout)
 				if err != nil {
