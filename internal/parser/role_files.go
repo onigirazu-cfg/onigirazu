@@ -58,3 +58,41 @@ func resolveRoleFiles(tasks []types.Task, rolePath string) {
 		}
 	}
 }
+
+// resolvePlayFiles makes the relative sources of an imported play's tasks
+// absolute: dir/src, else dir/files/src or dir/templates/src (by module)
+func resolvePlayFiles(tasks []types.Task, dir string) {
+	if abs, err := filepath.Abs(dir); err == nil {
+		dir = abs
+	}
+	for i := range tasks {
+		t := &tasks[i]
+		resolvePlayFiles(t.Block, dir)
+		resolvePlayFiles(t.Rescue, dir)
+		resolvePlayFiles(t.Always, dir)
+		sub, ok := roleFileDirs[t.Module]
+		if !ok || t.Args == nil {
+			continue
+		}
+		if remote, _ := t.Args["remote_src"].(bool); remote {
+			continue
+		}
+		key := "src"
+		switch t.Module {
+		case "script":
+			key = "script"
+		case "include_vars":
+			key = "file"
+		}
+		src, ok := t.Args[key].(string)
+		if !ok || src == "" || filepath.IsAbs(src) || strings.Contains(src, "{{") {
+			continue
+		}
+		for _, candidate := range []string{filepath.Join(dir, src), filepath.Join(dir, sub, src)} {
+			if _, err := os.Stat(candidate); err == nil {
+				t.Args[key] = candidate
+				break
+			}
+		}
+	}
+}

@@ -739,7 +739,10 @@ type Play struct {
 	// Environment of every task of the play; a task's own environment wins
 	Environment map[string]interface{} `yaml:"environment,omitempty"`
 	Roles       []RoleReference        `yaml:"roles,omitempty"` // NEW: List of roles to execute
-	RoleObjects []*Role                `yaml:"-" json:"-"`      // NEW: Loaded role objects (internal)
+	// BaseDir is the directory of the file the play came from (a playbook
+	// it was imported from): its relative paths start there
+	BaseDir     string  `yaml:"-" json:"-"`
+	RoleObjects []*Role `yaml:"-" json:"-"` // NEW: Loaded role objects (internal)
 }
 
 // Playbook represents a complete playbook
