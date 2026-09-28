@@ -2112,6 +2112,16 @@ read. `gather_subset` is accepted and has no effect.
 ```yaml
 - ansible.builtin.setup:
     filter: ansible_local
+### getent
+
+Reads a getent database into the `getent_<database>` fact: the first field of
+each entry is the key, the others its list. `database` (passwd, group, hosts,
+...), `key`, `split` (default `:` for passwd/group/shadow, else whitespace),
+`fail_key` (default true: a missing key fails).
+
+```yaml
+- ansible.builtin.getent: {database: passwd, key: deploy}
+- debug: {msg: "{{ getent_passwd.deploy[4] }}"}   # home directory
 ```
 
 ### meta
