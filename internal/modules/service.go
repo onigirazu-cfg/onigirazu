@@ -72,7 +72,8 @@ func (m *ServiceModuleFixed) PreCheckState(ctx context.Context, host types.Host,
 		}, nil
 	}
 
-	state := getStringArg(args, "state", "started")
+	// no state: the running state is left alone (Ansible)
+	state := getStringArg(args, "state", "")
 	enabledVal := args["enabled"]
 	hasEnabledArg := enabledVal != nil
 
@@ -146,7 +147,7 @@ func (m *ServiceModuleFixed) PreCheckState(ctx context.Context, host types.Host,
 		return &PreCheckResult{
 			IsStateCorrect: true,
 			ShouldExecute:  false,
-			Reason:         fmt.Sprintf("Service already in state: %s", state),
+			Reason:         fmt.Sprintf("Service %s already as wanted", name),
 			CurrentState:   currentState,
 		}, nil
 	}
@@ -164,7 +165,6 @@ func (m *ServiceModuleFixed) PreCheckState(ctx context.Context, host types.Host,
 func (m *ServiceModuleFixed) Execute(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
 	startTime := time.Now()
 	result := types.TaskResult{
-		TaskName:  "service",
 		Host:      host.Name,
 		Module:    m.GetName(),
 		Success:   true,
@@ -236,7 +236,7 @@ func (m *ServiceModuleFixed) Execute(ctx context.Context, host types.Host, args 
 		return m.failResult(result, "name parameter is required")
 	}
 
-	state := getStringArg(args, "state", "started")
+	state := getStringArg(args, "state", "")
 	enabled := getBoolArg(args, "enabled", false)
 
 	// Get current status
@@ -315,6 +315,9 @@ func (m *ServiceModuleFixed) Execute(ctx context.Context, host types.Host, args 
 func (m *ServiceModuleFixed) Validate(args map[string]interface{}) error {
 	if _, exists := args["name"]; !exists {
 		return fmt.Errorf("name parameter is required")
+	}
+	if args["state"] == nil && args["enabled"] == nil {
+		return fmt.Errorf("one of state or enabled is required")
 	}
 
 	if state, exists := args["state"]; exists {

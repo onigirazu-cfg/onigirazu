@@ -730,3 +730,36 @@ func BenchmarkServiceModule_Validate(b *testing.B) {
 		_ = module.Validate(args)
 	}
 }
+
+// Without state the running state is left alone (Ansible): an enabled
+// service that does not run stays stopped, a disabled one is not started
+func TestServiceModule_EnabledOnly(t *testing.T) {
+	mockManager := NewMockServiceManager()
+	mockManager.runningState["oneshot"] = false
+	mockManager.enabledState["oneshot"] = true
+	module := &ServiceModuleFixed{BaseExecutorModule: NewBaseExecutorModule("service"), testServiceManager: mockManager}
+	host := types.Host{Name: "test-host", Address: "localhost", Port: 22}
+
+	for _, check := range []bool{true, false} {
+		args := map[string]interface{}{"name": "oneshot", "enabled": true}
+		if check {
+			args["_check_mode"] = true
+		}
+		result, err := module.Execute(context.Background(), host, args)
+		if err != nil || !result.Success || result.Changed {
+			t.Fatalf("check=%v: expected no change, got %+v, %v", check, result, err)
+		}
+	}
+	if len(mockManager.startCalls) != 0 {
+		t.Errorf("started %v", mockManager.startCalls)
+	}
+
+	mockManager.enabledState["oneshot"] = false
+	result, err := module.Execute(context.Background(), host, map[string]interface{}{"name": "oneshot", "enabled": false})
+	if err != nil || result.Changed || len(mockManager.startCalls) != 0 {
+		t.Fatalf("a disabled service must not be started: %+v, %v", result, err)
+	}
+	if err := module.Validate(map[string]interface{}{"name": "x"}); err == nil {
+		t.Error("expected state or enabled to be required")
+	}
+}
