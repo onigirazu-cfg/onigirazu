@@ -1194,6 +1194,7 @@ All guides are listed in [docs/README.md](docs/README.md). Start with:
 - **[Modules Reference](docs/modules/README.md)** - every built-in module and its arguments
 - **[Playbook Examples](docs/examples/README.md)** - working playbooks
 - **[Inventory Formats](docs/INVENTORY_FORMATS.md)** - YAML, Ansible YAML/INI, TOML, JSON, scripts
+- **[Packer](docs/PACKER.md)** - run a playbook in an image build (shell-local)
 - **[Variables](docs/VARIABLES_CHEATSHEET.md)**, **[Filters and lookups](docs/FILTERS_GUIDE.md)**, **[Loops](docs/LOOPS_GUIDE.md)**, **[Handlers](docs/HANDLERS_GUIDE.md)**
 - **[Configuration Reference](docs/CONFIGURATION_REFERENCE.md)** and **[Security Policy](docs/SECURITY_POLICY_GUIDE.md)**
 - **[Contributing](CONTRIBUTING.md)**, **[Module Development](docs/MODULE_DEVELOPMENT_GUIDE.md)**
