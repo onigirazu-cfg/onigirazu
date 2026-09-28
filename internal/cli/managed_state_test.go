@@ -100,9 +100,9 @@ func TestDestroyOrphansOfUntargetedHost(t *testing.T) {
 	}}}}
 	scopes.Hosts = map[string]bool{"web": true}
 	// with --limit nothing is untargeted
-	m := updateManagedState(context.Background(), store, one, scopes, true, false, true, log)
+	updateManagedState(context.Background(), store, one, scopes, true, false, true, log)
 	assert.Empty(t, one.Orphans)
-	m = updateManagedState(context.Background(), store, one, scopes, true, true, false, log)
+	m := updateManagedState(context.Background(), store, one, scopes, true, true, false, log)
 	assert.Len(t, one.Orphans, 2)
 	u := &fakeUndo{}
 	var out bytes.Buffer
