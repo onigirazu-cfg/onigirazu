@@ -117,7 +117,7 @@ func compile(expression string) (*vm.Program, error) {
 			return params[0], nil
 		}),
 	}, append(extraFilterOptions(), filterFunctions()...)...)
-	program, err := expr.Compile(notToBang(testsToCalls(pipesToCalls(translate(expression)))), options...)
+	program, err := expr.Compile(notToBang(testsToCalls(pipesToCalls(translate(nestedConcat(expression))))), options...)
 	if err != nil {
 		return nil, err
 	}
@@ -349,6 +349,79 @@ func inlineIf(code string) (string, string, string, bool) {
 		cond, otherwise = rest[0], rest[1]
 	}
 	return parts[0], cond, otherwise, true
+}
+
+// nestedConcat turns ~ inside parentheses and square brackets into
+// jinja_concat calls, as translate does for the top level:
+// "('v ' ~ x) in y" becomes "(jinja_concat('v ', x)) in y"
+func nestedConcat(code string) string {
+	if !strings.Contains(code, "~") {
+		return code
+	}
+	var b strings.Builder
+	var quote byte
+	for i := 0; i < len(code); i++ {
+		c := code[i]
+		switch {
+		case quote != 0:
+			if c == '\\' && i+1 < len(code) {
+				b.WriteByte(c)
+				i++
+				c = code[i]
+			} else if c == quote {
+				quote = 0
+			}
+		case c == '"' || c == '\'':
+			quote = c
+		case c == '(' || c == '[':
+			end := closingBracket(code, i)
+			if end < 0 {
+				b.WriteString(code[i:])
+				return b.String()
+			}
+			pieces := splitTop(nestedConcat(code[i+1:end]), ",")
+			for k, piece := range pieces {
+				if parts := splitTop(piece, "~"); len(parts) > 1 {
+					pieces[k] = "jinja_concat(" + strings.Join(parts, ", ") + ")"
+				}
+			}
+			b.WriteByte(c)
+			b.WriteString(strings.Join(pieces, ","))
+			b.WriteByte(code[end])
+			i = end
+			continue
+		}
+		b.WriteByte(c)
+	}
+	return b.String()
+}
+
+// closingBracket is the index of the bracket that closes the one at open,
+// or -1
+func closingBracket(code string, open int) int {
+	depth := 0
+	var quote byte
+	for i := open; i < len(code); i++ {
+		c := code[i]
+		switch {
+		case quote != 0:
+			if c == '\\' {
+				i++
+			} else if c == quote {
+				quote = 0
+			}
+		case c == '"' || c == '\'':
+			quote = c
+		case c == '(' || c == '[' || c == '{':
+			depth++
+		case c == ')' || c == ']' || c == '}':
+			depth--
+			if depth == 0 {
+				return i
+			}
+		}
+	}
+	return -1
 }
 
 // splitTop splits code at sep outside quotes and brackets
