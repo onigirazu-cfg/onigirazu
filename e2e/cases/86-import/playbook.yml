@@ -1,0 +1,8 @@
+- name: something to import
+  hosts: all
+  become: true
+  tasks:
+    - name: config file
+      copy: {dest: /etc/onigirazu-import.conf, content: "imported=1\n", mode: "0640"}
+    - name: account
+      user: {name: e2eimport, uid: 4321, shell: /bin/sh}

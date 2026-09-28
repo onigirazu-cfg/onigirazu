@@ -301,6 +301,13 @@ After every batch the checks run on its hosts; an unhealthy batch is rolled back
 undone, newest first) and the rollout stops, exit code 5. `--canary 1 --canary-pause 5m` runs one
 host first and checks it again after a soak. See [docs/SAFE_APPLY.md](docs/SAFE_APPLY.md).
 
+### Import running hosts
+
+`onigirazu import web1 -i hosts.yml -o imported/` writes a playbook that recreates what the host
+has beyond a fresh install (packages installed by hand, services, accounts, configuration files,
+repositories), then plans it against the host: a faithful import has nothing to change. Private
+keys and credentials are left out and listed in the report. See [docs/IMPORT.md](docs/IMPORT.md).
+
 ### Managed state
 
 apply records the files, packages, services, users and groups each task manages
@@ -1137,6 +1144,7 @@ All guides are listed in [docs/README.md](docs/README.md). Start with:
 
 - **[Quick Start](docs/QUICK_START_CONFIGURATION.md)** - inventory, playbook, plan, apply
 - **[Plan, drift, diff and rollback](docs/DRIFT_AND_ROLLBACK.md)** - see and control what a playbook changes
+- **[Import](docs/IMPORT.md)** - a playbook from running hosts
 - **[Managed state](docs/MANAGED_STATE.md)** - what a playbook manages on each host, and what happens once a task is removed
 - **[Modules Reference](docs/modules/README.md)** - every built-in module and its arguments
 - **[Playbook Examples](docs/examples/README.md)** - working playbooks
