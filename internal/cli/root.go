@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -51,7 +52,7 @@ across your infrastructure with a focus on simplicity and reliability.`,
 
 	// Global flags
 	rootCmd.PersistentFlags().StringVarP(&configPath, "config", "c", "", "Path to configuration file")
-	rootCmd.PersistentFlags().StringArrayVarP(&inventoryPaths, "inventory", "i", []string{}, "Inventory file, directory or script, or a host list such as host1,user@host2:2222 (repeatable)")
+	rootCmd.PersistentFlags().StringArrayVarP(&inventoryPaths, "inventory", "i", envInventory(), "Inventory file, directory or script, or a host list such as host1,user@host2:2222 (repeatable; default: $ANSIBLE_INVENTORY)")
 	rootCmd.PersistentFlags().StringVarP(&statePath, "state", "s", ".onigirazu-state", "Path to state file")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Verbose output")
 	rootCmd.PersistentFlags().BoolVar(&noColor, "no-color", false, "Disable colored output")
@@ -144,4 +145,16 @@ func handleLegacyMode(cmd *cobra.Command, args []string) {
 func Execute() error {
 	rootCmd := NewRootCommand()
 	return rootCmd.Execute()
+}
+
+// envInventory is ANSIBLE_INVENTORY, a comma separated list of sources, as
+// the default of -i
+func envInventory() []string {
+	var out []string
+	for _, p := range strings.Split(os.Getenv("ANSIBLE_INVENTORY"), ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }

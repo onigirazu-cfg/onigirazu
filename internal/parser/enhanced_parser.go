@@ -352,9 +352,7 @@ func (p *EnhancedParser) validateInventoryLenient(inventory *types.Inventory) er
 
 // validateGroup validates a single inventory group
 func (p *EnhancedParser) validateGroup(group *types.Group, name string) error {
-	if len(group.Hosts) == 0 && len(group.Children) == 0 {
-		return fmt.Errorf("group '%s' must contain either hosts or children", name)
-	}
+	// an empty group is fine, as in Ansible (a lifecycle group with no hosts yet)
 
 	// Validate hosts
 	for hostName, host := range group.Hosts {
