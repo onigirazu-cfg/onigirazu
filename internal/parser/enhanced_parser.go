@@ -67,10 +67,22 @@ func (p *EnhancedParser) ParsePlaybook(ctx context.Context, filePath string) (*t
 	// Template rendering happens during task execution when variables are available.
 	// Rendering here would replace {{ variable }} with <no value> before execution.
 
+	// import_playbook items become the plays of the imported files
+	content, playDirs, err := expandImportPlaybooks(content, filepath.Dir(filePath), 0)
+	if err != nil {
+		return nil, fmt.Errorf("playbook %s: %w", filePath, err)
+	}
+
 	// Parse YAML directly without template rendering
 	var playbook types.Playbook
 	if err := yaml.Unmarshal(content, &playbook); err != nil {
 		return nil, fmt.Errorf("failed to parse YAML in playbook %s: %w", filePath, err)
+	}
+	for i := range playbook.Plays {
+		playbook.Plays[i].BaseDir = filepath.Dir(filePath)
+		if i < len(playDirs) {
+			playbook.Plays[i].BaseDir = playDirs[i]
+		}
 	}
 
 	// Set playbook metadata
@@ -79,7 +91,7 @@ func (p *EnhancedParser) ParsePlaybook(ctx context.Context, filePath string) (*t
 
 	// vars_files, relative to the playbook, override the play's vars
 	for i := range playbook.Plays {
-		if err := loadVarsFiles(&playbook.Plays[i], filepath.Dir(filePath)); err != nil {
+		if err := loadVarsFiles(&playbook.Plays[i], playbook.Plays[i].BaseDir); err != nil {
 			return nil, fmt.Errorf("play %q: %w", playbook.Plays[i].Name, err)
 		}
 	}
@@ -383,9 +395,18 @@ func (p *EnhancedParser) validateHost(host *types.Host, name string) error {
 func (p *EnhancedParser) processIncludes(ctx context.Context, playbook *types.Playbook, baseDir string) error {
 	// Process includes in each play
 	for i := range playbook.Plays {
-		p.roleLoader.rolesPath = filepath.Join(baseDir, "roles")
-		if err := p.processPlayIncludes(ctx, &playbook.Plays[i], baseDir); err != nil {
+		dir := playDir(&playbook.Plays[i], baseDir)
+		p.roleLoader.rolesPath = filepath.Join(dir, "roles")
+		if err := p.processPlayIncludes(ctx, &playbook.Plays[i], dir); err != nil {
 			return fmt.Errorf("failed to process includes in play %d: %w", i, err)
+		}
+		// an imported play's task sources start at its own directory; the
+		// modules resolve relative paths against the main playbook's
+		if dir != baseDir {
+			play := &playbook.Plays[i]
+			for _, list := range [][]types.Task{play.PreTasks, play.Tasks, play.PostTasks, play.Handlers} {
+				resolvePlayFiles(list, dir)
+			}
 		}
 	}
 
@@ -533,7 +554,7 @@ func (p *EnhancedParser) processRoles(ctx context.Context, playbook *types.Playb
 		p.logger.Debug("Loading %d roles for play %d: %s", len(play.Roles), i, play.Name)
 
 		// Update role loader's path if playbook has custom path
-		p.roleLoader.rolesPath = filepath.Join(baseDir, "roles")
+		p.roleLoader.rolesPath = filepath.Join(playDir(&playbook.Plays[i], baseDir), "roles")
 
 		// Load each role
 		for _, roleRef := range play.Roles {

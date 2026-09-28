@@ -829,6 +829,17 @@ on the hosts where its `when` holds; the task's `vars` are role parameters:
   when: upgrade | bool
 ```
 
+`import_playbook` puts the plays of another playbook in its place, relative to the importing file;
+`vars` on the import go to its plays (their own vars win), `tags` are added to them. Roles, includes,
+`vars_files` and task sources of an imported play start at the directory of its own file:
+
+```yaml
+- import_playbook: playbooks/base.yml
+  vars: {env: prod}
+  tags: base
+- import_playbook: playbooks/web.yml
+```
+
 ### Extra variables and limits
 
 `-e` sets variables that override all others: `-e env=prod -e version=1.2`,
