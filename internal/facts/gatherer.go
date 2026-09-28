@@ -44,7 +44,20 @@ func (g *Gatherer) GatherFacts(ctx context.Context, host types.Host) (*cache.Sys
 	if facts, found := g.cache.Get(host.Name); found {
 		return facts, nil
 	}
+	return g.gather(ctx, host, DefaultFactPath)
+}
 
+// Regather collects the facts of a host again, past the cache, with local
+// facts from factPath (the setup module)
+func (g *Gatherer) Regather(ctx context.Context, host types.Host, factPath string) (*cache.SystemFacts, error) {
+	g.cache.Invalidate(host.Name)
+	if factPath == "" {
+		factPath = DefaultFactPath
+	}
+	return g.gather(ctx, host, factPath)
+}
+
+func (g *Gatherer) gather(ctx context.Context, host types.Host, factPath string) (*cache.SystemFacts, error) {
 	var client commandRunner = localRunner{}
 	if !ssh.IsLocal(host) {
 		sshClient, err := ssh.NewClient(host)
@@ -68,6 +81,7 @@ func (g *Gatherer) GatherFacts(ctx context.Context, host types.Host) (*cache.Sys
 	}
 
 	g.gatherVirtualization(client, facts)
+	g.gatherLocalFacts(client, facts, factPath)
 
 	// Gather network information
 	if err := g.gatherNetworkInfo(client, facts); err != nil {

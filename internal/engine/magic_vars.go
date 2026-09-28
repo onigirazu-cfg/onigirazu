@@ -32,6 +32,7 @@ func ansibleFacts(sf *cache.SystemFacts, onigirazu map[string]interface{}) map[s
 		"default_ipv4":               map[string]interface{}{"address": sf.DefaultIPv4},
 		"virtualization_type":        sf.VirtualizationType,
 		"virtualization_role":        sf.VirtualizationRole,
+		"local":                      localFacts(sf.Local),
 		"user_id":                    sf.Username,
 		"pkg_mgr":                    packageManager(sf.OSFamily, sf.Distribution, major),
 		"date_time":                  onigirazu["onigirazu_date_time"],
@@ -42,6 +43,14 @@ func ansibleFacts(sf *cache.SystemFacts, onigirazu map[string]interface{}) map[s
 		vars["ansible_"+k] = v
 	}
 	return vars
+}
+
+// localFacts is ansible_local, an empty map when there are none
+func localFacts(local map[string]interface{}) map[string]interface{} {
+	if local == nil {
+		return map[string]interface{}{}
+	}
+	return local
 }
 
 // withMagicVariables adds hostvars and groups to the variables of a task:

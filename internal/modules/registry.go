@@ -58,6 +58,8 @@ func NewRegistry() *Registry {
 	registry.RegisterModule(NewAssertModule())
 	registry.RegisterModule(NewReplaceModule())
 	registry.RegisterModule(NewMetaModule())
+	registry.RegisterModule(NewSetupModule("setup"))
+	registry.RegisterModule(NewSetupModule("gather_facts"))
 	registry.RegisterModule(NewSlurpModule())
 	registry.RegisterModule(NewHostnameModule())
 	registry.RegisterModule(NewIniFileModule())
@@ -276,7 +278,7 @@ var checkModeModules = map[string]bool{
 	// read only
 	"ping": true, "debug": true, "set_fact": true, "stat": true, "find": true,
 	"fail": true, "wait_for": true, "assert": true, "include_vars": true,
-	"slurp": true, "docker_host_info": true,
+	"slurp": true, "docker_host_info": true, "setup": true, "gather_facts": true,
 	// compare, then change
 	"file": true, "copy": true, "template": true, "lineinfile": true, "blockinfile": true,
 	"apt": true, "yum": true, "package": true, "service": true, "user": true, "group": true,

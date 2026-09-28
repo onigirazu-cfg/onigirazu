@@ -1,0 +1,160 @@
+{
+  "version": 1,
+  "playbook": "",
+  "serial": 1,
+  "updated": "2026-09-28T14:01:22.621808Z",
+  "resources": [
+    {
+      "host": "r",
+      "type": "file",
+      "id": "/etc/ansible/facts.d",
+      "tasks": [
+        "play:setup/tasks/Facts directory"
+      ],
+      "task_name": "Facts directory",
+      "origin": "created",
+      "before": {
+        "_become": true,
+        "_become_method": "",
+        "_become_user": "",
+        "kind": "absent",
+        "path": "/etc/ansible/facts.d"
+      },
+      "first_applied": "2026-09-28T14:01:22.621808Z",
+      "last_applied": "2026-09-28T14:01:22.621808Z"
+    },
+    {
+      "host": "r",
+      "type": "file",
+      "id": "/etc/ansible/facts.d/onigirazu_e2e.fact",
+      "tasks": [
+        "play:setup/tasks/A JSON fact"
+      ],
+      "task_name": "A JSON fact",
+      "origin": "created",
+      "before": {
+        "_become": true,
+        "_become_method": "",
+        "_become_user": "",
+        "kind": "absent",
+        "path": "/etc/ansible/facts.d/onigirazu_e2e.fact"
+      },
+      "first_applied": "2026-09-28T14:01:22.621808Z",
+      "last_applied": "2026-09-28T14:01:22.621808Z"
+    },
+    {
+      "host": "r",
+      "type": "file",
+      "id": "/etc/ansible/facts.d/onigirazu_e2e_exec.fact",
+      "tasks": [
+        "play:setup/tasks/An executable fact"
+      ],
+      "task_name": "An executable fact",
+      "origin": "created",
+      "before": {
+        "_become": true,
+        "_become_method": "",
+        "_become_user": "",
+        "kind": "absent",
+        "path": "/etc/ansible/facts.d/onigirazu_e2e_exec.fact"
+      },
+      "first_applied": "2026-09-28T14:01:22.621808Z",
+      "last_applied": "2026-09-28T14:01:22.621808Z"
+    },
+    {
+      "host": "r",
+      "type": "file",
+      "id": "/root/onigirazu-e2e-setup",
+      "tasks": [
+        "play:setup/tasks/Write what setup found"
+      ],
+      "task_name": "Write what setup found",
+      "origin": "created",
+      "before": {
+        "_become": true,
+        "_become_method": "",
+        "_become_user": "",
+        "kind": "absent",
+        "path": "/root/onigirazu-e2e-setup"
+      },
+      "first_applied": "2026-09-28T14:01:22.621808Z",
+      "last_applied": "2026-09-28T14:01:22.621808Z"
+    },
+    {
+      "host": "u",
+      "type": "file",
+      "id": "/etc/ansible/facts.d",
+      "tasks": [
+        "play:setup/tasks/Facts directory"
+      ],
+      "task_name": "Facts directory",
+      "origin": "created",
+      "before": {
+        "_become": true,
+        "_become_method": "",
+        "_become_user": "",
+        "kind": "absent",
+        "path": "/etc/ansible/facts.d"
+      },
+      "first_applied": "2026-09-28T14:01:22.621808Z",
+      "last_applied": "2026-09-28T14:01:22.621808Z"
+    },
+    {
+      "host": "u",
+      "type": "file",
+      "id": "/etc/ansible/facts.d/onigirazu_e2e.fact",
+      "tasks": [
+        "play:setup/tasks/A JSON fact"
+      ],
+      "task_name": "A JSON fact",
+      "origin": "created",
+      "before": {
+        "_become": true,
+        "_become_method": "",
+        "_become_user": "",
+        "kind": "absent",
+        "path": "/etc/ansible/facts.d/onigirazu_e2e.fact"
+      },
+      "first_applied": "2026-09-28T14:01:22.621808Z",
+      "last_applied": "2026-09-28T14:01:22.621808Z"
+    },
+    {
+      "host": "u",
+      "type": "file",
+      "id": "/etc/ansible/facts.d/onigirazu_e2e_exec.fact",
+      "tasks": [
+        "play:setup/tasks/An executable fact"
+      ],
+      "task_name": "An executable fact",
+      "origin": "created",
+      "before": {
+        "_become": true,
+        "_become_method": "",
+        "_become_user": "",
+        "kind": "absent",
+        "path": "/etc/ansible/facts.d/onigirazu_e2e_exec.fact"
+      },
+      "first_applied": "2026-09-28T14:01:22.621808Z",
+      "last_applied": "2026-09-28T14:01:22.621808Z"
+    },
+    {
+      "host": "u",
+      "type": "file",
+      "id": "/root/onigirazu-e2e-setup",
+      "tasks": [
+        "play:setup/tasks/Write what setup found"
+      ],
+      "task_name": "Write what setup found",
+      "origin": "created",
+      "before": {
+        "_become": true,
+        "_become_method": "",
+        "_become_user": "",
+        "kind": "absent",
+        "path": "/root/onigirazu-e2e-setup"
+      },
+      "first_applied": "2026-09-28T14:01:22.621808Z",
+      "last_applied": "2026-09-28T14:01:22.621808Z"
+    }
+  ]
+}

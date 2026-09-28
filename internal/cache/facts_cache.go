@@ -26,6 +26,9 @@ type SystemFacts struct {
 	VirtualizationType string `json:"virtualization_type"`
 	VirtualizationRole string `json:"virtualization_role"`
 
+	// Local facts (ansible_local): /etc/ansible/facts.d/*.fact by name
+	Local map[string]interface{} `json:"local"`
+
 	// Network
 	FQDN        string `json:"fqdn"`
 	DefaultIPv4 string `json:"default_ipv4"`

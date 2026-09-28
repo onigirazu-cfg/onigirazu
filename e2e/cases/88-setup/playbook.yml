@@ -1,0 +1,28 @@
+plays:
+  - name: setup
+    hosts: all
+    become: true
+    gather_facts: true
+    tasks:
+      - name: Facts directory
+        file:
+          path: /etc/ansible/facts.d
+          state: directory
+      - name: A JSON fact
+        copy:
+          content: '{"color": "blue", "sizes": [1, 2]}'
+          dest: /etc/ansible/facts.d/onigirazu_e2e.fact
+      - name: An executable fact
+        copy:
+          content: "#!/bin/sh\necho '{\"from\": \"script\"}'\n"
+          dest: /etc/ansible/facts.d/onigirazu_e2e_exec.fact
+          mode: "0755"
+      # the facts gathered at the start of the play did not have them
+      - name: Gather the local facts again
+        ansible.builtin.setup:
+          filter: ansible_local
+        register: gathered
+      - name: Write what setup found
+        copy:
+          content: "{{ ansible_local.onigirazu_e2e.color }} {{ ansible_local.onigirazu_e2e.sizes | length }} {{ ansible_local.onigirazu_e2e_exec.from }} {{ gathered.ansible_facts | length }}\n"
+          dest: /root/onigirazu-e2e-setup
