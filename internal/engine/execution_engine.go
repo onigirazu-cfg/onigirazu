@@ -52,6 +52,10 @@ type ExecutionEngine struct {
 	taskKeys   map[string]bool
 	keptScopes []string
 	scope      string
+	// hosts every play matched, and how many plays got that far
+	targetedHosts map[string]bool
+	playsTargeted int
+	playsTotal    int
 
 	config            interfaces.Config
 	logger            interfaces.Logger
@@ -294,6 +298,9 @@ func (e *ExecutionEngine) ExecutePlaybook(ctx context.Context, playbook *types.P
 	e.rolloutReports = nil
 	e.taskKeys = nil
 	e.keptScopes = nil
+	e.targetedHosts = map[string]bool{}
+	e.playsTargeted = 0
+	e.playsTotal = len(playbook.Plays)
 	e.mutex.Unlock()
 	scopes := playScopes(playbook.Plays)
 
@@ -490,6 +497,15 @@ func (e *ExecutionEngine) executePlay(ctx context.Context, play *types.Play) (*t
 	if err != nil {
 		return nil, fmt.Errorf("failed to get hosts for play '%s': %w", play.Name, err)
 	}
+	e.mutex.Lock()
+	if e.targetedHosts == nil {
+		e.targetedHosts = map[string]bool{}
+	}
+	for _, h := range hosts {
+		e.targetedHosts[h.Name] = true
+	}
+	e.playsTargeted++
+	e.mutex.Unlock()
 	batches, canary, err := e.rolloutBatches(play, len(hosts))
 	if err != nil {
 		return nil, fmt.Errorf("play '%s': %w", play.Name, err)

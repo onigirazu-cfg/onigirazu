@@ -20,6 +20,10 @@ type ManagedScopes struct {
 	Keys map[string]bool
 	// Kept are scopes the run skipped whole; keys under them stay
 	Kept []string
+	// Hosts are the hosts the plays matched; AllPlays: every play got
+	// that far (the run was not cut short)
+	Hosts    map[string]bool
+	AllPlays bool
 }
 
 // ManagedScopes returns the task keys the last run assigned
@@ -30,7 +34,12 @@ func (e *ExecutionEngine) ManagedScopes() ManagedScopes {
 	for k := range e.taskKeys {
 		keys[k] = true
 	}
-	return ManagedScopes{Keys: keys, Kept: append([]string(nil), e.keptScopes...)}
+	hosts := make(map[string]bool, len(e.targetedHosts))
+	for h := range e.targetedHosts {
+		hosts[h] = true
+	}
+	return ManagedScopes{Keys: keys, Kept: append([]string(nil), e.keptScopes...), Hosts: hosts,
+		AllPlays: e.playsTotal > 0 && e.playsTargeted == e.playsTotal}
 }
 
 // playScopes names every play: by name, with its position when the name is

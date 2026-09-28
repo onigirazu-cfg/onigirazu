@@ -201,6 +201,9 @@ func (s *State) Clone() *State {
 type Scopes struct {
 	Keys map[string]bool
 	Kept []string
+	// Hosts the plays matched; AllPlays: no play was cut short
+	Hosts    map[string]bool
+	AllPlays bool
 }
 
 // Run describes a finished run for Update
@@ -210,7 +213,25 @@ type Run struct {
 	// Complete: the whole playbook was run (no --tags, --skip-tags or
 	// --start-at-task, not canceled); only then can claims be dropped
 	Complete bool
+	// AllHosts: no --limit, so a host no play matched has left the
+	// playbook
+	AllHosts bool
 	Now      time.Time
+}
+
+// Untargeted are the hosts with records that no play of a complete,
+// unlimited run matched: all they hold is orphaned
+func (s *State) Untargeted(run Run) map[string]bool {
+	out := map[string]bool{}
+	if !run.Complete || !run.AllHosts || !run.Scopes.AllPlays || run.Scopes.Hosts == nil {
+		return out
+	}
+	for _, r := range s.Resources {
+		if !run.Scopes.Hosts[r.Host] {
+			out[r.Host] = true
+		}
+	}
+	return out
 }
 
 // Update records what the run's tasks manage and drops the claims of tasks
@@ -261,9 +282,15 @@ func (s *State) Update(run Run) []*Record {
 			r.Tasks = kept
 		}
 	}
+	untargeted := s.Untargeted(run)
+	for _, r := range s.Resources {
+		if untargeted[r.Host] {
+			r.Tasks = nil
+		}
+	}
 	var orphans []*Record
 	for _, r := range s.Orphans() {
-		if hosts[r.Host] != nil {
+		if hosts[r.Host] != nil || untargeted[r.Host] {
 			orphans = append(orphans, r)
 		}
 	}

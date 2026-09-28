@@ -58,8 +58,10 @@ package names). A claim stays when:
 - a task failed or was rolled back on the host;
 - the run was partial (`--tags`, `--skip-tags`, `--start-at-task`, stopped or canceled).
 
-With `--limit` only the limited hosts are looked at. A host no play targets any more is not looked at
-yet: its records stay until `state rm`.
+With `--limit` only the limited hosts are looked at. A host no play matches any more (its group
+changed, `hosts:` narrowed) has all its resources orphaned once a complete run without `--limit`
+reaches every play; apply connects to it and cleans up. A host that is gone from the inventory too
+keeps its records (apply says so; `state rm` forgets them).
 
 ```
 $ onigirazu plan site.yml -i hosts.yml

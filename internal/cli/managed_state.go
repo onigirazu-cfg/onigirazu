@@ -26,13 +26,15 @@ type managedRun struct {
 	store           managed.Store
 	st              *managed.State
 	check, complete bool
+	// untargeted: hosts no play matches any more
+	untargeted map[string]bool
 }
 
 // updateManagedState records what the run's tasks manage in the playbook's
 // managed state and puts the orphans into the result. In check mode the
 // state file is left as it is.
 func updateManagedState(ctx context.Context, store managed.Store, result *types.PlaybookResult, scopes engine.ManagedScopes,
-	complete, check bool, log interfaces.Logger) *managedRun {
+	complete, allHosts, check bool, log interfaces.Logger) *managedRun {
 	if store == nil {
 		return nil
 	}
@@ -44,14 +46,16 @@ func updateManagedState(ctx context.Context, store managed.Store, result *types.
 	if check {
 		st = st.Clone()
 	}
-	orphans := st.Update(managed.Run{Result: result, Scopes: managed.Scopes{Keys: scopes.Keys, Kept: scopes.Kept},
-		Complete: complete})
+	run := managed.Run{Result: result, Complete: complete, AllHosts: allHosts,
+		Scopes: managed.Scopes{Keys: scopes.Keys, Kept: scopes.Kept, Hosts: scopes.Hosts, AllPlays: scopes.AllPlays}}
+	untargeted := st.Untargeted(run)
+	orphans := st.Update(run)
 	result.Orphans = nil
 	for _, r := range orphans {
 		result.Orphans = append(result.Orphans, types.ManagedOrphan{Host: r.Host, Type: r.Type, ID: r.ID,
 			Task: r.TaskName, Action: r.Action()})
 	}
-	m := &managedRun{store: store, st: st, check: check, complete: complete}
+	m := &managedRun{store: store, st: st, check: check, complete: complete, untargeted: untargeted}
 	if !check {
 		m.save(ctx, log)
 	}
@@ -97,13 +101,20 @@ type undoer interface {
 // failure. confirm is asked once, with the number of resources the host
 // changes touch.
 func (m *managedRun) destroyOrphans(ctx context.Context, u undoer, result *types.PlaybookResult,
-	confirm func(n int) bool, w io.Writer, log interfaces.Logger) error {
+	known func(host string) bool, confirm func(n int) bool, w io.Writer, log interfaces.Logger) error {
 	if m == nil || m.check {
 		return nil
 	}
 	var act, forget []*managed.Record
+	gone := map[string]int{}
 	for _, r := range m.st.Orphans() {
-		if !managed.HostRan(result, r.Host) || managed.HostFailed(result, r.Host) {
+		switch {
+		case m.untargeted[r.Host] && !known(r.Host):
+			// not in the inventory: nothing to connect to
+			gone[r.Host]++
+			continue
+		case m.untargeted[r.Host]:
+		case !managed.HostRan(result, r.Host) || managed.HostFailed(result, r.Host):
 			continue
 		}
 		if r.Action() == managed.ActionForget {
@@ -111,6 +122,9 @@ func (m *managedRun) destroyOrphans(ctx context.Context, u undoer, result *types
 		} else {
 			act = append(act, r)
 		}
+	}
+	for host, n := range gone {
+		fmt.Fprintf(w, "\nManaged state: %s is in no play and not in the inventory; its %d resource(s) stay recorded (state rm to forget them)\n", host, n)
 	}
 	if len(act)+len(forget) == 0 {
 		return nil
