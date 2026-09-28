@@ -201,6 +201,8 @@ func (s *State) Clone() *State {
 type Scopes struct {
 	Keys map[string]bool
 	Kept []string
+	// KeptFor: scope -> hosts that skipped it
+	KeptFor map[string][]string
 	// Hosts the plays matched; AllPlays: no play was cut short
 	Hosts    map[string]bool
 	AllPlays bool
@@ -306,9 +308,20 @@ func keepClaim(key string, r *Record, hr *hostRun, scopes Scopes) bool {
 	if scopes.Keys[key] {
 		return true // did not run here (when, loop without items, handler)
 	}
+	under := func(scope string) bool { return key == scope || strings.HasPrefix(key, scope+"/") }
 	for _, k := range scopes.Kept {
-		if key == k || strings.HasPrefix(key, k+"/") {
+		if under(k) {
 			return true
+		}
+	}
+	for scope, hosts := range scopes.KeptFor {
+		if !under(scope) {
+			continue
+		}
+		for _, h := range hosts {
+			if h == r.Host {
+				return true
+			}
 		}
 	}
 	return false
