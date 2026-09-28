@@ -64,3 +64,6 @@ coverage.txt
 *_report.txt
 *_result.txt
 lint_output.txt
+
+# state of playbooks run from a checkout (e2e cases run on the rig)
+.onigirazu/

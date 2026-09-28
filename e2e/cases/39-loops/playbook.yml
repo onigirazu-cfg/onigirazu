@@ -39,3 +39,14 @@ plays:
           dest: "/root/onigirazu-e2e-loop/{{ item.name }}"
         loop:
           - {name: nested, value: "{{ ansible_os_family | lower }}"}
+      # registered results are data: the braces of the command stay
+      - name: A command with literal braces
+        command: "echo '{{ '{{' }} .Id {{ '}}' }}'"
+        register: braces
+        changed_when: false
+        loop: [one]
+      - name: Loop over the registered results
+        copy:
+          content: "{{ item.stdout }}\n"
+          dest: /root/onigirazu-e2e-loop/braces
+        loop: "{{ braces.results }}"
