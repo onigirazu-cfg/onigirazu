@@ -9,7 +9,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gopkg.in/yaml.v3"
 )
 
 func b64(s string) string { return base64.StdEncoding.EncodeToString([]byte(s)) }
@@ -76,10 +75,7 @@ func TestGenerate(t *testing.T) {
 	assert.Equal(t, 1, rep.Counts["mounts"])
 	require.Len(t, rep.Secrets, 1)
 
-	data, err := os.ReadFile(filepath.Join(dir, "roles", "host_web1", "tasks", "main.yml"))
-	require.NoError(t, err)
-	var tasks []map[string]interface{}
-	require.NoError(t, yaml.Unmarshal(data, &tasks))
+	tasks := roleTasks(t, dir, "host_web1")
 	var names []string
 	for _, task := range tasks {
 		names = append(names, task["name"].(string))
@@ -117,7 +113,8 @@ func TestGenerate(t *testing.T) {
 	site, err := os.ReadFile(filepath.Join(dir, "site.yml"))
 	require.NoError(t, err)
 	assert.Contains(t, string(site), "hosts: web1")
-	assert.Contains(t, string(site), "- host_web1")
+	assert.Contains(t, string(site), "name: host_web1")
+	assert.Contains(t, string(site), "tasks_from: packages")
 
 	require.NoError(t, WriteReport(filepath.Join(dir, "IMPORT_REPORT.md"), rep))
 	report, _ := os.ReadFile(filepath.Join(dir, "IMPORT_REPORT.md"))

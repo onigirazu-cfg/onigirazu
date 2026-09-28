@@ -33,6 +33,8 @@ type Snapshot struct {
 	Groups []Group
 	Files  []File
 	Mounts []Mount
+	// Hostname, FQDN and IP as the host knows itself
+	Hostname, FQDN, IP string
 	// Systemd: systemd runs the host (not a container without it)
 	Systemd bool
 	// Timezone from /etc/localtime (Europe/Madrid)
@@ -122,6 +124,8 @@ func Parse(host, out string) (*Snapshot, error) {
 			}
 		case "UNIT":
 			s.Units[field(f, 1)] = Unit{State: field(f, 2), Preset: field(f, 3)}
+		case "HOST":
+			s.Hostname, s.FQDN, s.IP = field(f, 1), field(f, 2), field(f, 3)
 		case "SYSTEMD":
 			s.Systemd = true
 		case "ACTIVE":

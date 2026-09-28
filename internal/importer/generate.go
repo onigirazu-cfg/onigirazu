@@ -1,8 +1,9 @@
 package importer
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
-	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -22,13 +23,19 @@ const (
 // repoPaths are files that must be in place before packages install
 var repoPaths = regexp.MustCompile(`^/etc/apt/(sources\.list|keyrings|trusted\.gpg)|^/usr/share/keyrings/|^/etc/yum\.repos\.d/|^/etc/pki/rpm-gpg/|^/etc/dnf/`)
 
-// Role is one generated role: the tasks and the files they copy
-type Role struct {
-	Name  string
-	Tasks []*yaml.Node
-	// Files: path under the role's files/ -> content
-	Files map[string][]byte
-}
+// Stages: every role has one task file per stage and the playbook runs a
+// stage on all hosts before the next, so a file in a shared role can be
+// owned by an account of a host's own role
+var stages = []string{"repositories", "accounts", "packages", "files", "system", "services"}
+
+const (
+	stageRepos = iota
+	stageAccounts
+	stagePackages
+	stageFiles
+	stageSystem
+	stageServices
+)
 
 // Report says what an import took, left out and needs from the user
 type Report struct {
@@ -36,31 +43,118 @@ type Report struct {
 	Counts  map[string]int
 	Skipped []Skip
 	Secrets []Skip
+	// Layers: the generated roles and their hosts
+	Layers []LayerInfo
 	// Verified: the new playbook was planned; Drift is what it would change
 	Verified bool
 	Drift    []Drift
 }
 
-// Generate writes a playbook for the snapshots into dir: site.yml and one
-// role per host (phase 1: no shared layers yet)
+// LayerInfo describes one generated role
+type LayerInfo struct {
+	Role, Kind string // common | group | cluster | host
+	Hosts      []string
+	Tasks      int
+}
+
+// Options change how hosts are grouped
+type Options struct {
+	// Groups: host -> its inventory groups
+	Groups map[string][]string
+}
+
+// resource is one thing a host has, with the task that recreates it
+type resource struct {
+	key   string // identity: "file /etc/x", "package nginx"
+	stage int
+	// value: equal on two hosts when one task serves both
+	value string
+	name  string // task name (the package name for packages)
+	mod   string // module; "package:<os>" for a package
+	args  *yaml.Node
+	// file content for copy
+	file *File
+	// what it counts as in the report
+	count string
+}
+
+// Generate writes a playbook for the snapshots into dir
 func Generate(snaps []*Snapshot, dir string) (*Report, error) {
+	return GenerateWith(snaps, dir, Options{})
+}
+
+// GenerateWith writes roles for what all hosts share, what the hosts of an
+// inventory group (or of a cluster of similar hosts) share, and what each
+// host has alone, and site.yml running them stage by stage
+func GenerateWith(snaps []*Snapshot, dir string, opts Options) (*Report, error) {
 	rep := &Report{Counts: map[string]int{}}
-	var plays []*yaml.Node
+	perHost := map[string]map[string]*resource{}
+	byName := map[string]*Snapshot{}
+	var hosts []string
 	for _, s := range snaps {
-		role := hostRole(s, rep)
-		if err := writeRole(dir, role); err != nil {
+		hosts = append(hosts, s.Host)
+		byName[s.Host] = s
+		res := map[string]*resource{}
+		for _, r := range hostResources(s, rep) {
+			res[r.key] = r
+			rep.Counts[r.count]++
+		}
+		perHost[s.Host] = res
+	}
+	rep.Hosts = hosts
+
+	var layers []*layer
+	if l := extract("common", "common", hosts, perHost, byName); l != nil {
+		layers = append(layers, l)
+	}
+	grouped := map[string]bool{}
+	for _, g := range groupsBySize(hosts, opts.Groups) {
+		if l := extract(safeName(g.name), "group", g.hosts, perHost, byName); l != nil {
+			l.cond = fmt.Sprintf("'%s' in group_names", g.name)
+			layers = append(layers, l)
+		}
+		for _, h := range g.hosts {
+			grouped[h] = true
+		}
+	}
+	var loose []string
+	for _, h := range hosts {
+		if !grouped[h] {
+			loose = append(loose, h)
+		}
+	}
+	for i, c := range clusters(loose, perHost) {
+		if l := extract(clusterName(c, perHost, byName, i), "cluster", c, perHost, byName); l != nil {
+			layers = append(layers, l)
+		}
+	}
+	for _, h := range hosts {
+		if len(perHost[h]) == 0 {
+			continue
+		}
+		l := &layer{name: roleName(h), kind: "host", hosts: []string{h}}
+		if len(hosts) > 1 {
+			l.cond = fmt.Sprintf("inventory_hostname == '%s'", h)
+		}
+		for _, r := range sortedResources(perHost[h]) {
+			l.add(r, nil)
+		}
+		layers = append(layers, l)
+	}
+	uniqueNames(layers)
+	for _, l := range layers {
+		if l.cond == "" && l.kind == "cluster" {
+			l.cond = fmt.Sprintf("inventory_hostname in [%s]", quoteList(l.hosts))
+		}
+		if err := l.write(dir); err != nil {
 			return nil, err
 		}
-		rep.Hosts = append(rep.Hosts, s.Host)
-		plays = append(plays, mapping(
-			"name", scalar(s.Host),
-			"hosts", scalar(s.Host),
-			"become", boolean(true),
-			"gather_facts", boolean(false),
-			"roles", seq(scalar(role.Name)),
-		))
+		rep.Layers = append(rep.Layers, LayerInfo{Role: l.name, Kind: l.kind, Hosts: l.hosts, Tasks: len(l.tasks)})
 	}
-	if err := writeYAML(filepath.Join(dir, "site.yml"), seq(plays...)); err != nil {
+	if err := writeHostVars(dir, layers); err != nil {
+		return nil, err
+	}
+	if err := writeSite(dir, hosts, layers); err != nil {
 		return nil, err
 	}
 	return rep, nil
@@ -68,39 +162,207 @@ func Generate(snaps []*Snapshot, dir string) (*Report, error) {
 
 // roleName makes a role name out of a host name
 func roleName(host string) string {
-	return "host_" + regexp.MustCompile(`[^A-Za-z0-9_]+`).ReplaceAllString(host, "_")
+	return "host_" + safeName(host)
 }
 
-// hostRole is everything one host has, as tasks
-func hostRole(s *Snapshot, rep *Report) *Role {
-	r := &Role{Name: roleName(s.Host), Files: map[string][]byte{}}
-	var repoFiles, files []File
+var unsafeChars = regexp.MustCompile(`[^A-Za-z0-9_]+`)
+
+func safeName(s string) string {
+	return strings.Trim(unsafeChars.ReplaceAllString(s, "_"), "_")
+}
+
+func quoteList(items []string) string {
+	q := make([]string, len(items))
+	for i, s := range items {
+		q[i] = "'" + s + "'"
+	}
+	return strings.Join(q, ", ")
+}
+
+// ownerOf is the owner name, or the uid when the host has no name for it
+func ownerOf(name string, id int) string {
+	if name == "" || name == "UNKNOWN" {
+		return strconv.Itoa(id)
+	}
+	return name
+}
+
+// mode is an octal mode with a leading zero ("644" -> "0644")
+func mode(m string) string {
+	for len(m) < 4 {
+		m = "0" + m
+	}
+	return m
+}
+
+// hostResources is everything one host has
+func hostResources(s *Snapshot, rep *Report) []*resource {
+	var out []*resource
+	add := func(r *resource) { out = append(out, r) }
 	localRepos := localRepoDirs(s.Files)
 	for _, f := range s.Files {
 		if f.Secret != "" {
 			rep.Secrets = append(rep.Secrets, Skip{s.Host + ":" + f.Path, f.SecretReason})
 			continue
 		}
+		stage := stageFiles
 		if repoPaths.MatchString(f.Path) || underAny(f.Path, localRepos) {
-			repoFiles = append(repoFiles, f)
-		} else {
-			files = append(files, f)
+			stage = stageRepos
 		}
+		add(fileResource(f, stage))
 	}
 	for _, sk := range s.Skipped {
 		rep.Skipped = append(rep.Skipped, Skip{s.Host + ":" + sk.Path, sk.Reason})
 	}
 
-	r.addFiles(repoFiles, rep)
-	r.addAccounts(s, rep)
-	r.addPackages(s, rep)
-	r.addFiles(files, rep)
-	if s.Timezone != "" {
-		r.task("Timezone", "timezone", mapping("name", scalar(s.Timezone)))
+	groupName := map[int]string{}
+	for _, g := range s.Groups {
+		groupName[g.GID] = g.Name
 	}
-	r.addMounts(s, rep)
-	r.addServices(s, rep)
+	supplementary := map[string][]string{}
+	for _, g := range s.Groups {
+		for _, m := range g.Members {
+			supplementary[m] = append(supplementary[m], g.Name)
+		}
+	}
+	for _, g := range s.Groups {
+		if g.GID < minID || g.GID >= maxID {
+			continue
+		}
+		// "account 1": groups before users in the stage
+		add(&resource{key: "account 1 group " + g.Name, stage: stageAccounts, name: "Group " + g.Name, mod: "group",
+			args: mapping("name", scalar(g.Name), "gid", integer(g.GID)), count: "groups"})
+	}
+	for _, u := range s.Users {
+		if u.UID < minID || u.UID >= maxID {
+			continue
+		}
+		args := mapping("name", scalar(u.Name), "uid", integer(u.UID))
+		if g, ok := groupName[u.GID]; ok {
+			addPair(args, "group", scalar(g))
+		}
+		if sup := supplementary[u.Name]; len(sup) > 0 {
+			sort.Strings(sup)
+			addPair(args, "groups", scalar(strings.Join(sup, ",")))
+		}
+		if u.Comment != "" {
+			addPair(args, "comment", scalar(u.Comment))
+		}
+		addPair(args, "home", scalar(u.Home))
+		addPair(args, "shell", scalar(u.Shell))
+		add(&resource{key: "account 2 user " + u.Name, stage: stageAccounts, name: "User " + u.Name, mod: "user", args: args, count: "users"})
+	}
+	for _, p := range s.Packages {
+		add(&resource{key: "package " + p, stage: stagePackages, name: p, mod: "package:" + s.OS,
+			value: "package " + s.OS + " " + p, count: "packages"})
+	}
+	if s.Timezone != "" {
+		add(&resource{key: "timezone", stage: stageSystem, name: "Timezone", mod: "timezone",
+			args: mapping("name", scalar(s.Timezone)), count: "timezone"})
+	}
+	for _, m := range s.Mounts {
+		if m.Path == "/" || strings.HasPrefix(m.Path, "/boot") || m.FSType == "swap" || m.Path == "none" ||
+			m.FSType == "proc" || m.FSType == "sysfs" || (m.FSType == "tmpfs" && m.Path == "/tmp") {
+			continue
+		}
+		add(&resource{key: "mount " + m.Path, stage: stageSystem, name: "Mount " + m.Path, mod: "mount",
+			args: mapping("path", scalar(m.Path), "src", scalar(m.Src), "fstype", scalar(m.FSType),
+				"opts", scalar(m.Opts), "state", scalar("mounted")), count: "mounts"})
+	}
+	out = append(out, serviceResources(s, rep)...)
+	for _, r := range out {
+		if r.value == "" {
+			r.value = r.mod + " " + nodeString(r.args)
+		}
+	}
+	return out
+}
+
+func fileResource(f File, stage int) *resource {
+	owner, group := ownerOf(f.Owner, f.UID), ownerOf(f.Group, f.GID)
+	r := &resource{key: "file " + f.Path, stage: stage}
+	switch f.Kind {
+	case "directory":
+		r.name, r.mod, r.count = "Directory "+f.Path, "file", "directories"
+		r.args = mapping("path", scalar(f.Path), "state", scalar("directory"),
+			"owner", scalar(owner), "group", scalar(group), "mode", scalar(mode(f.Mode)))
+	case "link":
+		r.name, r.mod, r.count = "Link "+f.Path, "file", "links"
+		r.args = mapping("path", scalar(f.Path), "src", scalar(f.Target), "state", scalar("link"), "force", boolean(true))
+	default:
+		ff := f
+		r.name, r.mod, r.count, r.file = "File "+f.Path, "copy", "files", &ff
+		// src is set when the layer is known
+		r.args = mapping("dest", scalar(f.Path), "owner", scalar(owner), "group", scalar(group), "mode", scalar(mode(f.Mode)))
+		sum := sha256.Sum256(f.Content)
+		r.value = "copy " + nodeString(r.args) + " " + hex.EncodeToString(sum[:])
+	}
 	return r
+}
+
+// serviceResources keeps the services whose enablement differs from the
+// vendor preset (what installing the packages alone would give)
+func serviceResources(s *Snapshot, rep *Report) []*resource {
+	if !s.Systemd {
+		if len(s.Units) > 0 {
+			rep.Skipped = append(rep.Skipped, Skip{s.Host, "systemd is not running: services not imported"})
+		}
+		return nil
+	}
+	names := make([]string, 0, len(s.Units))
+	for n := range s.Units {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	var out []*resource
+	for _, n := range names {
+		u := s.Units[n]
+		name := strings.TrimSuffix(n, ".service")
+		if strings.Contains(name, "@") {
+			continue // templates and instances
+		}
+		var args *yaml.Node
+		switch {
+		case u.State == "enabled" && u.Preset != "enabled":
+			args = mapping("name", scalar(name), "enabled", boolean(true))
+			if s.Active[n] {
+				addPair(args, "state", scalar("started"))
+			}
+		case u.State == "disabled" && u.Preset == "enabled":
+			args = mapping("name", scalar(name), "enabled", boolean(false))
+		case u.State == "masked":
+			rep.Skipped = append(rep.Skipped, Skip{s.Host + ":" + n, "masked unit (not imported)"})
+			continue
+		default:
+			continue
+		}
+		out = append(out, &resource{key: "service " + name, stage: stageServices, name: "Service " + name,
+			mod: "service", args: args, count: "services"})
+	}
+	return out
+}
+
+func nodeString(n *yaml.Node) string {
+	if n == nil {
+		return ""
+	}
+	data, _ := yaml.Marshal(n)
+	return string(data)
+}
+
+func sortedResources(m map[string]*resource) []*resource {
+	out := make([]*resource, 0, len(m))
+	for _, r := range m {
+		out = append(out, r)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].stage != out[j].stage {
+			return out[i].stage < out[j].stage
+		}
+		// parents before children
+		return out[i].key < out[j].key
+	})
+	return out
 }
 
 // fileURI finds the local directories repositories point at
@@ -129,218 +391,4 @@ func underAny(path string, dirs []string) bool {
 		}
 	}
 	return false
-}
-
-func (r *Role) task(name, module string, args *yaml.Node) {
-	r.Tasks = append(r.Tasks, mapping("name", scalar(name), module, args))
-}
-
-// ownerOf is the owner name, or the uid when the host has no name for it
-func ownerOf(name string, id int) string {
-	if name == "" || name == "UNKNOWN" {
-		return strconv.Itoa(id)
-	}
-	return name
-}
-
-func (r *Role) addFiles(files []File, rep *Report) {
-	for _, f := range files {
-		owner, group := ownerOf(f.Owner, f.UID), ownerOf(f.Group, f.GID)
-		switch f.Kind {
-		case "directory":
-			r.task("Directory "+f.Path, "file", mapping("path", scalar(f.Path), "state", scalar("directory"),
-				"owner", scalar(owner), "group", scalar(group), "mode", scalar(mode(f.Mode))))
-			rep.Counts["directories"]++
-		case "link":
-			r.task("Link "+f.Path, "file", mapping("path", scalar(f.Path), "src", scalar(f.Target),
-				"state", scalar("link"), "force", boolean(true)))
-			rep.Counts["links"]++
-		case "file":
-			src := strings.TrimPrefix(f.Path, "/")
-			r.Files[src] = f.Content
-			r.task("File "+f.Path, "copy", mapping("src", scalar(src), "dest", scalar(f.Path),
-				"owner", scalar(owner), "group", scalar(group), "mode", scalar(mode(f.Mode))))
-			rep.Counts["files"]++
-		}
-	}
-}
-
-// mode is an octal mode with a leading zero ("644" -> "0644")
-func mode(m string) string {
-	for len(m) < 4 {
-		m = "0" + m
-	}
-	return m
-}
-
-func (r *Role) addAccounts(s *Snapshot, rep *Report) {
-	groupName := map[int]string{}
-	for _, g := range s.Groups {
-		groupName[g.GID] = g.Name
-	}
-	supplementary := map[string][]string{}
-	for _, g := range s.Groups {
-		for _, m := range g.Members {
-			supplementary[m] = append(supplementary[m], g.Name)
-		}
-	}
-	for _, g := range s.Groups {
-		if g.GID < minID || g.GID >= maxID {
-			continue
-		}
-		r.task("Group "+g.Name, "group", mapping("name", scalar(g.Name), "gid", integer(g.GID)))
-		rep.Counts["groups"]++
-	}
-	for _, u := range s.Users {
-		if u.UID < minID || u.UID >= maxID {
-			continue
-		}
-		args := mapping("name", scalar(u.Name), "uid", integer(u.UID))
-		if g, ok := groupName[u.GID]; ok {
-			addPair(args, "group", scalar(g))
-		}
-		if sup := supplementary[u.Name]; len(sup) > 0 {
-			sort.Strings(sup)
-			addPair(args, "groups", scalar(strings.Join(sup, ",")))
-		}
-		if u.Comment != "" {
-			addPair(args, "comment", scalar(u.Comment))
-		}
-		addPair(args, "home", scalar(u.Home))
-		addPair(args, "shell", scalar(u.Shell))
-		r.task("User "+u.Name, "user", args)
-		rep.Counts["users"]++
-	}
-}
-
-func (r *Role) addPackages(s *Snapshot, rep *Report) {
-	if len(s.Packages) == 0 {
-		return
-	}
-	names := make([]*yaml.Node, len(s.Packages))
-	for i, p := range s.Packages {
-		names[i] = scalar(p)
-	}
-	switch s.OS {
-	case "debian":
-		r.task("Packages", "apt", mapping("name", seq(names...), "state", scalar("present"),
-			"update_cache", boolean(true), "cache_valid_time", integer(3600)))
-	default:
-		r.task("Packages", "package", mapping("name", seq(names...), "state", scalar("present")))
-	}
-	rep.Counts["packages"] += len(s.Packages)
-}
-
-func (r *Role) addMounts(s *Snapshot, rep *Report) {
-	for _, m := range s.Mounts {
-		switch {
-		case m.Path == "/" || strings.HasPrefix(m.Path, "/boot") || m.FSType == "swap" || m.Path == "none" ||
-			m.FSType == "proc" || m.FSType == "sysfs" || m.FSType == "tmpfs" && m.Path == "/tmp":
-			continue
-		}
-		r.task("Mount "+m.Path, "mount", mapping("path", scalar(m.Path), "src", scalar(m.Src),
-			"fstype", scalar(m.FSType), "opts", scalar(m.Opts), "state", scalar("mounted")))
-		rep.Counts["mounts"]++
-	}
-}
-
-// addServices keeps the services whose enablement differs from the
-// vendor preset (what installing the packages alone would give)
-func (r *Role) addServices(s *Snapshot, rep *Report) {
-	if !s.Systemd {
-		if len(s.Units) > 0 {
-			rep.Skipped = append(rep.Skipped, Skip{s.Host, "systemd is not running: services not imported"})
-		}
-		return
-	}
-	names := make([]string, 0, len(s.Units))
-	for n := range s.Units {
-		names = append(names, n)
-	}
-	sort.Strings(names)
-	for _, n := range names {
-		u := s.Units[n]
-		name := strings.TrimSuffix(n, ".service")
-		if strings.Contains(name, "@") {
-			continue // templates and instances
-		}
-		switch {
-		case u.State == "enabled" && u.Preset != "enabled":
-			args := mapping("name", scalar(name), "enabled", boolean(true))
-			if s.Active[n] {
-				addPair(args, "state", scalar("started"))
-			}
-			r.task("Service "+name, "service", args)
-		case u.State == "disabled" && u.Preset == "enabled":
-			r.task("Service "+name, "service", mapping("name", scalar(name), "enabled", boolean(false)))
-		case u.State == "masked":
-			rep.Skipped = append(rep.Skipped, Skip{s.Host + ":" + n, "masked unit (not imported)"})
-			continue
-		default:
-			continue
-		}
-		rep.Counts["services"]++
-	}
-}
-
-func writeRole(dir string, r *Role) error {
-	base := filepath.Join(dir, "roles", r.Name)
-	for path, content := range r.Files {
-		dst := filepath.Join(base, "files", filepath.FromSlash(path))
-		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-			return err
-		}
-		if err := os.WriteFile(dst, content, 0o644); err != nil {
-			return err
-		}
-	}
-	return writeYAML(filepath.Join(base, "tasks", "main.yml"), seq(r.Tasks...))
-}
-
-func writeYAML(path string, node *yaml.Node) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	data, err := yaml.Marshal(node)
-	if err != nil {
-		return fmt.Errorf("%s: %w", path, err)
-	}
-	return os.WriteFile(path, append([]byte("---\n"), data...), 0o644)
-}
-
-// YAML node helpers: the output keeps the order it is written in
-
-func scalar(s string) *yaml.Node {
-	n := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: s}
-	return n
-}
-
-func integer(i int) *yaml.Node {
-	return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!int", Value: strconv.Itoa(i)}
-}
-
-func boolean(b bool) *yaml.Node {
-	return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!bool", Value: strconv.FormatBool(b)}
-}
-
-func seq(items ...*yaml.Node) *yaml.Node {
-	return &yaml.Node{Kind: yaml.SequenceNode, Content: items}
-}
-
-// mapping takes key, value pairs; a value is a *yaml.Node or a string
-func mapping(kv ...interface{}) *yaml.Node {
-	m := &yaml.Node{Kind: yaml.MappingNode}
-	for i := 0; i+1 < len(kv); i += 2 {
-		v, ok := kv[i+1].(*yaml.Node)
-		if !ok {
-			v = scalar(fmt.Sprint(kv[i+1]))
-		}
-		key, _ := kv[i].(string)
-		addPair(m, key, v)
-	}
-	return m
-}
-
-func addPair(m *yaml.Node, key string, v *yaml.Node) {
-	m.Content = append(m.Content, scalar(key), v)
 }

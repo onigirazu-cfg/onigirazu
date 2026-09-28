@@ -26,6 +26,12 @@ func WriteReport(path string, r *Report) error {
 	for _, k := range keys {
 		fmt.Fprintf(&b, "| %s | %d |\n", k, r.Counts[k])
 	}
+	if len(r.Layers) > 0 {
+		b.WriteString("\n## Roles\n\n| Role | Kind | Hosts | Tasks |\n|---|---|---|---|\n")
+		for _, l := range r.Layers {
+			fmt.Fprintf(&b, "| %s | %s | %s | %d |\n", l.Role, l.Kind, strings.Join(l.Hosts, ", "), l.Tasks)
+		}
+	}
 	if r.Verified {
 		if len(r.Drift) == 0 {
 			b.WriteString("\n## Check\n\n`plan` of the new playbook against the hosts: nothing to change.\n")
@@ -72,6 +78,13 @@ func PrintSummary(w io.Writer, r *Report, dir string) {
 		}
 	}
 	fmt.Fprintf(w, "Imported %s: %s\n", strings.Join(r.Hosts, ", "), strings.Join(parts, ", "))
+	var roles []string
+	for _, l := range r.Layers {
+		roles = append(roles, fmt.Sprintf("%s (%d)", l.Role, len(l.Hosts)))
+	}
+	if len(roles) > 0 {
+		fmt.Fprintf(w, "Roles: %s\n", strings.Join(roles, ", "))
+	}
 	fmt.Fprintf(w, "Playbook: %s/site.yml, report: %s/IMPORT_REPORT.md\n", dir, dir)
 	if len(r.Secrets) > 0 {
 		fmt.Fprintf(w, "Secrets not written: %d (listed in the report)\n", len(r.Secrets))

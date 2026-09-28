@@ -53,7 +53,7 @@ a faithful import has nothing to change.`,
 			if entries, err := os.ReadDir(outDir); err == nil && len(entries) > 0 && !force {
 				return fmt.Errorf("%s is not empty (--force writes into it)", outDir)
 			}
-			hosts, err := importHosts(cmd.Context(), args)
+			hosts, groups, err := importHosts(cmd.Context(), args)
 			if err != nil {
 				return err
 			}
@@ -63,7 +63,7 @@ a faithful import has nothing to change.`,
 			if err != nil {
 				return err
 			}
-			rep, err := importer.Generate(snaps, outDir)
+			rep, err := importer.GenerateWith(snaps, outDir, importer.Options{Groups: groups})
 			if err != nil {
 				return err
 			}
@@ -93,9 +93,9 @@ a faithful import has nothing to change.`,
 }
 
 // importHosts resolves the host patterns against the inventory
-func importHosts(ctx context.Context, patterns []string) ([]types.Host, error) {
+func importHosts(ctx context.Context, patterns []string) ([]types.Host, map[string][]string, error) {
 	if len(inventoryPaths) == 0 {
-		return nil, fmt.Errorf("inventory source is required (use -i/--inventory)")
+		return nil, nil, fmt.Errorf("inventory source is required (use -i/--inventory)")
 	}
 	log := logger.NewWithWriter(false, os.Stderr)
 	tmpl := template.NewEngine()
@@ -107,17 +107,17 @@ func importHosts(ctx context.Context, patterns []string) ([]types.Host, error) {
 	}
 	merged, err := inventory.NewMultiSourceLoader(p, log, cacheMgr, 10*time.Minute).LoadFromMultipleSources(ctx, inventoryPaths)
 	if err != nil {
-		return nil, fmt.Errorf("inventory: %w", err)
+		return nil, nil, fmt.Errorf("inventory: %w", err)
 	}
 	if err := mgr.SetInventory(merged); err != nil {
-		return nil, fmt.Errorf("inventory: %w", err)
+		return nil, nil, fmt.Errorf("inventory: %w", err)
 	}
 	seen := map[string]bool{}
 	var hosts []types.Host
 	for _, pattern := range patterns {
 		found, err := mgr.GetHosts(pattern)
 		if err != nil || len(found) == 0 {
-			return nil, fmt.Errorf("no host matches %q in the inventory", pattern)
+			return nil, nil, fmt.Errorf("no host matches %q in the inventory", pattern)
 		}
 		for _, h := range found {
 			if !seen[h.Name] {
@@ -126,7 +126,11 @@ func importHosts(ctx context.Context, patterns []string) ([]types.Host, error) {
 			}
 		}
 	}
-	return hosts, nil
+	groups := map[string][]string{}
+	for _, h := range hosts {
+		groups[h.Name] = mgr.GetHostGroups(h.Name)
+	}
+	return hosts, groups, nil
 }
 
 // collectHosts runs the collector on every host, a few at a time

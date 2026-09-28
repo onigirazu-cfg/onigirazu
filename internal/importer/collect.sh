@@ -11,6 +11,11 @@ os=unknown
 if command -v dpkg-query >/dev/null 2>&1; then os=debian
 elif command -v rpm >/dev/null 2>&1; then os=redhat; fi
 ( . /etc/os-release 2>/dev/null; printf 'OS\t%s\t%s\t%s\n' "$os" "${ID:-}" "${VERSION_ID:-}" )
+# what a file may say about the host itself (templates replace it)
+short=$(cat /proc/sys/kernel/hostname 2>/dev/null)
+fqdn=$(hostname -f 2>/dev/null || echo "$short")
+ip=$( (hostname -I 2>/dev/null || ip -4 -o addr show scope global 2>/dev/null | awk '{sub("/.*","",$4); print $4}') | awk '{print $1; exit}')
+printf 'HOST\t%s\t%s\t%s\n' "$short" "$fqdn" "$ip"
 
 # packages installed by hand, and every package file (for ownership)
 case $os in
