@@ -55,3 +55,25 @@
       ansible.builtin.assert:
         that: e2e_docker_info.containers is sequence
       when: e2e_docker.stat.exists
+
+    - name: Argument aliases (lineinfile dest, file name)
+      ansible.builtin.lineinfile:
+        dest: /etc/onigirazu-e2e-alias
+        line: alias works
+        create: true
+
+    - name: Mode through the file name alias
+      ansible.builtin.file:
+        name: /etc/onigirazu-e2e-alias
+        mode: "0640"
+
+    - name: stat through dest
+      ansible.builtin.stat:
+        dest: /etc/onigirazu-e2e-alias
+      register: e2e_alias
+
+    - name: Aliases reached the modules
+      ansible.builtin.assert:
+        that:
+          - e2e_alias.stat.exists
+          - e2e_alias.stat.mode == '0640'

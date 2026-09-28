@@ -325,6 +325,7 @@ func resolveDynamicAction(task *types.Task) (*types.Task, error) {
 			return nil, fmt.Errorf("action: %w", err)
 		}
 		resolved.Module, resolved.Args = types.ShortModuleName(name), args
+		types.CanonicalArgs(resolved.Module, resolved.Args)
 		return &resolved, nil
 	}
 	name, _ := task.Args["_module"].(string)
@@ -338,5 +339,6 @@ func resolveDynamicAction(task *types.Task) (*types.Task, error) {
 			resolved.Args[k] = v
 		}
 	}
+	types.CanonicalArgs(resolved.Module, resolved.Args)
 	return &resolved, nil
 }

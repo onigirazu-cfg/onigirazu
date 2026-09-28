@@ -642,7 +642,11 @@ func (t *Task) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		}
 	}
 
-	return t.applyShortForm(taskMap, reservedFields)
+	if err := t.applyShortForm(taskMap, reservedFields); err != nil {
+		return err
+	}
+	CanonicalArgs(t.Module, t.Args)
+	return nil
 }
 
 // MarshalYAML implements custom YAML marshaling for Task
