@@ -821,6 +821,12 @@ Roles are found, as in Ansible, in `roles/` next to the playbook, as a path rela
 `roles_path` (onigirazu.yml, `ANSIBLE_ROLES_PATH`, ansible.cfg), in `~/.ansible/roles`, and a
 `namespace.collection.role` in `collections_path` (`ansible_collections/<ns>/<collection>/roles/`).
 
+`onigirazu galaxy install -r requirements.yml` installs, as `ansible-galaxy install -r` does,
+what onigirazu can use: collections from git (at their `version`, into
+`<collections_path>/ansible_collections/<ns>/<name>`), roles from git or from Ansible Galaxy
+(the newest release unless `version` is set). Galaxy collections of modules
+(`community.general`, `ansible.posix`, ...) are skipped: onigirazu has its own modules.
+
 `include_role` / `import_role` run a role as a task (`name`, `tasks_from`),
 on the hosts where its `when` holds; the task's `vars` are role parameters:
 
