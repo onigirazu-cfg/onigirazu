@@ -34,7 +34,7 @@ type managedRun struct {
 // managed state and puts the orphans into the result. In check mode the
 // state file is left as it is.
 func updateManagedState(ctx context.Context, store managed.Store, result *types.PlaybookResult, scopes engine.ManagedScopes,
-	complete, allHosts, check bool, log interfaces.Logger) *managedRun {
+	complete, allHosts, check, adopt bool, log interfaces.Logger) *managedRun {
 	if store == nil {
 		return nil
 	}
@@ -43,10 +43,10 @@ func updateManagedState(ctx context.Context, store managed.Store, result *types.
 		log.Warn("Managed state not updated: %v", err)
 		return nil
 	}
-	if check {
+	if check && !adopt {
 		st = st.Clone()
 	}
-	run := managed.Run{Result: result, Complete: complete, AllHosts: allHosts,
+	run := managed.Run{Result: result, Complete: complete, AllHosts: allHosts, Adopt: adopt,
 		Scopes: managed.Scopes{Keys: scopes.Keys, Kept: scopes.Kept, KeptFor: scopes.KeptFor, Hosts: scopes.Hosts, AllPlays: scopes.AllPlays}}
 	untargeted := st.Untargeted(run)
 	orphans := st.Update(run)
@@ -56,7 +56,7 @@ func updateManagedState(ctx context.Context, store managed.Store, result *types.
 			Task: r.TaskName, Action: r.Action()})
 	}
 	m := &managedRun{store: store, st: st, check: check, complete: complete, untargeted: untargeted}
-	if !check {
+	if !check || adopt {
 		m.save(ctx, log)
 	}
 	return m

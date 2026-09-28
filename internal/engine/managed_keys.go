@@ -128,3 +128,9 @@ func (e *ExecutionEngine) keepScope(scope string) {
 	defer e.mutex.Unlock()
 	e.keptScopes = append(e.keptScopes, scope)
 }
+
+// SetAdopt makes check mode capture what every task's target is like, so
+// the managed state can record the resources that exist as adopted
+func (e *ExecutionEngine) SetAdopt(adopt bool) {
+	e.adopt = adopt
+}

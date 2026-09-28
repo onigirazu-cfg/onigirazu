@@ -218,7 +218,10 @@ type Run struct {
 	// AllHosts: no --limit, so a host no play matched has left the
 	// playbook
 	AllHosts bool
-	Now      time.Time
+	// Adopt: a check run records the resources that exist (adopted) and
+	// leaves the missing ones to the first apply
+	Adopt bool
+	Now   time.Time
 }
 
 // Untargeted are the hosts with records that no play of a complete,
@@ -263,6 +266,9 @@ func (s *State) Update(run Run) []*Record {
 	for _, host := range order {
 		hr := hosts[host]
 		for _, d := range hr.claims {
+			if run.Adopt && originOf(d.res) != OriginAdopted {
+				continue
+			}
 			s.claim(host, d, run.Now)
 		}
 		for _, a := range hr.absent {

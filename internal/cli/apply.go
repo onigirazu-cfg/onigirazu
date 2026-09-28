@@ -73,6 +73,7 @@ func newApplyCommand(onResult func(*types.PlaybookResult)) *cobra.Command {
 		canaryPause    time.Duration
 		autoRollback   bool
 		noDestroy      bool
+		adopt          bool
 		stateLock      bool
 		lockTimeout    time.Duration
 		autoApprove    bool
@@ -823,7 +824,11 @@ Examples:
 			if err != nil {
 				return err
 			}
-			if !cfg.IsCheckMode() && stateLock {
+			if adopt && !cfg.IsCheckMode() {
+				return fmt.Errorf("--adopt goes with --check: it records what exists and changes nothing")
+			}
+			executionEngine.SetAdopt(adopt)
+			if (!cfg.IsCheckMode() || adopt) && stateLock {
 				lock, err := mstore.Lock(ctx, "apply", lockTimeout)
 				if err != nil {
 					return err
@@ -846,7 +851,7 @@ Examples:
 			if result != nil {
 				complete := tags == "" && skipTags == "" && startAtTask == "" && ctx.Err() == nil && !runControl.Stopped()
 				mrun = updateManagedState(saveCtx, mstore, result, executionEngine.ManagedScopes(), complete, limit == "",
-					cfg.IsCheckMode(), log)
+					cfg.IsCheckMode(), adopt, log)
 				if onResult == nil && outputFormat != "json" && outputFormat != "yaml" {
 					printOrphans(resultOut, result.Orphans)
 				}
@@ -876,7 +881,7 @@ Examples:
 			}
 
 			// resources that left the playbook: removed or put back
-			if !noDestroy && result != nil && !result.Failed {
+			if !noDestroy && !cfg.IsCheckMode() && result != nil && !result.Failed {
 				out := resultOut
 				if outputFormat == "json" || outputFormat == "yaml" {
 					out = os.Stderr
@@ -1188,6 +1193,7 @@ Examples:
 	cmd.Flags().StringVar(&canary, "canary", "", "Run the first batch on this many hosts (N or P%) and check it before the rest")
 	cmd.Flags().DurationVar(&canaryPause, "canary-pause", 0, "After a healthy canary batch, wait this long and check its health again")
 	cmd.Flags().BoolVar(&autoRollback, "auto-rollback", false, "Roll back a batch whose tasks or health checks failed, and stop")
+	cmd.Flags().BoolVar(&adopt, "adopt", false, "With --check: record the resources the playbook manages that already exist as adopted in the managed state")
 	cmd.Flags().BoolVar(&noDestroy, "no-destroy", false, "Keep the resources that left the playbook (plan keeps listing them)")
 	cmd.Flags().BoolVar(&stateLock, "lock", true, "Lock the playbook's managed state for the run")
 	cmd.Flags().DurationVar(&lockTimeout, "lock-timeout", 0, "Wait this long for another run's state lock")

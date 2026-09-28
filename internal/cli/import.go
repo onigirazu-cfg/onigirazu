@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -30,6 +31,8 @@ func newImportCmd() *cobra.Command {
 		noBecome   bool
 		becomeUser string
 		force      bool
+		baseline   string
+		adopt      bool
 	)
 	cmd := &cobra.Command{
 		Use:   "import HOST_PATTERN... -i INVENTORY -o DIR",
@@ -53,26 +56,40 @@ a faithful import has nothing to change.`,
 			if entries, err := os.ReadDir(outDir); err == nil && len(entries) > 0 && !force {
 				return fmt.Errorf("%s is not empty (--force writes into it)", outDir)
 			}
-			hosts, err := importHosts(cmd.Context(), args)
+			hosts, groups, err := importHosts(cmd.Context(), args)
 			if err != nil {
 				return err
 			}
 			out := cmd.OutOrStdout()
-			fmt.Fprintf(out, "Collecting %d host(s)...\n", len(hosts))
-			snaps, err := collectHosts(cmd.Context(), hosts, !noBecome, becomeUser)
+			collect := hosts
+			if baseline != "" {
+				base, _, err := importHosts(cmd.Context(), []string{baseline})
+				if err != nil {
+					return fmt.Errorf("--baseline: %w", err)
+				}
+				collect = append(append([]types.Host(nil), hosts...), base[0])
+			}
+			fmt.Fprintf(out, "Collecting %d host(s)...\n", len(collect))
+			snaps, err := collectHosts(cmd.Context(), collect, !noBecome, becomeUser)
 			if err != nil {
 				return err
 			}
-			rep, err := importer.Generate(snaps, outDir)
+			opts := importer.Options{Groups: groups}
+			if baseline != "" {
+				opts.Baseline, snaps = snaps[len(snaps)-1], snaps[:len(snaps)-1]
+			}
+			rep, err := importer.GenerateWith(snaps, outDir, opts)
 			if err != nil {
 				return err
 			}
-			if !noVerify {
-				rep.Verified = true
-				rep.Drift, err = verifyImport(outDir, hosts)
+			if !noVerify || adopt {
+				// --adopt records, in the same check run, what exists as
+				// adopted in the new playbook's managed state
+				drift, err := verifyImport(outDir, hosts, importer.SecretValues(snaps), adopt)
 				if err != nil {
 					return fmt.Errorf("verify: %w", err)
 				}
+				rep.Verified, rep.Drift, rep.Adopted = true, drift, adopt
 			}
 			if err := importer.WriteReport(filepath.Join(outDir, "IMPORT_REPORT.md"), rep); err != nil {
 				return err
@@ -89,13 +106,15 @@ a faithful import has nothing to change.`,
 	cmd.Flags().BoolVar(&noBecome, "no-become", false, "Collect as the login user (root-only files are missed)")
 	cmd.Flags().StringVar(&becomeUser, "become-user", "root", "User to collect as")
 	cmd.Flags().BoolVar(&force, "force", false, "Write into a directory that is not empty")
+	cmd.Flags().StringVar(&baseline, "baseline", "", "A fresh host of the same system: what it has too is not imported")
+	cmd.Flags().BoolVar(&adopt, "adopt", false, "Record the imported resources as adopted in the new playbook's managed state")
 	return cmd
 }
 
 // importHosts resolves the host patterns against the inventory
-func importHosts(ctx context.Context, patterns []string) ([]types.Host, error) {
+func importHosts(ctx context.Context, patterns []string) ([]types.Host, map[string][]string, error) {
 	if len(inventoryPaths) == 0 {
-		return nil, fmt.Errorf("inventory source is required (use -i/--inventory)")
+		return nil, nil, fmt.Errorf("inventory source is required (use -i/--inventory)")
 	}
 	log := logger.NewWithWriter(false, os.Stderr)
 	tmpl := template.NewEngine()
@@ -107,17 +126,17 @@ func importHosts(ctx context.Context, patterns []string) ([]types.Host, error) {
 	}
 	merged, err := inventory.NewMultiSourceLoader(p, log, cacheMgr, 10*time.Minute).LoadFromMultipleSources(ctx, inventoryPaths)
 	if err != nil {
-		return nil, fmt.Errorf("inventory: %w", err)
+		return nil, nil, fmt.Errorf("inventory: %w", err)
 	}
 	if err := mgr.SetInventory(merged); err != nil {
-		return nil, fmt.Errorf("inventory: %w", err)
+		return nil, nil, fmt.Errorf("inventory: %w", err)
 	}
 	seen := map[string]bool{}
 	var hosts []types.Host
 	for _, pattern := range patterns {
 		found, err := mgr.GetHosts(pattern)
 		if err != nil || len(found) == 0 {
-			return nil, fmt.Errorf("no host matches %q in the inventory", pattern)
+			return nil, nil, fmt.Errorf("no host matches %q in the inventory", pattern)
 		}
 		for _, h := range found {
 			if !seen[h.Name] {
@@ -126,7 +145,11 @@ func importHosts(ctx context.Context, patterns []string) ([]types.Host, error) {
 			}
 		}
 	}
-	return hosts, nil
+	groups := map[string][]string{}
+	for _, h := range hosts {
+		groups[h.Name] = mgr.GetHostGroups(h.Name)
+	}
+	return hosts, groups, nil
 }
 
 // collectHosts runs the collector on every host, a few at a time
@@ -171,13 +194,52 @@ func collectHosts(ctx context.Context, hosts []types.Host, become bool, becomeUs
 
 // verifyImport plans the new playbook against the hosts; what it would
 // change is what the import got wrong
-func verifyImport(dir string, hosts []types.Host) ([]importer.Drift, error) {
+func verifyImport(dir string, hosts []types.Host, secrets map[string]map[string]string, adopt bool) ([]importer.Drift, error) {
 	names := make([]string, len(hosts))
 	for i, h := range hosts {
 		names[i] = h.Name
 	}
-	result, err := runPlaybook([]string{filepath.Join(dir, "site.yml"), "--check", "--diff",
-		"--limit", strings.Join(names, ","), "--lock=false"})
+	// secret values differ per host and exist only in memory: one run per
+	// host that has them, with its values as extra vars
+	runs := [][]string{}
+	var plain []string
+	for _, h := range names {
+		if len(secrets[h]) == 0 {
+			plain = append(plain, h)
+			continue
+		}
+		vals, err := json.Marshal(secrets[h])
+		if err != nil {
+			return nil, err
+		}
+		runs = append(runs, []string{"--limit", h, "-e", string(vals)})
+	}
+	if len(plain) > 0 {
+		runs = append(runs, []string{"--limit", strings.Join(plain, ",")})
+	}
+	var drift []importer.Drift
+	for _, extra := range runs {
+		if adopt {
+			extra = append(extra, "--adopt")
+		}
+		d, err := planDrift(dir, extra)
+		if err != nil {
+			return nil, err
+		}
+		drift = append(drift, d...)
+	}
+	sort.Slice(drift, func(i, j int) bool {
+		if drift[i].Host != drift[j].Host {
+			return drift[i].Host < drift[j].Host
+		}
+		return drift[i].Task < drift[j].Task
+	})
+	return drift, nil
+}
+
+// planDrift plans the imported playbook with extra apply arguments
+func planDrift(dir string, extra []string) ([]importer.Drift, error) {
+	result, err := runPlaybook(append([]string{filepath.Join(dir, "site.yml"), "--check", "--diff", "--lock=false"}, extra...))
 	if err != nil {
 		return nil, err
 	}
@@ -194,11 +256,5 @@ func verifyImport(dir string, hosts []types.Host) ([]importer.Drift, error) {
 			}
 		}
 	}
-	sort.Slice(drift, func(i, j int) bool {
-		if drift[i].Host != drift[j].Host {
-			return drift[i].Host < drift[j].Host
-		}
-		return drift[i].Task < drift[j].Task
-	})
 	return drift, nil
 }

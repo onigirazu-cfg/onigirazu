@@ -224,6 +224,9 @@ type Task struct {
 	// PreventDestroy: when the task leaves the playbook, its resources are
 	// forgotten, never removed or restored
 	PreventDestroy bool `yaml:"prevent_destroy,omitempty"`
+	// Capture: record what the task's target is like in check mode too
+	// (apply --check --adopt)
+	Capture bool `yaml:"-" json:"-"`
 	// Key identifies the task across runs (play, role, block path and
 	// name); the engine assigns it
 	Key string `yaml:"-" json:"-"`

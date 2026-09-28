@@ -179,3 +179,12 @@ func TestKeptForSomeHosts(t *testing.T) {
 	require.Len(t, orphans, 1)
 	assert.Equal(t, "a", orphans[0].Host)
 }
+
+func TestAdoptRecordsWhatExists(t *testing.T) {
+	st := &State{}
+	r := run(true, []string{"p/a", "p/b"}, nil, task("p/a", fileRes("/a", "file")), task("p/b", fileRes("/b", "absent")))
+	r.Adopt = true
+	st.Update(r)
+	assert.Equal(t, OriginAdopted, st.Find("h", "file", "/a").Origin)
+	assert.Nil(t, st.Find("h", "file", "/b"), "missing: the first apply creates and records it")
+}

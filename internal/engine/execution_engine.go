@@ -54,6 +54,8 @@ type ExecutionEngine struct {
 	keptFor    map[string][]string
 	scope      string
 	// hosts every play matched, and how many plays got that far
+	// adopt: capture targets in check mode (apply --check --adopt)
+	adopt         bool
 	targetedHosts map[string]bool
 	playsTargeted int
 	playsTotal    int
@@ -1135,6 +1137,7 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 			CheckMode:    &check,
 			Environment:  environment,
 			Diff:         e.showDiff,
+			Capture:      e.adopt,
 		}, target, taskVars)
 
 		if task.Until != "" && err == nil {
