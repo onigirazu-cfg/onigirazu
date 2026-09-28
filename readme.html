@@ -337,8 +337,11 @@ plays:
 - file: path=/etc/app state=directory mode=0750
 - ping:
 - local_action: command make package   # delegate_to: localhost
+- action: copy src=app.conf dest=/etc/app.conf
+- action: &quot;{{ ansible_pkg_mgr }} name={{ pkgs }} state=present&quot;   # the module chosen when it runs
 </code></pre>
 
+<p><code>dnf</code> runs the <code>yum</code> module (it works with whichever the host has).</p>
 <p>Fully qualified names work for the built-in modules (<code>ansible.builtin.copy</code>,
 <code>ansible.legacy.command</code>) and for collection modules Onigirazu implements
 (<code>ansible.posix.sysctl</code>, <code>ansible.posix.mount</code>, <code>ansible.posix.authorized_key</code>,
