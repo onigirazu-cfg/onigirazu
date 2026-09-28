@@ -200,8 +200,16 @@ func (e *ExecutionEngine) runIncludedRole(ctx context.Context, task *types.Task,
 		}
 	}
 	if len(targets) < len(hosts) {
-		// some hosts skip the role: keep what it manages
-		e.keepScope(task.Key)
+		// the hosts that skip the role keep what it manages there
+		in := map[string]bool{}
+		for _, h := range targets {
+			in[h.Name] = true
+		}
+		for _, h := range hosts {
+			if !in[h.Name] {
+				e.keepScopeFor(task.Key, h.Name)
+			}
+		}
 	}
 	if len(targets) == 0 {
 		return nil

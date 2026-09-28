@@ -20,6 +20,8 @@ type ManagedScopes struct {
 	Keys map[string]bool
 	// Kept are scopes the run skipped whole; keys under them stay
 	Kept []string
+	// KeptFor are scopes some hosts skipped: scope -> those hosts
+	KeptFor map[string][]string
 	// Hosts are the hosts the plays matched; AllPlays: every play got
 	// that far (the run was not cut short)
 	Hosts    map[string]bool
@@ -38,7 +40,11 @@ func (e *ExecutionEngine) ManagedScopes() ManagedScopes {
 	for h := range e.targetedHosts {
 		hosts[h] = true
 	}
-	return ManagedScopes{Keys: keys, Kept: append([]string(nil), e.keptScopes...), Hosts: hosts,
+	keptFor := make(map[string][]string, len(e.keptFor))
+	for k, v := range e.keptFor {
+		keptFor[k] = append([]string(nil), v...)
+	}
+	return ManagedScopes{Keys: keys, Kept: append([]string(nil), e.keptScopes...), KeptFor: keptFor, Hosts: hosts,
 		AllPlays: e.playsTotal > 0 && e.playsTargeted == e.playsTotal}
 }
 
@@ -104,6 +110,16 @@ func (e *ExecutionEngine) recordKey(key string) {
 		e.taskKeys = map[string]bool{}
 	}
 	e.taskKeys[key] = true
+}
+
+// keepScopeFor records a scope one host skipped
+func (e *ExecutionEngine) keepScopeFor(scope, host string) {
+	e.mutex.Lock()
+	defer e.mutex.Unlock()
+	if e.keptFor == nil {
+		e.keptFor = map[string][]string{}
+	}
+	e.keptFor[scope] = append(e.keptFor[scope], host)
 }
 
 // keepScope records a scope the run skipped whole

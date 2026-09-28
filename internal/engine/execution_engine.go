@@ -51,6 +51,7 @@ type ExecutionEngine struct {
 	// and the scope roles are keyed under (the play, or an include_role)
 	taskKeys   map[string]bool
 	keptScopes []string
+	keptFor    map[string][]string
 	scope      string
 	// hosts every play matched, and how many plays got that far
 	targetedHosts map[string]bool
@@ -298,6 +299,7 @@ func (e *ExecutionEngine) ExecutePlaybook(ctx context.Context, playbook *types.P
 	e.rolloutReports = nil
 	e.taskKeys = nil
 	e.keptScopes = nil
+	e.keptFor = nil
 	e.targetedHosts = map[string]bool{}
 	e.playsTargeted = 0
 	e.playsTotal = len(playbook.Plays)

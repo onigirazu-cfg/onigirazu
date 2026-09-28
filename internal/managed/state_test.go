@@ -160,3 +160,22 @@ func TestLock(t *testing.T) {
 	require.NoError(t, l2.Release())
 	assert.Error(t, ForceUnlock(path, l2.info.ID))
 }
+
+func TestKeptForSomeHosts(t *testing.T) {
+	st := &State{}
+	two := func(tasks ...types.TaskResult) *types.PlaybookResult {
+		return &types.PlaybookResult{Plays: []types.PlayResult{{Hosts: []types.HostResult{{Host: "a", Tasks: tasks}, {Host: "b"}}}}}
+	}
+	res := fileRes("/x", "absent")
+	st.Update(Run{Complete: true, Scopes: Scopes{Keys: map[string]bool{"inc/role:r/tasks/t": true}},
+		Result: two(task("inc/role:r/tasks/t", res))})
+	rb := *st.Find("a", "file", "/x")
+	rb.Host = "b"
+	st.Resources = append(st.Resources, &rb)
+
+	// the task left the role; the include was skipped on b only
+	orphans := st.Update(Run{Complete: true, Scopes: Scopes{Keys: map[string]bool{},
+		KeptFor: map[string][]string{"inc": {"b"}}}, Result: two()})
+	require.Len(t, orphans, 1)
+	assert.Equal(t, "a", orphans[0].Host)
+}

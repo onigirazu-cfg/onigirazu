@@ -47,7 +47,7 @@ func updateManagedState(ctx context.Context, store managed.Store, result *types.
 		st = st.Clone()
 	}
 	run := managed.Run{Result: result, Complete: complete, AllHosts: allHosts,
-		Scopes: managed.Scopes{Keys: scopes.Keys, Kept: scopes.Kept, Hosts: scopes.Hosts, AllPlays: scopes.AllPlays}}
+		Scopes: managed.Scopes{Keys: scopes.Keys, Kept: scopes.Kept, KeptFor: scopes.KeptFor, Hosts: scopes.Hosts, AllPlays: scopes.AllPlays}}
 	untargeted := st.Untargeted(run)
 	orphans := st.Update(run)
 	result.Orphans = nil
