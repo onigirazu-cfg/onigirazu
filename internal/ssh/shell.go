@@ -38,12 +38,17 @@ func (e *ExitStatusError) ExitStatus() int { return e.Status }
 // "ONIGIRAZU <rc> <stdout bytes> <stderr bytes>" followed by the bytes.
 // Every command gets its own output files: a background process it leaves
 // behind writes to a removed file, not into the next command's output.
-const shellScript = `d=$(mktemp -d 2>/dev/null) || exit 97
+// The files live in ~/.onigirazu/tmp, as Ansible keeps its own in
+// ~/.ansible/tmp: a task that cleans /tmp neither sees nor removes them, and
+// the directory comes back if something removes it anyway.
+const shellScript = `r="$HOME/.onigirazu/tmp"
+d=$( (mkdir -p -m 700 "$r" && mktemp -d "$r/sh.XXXXXX") 2>/dev/null || mktemp -d 2>/dev/null) || exit 97
 trap 'rm -rf "$d"' EXIT
 command -v base64 >/dev/null 2>&1 || exit 98
 printf 'ONIGIRAZU-READY\n'
 n=0
 while IFS= read -r l; do
+  [ -d "$d" ] || mkdir -p -m 700 "$d"
   n=$((n+1)); o="$d/o$n"; e="$d/e$n"
   m=${l%% *}; l=${l#* }
   printf '%s' "$l" | base64 -d > "$d/c" 2>/dev/null || { printf 'ONIGIRAZU 255 0 0\n'; continue; }
