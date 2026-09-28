@@ -1485,6 +1485,11 @@ func (e *ExecutionEngine) getPlayHosts(play *types.Play) ([]types.Host, error) {
 	return limited, nil
 }
 
+// PlayHosts are the hosts a play runs on (its pattern and --limit)
+func (e *ExecutionEngine) PlayHosts(play *types.Play) ([]types.Host, error) {
+	return e.getPlayHosts(play)
+}
+
 // SetExtraVars sets variables that override every other variable (-e)
 func (e *ExecutionEngine) SetExtraVars(vars map[string]interface{}) {
 	e.extraVars = vars

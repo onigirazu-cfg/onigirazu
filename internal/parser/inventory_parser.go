@@ -635,6 +635,16 @@ func (p *InventoryParser) parseIniInventory(data []byte) (*types.Inventory, erro
 			continue
 		}
 
+		// hosts before any section are "ungrouped", as in Ansible
+		if currentGroup == nil {
+			currentGroup = &types.Group{
+				Name:     "ungrouped",
+				Hosts:    make(map[string]*types.Host),
+				Children: make([]string, 0),
+				Vars:     make(map[string]interface{}),
+			}
+			inventory.Groups["ungrouped"] = currentGroup
+		}
 		if currentGroup != nil {
 			if isChildrenSection {
 				currentGroup.Children = append(currentGroup.Children, line)

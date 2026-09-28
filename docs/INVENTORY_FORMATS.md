@@ -105,6 +105,9 @@ databases
 environment=production
 ```
 
+Hosts before the first section are in the group `ungrouped`, as in Ansible. A group may be
+empty (`[pending]`, or `pending: {hosts: }` in YAML).
+
 ## Plain host list
 
 One `[user@]host[:port]` per line; `#` starts a comment. Hosts get port 22 and the local user
@@ -190,6 +193,7 @@ so they win). They override variables written in the inventory itself.
 
 ## Without -i
 
+`ANSIBLE_INVENTORY` (a comma separated list of sources) is the default of `-i`. Without it,
 `run` requires `-i`. `apply` (and `plan`/`drift`) look in the playbook's directory for
 `inventory.yml`, `inventory.yaml`, `inventory.toml`, `inventory.json`, `inventory.ini`,
 `hosts`, `hosts.yml`, `hosts.yaml`, `hosts.toml`, `hosts.json`, `hosts.ini`, `inventory`,
@@ -206,4 +210,11 @@ the inventory is `localhost` alone, run on the control machine.
 onigirazu inventory --list -i inventory.yml       # hosts and groups
 onigirazu inventory --graph -i inventory.yml      # group tree
 onigirazu inventory --host web1 -i inventory.yml  # groups of one host
+onigirazu inventory --list --json -i inventory.yml   # as ansible-inventory --list
+onigirazu inventory --host web1 --json -i inventory.yml  # as ansible-inventory --host
 ```
+
+`--json` prints what `ansible-inventory` prints: groups with their own hosts and children,
+`all` with the top groups and `ungrouped`, `_meta.hostvars` with each host's variables (group
+variables resolved, templated connection variables rendered). Passwords are left out. Messages
+go to stderr, so the output can be piped to a script.

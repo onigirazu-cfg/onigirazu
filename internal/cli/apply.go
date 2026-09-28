@@ -82,6 +82,8 @@ func newApplyCommand(onResult func(*types.PlaybookResult)) *cobra.Command {
 		skipTags       string
 		listTags       bool
 		listTasks      bool
+		listHosts      bool
+		syntaxCheck    bool
 		verboseOutput  bool
 		backgroundMode bool
 		lenient        bool
@@ -141,7 +143,8 @@ Examples:
 			resultOut := io.Writer(os.Stdout)
 			var runResult *types.PlaybookResult
 			var runStart time.Time
-			if outputFormat == "json" || outputFormat == "yaml" || onResult != nil {
+			// the same for listings that scripts read (--list-hosts, --syntax-check, --list-tasks)
+			if outputFormat == "json" || outputFormat == "yaml" || onResult != nil || listHosts || syntaxCheck || listTasks {
 				realStdout := os.Stdout
 				resultOut = realStdout
 				os.Stdout = os.Stderr
@@ -614,6 +617,29 @@ Examples:
 					result = output.FormatTagsText(tagsResult)
 				}
 				fmt.Fprint(resultOut, result)
+				return nil
+			}
+
+			// --syntax-check: the playbook parsed and validated above
+			if syntaxCheck {
+				fmt.Fprintf(resultOut, "\nplaybook: %s\n", playbookPath)
+				return nil
+			}
+			// --list-hosts: the hosts of every play, as ansible-playbook prints them
+			if listHosts {
+				fmt.Fprintf(resultOut, "\nplaybook: %s\n", playbookPath)
+				for i := range playbook.Plays {
+					play := &playbook.Plays[i]
+					hosts, err := executionEngine.PlayHosts(play)
+					if err != nil {
+						return err
+					}
+					fmt.Fprintf(resultOut, "\n  play #%d (%s): %s\tTAGS: [%s]\n    pattern: ['%s']\n    hosts (%d):\n",
+						i+1, play.Hosts, play.Name, strings.Join(play.Tags, ", "), play.Hosts, len(hosts))
+					for _, h := range hosts {
+						fmt.Fprintf(resultOut, "      %s\n", h.Name)
+					}
+				}
 				return nil
 			}
 
@@ -1207,6 +1233,8 @@ Examples:
 	cmd.Flags().StringVar(&skipTags, "skip-tags", "", "Skip tasks with these tags (comma-separated)")
 	cmd.Flags().BoolVar(&listTags, "list-tags", false, "List all available tags in the playbook without executing")
 	cmd.Flags().BoolVar(&listTasks, "list-tasks", false, "List tasks that would execute with current filters")
+	cmd.Flags().BoolVar(&listHosts, "list-hosts", false, "List the hosts of every play (with --limit) and exit")
+	cmd.Flags().BoolVar(&syntaxCheck, "syntax-check", false, "Parse and validate the playbook and exit")
 	cmd.Flags().BoolVar(&verboseOutput, "verbose-output", false, "Use verbose output formatting (more details)")
 	cmd.Flags().BoolVar(&backgroundMode, "background", false, "Run in background mode (returns immediately, use show-execution to view results)")
 

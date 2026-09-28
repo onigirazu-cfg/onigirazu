@@ -2,8 +2,11 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"os"
+	"strings"
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
@@ -22,6 +25,7 @@ var (
 	inventoryList    bool
 	inventoryGraph   bool
 	inventoryLenient bool
+	inventoryJSON    bool
 )
 
 var inventoryCmd = &cobra.Command{
@@ -38,20 +42,24 @@ func init() {
 	inventoryCmd.Flags().BoolVar(&inventoryList, "list", false, "List all hosts and groups")
 	inventoryCmd.Flags().BoolVar(&inventoryGraph, "graph", false, "Show group hierarchy as a graph")
 	inventoryCmd.Flags().BoolVar(&inventoryLenient, "lenient", false, "Lenient mode: skip inventory validation errors and process what is valid")
+	inventoryCmd.Flags().BoolVar(&inventoryJSON, "json", false, "With --list or --host: JSON as ansible-inventory prints it (passwords left out)")
 }
 
 func runInventory(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
-	log, err := logger.NewEnhancedLogger("info", "text", os.Stdout)
-	if err != nil {
-		return fmt.Errorf("failed to create logger: %w", err)
-	}
+	// the output may be parsed: messages go to stderr
+	log := logger.NewWithWriter(false, os.Stderr)
 
 	// Initialize parser and cache
 	invParser := parser.NewInventoryParser(log)
 	cacheManager := cache.NewManager(0)
 
-	// Find inventory file if not specified
+	// Find inventory file if not specified: ANSIBLE_INVENTORY, as Ansible
+	if inventoryFile == "" {
+		if env := strings.TrimSpace(strings.Split(os.Getenv("ANSIBLE_INVENTORY"), ",")[0]); env != "" {
+			inventoryFile = env
+		}
+	}
 	if inventoryFile == "" {
 		var err error
 		inventoryFile, err = invParser.FindInventoryFile(".")
@@ -76,13 +84,26 @@ func runInventory(cmd *cobra.Command, args []string) error {
 		invManager.SetLenient(true)
 	}
 
-	// Load inventory
-	if err := invManager.LoadInventory(ctx, inventoryFile); err != nil {
+	// Load inventory as apply does: group_vars/host_vars next to it too
+	merged, err := inventory.NewMultiSourceLoader(playbookParser, log, cacheManager, 0).
+		LoadFromMultipleSources(ctx, []string{inventoryFile})
+	if err != nil {
+		return fmt.Errorf("failed to load inventory: %w", err)
+	}
+	if err := invManager.SetInventory(merged); err != nil {
 		return fmt.Errorf("failed to load inventory: %w", err)
 	}
 
 	// Handle different query modes
 	switch {
+	case inventoryJSON && inventoryHost != "":
+		vars, ok := invManager.AnsibleHostVars(inventoryHost)
+		if !ok {
+			return fmt.Errorf("host %s is not in the inventory", inventoryHost)
+		}
+		return printJSON(cmd.OutOrStdout(), vars)
+	case inventoryJSON:
+		return printJSON(cmd.OutOrStdout(), invManager.AnsibleList())
 	case inventoryHost != "":
 		return showHostGroups(invManager, inventoryHost)
 	case inventoryGroup != "":
@@ -295,4 +316,10 @@ func showInventoryStats(invManager *inventory.Manager) error {
 	}
 
 	return nil
+}
+
+func printJSON(w io.Writer, v interface{}) error {
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "    ")
+	return enc.Encode(v)
 }

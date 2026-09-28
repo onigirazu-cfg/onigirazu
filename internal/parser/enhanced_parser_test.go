@@ -630,10 +630,8 @@ func TestEnhancedParser_ValidateGroup_NoHostsOrChildren(t *testing.T) {
 		Children: []string{},
 	}
 
-	err := parser.validateGroup(group, "test")
-
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "must contain either hosts or children")
+	// an empty group is valid, as in Ansible
+	assert.NoError(t, parser.validateGroup(group, "test"))
 }
 
 func TestEnhancedParser_ValidateGroup_ValidWithHosts(t *testing.T) {
