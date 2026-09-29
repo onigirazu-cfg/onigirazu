@@ -92,6 +92,7 @@ func compile(expression string) (*vm.Program, error) {
 		expr.AllowUndefinedVariables(),
 		expr.Patch(inPatch{}),
 		expr.Patch(methodPatch{}),
+		expr.Patch(indexPatch{}),
 		expr.Function("jinja_method", callMethod),
 		expr.Function("bitwarden", func(params ...interface{}) (interface{}, error) {
 			if len(params) == 0 {
@@ -223,7 +224,13 @@ func translate(condition string) string {
 	return b.String()
 }
 
+// numeric attributes: item.0 is item[0] in Jinja; expr reads ".0" as a number
+var numericAttr = regexp.MustCompile(`([A-Za-z_]\w*|[\])])\.(\d+)\b`)
+
 func translateCode(code string) string {
+	for numericAttr.MatchString(code) {
+		code = numericAttr.ReplaceAllString(code, "${1}[$2]")
+	}
 	code = definedTest.ReplaceAllStringFunc(code, func(m string) string {
 		parts := definedTest.FindStringSubmatch(m)
 		// optional chaining: a missing parent is "not defined", not an error
@@ -601,4 +608,23 @@ func asInt(v interface{}) (int, bool) {
 		return int(n), true
 	}
 	return 0, false
+}
+
+// indexPatch sends x[i] with a computed index through jinja_index: strings
+// index to characters, negative indexes count from the end, a missing item
+// is undefined (nil) instead of an error
+type indexPatch struct{}
+
+func (indexPatch) Visit(node *ast.Node) {
+	m, ok := (*node).(*ast.MemberNode)
+	if !ok {
+		return
+	}
+	if _, isName := m.Property.(*ast.StringNode); isName {
+		return
+	}
+	ast.Patch(node, &ast.CallNode{
+		Callee:    &ast.IdentifierNode{Value: "jinja_index"},
+		Arguments: []ast.Node{m.Node, m.Property},
+	})
 }
