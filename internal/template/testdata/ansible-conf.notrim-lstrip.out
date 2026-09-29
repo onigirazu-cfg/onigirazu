@@ -1,0 +1,14 @@
+# Ansible managed
+
+user ann 1 admin
+
+
+user bob 2
+
+
+total=3
+enabled=True
+no extra
+
+list=['ann', 'bob']
+ab   |

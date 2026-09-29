@@ -16,4 +16,4 @@
     - debug: {msg: "{{ 'hello'.startswith('he') }} {{ 'hello'.endswith('x') }} {{ 'a-b' in 'xa-by' }}"}
     - debug: {msg: "{{ '%s=%s' | format('k', 'v') }} {{ 'x' | center(5) }}|{{ '5' | int * 2 }}"}
     - debug: {msg: "{{ ver is version('20.04', '>=') }} {{ ver is version('22.10', '<') }}"}
-    - debug: {msg: "{{ '  a  b ' | split | list }} {{ 'a\nb' | splitlines if false else 'a\nb'.splitlines() }}"}
+    - debug: {msg: "{{ '  a  b ' | split | list }} {{ 'a\nb'.splitlines() }}"}

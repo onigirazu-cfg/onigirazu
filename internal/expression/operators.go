@@ -192,3 +192,41 @@ func matchForward(s string, open int) int {
 	}
 	return len(s) - 1
 }
+
+// keepUnknownEscapes doubles a backslash inside a string literal unless it
+// starts \\ \' \" \n \t or \r: Jinja keeps '\d' and '\2' as written (regex
+// patterns and group references), expr would reject them. Raw newlines in a
+// literal become \n.
+func keepUnknownEscapes(s string) string {
+	var b strings.Builder
+	var quote byte
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case quote == 0:
+			if c == '\'' || c == '"' {
+				quote = c
+			}
+		case c == '\\' && i+1 < len(s):
+			if strings.IndexByte("\\'\"ntr", s[i+1]) >= 0 {
+				b.WriteByte(c)
+				b.WriteByte(s[i+1])
+				i++
+				continue
+			}
+			b.WriteString(`\\`)
+			continue
+		case c == quote:
+			quote = 0
+		case c == '\n':
+			// a raw newline inside a literal (from YAML "\n"): Jinja takes it
+			b.WriteString(`\n`)
+			continue
+		case c == '\r':
+			b.WriteString(`\r`)
+			continue
+		}
+		b.WriteByte(c)
+	}
+	return b.String()
+}

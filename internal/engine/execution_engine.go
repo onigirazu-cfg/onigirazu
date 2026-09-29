@@ -1238,8 +1238,14 @@ func (e *ExecutionEngine) finishTask(task *types.Task, host *types.Host, result 
 	// an unnamed task is called after its module, as Ansible does
 	// "" -> "debug", " (item 2)" -> "debug (item 2)",
 	// "debug task (item 2)" -> "debug (item 2)"
+	// (some modules put their own name in the result: only a loop item's
+	// " (item N)" suffix is kept)
 	if task.Name == "" || task.NameGenerated {
-		result.TaskName = task.Module + strings.TrimPrefix(result.TaskName, task.Name)
+		suffix := strings.TrimPrefix(result.TaskName, task.Name)
+		if !strings.HasPrefix(suffix, " (item ") {
+			suffix = ""
+		}
+		result.TaskName = task.Module + suffix
 	}
 	if task.PreventDestroy {
 		for i := range result.Resources {
@@ -1448,7 +1454,13 @@ func (e *ExecutionEngine) runLoopOnHost(ctx context.Context, task *types.Task, h
 		}
 
 		taskCopy := *task
-		taskCopy.Name = fmt.Sprintf("%s (item %d)", task.Name, i+1)
+		// an unnamed task's items are "debug (item 1)", as in Ansible
+		base := task.Name
+		if base == "" || task.NameGenerated {
+			base = task.Module
+		}
+		taskCopy.Name = fmt.Sprintf("%s (item %d)", base, i+1)
+		taskCopy.NameGenerated = false
 		taskCopy.Loop = nil
 		loopVars := e.mergeVariables(variables, map[string]interface{}{
 			itemVar:  item,
@@ -1457,6 +1469,9 @@ func (e *ExecutionEngine) runLoopOnHost(ctx context.Context, task *types.Task, h
 				"index": i + 1, "index0": i, "length": len(items),
 				"first": i == 0, "last": i == len(items)-1,
 			},
+			// loop_control extended: true in Ansible; always set here
+			"ansible_loop":     extendedLoopVars(items, i),
+			"ansible_loop_var": itemVar,
 		})
 		err := e.executeTaskOnHost(ctx, &taskCopy, host, loopVars, playResult)
 		if task.Register != "" {
@@ -2575,4 +2590,21 @@ func (e *ExecutionEngine) enterPlay(play *types.Play) func() {
 		e.playEnvironment = nil
 		e.mutex.Unlock()
 	}
+}
+
+// extendedLoopVars is Ansible's ansible_loop for item i of items
+func extendedLoopVars(items []interface{}, i int) map[string]interface{} {
+	n := len(items)
+	v := map[string]interface{}{
+		"allitems": items, "index": i + 1, "index0": i,
+		"revindex": n - i, "revindex0": n - i - 1,
+		"first": i == 0, "last": i == n-1, "length": n,
+	}
+	if prev := i - 1; prev >= 0 && prev < len(items) {
+		v["previtem"] = items[prev]
+	}
+	if next := i + 1; next < len(items) {
+		v["nextitem"] = items[next]
+	}
+	return v
 }

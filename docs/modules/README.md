@@ -409,7 +409,7 @@ Render a Jinja2 template on the control machine and write it to the host.
 | `trim_blocks` | boolean | `true` | Remove the newline after a `{% ... %}` tag |
 | `lstrip_blocks` | boolean | `false` | Remove spaces before a tag at the start of a line (`{%+` keeps them) |
 
-`{%-`/`-%}` strip whitespace, as in Ansible. Returns `dest`, `size`, `checksum` and `backup_file` when a backup was made.
+`{%-`/`-%}` strip whitespace, as in Ansible. `ansible_managed` is "Ansible managed" unless the playbook sets it. Returns `dest`, `size`, `checksum` and `backup_file` when a backup was made.
 
 #### Example
 
