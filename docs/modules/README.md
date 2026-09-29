@@ -1619,18 +1619,21 @@ Docker Compose projects (`docker compose`, else `docker-compose`). Also `communi
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `project_dir` | string | - | Directory of the project (required; `project_src` is an alias) |
-| `file` | string | - | Compose file (the first of `files` is used too) |
+| `file` / `files` | string/list | - | Compose files (`-f` each) |
 | `project_name` | string | - | Project name |
-| `state` | string | `present` | `present` (up), `absent` (down), `restarted`, `pull` or `build` |
-| `services` | list | - | Services (`present`, `restarted`, `build`) |
+| `profiles`, `env_files` | list | - | `--profile`, `--env-file` for each |
+| `state` | string | `present` | `present` (up), `absent` (down), `stopped` (stop), `restarted`, `pull` or `build` |
+| `services` | list | - | Only these services |
 | `detach` | boolean | `true` | `false` runs `up` in the foreground |
-| `build` | boolean | `false` | `present`: `up --build` (`always` = true; `never`, `missing`, `policy` = false) |
-| `force_recreate` | boolean | `false` | `present`: `--force-recreate` |
+| `build` | boolean/string | - | `present`: `true`/`always` = `--build`, `never` = `--no-build`, `policy` = compose decides |
+| `pull` | boolean/string | - | `present`: `always`, `missing`, `never` = `--pull <policy>` (`true` = always), `policy` = compose decides; `build`: `true` = `--pull` |
+| `recreate` | string | `auto` | `always` = `--force-recreate`, `never` = `--no-recreate` (`force_recreate: true` = always) |
+| `remove_orphans` | boolean | `false` | `present` and `absent`: `--remove-orphans` (containers of services no longer in the files) |
+| `wait`, `wait_timeout` | boolean, int | `false` | `present`: `--wait` until services are running/healthy |
 | `remove_volumes` | boolean | `false` | `absent`: `down -v` |
-| `remove_orphans` | boolean | `false` | `absent`: `--remove-orphans` |
-| `nocache`, `pull` | boolean | `false` | `build`: `--no-cache`, `--pull` |
+| `nocache` | boolean | `false` | `build`: `--no-cache` |
 
-`present` and `absent` report `changed` when the project's containers changed; `restarted`, `pull` and `build` always do. Returns `action`.
+`present`, `absent` and `stopped` report `changed` when the project's containers changed; `restarted`, `pull` and `build` always do. Returns `action`.
 
 #### Examples
 

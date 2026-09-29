@@ -83,13 +83,19 @@ func TestUfwRuleCommand(t *testing.T) {
 }
 
 func TestComposeV2Args(t *testing.T) {
-	args := map[string]interface{}{"project_src": "/srv/app", "build": "always", "pull": "missing", "files": []interface{}{"c.yml"}}
+	args := map[string]interface{}{"project_src": "/srv/app", "build": "always", "pull": "missing",
+		"files": []interface{}{"a.yml", "b.yml"}, "profiles": []interface{}{"web"}, "env_files": "x.env",
+		"remove_orphans": true, "recreate": "never", "wait": true, "wait_timeout": 60}
 	composeV2Args(args)
 	assert.Equal(t, "/srv/app", args["project_dir"])
-	assert.Equal(t, true, args["build"])
-	assert.Equal(t, false, args["pull"])
-	assert.Equal(t, "c.yml", args["file"])
+	assert.Equal(t, "up -d --build --pull missing --no-recreate --remove-orphans --wait --wait-timeout 60", upCommand(args))
+	p := newComposeProject("/srv/app", args)
+	assert.Equal(t, []string{"-f", "'a.yml'", "-f", "'b.yml'", "--profile", "'web'", "--env-file", "'x.env'"}, p.flags)
+	assert.Equal(t, "up -d --no-build", upCommand(map[string]interface{}{"build": "never", "pull": "policy"}))
+	assert.Equal(t, "up -d --build --pull always 'web'", upCommand(map[string]interface{}{"build": true, "pull": true, "services": []interface{}{"web"}}))
+	assert.Equal(t, "down -v --remove-orphans", downCommand(map[string]interface{}{"remove_volumes": true, "remove_orphans": true}))
 	assert.Equal(t, "docker_compose", types.ShortModuleName("community.docker.docker_compose_v2"))
+	assert.Equal(t, "docker_compose", types.ShortModuleName("docker_compose_v2"))
 	assert.Equal(t, "ufw", types.ShortModuleName("community.general.ufw"))
 	assert.Equal(t, "timezone", types.ShortModuleName("community.general.timezone"))
 }

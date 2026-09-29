@@ -16,7 +16,7 @@ var moduleArgs = map[string][]string{
 	"copy":             {"backup", "content", "decrypt", "dest", "force", "group", "mode", "owner", "remote_src", "src"},
 	"cron":             {"backup", "content", "cron_type", "day", "hour", "job", "minute", "month", "name", "operation", "special_time", "state", "user", "weekday"},
 	"debug":            {"msg", "var"},
-	"docker_compose":   {"build", "detach", "file", "files", "force_recreate", "nocache", "project_dir", "project_name", "project_src", "pull", "remove_orphans", "remove_volumes", "services", "state"},
+	"docker_compose":   {"build", "detach", "env_files", "file", "files", "force_recreate", "nocache", "profiles", "project_dir", "project_name", "project_src", "pull", "recreate", "remove_orphans", "remove_volumes", "services", "state", "wait", "wait_timeout"},
 	"docker_container": {"command", "cpus", "env", "force", "image", "memory", "name", "networks", "ports", "restart_policy", "state", "volumes"},
 	"docker_host_info": {"containers", "containers_all", "containers_filters"},
 	"docker_image":     {"build_args", "dockerfile", "force", "name", "nocache", "path", "platform", "pull", "state", "tag"},
