@@ -351,14 +351,18 @@ docker-setup:
 	@echo "Setting up Docker test environment..."
 	./docker/setup.sh
 
-docker-up:
-	docker-compose -f docker-compose.test.yml up -d
+# Test containers (ports on 127.0.0.1 only); RIG="ubuntu2404 rocky9" starts a subset
+RIG ?=
+DOCKER_TEST = docker compose -p onigirazu -f docker-compose.test.yml
+
+docker-up: docker-setup
+	$(DOCKER_TEST) up -d --build $(RIG)
 
 docker-down:
-	docker-compose -f docker-compose.test.yml down
+	$(DOCKER_TEST) down
 
 docker-logs:
-	docker-compose -f docker-compose.test.yml logs -f
+	$(DOCKER_TEST) logs -f
 
 docker-test: build docker-setup
 	@if [ -z "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
