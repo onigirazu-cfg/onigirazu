@@ -15,6 +15,9 @@ compat/run.sh                       # all cases
 compat/run.sh compat/cases/loops.yml
 ```
 
+Workflow `Ansible comparison` runs it for pull requests that touch the code, on the docker-test-lab
+runner (label `compat`).
+
 Needs docker, `ansible-playbook` (ansible-core, e.g. `uv tool install ansible-core`) and go. Runs on
 the docker-test-lab VM. A case is a plain Ansible playbook for `hosts: all`; write results under
 `/root/compat` or print them with `debug`.
