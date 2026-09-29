@@ -296,67 +296,41 @@ func TestCronModule_parseCrontab(t *testing.T) {
 	}
 }
 
-func TestCronModule_buildCrontab(t *testing.T) {
-	module := NewCronModule()
+func TestEditCronJobKeepsOtherLines(t *testing.T) {
+	crontab := "MAILTO=ops@example.com\n# nightly report, by hand\n0 2 * * * /usr/local/bin/report\n#Ansible: backup\n0 3 * * * /bin/backup\n"
 
-	tests := []struct {
-		name     string
-		jobs     map[string]string
-		contains []string
-	}{
-		{
-			name: "empty jobs",
-			jobs: map[string]string{},
-			contains: []string{
-				"# Managed by Onigirazu",
-			},
-		},
-		{
-			name: "single job",
-			jobs: map[string]string{
-				"backup-job": "0 2 * * * /usr/bin/backup.sh",
-			},
-			contains: []string{
-				"# Managed by Onigirazu",
-				"# Onigirazu: backup-job",
-				"0 2 * * * /usr/bin/backup.sh",
-			},
-		},
-		{
-			name: "multiple jobs",
-			jobs: map[string]string{
-				"backup-job":  "0 2 * * * /usr/bin/backup.sh",
-				"cleanup-job": "0 3 * * * /usr/bin/cleanup.sh",
-			},
-			contains: []string{
-				"# Managed by Onigirazu",
-				"# Onigirazu: backup-job",
-				"0 2 * * * /usr/bin/backup.sh",
-				"# Onigirazu: cleanup-job",
-				"0 3 * * * /usr/bin/cleanup.sh",
-			},
-		},
+	out, action := editCronJob(crontab, "backup", "0 3 * * * /bin/backup", true)
+	if action != "" || out != crontab {
+		t.Errorf("unchanged job: action %q\n%s", action, out)
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := module.buildCrontab(tt.jobs)
-
-			for _, expected := range tt.contains {
-				if !containsString(result, expected) {
-					t.Errorf("buildCrontab() result does not contain %q\nGot: %s", expected, result)
-				}
-			}
-		})
+	out, action = editCronJob(crontab, "backup", "30 3 * * * /bin/backup", true)
+	want := "MAILTO=ops@example.com\n# nightly report, by hand\n0 2 * * * /usr/local/bin/report\n#Ansible: backup\n30 3 * * * /bin/backup\n"
+	if action != "job_changed" || out != want {
+		t.Errorf("changed job: %q\n%s", action, out)
 	}
-}
 
-// Helper function to check if a string contains a substring
-func containsString(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
+	out, action = editCronJob(crontab, "clean", "@daily /bin/clean", true)
+	if action != "job_added" || out != crontab+"#Ansible: clean\n@daily /bin/clean\n" {
+		t.Errorf("added job: %q\n%s", action, out)
 	}
-	return false
+
+	out, action = editCronJob(crontab, "backup", "", false)
+	if action != "job_removed" || out != "MAILTO=ops@example.com\n# nightly report, by hand\n0 2 * * * /usr/local/bin/report\n" {
+		t.Errorf("removed job: %q\n%s", action, out)
+	}
+
+	if _, none := editCronJob(crontab, "missing", "", false); none != "" {
+		t.Error("removing a job that is not there changes nothing")
+	}
+
+	old := "# Managed by Onigirazu\n\n# Onigirazu: legacy\n* * * * * /bin/x\n"
+	out, action = editCronJob(old, "legacy", "* * * * * /bin/y", true)
+	if action != "job_changed" || out != "# Managed by Onigirazu\n\n# Onigirazu: legacy\n* * * * * /bin/y\n" {
+		t.Errorf("older marker: %q\n%s", action, out)
+	}
+
+	if first, added := editCronJob("", "first", "@reboot /bin/up", true); added != "job_added" || first != "#Ansible: first\n@reboot /bin/up\n" {
+		t.Errorf("empty crontab: %q\n%s", added, first)
+	}
 }
