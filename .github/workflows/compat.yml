@@ -1,0 +1,53 @@
+name: Ansible comparison
+
+# compat/run.sh: every case with ansible-playbook and with onigirazu on fresh
+# containers, compared per task. Runs on the docker-test-lab runner (label
+# compat) for pull requests from this repository that touch the code, and by hand.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'cmd/**'
+      - 'internal/**'
+      - 'pkg/**'
+      - 'compat/**'
+      - 'go.mod'
+      - 'go.sum'
+      - '.github/workflows/compat.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: compat-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compat:
+    # forks and Dependabot never reach the self-hosted runner
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]')
+    runs-on: [self-hosted, compat]
+    timeout-minutes: 30
+    env:
+      COMPAT_IMAGE: onigirazu-compat-ubuntu2404
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Tools
+        run: |
+          echo "/usr/local/go/bin" >> "$GITHUB_PATH"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      # the image carries this checkout's rig key; layers other than the key are cached
+      - name: Rig image
+        run: |
+          docker/setup.sh >/dev/null
+          docker build -q -t "$COMPAT_IMAGE" -f docker/Dockerfile.ubuntu2404 docker >/dev/null
+
+      - name: Compare with ansible-playbook
+        run: |
+          ansible-playbook --version | head -1
+          compat/run.sh

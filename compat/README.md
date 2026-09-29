@@ -15,6 +15,9 @@ compat/run.sh                       # all cases
 compat/run.sh compat/cases/loops.yml
 ```
 
+Workflow `Ansible comparison` runs it for pull requests that touch the code, on the docker-test-lab
+runner (label `compat`).
+
 A case that starts with `# compat-hosts: N` runs on N hosts (`h1`..`hN`, in groups `odd` and `even`); each host's
 tasks and files are compared on their own, since hosts run in parallel.
 

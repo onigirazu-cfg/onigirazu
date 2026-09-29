@@ -16,7 +16,7 @@ selected=()
 all=""
 while IFS= read -r f; do
   case "$f" in
-    *.md | docs/* | examples/* | scripts/* | e2e/image/* | docker/* | docker-compose*.yml | Makefile | LICENSE* | \
+    *.md | docs/* | examples/* | scripts/* | e2e/image/* | compat/* | docker/* | docker-compose*.yml | Makefile | LICENSE* | \
       .goreleaser.yml | .golangci.yml | .gitignore | *_test.go | testdata/* | */testdata/*) ;;
     .github/workflows/e2e.yml) all=1 ;;
     .github/*) ;;

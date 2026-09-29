@@ -1,3 +1,4 @@
 self-hosted-runner:
   labels:
     - vsphere-e2e
+    - compat
