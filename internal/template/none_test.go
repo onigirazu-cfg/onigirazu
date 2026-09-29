@@ -17,8 +17,8 @@ func TestRenderNone(t *testing.T) {
 		"{{ None }}":             "",
 		"{{ d.k }}|{{ d['k'] }}": "|",
 		"{{ d.l[0] }}":           "",
-		"{{ n is none }}":        "true",
-		"{{ n is defined }}":     "true",
+		"{{ n is none }}":        "True",
+		"{{ n is defined }}":     "True",
 		"{{ name }}{{ n }}":      "x",
 	}
 	for tpl, want := range ok {

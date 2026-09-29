@@ -2,6 +2,7 @@ package modules
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -40,13 +41,11 @@ func (m *DebugModule) Execute(ctx context.Context, host types.Host, args map[str
 	}
 
 	// Get the message to print
-	msg := ""
+	// msg keeps its type (a list stays a list, as in Ansible); var= prints
+	// "name: value"; values that are not text print as JSON
+	var msg interface{}
 	if msgVal, exists := args["msg"]; exists {
-		if msgStr, ok := msgVal.(string); ok {
-			msg = msgStr
-		} else {
-			msg = fmt.Sprintf("%v", msgVal)
-		}
+		msg = msgVal
 	} else if varVal, exists := args["var"]; exists {
 		// Support for var parameter (print variable)
 		if varStr, ok := varVal.(string); ok {
@@ -61,10 +60,10 @@ func (m *DebugModule) Execute(ctx context.Context, host types.Host, args map[str
 			if !found {
 				value = "VARIABLE IS NOT DEFINED!"
 			}
-			msg = fmt.Sprintf("%s: %v", varStr, value)
+			msg = varStr + ": " + debugText(value)
 			result.Output[varStr] = value
 		} else {
-			msg = fmt.Sprintf("%v", varVal)
+			msg = debugText(varVal)
 		}
 	} else {
 		result.Success = false
@@ -109,4 +108,16 @@ func lookupVar(vars map[string]interface{}, path string) (interface{}, bool) {
 		}
 	}
 	return cur, true
+}
+
+// debugText prints a value the way Ansible's output shows it: text as is,
+// anything else as JSON
+func debugText(v interface{}) string {
+	if s, ok := v.(string); ok {
+		return s
+	}
+	if b, err := json.Marshal(v); err == nil {
+		return string(b)
+	}
+	return fmt.Sprint(v)
 }

@@ -145,10 +145,9 @@ func TestDebugModule_Execute_WithNonStringMsg(t *testing.T) {
 		t.Errorf("Expected success, got failure: %s", result.Error)
 	}
 
-	if msg, ok := result.Output["msg"].(string); !ok {
-		t.Errorf("Expected msg to be string, got %T", result.Output["msg"])
-	} else if msg != "123" {
-		t.Errorf("Expected msg='123', got %s", msg)
+	// msg keeps its type, as in Ansible
+	if msg := result.Output["msg"]; msg != 123 {
+		t.Errorf("Expected msg=123, got %v (%T)", msg, msg)
 	}
 }
 

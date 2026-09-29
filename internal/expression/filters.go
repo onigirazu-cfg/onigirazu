@@ -44,6 +44,30 @@ func filterFunctions() []expr.Option {
 	return []expr.Option{
 		expr.DisableBuiltin("map"),
 		expr.DisableBuiltin("sort"),
+		// Jinja's string and join print as Python does (True, ['a'])
+		expr.DisableBuiltin("string"),
+		expr.DisableBuiltin("join"),
+		expr.DisableBuiltin("lower"),
+		expr.DisableBuiltin("upper"),
+		// {{ flag | lower }} is the usual way to get "true" out of a boolean
+		fn("lower", func(p ...interface{}) (interface{}, error) { return strings.ToLower(PyStr(p[0])), nil }),
+		fn("upper", func(p ...interface{}) (interface{}, error) { return strings.ToUpper(PyStr(p[0])), nil }),
+		fn("string", func(p ...interface{}) (interface{}, error) { return PyStr(p[0]), nil }),
+		fn("join", func(p ...interface{}) (interface{}, error) {
+			items, err := Items(p[0])
+			if err != nil {
+				return nil, fmt.Errorf("join: %w", err)
+			}
+			sep := ""
+			if len(p) > 1 {
+				sep = PyStr(p[1])
+			}
+			parts := make([]string, len(items))
+			for i, item := range items {
+				parts[i] = PyStr(item)
+			}
+			return strings.Join(parts, sep), nil
+		}),
 		fn("to_json", func(p ...interface{}) (interface{}, error) {
 			out, err := json.Marshal(p[0])
 			return string(out), err
@@ -380,7 +404,7 @@ func filterFunctions() []expr.Option {
 			var b strings.Builder
 			for _, v := range p {
 				if v != nil {
-					b.WriteString(str(v))
+					b.WriteString(PyStr(v))
 				}
 			}
 			return b.String(), nil

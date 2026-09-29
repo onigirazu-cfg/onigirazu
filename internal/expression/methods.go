@@ -174,7 +174,7 @@ func stringMethod(s, name string, args []interface{}) (interface{}, error) {
 		}
 		parts := make([]string, len(items))
 		for i, item := range items {
-			parts[i] = fmt.Sprint(item)
+			parts[i] = PyStr(item)
 		}
 		return strings.Join(parts, s), nil
 	case "splitlines":
