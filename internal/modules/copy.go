@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/onigirazu-cfg/onigirazu/internal/vault"
+
 	sshpkg "github.com/onigirazu-cfg/onigirazu/internal/ssh"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
@@ -94,6 +96,15 @@ func (m *CopyModule) Execute(ctx context.Context, host types.Host, args map[stri
 			result.Failed = true
 			result.Error = fmt.Sprintf("failed to read source file %s: %v", src, err)
 			return result, err
+		}
+		// a vault-encrypted source is copied decrypted, as Ansible does
+		// (decrypt: false copies it as it is)
+		if vault.IsEncrypted(sourceData) && getBoolArg(args, "decrypt", true) {
+			if sourceData, err = vault.Open(sourceData); err != nil {
+				result.Failed = true
+				result.Error = fmt.Sprintf("%s: %v", src, err)
+				return result, err
+			}
 		}
 		result.Output["source"] = src
 	} else {

@@ -181,9 +181,13 @@ Existing Ansible content runs as it is in most cases. What is supported:
 - **Command line**: `-i`, `-e` (also `@file`), `--limit`, `--tags`/`--skip-tags`, `--check`,
   `--diff`, `-b`/`--become-user`, `-u`, `--private-key`, `--start-at-task`, `--list-hosts`,
   `--list-tasks`, `--list-tags`, `--syntax-check`
+- **Ansible Vault**: encrypted files and `!vault` values anywhere variables are read, `copy` and
+  `template` sources; `--vault-password-file`, `--vault-id`, `--ask-vault-pass`, the
+  `ANSIBLE_VAULT_*` variables and `ansible.cfg`; `onigirazu vault encrypt|decrypt|view|encrypt_string`.
+  See [docs/VAULT.md](docs/VAULT.md)
 
 Not supported: Python modules and plugins from collections (Onigirazu has its own modules;
-`validate` names any module it lacks), Windows hosts (WinRM), and `ansible-vault` files.
+`validate` names any module it lacks) and Windows hosts (WinRM).
 For Packer builds see [docs/PACKER.md](docs/PACKER.md).
 
 ## Playbooks
@@ -410,6 +414,7 @@ return values and examples: [docs/modules/README.md](docs/modules/README.md). Ne
 | `graph PLAYBOOK` | Plays, tasks, handlers and variables as ASCII, DOT or Mermaid |
 | `inventory` | `--list`, `--host`, `--graph`, `--json` (as `ansible-inventory`) |
 | `galaxy install -r FILE` | Install roles and collections from a requirements file |
+| `vault` | `encrypt`, `decrypt`, `view`, `encrypt_string` of Ansible Vault data |
 | `healthcheck` | Reachability, disk, memory, CPU and services of the inventory hosts |
 | `audit` | History of runs: `list`, `show`, `host`, `stats`, `export`, `clear` |
 | `list-executions`, `show-execution`, `show-last-execution` | Results of `apply --background` runs |

@@ -2,9 +2,10 @@ package parser
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/onigirazu-cfg/onigirazu/internal/vault"
 
 	"gopkg.in/yaml.v3"
 
@@ -64,7 +65,7 @@ func importItems(seq *yaml.Node, dir string, depth int) ([]*yaml.Node, []string,
 		if !filepath.IsAbs(path) {
 			path = filepath.Join(dir, path)
 		}
-		data, err := os.ReadFile(path) // #nosec G304 -- a playbook the playbook imports
+		data, err := vault.ReadFile(path) // #nosec G304 -- a playbook the playbook imports
 		if err != nil {
 			return nil, nil, false, fmt.Errorf("import_playbook: %w", err)
 		}

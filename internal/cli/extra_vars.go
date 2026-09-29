@@ -2,8 +2,9 @@ package cli
 
 import (
 	"fmt"
-	"os"
 	"strings"
+
+	"github.com/onigirazu-cfg/onigirazu/internal/vault"
 
 	"gopkg.in/yaml.v3"
 )
@@ -20,7 +21,7 @@ func parseExtraVars(values []string) (map[string]interface{}, error) {
 		case value == "":
 			continue
 		case strings.HasPrefix(value, "@"):
-			data, err := os.ReadFile(strings.TrimPrefix(value, "@")) // #nosec G304 -- the user names the file
+			data, err := vault.ReadFile(strings.TrimPrefix(value, "@")) // #nosec G304 -- the user names the file
 			if err != nil {
 				return nil, fmt.Errorf("-e %s: %w", value, err)
 			}

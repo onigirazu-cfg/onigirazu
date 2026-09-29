@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/onigirazu-cfg/onigirazu/internal/vault"
+
 	"gopkg.in/yaml.v3"
 
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
@@ -92,7 +94,7 @@ func readVarsDir(dir string) (map[string]interface{}, error) {
 }
 
 func readVarsFile(path string) (map[string]interface{}, error) {
-	data, err := os.ReadFile(path)
+	data, err := vault.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}

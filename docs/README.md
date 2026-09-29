@@ -36,6 +36,7 @@ Start with the [Quick Start](QUICK_START_CONFIGURATION.md). The project
 ## Configuration and security
 
 - [Configuration reference](CONFIGURATION_REFERENCE.md) — `onigirazu.yml` and `ONIGIRAZU_*` variables
+- [Ansible Vault](VAULT.md) — encrypted files and `!vault` values, passwords, `onigirazu vault`
 - [Secrets](BITWARDEN_INTEGRATION.md) — Bitwarden/Vaultwarden and HashiCorp Vault in templates
 - [Security policy](SECURITY_POLICY_GUIDE.md) — restricting hosts, modules, paths and commands
 - [Troubleshooting](TROUBLESHOOTING_CONFIG.md)

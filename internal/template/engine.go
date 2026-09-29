@@ -12,6 +12,8 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/onigirazu-cfg/onigirazu/internal/vault"
+
 	"github.com/onigirazu-cfg/onigirazu/internal/bufferpool"
 	"github.com/onigirazu-cfg/onigirazu/internal/cache"
 	"github.com/onigirazu-cfg/onigirazu/internal/expression"
@@ -369,6 +371,11 @@ func (e *Engine) RenderFile(ctx context.Context, filePath string, variables map[
 	content, err := os.ReadFile(filePath) // #nosec G304 -- filePath is validated by security validator
 	if err != nil {
 		return "", fmt.Errorf("failed to read template file %s: %w", filePath, err)
+	}
+	if vault.IsEncrypted(content) {
+		if content, err = vault.Open(content); err != nil {
+			return "", fmt.Errorf("%s: %w", filePath, err)
+		}
 	}
 
 	return e.Render(ctx, string(content), variables)

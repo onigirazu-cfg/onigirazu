@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/onigirazu-cfg/onigirazu/internal/vault"
+
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 	"gopkg.in/yaml.v3"
 )
@@ -66,7 +68,7 @@ func (m *IncludeVarsModule) Execute(ctx context.Context, host types.Host, args m
 
 	vars := map[string]interface{}{}
 	for _, f := range files {
-		data, err := os.ReadFile(f) // #nosec G304 -- the playbook names its vars files
+		data, err := vault.ReadFile(f) // #nosec G304 -- the playbook names its vars files
 		if err != nil {
 			return fail(err)
 		}

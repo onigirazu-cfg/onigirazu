@@ -3,7 +3,8 @@ package parser
 import (
 	"context"
 	"fmt"
-	"os"
+
+	"github.com/onigirazu-cfg/onigirazu/internal/vault"
 
 	"gopkg.in/yaml.v3"
 
@@ -35,7 +36,7 @@ func (p *Parser) SetModuleSyntaxValidator(validator *validator.ModuleSyntaxValid
 
 // ParsePlaybook parses playbook from YAML file
 func (p *Parser) ParsePlaybook(ctx context.Context, filePath string) (*types.Playbook, error) {
-	data, err := os.ReadFile(filePath) // #nosec G304 -- filePath is provided by user as playbook file
+	data, err := vault.ReadFile(filePath) // #nosec G304 -- filePath is provided by user as playbook file
 	if err != nil {
 		return nil, fmt.Errorf("error reading playbook: %w", err)
 	}
@@ -125,7 +126,7 @@ func (p *Parser) ParseInventory(ctx context.Context, filePath string) (*types.In
 	}
 
 	// Fallback to old YAML-only parsing for backward compatibility
-	data, err := os.ReadFile(filePath) // #nosec G304 -- filePath is provided by user as inventory file
+	data, err := vault.ReadFile(filePath) // #nosec G304 -- filePath is provided by user as inventory file
 	if err != nil {
 		return nil, fmt.Errorf("error reading inventory: %w", err)
 	}

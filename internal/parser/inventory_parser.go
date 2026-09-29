@@ -11,6 +11,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/onigirazu-cfg/onigirazu/internal/vault"
+
 	"github.com/pelletier/go-toml/v2"
 	"gopkg.in/yaml.v3"
 
@@ -61,7 +63,7 @@ func (p *InventoryParser) FindInventoryFileWithPath(explicitPath, baseDir string
 // ParseInventoryFile parses inventory file and auto-detects format
 func (p *InventoryParser) ParseInventoryFile(ctx context.Context, filePath string) (*types.Inventory, error) {
 	// Read file content
-	data, err := os.ReadFile(filePath) // #nosec G304 -- filePath is provided by user
+	data, err := vault.ReadFile(filePath) // #nosec G304 -- filePath is provided by user
 	if err != nil {
 		return nil, fmt.Errorf("error reading inventory file: %w", err)
 	}
