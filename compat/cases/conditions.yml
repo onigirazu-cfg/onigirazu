@@ -17,9 +17,10 @@
     - name: string truthiness
       debug: msg="s is truthy"
       when: s | bool
+    # a bare non-boolean "when: empty" fails in ansible-core 2.19+ (README: known differences)
     - name: empty string is false
       debug: msg="never"
-      when: empty
+      when: empty | length > 0
     - name: defined and none
       debug: msg="{{ nothing is defined }} {{ nothing is none }} {{ missing is defined }}"
     - name: in list
