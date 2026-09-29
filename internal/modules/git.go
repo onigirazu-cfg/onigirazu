@@ -257,6 +257,19 @@ func (m *GitModuleFixed) updateRepository(exec *executor.CommandExecutor, dest, 
 	// branch or tag may have no local ref, FETCH_HEAD is it
 	if depth > 0 && version != "HEAD" {
 		err = m.checkoutVersion(exec, dest, "FETCH_HEAD")
+	} else if version == "HEAD" {
+		// HEAD is the remote's default branch, as in Ansible: move to its tip
+		var target string
+		target, err = m.executeInDirectory(exec, dest, "git", "rev-parse", "--abbrev-ref", "origin/HEAD")
+		if err != nil {
+			// a clone of one branch or tag has no origin/HEAD yet
+			if _, err = m.executeInDirectory(exec, dest, "git", "remote", "set-head", "origin", "--auto"); err == nil {
+				target, err = m.executeInDirectory(exec, dest, "git", "rev-parse", "--abbrev-ref", "origin/HEAD")
+			}
+		}
+		if err == nil {
+			err = m.checkoutVersion(exec, dest, strings.TrimSpace(target))
+		}
 	} else {
 		err = m.checkoutVersion(exec, dest, version)
 	}

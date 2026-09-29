@@ -1359,7 +1359,7 @@ Clone a repository on the host, or update an existing clone.
 |-----------|------|---------|-------------|
 | `repo` | string | - | Repository URL (required; `name` is an alias) |
 | `dest` | string | - | Destination path (required) |
-| `version` | string | `HEAD` | Branch, tag or commit to check out |
+| `version` | string | `HEAD` | Branch, tag or commit to check out; `HEAD` is the tip of the remote's default branch |
 | `update` | boolean | `true` | Fetch and check out `version` in an existing clone |
 | `force` | boolean | `false` | Clone even when `dest` exists and is not a git repository |
 | `depth` | integer | - | Shallow clone with that many commits; a branch or tag clones just that ref, a commit needs its full hash |
