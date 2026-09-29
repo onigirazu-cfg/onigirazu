@@ -57,6 +57,8 @@ A task notifies only when it reports `changed`. A task that is `ok`, skipped or 
 
 A `notify` name that matches no handler is ignored silently.
 
+Of handlers with the same name, only the first runs when that name is notified, as in Ansible (a role included twice loads its handlers twice). Every handler that `listen`s to a notified topic runs.
+
 ## Listen Directive
 
 `listen` lets a handler respond to an event name instead of (or in addition to) its own name, so several handlers can react to one notification.
