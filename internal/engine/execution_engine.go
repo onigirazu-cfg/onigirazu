@@ -1235,11 +1235,9 @@ func (e *ExecutionEngine) finishTask(task *types.Task, host *types.Host, result 
 	// result, state and the returned error get a placeholder
 	result.TaskKey = task.Key
 	// an unnamed task is called after its module, as Ansible does
-	switch {
-	case result.TaskName == "":
-		result.TaskName = task.Module
-	case task.NameGenerated:
-		// "debug task (item 2)" -> "debug (item 2)"
+	// "" -> "debug", " (item 2)" -> "debug (item 2)",
+	// "debug task (item 2)" -> "debug (item 2)"
+	if task.Name == "" || task.NameGenerated {
 		result.TaskName = task.Module + strings.TrimPrefix(result.TaskName, task.Name)
 	}
 	if task.PreventDestroy {
@@ -1646,6 +1644,22 @@ func (e *ExecutionEngine) hostFactsOf(host string) (map[string]interface{}, bool
 //   - "a-z" -> ['a', 'b', 'c', ..., 'z']
 //   - "0-3" -> [0, 1, 2, 3]
 func (e *ExecutionEngine) getLoopItems(ctx context.Context, loop *types.Loop, variables map[string]interface{}) ([]interface{}, error) {
+	items, err := e.loopItems(ctx, loop, variables)
+	if err != nil || !loop.FlattenOnce {
+		return items, err
+	}
+	flat := make([]interface{}, 0, len(items))
+	for _, item := range items {
+		if list, ok := item.([]interface{}); ok {
+			flat = append(flat, list...)
+		} else {
+			flat = append(flat, item)
+		}
+	}
+	return flat, nil
+}
+
+func (e *ExecutionEngine) loopItems(ctx context.Context, loop *types.Loop, variables map[string]interface{}) ([]interface{}, error) {
 	if loop.Items != nil {
 		return e.renderLoopItems(ctx, loop.Items, variables)
 	}

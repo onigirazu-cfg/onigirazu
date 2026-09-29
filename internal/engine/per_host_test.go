@@ -509,3 +509,27 @@ func TestUnnamedTask_ResultIsNamedAfterItsModule(t *testing.T) {
 	require.NoError(t, engine.executeTaskOnHost(context.Background(), named, &host, map[string]interface{}{}, play))
 	assert.Equal(t, "debug task", play.Hosts[0].Tasks[0].TaskName, "a name the user wrote stays")
 }
+
+func TestWithItems_FlattensOneLevel(t *testing.T) {
+	engine, _, _, _, _, mockTemplate := createTestEngine()
+	mockTemplate.On("RenderTaskArgs", mock.Anything, mock.Anything, mock.Anything).
+		Return(func(_ context.Context, args map[string]interface{}, _ map[string]interface{}) map[string]interface{} {
+			return args
+		}, nil)
+	items, err := engine.getLoopItems(context.Background(),
+		&types.Loop{Items: []interface{}{[]interface{}{1, []interface{}{2}}, 3}, FlattenOnce: true}, map[string]interface{}{})
+	require.NoError(t, err)
+	assert.Equal(t, []interface{}{1, []interface{}{2}, 3}, items)
+	items, err = engine.getLoopItems(context.Background(),
+		&types.Loop{Expr: "l", FlattenOnce: true}, map[string]interface{}{"l": []interface{}{[]interface{}{"a"}, "b"}})
+	require.NoError(t, err)
+	assert.Equal(t, []interface{}{"a", "b"}, items)
+}
+
+func TestUnnamedLoopTask_ItemsAreNamedAfterTheModule(t *testing.T) {
+	engine, _, _ := perHostEngine(t, types.TaskResult{Success: true, TaskName: " (item 2)"})
+	host := twoHosts()[0]
+	play := &types.PlayResult{Success: true}
+	require.NoError(t, engine.executeTaskOnHost(context.Background(), &types.Task{Module: "debug"}, &host, map[string]interface{}{}, play))
+	assert.Equal(t, "debug (item 2)", play.Hosts[0].Tasks[0].TaskName)
+}
