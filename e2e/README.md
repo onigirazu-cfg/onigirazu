@@ -14,6 +14,14 @@ Runs every case in `cases/` on disposable vSphere VMs cloned from the current
 - Shards: one per ~5 minutes of cases, at most four (`E2E_SHARD=i/n`), each on its
   own VMs, balanced by `case-seconds.tsv` (longest case first onto the least loaded
   shard). Add a new slow case there.
+- Base templates: `image/build.sh` (workflow `E2E base image`: nightly at 03:30 UTC,
+  on changes to `image/`, `images.sh`, `setup-lib.sh`, and by hand) clones each golden
+  `[latest]` image, preinstalls what the cases install (`image/prepare.sh`: packages,
+  Docker and the container images), seals it like the golden image (`image/seal.sh`)
+  and keeps it as `e2e-base-<os>-<golden item>-<time>` in the e2e folder (two per OS).
+  Pull requests and manual runs clone the base of the current golden item when there
+  is one (`E2E_BASE=1`), otherwise the golden image; the nightly run always tests the
+  golden images. A new install in a case's `setup.sh` belongs in `prepare.sh` too.
 - VMs are named `tmp-e2e-onigirazu-<run>-<os>`, live in a dedicated folder and
   carry a "TEMPORARY" note with the run link and expiry time.
 - `janitor.sh` runs hourly and deletes e2e VMs older than 3 hours from that

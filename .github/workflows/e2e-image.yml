@@ -1,0 +1,67 @@
+name: E2E base image
+
+# Builds the e2e base templates (e2e/image/build.sh): the golden images with
+# what the e2e cases install, so e2e VMs skip the installs. Nightly after the
+# golden images are rebuilt, when the preparation changes, and by hand.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '30 3 * * *'
+  push:
+    branches: [ main ]
+    paths:
+      - e2e/image/**
+      - e2e/images.sh
+      - e2e/setup-lib.sh
+      - .github/workflows/e2e-image.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-image
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: [self-hosted, vsphere-e2e]
+    timeout-minutes: 90
+    env:
+      GOVC_VERSION: v0.56.0
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: hashicorp/setup-terraform@v4
+        id: terraform
+        continue-on-error: true
+        with:
+          terraform_wrapper: false
+      - uses: hashicorp/setup-terraform@v4
+        if: steps.terraform.outcome == 'failure'
+        with:
+          terraform_wrapper: false
+
+      - name: Install govc
+        run: |
+          dir="$RUNNER_TEMP/govc-$GOVC_VERSION"
+          if [ ! -x "$dir/govc" ]; then
+            mkdir -p "$dir"
+            curl -fsSL "https://github.com/vmware/govmomi/releases/download/$GOVC_VERSION/govc_Linux_x86_64.tar.gz" | tar -xz -C "$dir" govc
+          fi
+          echo "$dir" >> "$GITHUB_PATH"
+
+      - name: Build the base templates
+        env:
+          TF_VAR_vsphere_server: ${{ secrets.VSPHERE_SERVER }}
+          TF_VAR_vsphere_user: ${{ secrets.VSPHERE_USER }}
+          TF_VAR_vsphere_password: ${{ secrets.VSPHERE_PASSWORD }}
+          TF_VAR_datacenter: ${{ secrets.E2E_DATACENTER }}
+          TF_VAR_cluster: ${{ secrets.E2E_CLUSTER }}
+          TF_VAR_host: ${{ secrets.E2E_HOST }}
+          TF_VAR_datastore: ${{ secrets.E2E_DATASTORE }}
+          TF_VAR_network: ${{ secrets.E2E_NETWORK }}
+          TF_VAR_folder: ${{ secrets.E2E_FOLDER }}
+          TF_VAR_library: ${{ secrets.E2E_LIBRARY }}
+          RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: e2e/image/build.sh
