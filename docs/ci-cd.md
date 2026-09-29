@@ -31,6 +31,7 @@ The release chain is described in [Release Process](RELEASE_PROCESS.md).
 | `install` | build and copy to `/usr/local/bin` |
 | `test`, `test-race`, `test-coverage`, `bench` | tests |
 | `fmt`, `vet`, `lint`, `security`, `vuln-check` | go fmt + goimports, go vet, golangci-lint, gosec, govulncheck |
+| `hooks` | Use `.githooks`: pre-commit checks gofmt, regenerates the lint argument table when a module changes, runs golangci-lint on the changes |
 | `quality` | fmt, vet, lint, security, test |
 | `release-test` | GoReleaser snapshot, no publish |
 | `release` | prompts for a version, pushes the tag |
