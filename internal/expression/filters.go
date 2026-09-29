@@ -197,6 +197,10 @@ func filterFunctions() []expr.Option {
 		}),
 		fn("password_hash", passwordHash),
 		fn("jinja_lookup", jinjaLookup),
+		fn("jinja_defined", func(p ...interface{}) (interface{}, error) {
+			vars, _ := p[0].(map[string]interface{})
+			return jinjaDefined(vars, str(p[1]), p[2]), nil
+		}),
 		fn("jinja_query", jinjaQuery),
 		fn("combine", func(p ...interface{}) (interface{}, error) {
 			out := map[string]interface{}{}

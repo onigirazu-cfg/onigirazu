@@ -393,6 +393,7 @@ loop: "{{ query('fileglob', 'files/conf.d/*.conf') }}"
 - String concatenation: `{{ name ~ '-' ~ version }}`, also inside parentheses and lists, as inline ifs (`('yes' if x else 'no')`) (`when: ('version ' ~ v) not in out.stdout`); `+` adds numbers and concatenates strings and lists (`(a | intersect(b) + ['Other']) | first`)
 - `{% set name = expression %}` in templates, for the rest of the template (inside a for loop, for that iteration)
 - `True`, `False` and `None` as in Jinja; `and`, `or`, `not`, `in`
+- A variable set to `null`/`None` is defined (`x is defined` is true, `x is none` is true) and prints as an empty string, as in Ansible; an undefined name in `{{ }}` fails the task. Unlike Ansible, `default(...)` also replaces `None`
 - Dictionary methods `d.keys()` and `d.values()`
 - Precedence as in Jinja: a filter applies to the operand right before it
   (`a and b | length > 0` is `a and ((b | length) > 0)`), `not` is weaker than

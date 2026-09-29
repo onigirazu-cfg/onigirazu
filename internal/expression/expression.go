@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -202,10 +203,16 @@ func translateCode(code string) string {
 		parts := definedTest.FindStringSubmatch(m)
 		// optional chaining: a missing parent is "not defined", not an error
 		subject := strings.ReplaceAll(parts[1], ".", "?.")
-		if parts[2] == "defined" {
-			return "(" + subject + " != nil)"
+		// a variable that holds None is defined; the subject itself is the
+		// answer for paths LookupPath cannot walk
+		if staticPath.MatchString(parts[1]) {
+			subject = "nil" // walked by name, not evaluated: a[5] past the end is undefined
 		}
-		return "(" + subject + " == nil)"
+		test := "jinja_defined(" + lookupVars + ", " + strconv.Quote(parts[1]) + ", " + subject + ")"
+		if parts[2] == "defined" {
+			return test
+		}
+		return "(!" + test + ")"
 	})
 	code = bareFilter.ReplaceAllStringFunc(code, func(m string) string {
 		parts := bareFilter.FindStringSubmatch(m)
