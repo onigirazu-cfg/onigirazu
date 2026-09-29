@@ -44,3 +44,22 @@ func TestJinjaStringsPrintLikePython(t *testing.T) {
 		}
 	}
 }
+
+func TestPyJSON(t *testing.T) {
+	vars := map[string]interface{}{
+		"d": map[string]interface{}{"k": []interface{}{1, 2}, "é": "<a&b>", "n": nil, "f": 1.0},
+		"n": map[string]interface{}{"b": map[string]interface{}{"x": 1}, "a": []interface{}{1, "y"}},
+	}
+	cases := map[string]string{
+		"d | to_json":      `{"f": 1.0, "k": [1, 2], "n": null, "\u00e9": "<a&b>"}`,
+		"n | to_nice_json": "{\n    \"a\": [\n        1,\n        \"y\"\n    ],\n    \"b\": {\n        \"x\": 1\n    }\n}",
+		"[] | to_json":     "[]",
+		"'{\"x\": 1, \"y\": 2.5}' | from_json | string": "{'x': 1, 'y': 2.5}",
+	}
+	for in, want := range cases {
+		got, err := Eval(in, vars)
+		if err != nil || got != want {
+			t.Errorf("%s = %q, %v; want %q", in, got, err, want)
+		}
+	}
+}

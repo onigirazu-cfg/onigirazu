@@ -7,7 +7,6 @@ import (
 	"crypto/sha512"
 	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"hash"
 	"path"
@@ -68,23 +67,13 @@ func filterFunctions() []expr.Option {
 			}
 			return strings.Join(parts, sep), nil
 		}),
-		fn("to_json", func(p ...interface{}) (interface{}, error) {
-			out, err := json.Marshal(p[0])
-			return string(out), err
-		}),
-		fn("to_nice_json", func(p ...interface{}) (interface{}, error) {
-			out, err := json.MarshalIndent(p[0], "", "    ")
-			return string(out), err
-		}),
+		fn("to_json", func(p ...interface{}) (interface{}, error) { return pyJSON(p[0], 0) }),
+		fn("to_nice_json", func(p ...interface{}) (interface{}, error) { return pyJSON(p[0], 4) }),
 		fn("random", jinjaRandom),
 		fn("shuffle", jinjaShuffle),
 		fn("to_yaml", toYAML),
 		fn("to_nice_yaml", toYAML),
-		fn("from_json", func(p ...interface{}) (interface{}, error) {
-			var out interface{}
-			err := json.Unmarshal([]byte(str(p[0])), &out)
-			return out, err
-		}),
+		fn("from_json", func(p ...interface{}) (interface{}, error) { return fromJSON(str(p[0])) }),
 		fn("from_yaml", func(p ...interface{}) (interface{}, error) {
 			var out interface{}
 			err := yaml.Unmarshal([]byte(str(p[0])), &out)
