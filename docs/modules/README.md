@@ -1403,8 +1403,9 @@ Cron jobs in a user's crontab, whole crontabs, and files in `/etc/cron.*`.
 | `cron_type` | string | `d` | `system`: `d` (`/etc/cron.d`), `hourly`, `daily`, `weekly` or `monthly` |
 | `backup` | boolean | `true` | `file`: save the old crontab to `/root/crontab.<user>.<time>.backup` |
 
-`operation: job` names each job with a `# Onigirazu: <name>` (or `# Ansible: <name>`) comment and
-rewrites the whole crontab with the named jobs only: lines without such a comment are dropped.
+`operation: job` names each job with a `#Ansible: <name>` comment above its line, as Ansible does
+(older `# Onigirazu: <name>` comments are read too). Only that job's lines change; the rest of the
+crontab stays as it is. `--diff` shows the change.
 `list` returns `jobs` (name to line), `jobs_count` and `raw_crontab`.
 
 #### Examples

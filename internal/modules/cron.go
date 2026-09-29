@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -103,57 +104,93 @@ func (m *CronModule) handleJob(ctx context.Context, exec *executor.CommandExecut
 		return m.failResult(result, "name parameter is required")
 	}
 
-	changed := false
-
 	// Get current crontab
 	currentCrontab, err := m.getCrontab(exec, user)
 	if err != nil && !strings.Contains(err.Error(), "no crontab") {
 		return m.failResult(result, fmt.Sprintf("failed to get crontab: %v", err))
 	}
 
-	// Parse current jobs
-	jobs := m.parseCrontab(currentCrontab)
-
+	var cronLine string
 	if state == "present" {
 		if job == "" {
 			return m.failResult(result, "job parameter is required when state is present")
 		}
-
-		// Build cron line
-		var cronLine string
 		if special_time != "" {
 			cronLine = fmt.Sprintf("@%s %s", special_time, job)
 		} else {
 			cronLine = fmt.Sprintf("%s %s %s %s %s %s", minute, hour, day, month, weekday, job)
 		}
+	}
 
-		// Check if job already exists
-		existingJob, exists := jobs[name]
-		if !exists || existingJob != cronLine {
-			jobs[name] = cronLine
-			changed = true
-			result.Output["action"] = "job_added"
-		}
-	} else if state == "absent" {
-		if _, exists := jobs[name]; exists {
-			delete(jobs, name)
-			changed = true
-			result.Output["action"] = "job_removed"
-		}
+	// only this job's lines change; every other line stays as it is
+	newCrontab, action := editCronJob(currentCrontab, name, cronLine, state == "present")
+	changed := action != ""
+	if changed {
+		result.Output["action"] = action
+		addDiff(args, &result, "crontab of "+user, currentCrontab, newCrontab)
 	}
 
 	// Write crontab if changed; check mode stops here
 	if changed && !inCheckMode(args) {
-		newCrontab := m.buildCrontab(jobs)
 		if err := m.setCrontab(exec, user, newCrontab); err != nil {
 			return m.failResult(result, fmt.Sprintf("failed to set crontab: %v", err))
 		}
 	}
 
 	result.Changed = changed
-	result.Output["jobs_count"] = len(jobs)
+	result.Output["jobs_count"] = len(m.parseCrontab(newCrontab))
 	result.Duration = time.Since(result.Timestamp)
 	return result, nil
+}
+
+// cronMarker is the name comment above a managed job: "#Ansible: name" as
+// Ansible writes it, and the "# Onigirazu: name" older versions wrote
+var cronMarker = regexp.MustCompile(`^#\s*(?:Ansible|Onigirazu):\s*(.*?)\s*$`)
+
+// editCronJob sets or removes the job called name in a crontab and keeps
+// every other line. action is job_added, job_changed, job_removed or "".
+func editCronJob(crontab, name, line string, present bool) (string, string) {
+	lines := strings.Split(strings.TrimRight(crontab, "\n"), "\n")
+	if crontab == "" {
+		lines = nil
+	}
+	for i, l := range lines {
+		m := cronMarker.FindStringSubmatch(strings.TrimSpace(l))
+		if m == nil || m[1] != name {
+			continue
+		}
+		hasJob := i+1 < len(lines) && !strings.HasPrefix(strings.TrimSpace(lines[i+1]), "#") && strings.TrimSpace(lines[i+1]) != ""
+		if !present {
+			end := i + 1
+			if hasJob {
+				end = i + 2
+			}
+			out := append(append([]string{}, lines[:i]...), lines[end:]...)
+			return joinCrontab(out), "job_removed"
+		}
+		if hasJob && strings.TrimSpace(lines[i+1]) == line {
+			return crontab, ""
+		}
+		out := append([]string{}, lines[:i+1]...)
+		out = append(out, line)
+		if hasJob {
+			out = append(out, lines[i+2:]...)
+		} else {
+			out = append(out, lines[i+1:]...)
+		}
+		return joinCrontab(out), "job_changed"
+	}
+	if !present {
+		return crontab, ""
+	}
+	return joinCrontab(append(lines, "#Ansible: "+name, line)), "job_added"
+}
+
+func joinCrontab(lines []string) string {
+	if len(lines) == 0 {
+		return ""
+	}
+	return strings.Join(lines, "\n") + "\n"
 }
 
 // handleFile manages crontab files directly
@@ -359,8 +396,8 @@ func (m *CronModule) parseCrontab(crontab string) map[string]string {
 		line = strings.TrimSpace(line)
 
 		// Check for name comment
-		if strings.HasPrefix(line, "# Ansible:") || strings.HasPrefix(line, "# Onigirazu:") {
-			currentName = strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(line, "# Ansible:"), "# Onigirazu:"))
+		if m := cronMarker.FindStringSubmatch(line); m != nil {
+			currentName = m[1]
 			continue
 		}
 
@@ -377,21 +414,6 @@ func (m *CronModule) parseCrontab(crontab string) map[string]string {
 	}
 
 	return jobs
-}
-
-func (m *CronModule) buildCrontab(jobs map[string]string) string {
-	var lines []string
-
-	lines = append(lines, "# Managed by Onigirazu")
-	lines = append(lines, "")
-
-	for name, job := range jobs {
-		lines = append(lines, fmt.Sprintf("# Onigirazu: %s", name))
-		lines = append(lines, job)
-		lines = append(lines, "")
-	}
-
-	return strings.Join(lines, "\n")
 }
 
 // Validate validates cron module arguments
