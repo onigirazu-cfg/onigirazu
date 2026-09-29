@@ -9,6 +9,7 @@
 #   TF_VAR_datacenter TF_VAR_cluster TF_VAR_host TF_VAR_datastore
 #   TF_VAR_network TF_VAR_folder TF_VAR_library
 # Optional: E2E_IMAGES (default "u2404=ubuntu-24.04 u2604=ubuntu-26.04"),
+#   E2E_BASE=1 (clone the e2e base templates of image/build.sh when current),
 #   E2E_CASES (case directory names, default all), RUN_ID, RUN_URL, KEEP_VMS=1,
 #   E2E_SHARD=i/n (the i-th of n shards balanced by case-seconds.tsv, on own VMs)
 # TF_VAR_* come from the environment and are checked below
@@ -84,18 +85,9 @@ command -v terraform >/dev/null || die "terraform not found"
 # --- resolve the current [latest] item of each image family ------------------
 export GOVC_URL="$TF_VAR_vsphere_server" GOVC_USERNAME="$TF_VAR_vsphere_user" GOVC_PASSWORD="$TF_VAR_vsphere_password" GOVC_INSECURE=1
 export GOVC_DATACENTER="$TF_VAR_datacenter"
-items="$(govc library.info -json "/$TF_VAR_library/*")"
-images_json="{"
-for pair in $E2E_IMAGES; do
-  key="${pair%%=*}" family="${pair#*=}"
-  name="$(jq -r --arg f "$family-" '
-    [ (if type == "array" then . else [.] end)[]
-      | select(.name | startswith($f)) | select((.description // "") | contains("[latest]")) | .name ] | first // empty' <<<"$items")"
-  [ -n "$name" ] || die "no [latest] item for $family in $TF_VAR_library"
-  echo "$key: $name"
-  images_json+="\"$key\":\"$name\","
-done
-images_json="${images_json%,}}"
+# shellcheck source=e2e/images.sh
+. "$HERE/images.sh"
+resolve_images || exit 1
 
 # The REST deploy call answers a bare 403; the SOAP clone of the same template
 # names the missing privilege and the object it was checked on.
