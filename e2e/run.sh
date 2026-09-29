@@ -19,7 +19,8 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(dirname "$HERE")"
 TF_DIR="$HERE/terraform"
-WORK="$(mktemp -d)"
+# the prefix lets the janitor find what a killed (cancelled) run left behind
+WORK="$(mktemp -d -t onigirazu-e2e.XXXXXX)"
 BIN="$WORK/onigirazu"
 KEY="$WORK/id_e2e"
 INVENTORY="$WORK/inventory.yml"
