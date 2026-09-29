@@ -37,6 +37,7 @@ func filterFunctions() []expr.Option {
 	}
 	return []expr.Option{
 		expr.DisableBuiltin("map"),
+		expr.DisableBuiltin("sort"),
 		fn("to_json", func(p ...interface{}) (interface{}, error) {
 			out, err := json.Marshal(p[0])
 			return string(out), err
@@ -202,19 +203,8 @@ func filterFunctions() []expr.Option {
 			return jinjaDefined(vars, str(p[1]), p[2]), nil
 		}),
 		fn("jinja_query", jinjaQuery),
-		fn("combine", func(p ...interface{}) (interface{}, error) {
-			out := map[string]interface{}{}
-			for _, v := range p {
-				m, ok := v.(map[string]interface{})
-				if !ok {
-					return nil, fmt.Errorf("combine needs dictionaries, got %T", v)
-				}
-				for k, val := range m {
-					out[k] = val
-				}
-			}
-			return out, nil
-		}),
+		fn("combine", jinjaCombine),
+		fn("sort", jinjaSort),
 		fn("mandatory", func(p ...interface{}) (interface{}, error) {
 			if p[0] == nil {
 				return nil, fmt.Errorf("mandatory variable is not defined")

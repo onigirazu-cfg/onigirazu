@@ -324,11 +324,11 @@ list items too.
 | Regular expressions | `regex_replace(pattern, repl)` (`\1` back references), `regex_search(pattern)` (match or none), `regex_findall(pattern)`, `regex_escape` |
 | Conversion | `int`, `float`, `string`, `bool`, `list`, `abs`, `round` |
 | Data formats | `to_json`, `to_nice_json`, `from_json`, `to_yaml`, `to_nice_yaml`, `from_yaml`, `b64encode`, `b64decode` |
-| Lists | `length`/`count`, `first`, `last`, `join(sep)`, `unique`, `sort`, `reverse`, `flatten`, `sum`, `min`, `max`, `range(n)`, `zip(other...)`, `product(other...)` |
+| Lists | `length`/`count`, `first`, `last`, `join(sep)`, `unique`, `sort` (`reverse=`, `case_sensitive=`, `attribute=` with dotted and comma separated keys; case-insensitive by default, as in Jinja), `reverse`, `flatten`, `sum`, `min`, `max`, `range(n)`, `zip(other...)`, `product(other...)` |
 | Sets | `intersect(other)`, `difference(other)`, `union(other)`, `symmetric_difference(other)` (order of the first list, no duplicates) |
 | Selection | `select(test, arg)`, `reject(test, arg)`, `selectattr(attr, test, arg)`, `rejectattr(attr, test, arg)`; without a test an item is kept when it is truthy |
 | Mapping | `map(attribute='x')`, `map(attribute='x', default=d)`, `map('filter', args...)`, `map('extract', container, key)` |
-| Dictionaries | `keys`, `values`, `dict2items`, `items2dict`, `combine(other, ...)` (shallow merge) |
+| Dictionaries | `keys`, `values`, `dict2items`, `items2dict` (`key_name=`, `value_name=`), `combine(other, ...)` (`recursive=true` for a deep merge; `list_merge=` `replace`, `keep`, `append`, `prepend`) |
 | Random | `random` (an item of a list, or for a number N one of `start`, `start+step`, ... below N: `60 \| random(seed=inventory_hostname)`), `shuffle`; the same `seed` gives the same result, but not the numbers Ansible would pick |
 | Other | `default(value)`, `mandatory` (error when undefined), `ternary(if_true, if_false)`, `password_hash('sha512' or 'sha256', salt)` |
 
