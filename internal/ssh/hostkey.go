@@ -1,10 +1,10 @@
 package ssh
 
 import (
-	"bufio"
 	"bytes"
 	"crypto/sha256"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -13,16 +13,21 @@ import (
 	"sync"
 
 	"golang.org/x/crypto/ssh"
+	"golang.org/x/crypto/ssh/knownhosts"
 )
 
-// keysEqual сравнивает два SSH ключа
+// keysEqual compares two SSH public keys
 func keysEqual(a, b ssh.PublicKey) bool {
 	return bytes.Equal(a.Marshal(), b.Marshal())
 }
 
+// HostKeyManager checks host keys against an OpenSSH known_hosts file:
+// a known host must present its key, a new host's key is added (unless
+// strict), and a changed key fails the connection
 type HostKeyManager struct {
 	knownHostsFile string
-	knownHosts     map[string]ssh.PublicKey
+	callback       ssh.HostKeyCallback // from the file as it was loaded
+	added          map[string]ssh.PublicKey
 	mutex          sync.RWMutex
 	strictMode     bool
 	insecure       bool
@@ -36,11 +41,15 @@ func NewHostKeyManagerWithInsecure(knownHostsFile string, strictMode bool, insec
 	if knownHostsFile == "" {
 		home, _ := os.UserHomeDir()
 		knownHostsFile = filepath.Join(home, ".ssh", "known_hosts")
+	} else if strings.HasPrefix(knownHostsFile, "~/") {
+		if home, err := os.UserHomeDir(); err == nil {
+			knownHostsFile = filepath.Join(home, knownHostsFile[2:])
+		}
 	}
 
 	hkm := &HostKeyManager{
 		knownHostsFile: knownHostsFile,
-		knownHosts:     make(map[string]ssh.PublicKey),
+		added:          make(map[string]ssh.PublicKey),
 		strictMode:     strictMode,
 		insecure:       insecure,
 	}
@@ -51,120 +60,116 @@ func NewHostKeyManagerWithInsecure(knownHostsFile string, strictMode bool, insec
 	return hkm
 }
 
+// loadKnownHosts reads the file with OpenSSH's rules: hashed names,
+// [host]:port, several names per line, @revoked; a missing file is empty
 func (hkm *HostKeyManager) loadKnownHosts() error {
 	hkm.mutex.Lock()
 	defer hkm.mutex.Unlock()
-
-	file, err := os.Open(hkm.knownHostsFile)
-	if err != nil {
+	if _, err := os.Stat(hkm.knownHostsFile); err != nil {
 		if os.IsNotExist(err) {
-			return nil // Файл не существует, это нормально
+			return nil
 		}
 		return err
 	}
-	defer file.Close()
-
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-
-		parts := strings.Fields(line)
-		if len(parts) < 3 {
-			continue
-		}
-
-		hosts := strings.Split(parts[0], ",")
-		keyType := parts[1]
-		keyData := parts[2]
-
-		// Parse the public key using ParseAuthorizedKey
-		key, _, _, _, err := ssh.ParseAuthorizedKey([]byte(keyType + " " + keyData))
-		if err != nil {
-			continue
-		}
-
-		for _, host := range hosts {
-			hkm.knownHosts[host] = key
+	data, err := os.ReadFile(hkm.knownHostsFile)
+	if err != nil {
+		return err
+	}
+	// knownhosts rejects a whole file for one bad line; OpenSSH skips it.
+	// Older onigirazu versions wrote such lines (the key type twice).
+	tmp, err := os.CreateTemp("", "onigirazu-known-hosts-*")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.Remove(tmp.Name()) }()
+	for _, line := range strings.Split(string(data), "\n") {
+		if validKnownHostsLine(line) {
+			_, _ = tmp.WriteString(line + "\n")
 		}
 	}
-
-	return scanner.Err()
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	cb, err := knownhosts.New(tmp.Name())
+	if err != nil {
+		return err
+	}
+	hkm.callback = cb
+	return nil
 }
 
+// validKnownHostsLine tells whether a known_hosts line holds a key:
+// [@marker] hosts keytype base64 [comment]
+func validKnownHostsLine(line string) bool {
+	fields := strings.Fields(line)
+	if len(fields) == 0 || strings.HasPrefix(fields[0], "#") {
+		return false
+	}
+	if strings.HasPrefix(fields[0], "@") {
+		fields = fields[1:]
+	}
+	if len(fields) < 3 {
+		return false
+	}
+	_, _, _, _, err := ssh.ParseAuthorizedKey([]byte(fields[1] + " " + fields[2]))
+	return err == nil
+}
+
+// VerifyHostKey is the ssh.HostKeyCallback of the manager
 func (hkm *HostKeyManager) VerifyHostKey(hostname string, remote net.Addr, key ssh.PublicKey) error {
 	if hkm.insecure {
 		return nil
 	}
+	name := knownhosts.Normalize(hostname)
 
 	hkm.mutex.RLock()
-
-	if knownKey, exists := hkm.knownHosts[hostname]; exists {
-		hkm.mutex.RUnlock()
-		if keysEqual(key, knownKey) {
-			return nil
-		}
-		return fmt.Errorf("host key verification failed for %s: key mismatch", hostname)
-	}
-
-	if tcpAddr, ok := remote.(*net.TCPAddr); ok {
-		ip := tcpAddr.IP.String()
-		if knownKey, exists := hkm.knownHosts[ip]; exists {
-			hkm.mutex.RUnlock()
-			if keysEqual(key, knownKey) {
-				return nil
-			}
-			return fmt.Errorf("host key verification failed for %s (%s): key mismatch", hostname, ip)
-		}
-	}
-
+	cb := hkm.callback
+	addedKey, wasAdded := hkm.added[name]
 	hkm.mutex.RUnlock()
 
-	if hkm.strictMode {
-		return fmt.Errorf("host key verification failed for %s: unknown host", hostname)
+	if wasAdded {
+		if keysEqual(key, addedKey) {
+			return nil
+		}
+		return fmt.Errorf("host key verification failed for %s: the key changed", hostname)
 	}
-
-	return hkm.addHostKey(hostname, key)
+	if cb != nil {
+		err := cb(hostname, remote, key)
+		if err == nil {
+			return nil
+		}
+		var keyErr *knownhosts.KeyError
+		if !errors.As(err, &keyErr) || len(keyErr.Want) > 0 {
+			// a known host with another key, or a revoked key
+			return fmt.Errorf("host key verification failed for %s: %w (the host key changed; if this is expected, remove the old line from %s)", hostname, err, hkm.knownHostsFile)
+		}
+	}
+	if hkm.strictMode {
+		return fmt.Errorf("host key verification failed for %s: unknown host (ssh_strict_host_key is on; add its key to %s)", hostname, hkm.knownHostsFile)
+	}
+	return hkm.addHostKey(name, key)
 }
 
-func (hkm *HostKeyManager) addHostKey(hostname string, key ssh.PublicKey) error {
+// addHostKey appends an OpenSSH known_hosts line for a new host
+func (hkm *HostKeyManager) addHostKey(name string, key ssh.PublicKey) error {
 	hkm.mutex.Lock()
 	defer hkm.mutex.Unlock()
+	if _, ok := hkm.added[name]; ok {
+		return nil
+	}
+	hkm.added[name] = key
 
-	// Добавляем в память
-	hkm.knownHosts[hostname] = key
-
-	// Создаем директорию если не существует
-	dir := filepath.Dir(hkm.knownHostsFile)
-	if err := os.MkdirAll(dir, 0700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(hkm.knownHostsFile), 0o700); err != nil {
 		return err
 	}
-
-	// Добавляем в файл
-	file, err := os.OpenFile(hkm.knownHostsFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
+	file, err := os.OpenFile(hkm.knownHostsFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return err
 	}
-	defer func() {
-		// Best-effort cleanup in case of panic
+	if _, err := file.WriteString(knownhosts.Line([]string{name}, key) + "\n"); err != nil {
 		_ = file.Close()
-	}()
-
-	keyLine := fmt.Sprintf("%s %s %s\n", hostname, key.Type(),
-		strings.TrimSpace(string(ssh.MarshalAuthorizedKey(key))))
-
-	if _, err = file.WriteString(keyLine); err != nil {
 		return err
 	}
-
-	// Ensure data is flushed to disk before closing
-	if err = file.Sync(); err != nil {
-		return err
-	}
-
-	// Explicitly close and handle any errors
 	return file.Close()
 }
 

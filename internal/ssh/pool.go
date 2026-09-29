@@ -341,8 +341,10 @@ func GetGlobalPool() *ConnectionPool {
 	return globalPool
 }
 
-// SetGlobalPool sets a custom global connection pool
+// SetGlobalPool sets a custom global connection pool; GetGlobalPool keeps
+// it (it used to replace a pool set before its first call)
 func SetGlobalPool(pool *ConnectionPool) {
+	poolOnce.Do(func() {})
 	globalPool = pool
 }
 

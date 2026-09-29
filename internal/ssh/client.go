@@ -49,7 +49,21 @@ func NewClient(host types.Host) (*Client, error) {
 
 // NewClientWithLogger creates a new SSH client with a custom logger
 func NewClientWithLogger(host types.Host, lg Logger) (*Client, error) {
-	return NewClientWithHostKeyManagerAndLogger(host, NewHostKeyManagerWithInsecure("", false, host.InsecureIgnoreHostKey), lg)
+	// the known_hosts file and strict mode of the configuration, as for
+	// pooled connections (hostKeyCallback honors the host's insecure flag)
+	return NewClientWithHostKeyManagerAndLogger(host, GetGlobalPool().hostKeyMgr, lg)
+}
+
+// hostKeyCallback checks the host key with the manager, unless the host
+// turns the check off (insecure_ignore_host_key, StrictHostKeyChecking=no)
+func hostKeyCallback(host types.Host, m *HostKeyManager) ssh.HostKeyCallback {
+	insecure := host.InsecureIgnoreHostKey
+	return func(hostname string, remote net.Addr, key ssh.PublicKey) error {
+		if insecure {
+			return nil // the inventory turned the check off for this host
+		}
+		return m.VerifyHostKey(hostname, remote, key)
+	}
 }
 
 // NewClientWithHostKeyManager creates a new SSH client with custom host key manager (deprecated, use NewClientWithHostKeyManagerAndLogger)
@@ -128,7 +142,7 @@ func NewClientWithHostKeyManagerAndLogger(host types.Host, hostKeyManager *HostK
 	config := &ssh.ClientConfig{
 		User:            host.User,
 		Auth:            auth,
-		HostKeyCallback: hostKeyManager.VerifyHostKey, // ✅ БЕЗОПАСНАЯ ПРОВЕРКА HOST KEY
+		HostKeyCallback: hostKeyCallback(host, hostKeyManager),
 		Timeout:         dialTimeout,
 	}
 
