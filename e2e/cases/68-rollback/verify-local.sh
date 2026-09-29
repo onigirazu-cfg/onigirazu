@@ -3,5 +3,5 @@ set -e
 out="$("$BIN" apply v2.yml -i "$INVENTORY" --limit "$HOST" 2>&1)"
 id="$(echo "$out" | sed -n 's/.*Snapshot created: \([0-9]*\) .*/\1/p' | tail -1)"
 [ -n "$id" ] || { echo "no snapshot id in the apply output: $(echo "$out" | grep -v '^$' | tail -3 | paste -sd' ' -)"; exit 1; }
-"$BIN" rollback --snapshot "$id" -i "$INVENTORY" >/dev/null 2>&1
-"$BIN" drift playbook.yml -i "$INVENTORY" --limit "$HOST" >/dev/null 2>&1
+out="$("$BIN" rollback --snapshot "$id" -i "$INVENTORY" 2>&1)" || { echo "rollback failed: $(echo "$out" | grep -v '^$' | tail -3 | paste -sd' ' -)"; exit 1; }
+out="$("$BIN" drift playbook.yml -i "$INVENTORY" --limit "$HOST" 2>&1)" || { echo "drift after rollback: $(echo "$out" | grep -v '^$' | tail -3 | paste -sd' ' -)"; exit 1; }
