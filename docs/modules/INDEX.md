@@ -9,6 +9,7 @@ All 61 built-in modules, alphabetically. `include_role`/`import_role` and `setup
 - **[apt_repository](README.md#apt_repository)** - Add or remove an APT repository
 - **[archive](README.md#archive)** - Create a compressed archive of files or directories
 - **[assert](README.md#assert)** - Fail when a condition does not hold
+- **[async_status](README.md#async_status)** - Status of a task started with async and poll: 0
 - **[authorized_key](README.md#authorized_key)** - Manage SSH authorized keys for user accounts
 
 ## B
@@ -125,4 +126,4 @@ All 61 built-in modules, alphabetically. `include_role`/`import_role` and `setup
 - **Source control**: [git](README.md#git)
 - **Containers**: [docker_container](README.md#docker_container), [docker_image](README.md#docker_image), [docker_compose](README.md#docker_compose), [docker_host_info](README.md#docker_host_info), [podman](README.md#podman)
 - **Databases**: [mysql_db](README.md#mysql_db), [mysql_user](README.md#mysql_user), [postgresql_db](README.md#postgresql_db), [postgresql_user](README.md#postgresql_user), [mongodb](README.md#mongodb)
-- **Playbook control**: [debug](README.md#debug), [set_fact](README.md#set_fact), [assert](README.md#assert), [fail](README.md#fail), [pause](README.md#pause), [ping](README.md#ping), [include_vars](README.md#include_vars), [include_role / import_role](README.md#include_role--import_role), [setup / gather_facts](README.md#setup), [meta](README.md#meta)
+- **Playbook control**: [debug](README.md#debug), [set_fact](README.md#set_fact), [assert](README.md#assert), [fail](README.md#fail), [pause](README.md#pause), [ping](README.md#ping), [include_vars](README.md#include_vars), [include_role / import_role](README.md#include_role--import_role), [setup / gather_facts](README.md#setup), [meta](README.md#meta), [async_status](README.md#async_status)
