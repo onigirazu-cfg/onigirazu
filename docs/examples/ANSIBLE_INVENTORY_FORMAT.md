@@ -68,5 +68,5 @@ onigirazu plan playbook.yml -i inventory.yml
 onigirazu apply playbook.yml -i inventory.yml
 ```
 
-Variables other than the connection variables keep their names (`http_port` is
-`{{ http_port }}`), except that a host's own `ansible_*` variables lose the prefix.
+Variables keep their names (`http_port` is `{{ http_port }}`, `ansible_host` is
+`{{ hostvars[h].ansible_host }}`).

@@ -595,7 +595,11 @@ func TestEnhancedParser_ValidateInventory_NoGroups(t *testing.T) {
 	err := parser.validateInventory(inventory)
 
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "inventory must contain at least one group")
+	assert.Contains(t, err.Error(), "inventory must contain at least one host or group")
+
+	// hosts directly under "all" and no groups are fine
+	inventory.Hosts = []types.Host{{Name: "web1", Address: "web1"}}
+	assert.NoError(t, parser.validateInventory(inventory))
 }
 
 func TestEnhancedParser_ValidateInventory_Valid(t *testing.T) {

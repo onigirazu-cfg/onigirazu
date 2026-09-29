@@ -301,8 +301,9 @@ func (p *EnhancedParser) validateCondition(condition, context string) error {
 
 // validateInventory validates inventory structure (strict mode)
 func (p *EnhancedParser) validateInventory(inventory *types.Inventory) error {
-	if len(inventory.Groups) == 0 {
-		return fmt.Errorf("inventory must contain at least one group")
+	// hosts directly under "all" are an inventory without groups
+	if len(inventory.Groups) == 0 && len(inventory.Hosts) == 0 {
+		return fmt.Errorf("inventory must contain at least one host or group")
 	}
 
 	// Validate groups

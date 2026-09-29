@@ -287,8 +287,69 @@ func (p *InventoryParser) parseYamlInventory(data []byte) (*types.Inventory, err
 	if inventory.Hosts == nil {
 		inventory.Hosts = make([]types.Host, 0)
 	}
+	linkGroupHosts(&inventory)
 
 	return &inventory, nil
+}
+
+// linkGroupHosts takes each group's "vars:" and completes the entries of a
+// group's hosts with the host of the same name in the top-level list: {"web1": {}} in a group means that
+// host, and what the entry sets (port, user, vars, ...) goes on top of it
+func linkGroupHosts(inv *types.Inventory) {
+	byName := make(map[string]*types.Host, len(inv.Hosts))
+	for i := range inv.Hosts {
+		byName[inv.Hosts[i].Name] = &inv.Hosts[i]
+	}
+	for groupName, g := range inv.Groups {
+		if g == nil {
+			continue
+		}
+		// "vars:" of a group is read into Variables; everything else reads Vars
+		if len(g.Vars) == 0 && len(g.Variables) > 0 {
+			g.Vars = g.Variables
+		}
+		if g.Name == "" {
+			g.Name = groupName
+		}
+		for name, entry := range g.Hosts {
+			base, ok := byName[name]
+			if !ok {
+				continue
+			}
+			merged := *base
+			merged.Vars = make(map[string]interface{}, len(base.Vars))
+			for k, v := range base.Vars {
+				merged.Vars[k] = v
+			}
+			if entry != nil {
+				if entry.Address != "" && entry.Address != name {
+					merged.Address = entry.Address
+				}
+				if entry.Port != 0 {
+					merged.Port = entry.Port
+				}
+				if entry.User != "" {
+					merged.User = entry.User
+				}
+				if entry.Password != "" {
+					merged.Password = entry.Password
+				}
+				if entry.KeyFile != "" {
+					merged.KeyFile = entry.KeyFile
+				}
+				if entry.InsecureIgnoreHostKey {
+					merged.InsecureIgnoreHostKey = true
+				}
+				if entry.BecomePassword != "" {
+					merged.BecomePassword = entry.BecomePassword
+				}
+				for k, v := range entry.Vars {
+					merged.Vars[k] = v
+				}
+			}
+			g.Hosts[name] = &merged
+		}
+	}
 }
 
 // isAnsibleYaml detects if YAML content is in Ansible format
@@ -359,6 +420,24 @@ func (p *InventoryParser) parseAnsibleTree(all map[string]interface{}) (*types.I
 				inventory.Hosts = append(inventory.Hosts, *host)
 			}
 		}
+		// hosts in no group but "all" are "ungrouped", as in Ansible
+		grouped := map[string]bool{}
+		for groupName, names := range w.members {
+			if groupName == "all" {
+				continue
+			}
+			for _, name := range names {
+				grouped[name] = true
+			}
+		}
+		for _, name := range w.order {
+			if !grouped[name] {
+				if inventory.Groups["ungrouped"] == nil {
+					inventory.Groups["ungrouped"] = &types.Group{Name: "ungrouped", Hosts: map[string]*types.Host{}, Vars: map[string]interface{}{}}
+				}
+				w.members["ungrouped"] = append(w.members["ungrouped"], name)
+			}
+		}
 		w.members["all"] = w.order
 		for groupName, names := range w.members {
 			for _, name := range names {
@@ -398,8 +477,15 @@ func (p *InventoryParser) parseAnsibleHost(hostName string, hostData interface{}
 		return host
 	}
 
-	// Map Ansible variables to Onigirazu fields
+	// Map Ansible variables to Onigirazu fields; every variable but the
+	// passwords also stays under its own name, as Ansible has it
+	// (hostvars[h].ansible_host, ansible_connection, ansible_ssh_common_args)
 	for key, value := range hostMap {
+		switch key {
+		case "ansible_password", "ansible_ssh_pass", "ansible_become_password", "ansible_become_pass", "ansible_sudo_pass", "onigirazu_become_password":
+		default:
+			host.Vars[key] = value
+		}
 		switch key {
 		case "ansible_host":
 			if v, ok := value.(string); ok {
@@ -424,7 +510,7 @@ func (p *InventoryParser) parseAnsibleHost(hostName string, hostData interface{}
 			if v, ok := value.(string); ok {
 				host.KeyFile = v
 			}
-		case "ansible_password":
+		case "ansible_password", "ansible_ssh_pass":
 			if v, ok := value.(string); ok {
 				host.Password = v
 			}
@@ -434,11 +520,6 @@ func (p *InventoryParser) parseAnsibleHost(hostName string, hostData interface{}
 			if v, ok := value.(bool); ok && !v {
 				host.InsecureIgnoreHostKey = true
 			}
-		default:
-			// Store other Ansible variables (including custom ones) in Vars
-			// Remove ansible_ prefix for cleaner variable names
-			varName := strings.TrimPrefix(key, "ansible_")
-			host.Vars[varName] = value
 		}
 	}
 
@@ -557,6 +638,7 @@ func (p *InventoryParser) parseJsonInventory(data []byte) (*types.Inventory, err
 		inventory.Hosts = make([]types.Host, 0)
 	}
 
+	linkGroupHosts(&inventory)
 	p.logger.Info("Parsed JSON inventory: %d groups, %d hosts", len(inventory.Groups), len(inventory.Hosts))
 	return &inventory, nil
 }
