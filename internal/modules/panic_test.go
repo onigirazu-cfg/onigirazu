@@ -11,9 +11,7 @@ import (
 type panickingModule struct{ *BaseModule }
 
 func (panickingModule) Execute(context.Context, types.Host, map[string]interface{}) (types.TaskResult, error) {
-	var m map[string]int
-	m["boom"] = 1 // assignment to entry in nil map
-	return types.TaskResult{}, nil
+	panic("assignment to entry in nil map")
 }
 func (panickingModule) Validate(map[string]interface{}) error { return nil }
 func (panickingModule) GetDescription() string                { return "panics" }
