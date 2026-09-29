@@ -9,3 +9,20 @@ plays:
           block: |
             alpha=1
             beta=2
+      - name: Block at the start of the file
+        blockinfile:
+          path: /etc/onigirazu-e2e-block.conf
+          marker: "# {mark} HEAD"
+          insertbefore: BOF
+          block: "head=1"
+      - name: Block after a line that is not there goes to the end
+        blockinfile:
+          path: /etc/onigirazu-e2e-block.conf
+          marker: "# {mark} TAIL"
+          insertafter: "^no such line"
+          block: "tail=1"
+      - name: Line at the start of the file
+        lineinfile:
+          path: /etc/onigirazu-e2e-block.conf
+          line: "# managed"
+          insertbefore: BOF

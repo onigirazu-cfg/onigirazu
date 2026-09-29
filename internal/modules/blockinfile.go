@@ -143,32 +143,22 @@ func (m *BlockinfileModule) Execute(ctx context.Context, host types.Host, args m
 				}
 			}
 		} else {
-			// Add new block
-			newBlockContent := fmt.Sprintf("%s\n%s\n%s\n", markerBegin, block, markerEnd)
-
-			if insertBefore != "" {
-				// Insert before pattern
-				pattern := regexp.MustCompile("(?m)^.*" + regexp.QuoteMeta(insertBefore) + ".*$")
-				if matches := pattern.FindStringIndex(fileContent); matches != nil {
-					newContent = fileContent[:matches[0]] + newBlockContent + fileContent[matches[0]:]
-					result.Changed = true
-				}
-			} else if insertAfter != "" {
-				// Insert after pattern
-				pattern := regexp.MustCompile("(?m)^.*" + regexp.QuoteMeta(insertAfter) + ".*$")
-				if matches := pattern.FindStringIndex(fileContent); matches != nil {
-					newContent = fileContent[:matches[1]] + "\n" + newBlockContent + fileContent[matches[1]:]
-					result.Changed = true
-				}
-			} else {
-				// Append at end
-				if fileContent != "" && !strings.HasSuffix(fileContent, "\n") {
-					newContent = fileContent + "\n" + newBlockContent
-				} else {
-					newContent = fileContent + newBlockContent
-				}
-				result.Changed = true
+			// Add new block at the insertafter/insertbefore position
+			var lines []string
+			if fileContent != "" {
+				lines = strings.Split(strings.TrimSuffix(fileContent, "\n"), "\n")
 			}
+			at, err := anchorIndex(lines, insertAfter, insertBefore, getBoolArg(args, "firstmatch", false))
+			if err != nil {
+				result.Success = false
+				result.Error = err.Error()
+				result.Duration = time.Since(startTime)
+				return result, nil
+			}
+			blockLines := append([]string{markerBegin}, strings.Split(block, "\n")...)
+			blockLines = append(blockLines, markerEnd)
+			newLines := append(append(append([]string{}, lines[:at]...), blockLines...), lines[at:]...)
+			newContent = strings.Join(newLines, "\n") + "\n"
 		}
 	} else if state == "absent" {
 		// Remove block

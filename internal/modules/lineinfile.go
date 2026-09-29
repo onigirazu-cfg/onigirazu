@@ -144,7 +144,13 @@ func (m *LineinfileModule) Execute(ctx context.Context, host types.Host, args ma
 		newLines, changed = m.removeLines(lines, line, regexpPattern)
 	} else {
 		// Add or replace line
-		newLines, changed = m.ensureLine(lines, line, regexpPattern, insertafter, insertbefore)
+		newLines, changed, err = m.ensureLine(lines, line, regexpPattern, insertafter, insertbefore, getBoolArg(args, "firstmatch", false))
+		if err != nil {
+			result.Success = false
+			result.Error = err.Error()
+			result.Duration = time.Since(startTime)
+			return result, err
+		}
 	}
 
 	if changed {
@@ -250,7 +256,7 @@ func (m *LineinfileModule) removeLines(lines []string, line string, pattern *reg
 }
 
 // ensureLine ensures the line exists in the file
-func (m *LineinfileModule) ensureLine(lines []string, line string, pattern *regexp.Regexp, insertafter, insertbefore string) ([]string, bool) {
+func (m *LineinfileModule) ensureLine(lines []string, line string, pattern *regexp.Regexp, insertafter, insertbefore string, firstmatch bool) ([]string, bool, error) {
 	// Check if line already exists
 	lineIndex := -1
 	for i, l := range lines {
@@ -270,59 +276,20 @@ func (m *LineinfileModule) ensureLine(lines []string, line string, pattern *rege
 	// If line exists and matches, no change needed
 	if lineIndex >= 0 {
 		if strings.TrimSpace(lines[lineIndex]) == strings.TrimSpace(line) {
-			return lines, false
+			return lines, false, nil
 		}
 		// Replace the line
 		lines[lineIndex] = line
-		return lines, true
+		return lines, true, nil
 	}
 
-	// Line doesn't exist, need to add it
-	newLines := []string{}
-
-	// Handle insertafter
-	if insertafter != "" {
-		inserted := false
-		afterPattern, _ := regexp.Compile(insertafter)
-
-		for _, l := range lines {
-			newLines = append(newLines, l)
-			if !inserted && afterPattern != nil && afterPattern.MatchString(l) {
-				newLines = append(newLines, line)
-				inserted = true
-			}
-		}
-
-		if !inserted {
-			// Pattern not found, append at end
-			newLines = append(newLines, line)
-		}
-		return newLines, true
+	// Line doesn't exist: add it at the insertafter/insertbefore position
+	at, err := anchorIndex(lines, insertafter, insertbefore, firstmatch)
+	if err != nil {
+		return nil, false, err
 	}
-
-	// Handle insertbefore
-	if insertbefore != "" {
-		inserted := false
-		beforePattern, _ := regexp.Compile(insertbefore)
-
-		for _, l := range lines {
-			if !inserted && beforePattern != nil && beforePattern.MatchString(l) {
-				newLines = append(newLines, line)
-				inserted = true
-			}
-			newLines = append(newLines, l)
-		}
-
-		if !inserted {
-			// Pattern not found, append at end
-			newLines = append(newLines, line)
-		}
-		return newLines, true
-	}
-
-	// No insert position specified, append at end
-	newLines = append(append([]string{}, lines...), line)
-	return newLines, true
+	newLines := append(append(append([]string{}, lines[:at]...), line), lines[at:]...)
+	return newLines, true, nil
 }
 
 // checkFileExists checks if a file exists on the remote host
