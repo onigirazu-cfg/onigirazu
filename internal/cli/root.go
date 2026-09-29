@@ -93,6 +93,7 @@ across your infrastructure with a focus on simplicity and reliability.`,
 	rootCmd.AddCommand(inventoryCmd)
 	rootCmd.AddCommand(healthcheckCmd)
 	rootCmd.AddCommand(auditCmd)
+	rootCmd.AddCommand(newPluginCmd())
 
 	// Three-mode execution system commands
 	rootCmd.AddCommand(NewShowExecutionCommand())
@@ -147,6 +148,9 @@ func handleLegacyMode(cmd *cobra.Command, args []string) {
 // Execute runs the root command
 func Execute() error {
 	rootCmd := NewRootCommand()
+	if plugin := pluginFor(rootCmd, os.Args[1:]); plugin != "" {
+		return runPlugin(plugin, os.Args[2:])
+	}
 	return rootCmd.Execute()
 }
 

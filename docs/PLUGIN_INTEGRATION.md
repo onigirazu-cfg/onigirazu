@@ -1,7 +1,27 @@
 # Plugins
 
-Plugins add template filters, modules and execution callbacks. They are Go plugins
-(`.so` files) loaded by `onigirazu apply`, and therefore also by `plan` and `drift`.
+## Command plugins
+
+`onigirazu NAME args...`, where NAME is not a command of onigirazu, runs the executable
+`onigirazu-NAME` with the arguments. It is looked up in the directories of
+`ONIGIRAZU_PLUGIN_PATH` (a path list), `~/.onigirazu/plugins`, the directory of the onigirazu
+binary, then `PATH`; the first one found wins. The plugin gets the terminal, its exit status
+becomes onigirazu's, and `ONIGIRAZU_BIN` holds the path of the onigirazu that ran it, for running
+playbooks. Any language works. `onigirazu plugin list` shows the plugins found.
+
+```sh
+cat > ~/.onigirazu/plugins/onigirazu-hosts <<'EOF'
+#!/bin/sh
+exec "$ONIGIRAZU_BIN" inventory --list "$@"
+EOF
+chmod +x ~/.onigirazu/plugins/onigirazu-hosts
+onigirazu hosts -i inventory.yml
+```
+
+## Go plugins
+
+Go plugins (`.so` files) add template filters, modules and execution callbacks; they are loaded
+by `onigirazu apply`, and therefore also by `plan` and `drift`.
 
 ## Loading plugins
 
