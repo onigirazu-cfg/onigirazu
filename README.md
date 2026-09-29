@@ -145,8 +145,9 @@ YAML is read as Ansible reads it: unquoted `yes`/`no`/`on`/`off` values are bool
 
 - **Playbooks**: plays with `pre_tasks`, `tasks`, `post_tasks`, `handlers`, `roles`,
   `vars`, `vars_files`, `environment`, `serial`, `max_fail_percentage`, `any_errors_fatal`,
-  `force_handlers`; `import_playbook`, `include_tasks`/`import_tasks`,
-  `include_role`/`import_role`, `block`/`rescue`/`always`
+  `force_handlers`; `import_playbook`, `include_tasks`/`import_tasks` (with `vars`, `when`,
+  `tags` and `loop`; a loop runs each included task over the items in turn, not the whole file per
+  item), `include_role`/`import_role`, `block`/`rescue`/`always`
 - **Task keywords**: `when`, `loop` and `with_*` (items, list, dict, sequence, nested,
   together, subelements, indexed_items, file, fileglob, first_found, lines, ...), `loop_control`, `register`, `until`/`retries`/
   `delay`, `changed_when`, `failed_when`, `ignore_errors`, `notify`/`listen`, `tags`,

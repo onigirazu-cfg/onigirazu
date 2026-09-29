@@ -473,7 +473,31 @@ func (p *EnhancedParser) expandIncludes(ctx context.Context, tasks []types.Task,
 		if err != nil {
 			return nil, err
 		}
+		if task.Loop != nil {
+			for i := range included {
+				if included[i].Loop != nil {
+					return nil, fmt.Errorf("%s: a loop over an included file whose tasks loop themselves is not supported", task.Include)
+				}
+			}
+		}
 		for i := range included {
+			// vars of the include apply to every included task and win over
+			// the task's own, as Ansible's include params do
+			if len(task.Vars) > 0 {
+				merged := map[string]interface{}{}
+				for k, v := range included[i].Vars {
+					merged[k] = v
+				}
+				for k, v := range task.Vars {
+					merged[k] = v
+				}
+				included[i].Vars = merged
+			}
+			// a loop over the include runs each included task over the items
+			if task.Loop != nil {
+				loop := *task.Loop
+				included[i].Loop = &loop
+			}
 			if task.When != "" {
 				if included[i].When != "" {
 					included[i].When = "(" + task.When + ") and (" + included[i].When + ")"
