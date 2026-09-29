@@ -191,8 +191,9 @@ formats can be used side by side. Examples: <a href="docs/examples/README.md">do
 <ul>
 <li><strong>Playbooks</strong>: plays with <code>pre_tasks</code>, <code>tasks</code>, <code>post_tasks</code>, <code>handlers</code>, <code>roles</code>,
   <code>vars</code>, <code>vars_files</code>, <code>environment</code>, <code>serial</code>, <code>max_fail_percentage</code>, <code>any_errors_fatal</code>,
-  <code>force_handlers</code>; <code>import_playbook</code>, <code>include_tasks</code>/<code>import_tasks</code>,
-  <code>include_role</code>/<code>import_role</code>, <code>block</code>/<code>rescue</code>/<code>always</code></li>
+  <code>force_handlers</code>; <code>import_playbook</code>, <code>include_tasks</code>/<code>import_tasks</code> (with <code>vars</code>, <code>when</code>,
+  <code>tags</code> and <code>loop</code>; a loop runs each included task over the items in turn, not the whole file per
+  item), <code>include_role</code>/<code>import_role</code>, <code>block</code>/<code>rescue</code>/<code>always</code></li>
 <li><strong>Task keywords</strong>: <code>when</code>, <code>loop</code> and <code>with_*</code> (items, list, dict, sequence, nested,
   together, subelements, indexed_items, file, fileglob, first_found, lines, ...), <code>loop_control</code>, <code>register</code>, <code>until</code>/<code>retries</code>/
   <code>delay</code>, <code>changed_when</code>, <code>failed_when</code>, <code>ignore_errors</code>, <code>notify</code>/<code>listen</code>, <code>tags</code>,
