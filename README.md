@@ -479,8 +479,9 @@ Without a terminal the normal output is used. See [docs/INTERACTIVE_MODE.md](doc
 - `drift` and `plan` have JSON and HTML reports; `drift --notify` posts to webhooks.
 - `apply --background` returns at once; `show-execution` reads the result later.
 - `audit` keeps the history of runs with per-host statistics.
-- Callback, filter and module plugins (Go plugins) hook into runs: see
-  [docs/PLUGIN_INTEGRATION.md](docs/PLUGIN_INTEGRATION.md).
+- Command plugins: `onigirazu NAME` runs the executable `onigirazu-NAME` (from
+  `~/.onigirazu/plugins`, `ONIGIRAZU_PLUGIN_PATH` or `PATH`); callback, filter and module plugins
+  (Go plugins) hook into runs. See [docs/PLUGIN_INTEGRATION.md](docs/PLUGIN_INTEGRATION.md).
 
 ## Configuration and security
 
