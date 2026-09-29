@@ -335,6 +335,11 @@ func evalBlocks(text string, variables map[string]interface{}) (string, []string
 		if err != nil && firstErr == nil {
 			firstErr = fmt.Errorf("%s: %w", inner, err)
 		}
+		if err == nil && value == nil && definedNone(inner, variables) {
+			// Ansible prints a defined None as nothing
+			values = append(values, "")
+			return fmt.Sprintf("\x00%d\x00", len(values)-1)
+		}
 		if err != nil || value == nil {
 			return block
 		}
@@ -342,6 +347,16 @@ func evalBlocks(text string, variables map[string]interface{}) (string, []string
 		return fmt.Sprintf("\x00%d\x00", len(values)-1)
 	})
 	return out, values, firstErr
+}
+
+// definedNone reports whether expr is None itself or a variable that exists
+// and holds None, as opposed to an undefined name, which stays an error
+func definedNone(expr string, variables map[string]interface{}) bool {
+	if expr == "None" || expr == "none" || expr == "null" {
+		return true
+	}
+	v, found, _ := expression.LookupPath(expr, variables)
+	return found && v == nil
 }
 
 func restoreBlocks(text string, values []string) string {
