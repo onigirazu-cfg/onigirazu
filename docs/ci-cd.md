@@ -17,7 +17,6 @@ All automation is GitHub Actions in `.github/workflows/`. Dependency updates com
 | Release Gate (`release-gate.yml`) | `v*` tag push, manual | security, code quality, tests (coverage >= 15%), builds, lint; starts Release |
 | Release (`release.yml`) | manual (started by Release Gate) | GoReleaser, multi-arch image to `ghcr.io/onigirazu-cfg/onigirazu` |
 
-The `develop` triggers are unused: the repository has no `develop` branch.
 
 E2E does not run for pull requests; start it on a branch with `gh workflow run e2e.yml --ref <branch>`.
 
