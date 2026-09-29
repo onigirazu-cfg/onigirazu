@@ -137,7 +137,7 @@ func TestHostKeyHomeInPathAndInsecure(t *testing.T) {
 	assert.NoError(t, insecure.VerifyHostKey("any:22", testAddr, generateTestKey(t)))
 }
 
-func TestHostKeyCallbackHonoursInsecureHost(t *testing.T) {
+func TestHostKeyCallbackHonorsInsecureHost(t *testing.T) {
 	m := NewHostKeyManager(writeKnownHosts(t), true)
 	cb := hostKeyCallback(types.Host{Name: "h", InsecureIgnoreHostKey: true}, m)
 	assert.NoError(t, cb("h:22", testAddr, generateTestKey(t)))

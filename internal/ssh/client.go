@@ -50,7 +50,7 @@ func NewClient(host types.Host) (*Client, error) {
 // NewClientWithLogger creates a new SSH client with a custom logger
 func NewClientWithLogger(host types.Host, lg Logger) (*Client, error) {
 	// the known_hosts file and strict mode of the configuration, as for
-	// pooled connections (hostKeyCallback honours the host's insecure flag)
+	// pooled connections (hostKeyCallback honors the host's insecure flag)
 	return NewClientWithHostKeyManagerAndLogger(host, GetGlobalPool().hostKeyMgr, lg)
 }
 
