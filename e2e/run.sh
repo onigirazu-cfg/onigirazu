@@ -133,6 +133,16 @@ if [ -n "${GITHUB_ACTIONS:-}" ]; then
 fi
 echo "$hosts_json" | jq -r 'to_entries[] | "\(.key)\t\(.value)"'
 
+# The VMs are new, their addresses are not: a key a previous run recorded for
+# the same address would be a changed key. Each run checks host keys against
+# its own file, and stale entries of these addresses leave the runner's file
+# (older binaries read ~/.ssh/known_hosts whatever the configuration says).
+export ONIGIRAZU_SSH_KNOWN_HOSTS_FILE="$WORK/known_hosts"
+for ip in $(jq -r '.[]' <<<"$hosts_json"); do
+  ssh-keygen -R "$ip" >/dev/null 2>&1 || true
+  ssh-keygen -R "[$ip]:22" >/dev/null 2>&1 || true
+done
+
 {
   echo "groups:"
   echo "  e2e:"

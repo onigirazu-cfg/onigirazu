@@ -8,3 +8,4 @@ plays:
           repo: https://github.com/onigirazu-cfg/onigirazu.git
           dest: /opt/onigirazu-e2e-src
           version: v1.63.1
+          depth: 1              # the whole history is hundreds of MB
