@@ -1138,10 +1138,19 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 		target = e.delegateHost(strings.TrimSpace(delegate))
 	}
 
+	// async: the task may run at most that many seconds (Ansible polls it
+	// every poll seconds; here the connection waits for it)
+	if task.Async > 0 && task.PollSet && task.Poll == 0 {
+		return failed(fmt.Errorf("poll: 0 (start the task and do not wait for it) is not supported yet; use poll > 0"))
+	}
+
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		// Check if we're in dry-run mode
+		runCtx, cancelRun := ctx, context.CancelFunc(func() {})
+		if task.Async > 0 {
+			runCtx, cancelRun = context.WithTimeout(ctx, time.Duration(task.Async)*time.Second)
+		}
 		// Execute the task
-		result, err = e.moduleRegistry.ExecuteTask(ctx, &types.Task{
+		result, err = e.moduleRegistry.ExecuteTask(runCtx, &types.Task{
 			Name:         task.Name,
 			Module:       task.Module,
 			Args:         renderedArgs,
@@ -1153,6 +1162,19 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 			Diff:         e.showDiff,
 			Capture:      e.adopt,
 		}, target, taskVars)
+		if task.Async > 0 {
+			if errors.Is(runCtx.Err(), context.DeadlineExceeded) && ctx.Err() == nil {
+				result.Failed, result.Success = true, false
+				result.Error = fmt.Sprintf("async task did not complete within %d seconds", task.Async)
+				err = errors.New(result.Error)
+			} else {
+				if result.Output == nil {
+					result.Output = map[string]interface{}{}
+				}
+				result.Output["finished"] = true
+			}
+		}
+		cancelRun()
 
 		// Ansible records how many attempts an until loop took
 		if task.Until != "" && err == nil {

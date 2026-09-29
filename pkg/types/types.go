@@ -230,6 +230,12 @@ type Task struct {
 	// Throttle limits how many hosts run the task at once (a number or a
 	// template of one)
 	Throttle string `yaml:"throttle,omitempty"`
+	// Async: the task may take at most this many seconds; Poll: how often
+	// Ansible checks it (0 = do not wait). Async 0: a normal task.
+	Async int `yaml:"async,omitempty"`
+	Poll  int `yaml:"poll,omitempty"`
+	// PollSet: poll was written (Ansible's default is 10)
+	PollSet bool `yaml:"-" json:"-"`
 	// PreventDestroy: when the task leaves the playbook, its resources are
 	// forgotten, never removed or restored
 	PreventDestroy bool `yaml:"prevent_destroy,omitempty"`
@@ -288,6 +294,8 @@ func (t *Task) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		"no_log":          true,
 		"prevent_destroy": true,
 		"throttle":        true,
+		"async":           true,
+		"poll":            true,
 		"loop_control":    true,
 		"with_items":      true,
 		"with_list":       true,
@@ -314,6 +322,21 @@ func (t *Task) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	}
 	if v, ok := taskMap["throttle"]; ok && v != nil {
 		t.Throttle = fmt.Sprint(v)
+	}
+	// async / poll: whole seconds
+	for key, dst := range map[string]*int{"async": &t.Async, "poll": &t.Poll} {
+		v, ok := taskMap[key]
+		if !ok || v == nil {
+			continue
+		}
+		n, err := strconv.Atoi(strings.TrimSpace(fmt.Sprint(v)))
+		if err != nil || n < 0 {
+			return fmt.Errorf("%s must be a whole number of seconds, got %v", key, v)
+		}
+		*dst = n
+		if key == "poll" {
+			t.PollSet = true
+		}
 	}
 	// with_items / with_list: the old spelling of loop; with_items also
 	// expands items that are lists, one level ([[1, 2], 3] is 1, 2, 3)
