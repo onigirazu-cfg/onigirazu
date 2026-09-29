@@ -324,8 +324,8 @@ List the entries of a directory on the host that match a glob pattern and a type
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `path` | string | `.` | Directory to search; `paths` and `name` are aliases (a single path) |
-| `pattern` | string | `*` | Glob for file names, e.g. `*.log`; `patterns` is an alias (a single pattern) |
+| `path` | string/list | `.` | Directories to search: a list or comma separated; `paths` and `name` are aliases |
+| `pattern` | string/list | `*` | Globs for file names, a list or comma separated (`*.log,*.gz`); `patterns` is an alias |
 | `type` | string | `file` | `file`, `directory`, `link`, `socket`, `pipe`, `block` or `char` |
 | `recurse` | boolean | `false` | Search subdirectories too; otherwise only the directory's own entries |
 | `limit` | integer | `0` | Maximum number of entries (0 = no limit) |
@@ -541,7 +541,8 @@ Ensure a line is present in a file, or remove matching lines.
 | `state` | string | `present` | `present` or `absent` |
 | `insertafter` | string | `EOF` | Regular expression: a new line goes after the last matching line; `EOF` is the end of the file |
 | `insertbefore` | string | - | Regular expression: a new line goes before the last matching line; `BOF` is the start of the file |
-| `firstmatch` | boolean | `false` | Use the first matching line for `insertafter`/`insertbefore` instead of the last |
+| `firstmatch` | boolean | `false` | Use the first matching line for `regexp`, `insertafter`/`insertbefore` instead of the last |
+| `backrefs` | boolean | `false` | `line` takes the groups of the `regexp` match (`\1`, `\g<name>`); with no match the file is left as it is |
 | `backup` | boolean | `false` | Keep the old file as `<path>.<unixtime>.backup` |
 | `create` | boolean | `false` | Create the file if it is missing (otherwise a missing file fails) |
 
