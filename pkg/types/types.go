@@ -171,26 +171,29 @@ type Inventory struct {
 
 // Task represents a single task
 type Task struct {
-	Name         string                 `yaml:"name"`
-	Module       string                 `yaml:"module"`
-	Args         map[string]interface{} `yaml:"args,omitempty"`
-	When         string                 `yaml:"when,omitempty"`
-	Loop         *Loop                  `yaml:"loop,omitempty"`
-	Register     string                 `yaml:"register,omitempty"`
-	IgnoreErrors bool                   `yaml:"ignore_errors,omitempty"`
-	Tags         []string               `yaml:"tags,omitempty"`
-	Notify       []string               `yaml:"notify,omitempty"`
-	Listen       string                 `yaml:"listen,omitempty"`
-	Timeout      time.Duration          `yaml:"timeout,omitempty"`
-	Retries      int                    `yaml:"retries,omitempty"`
-	Delay        time.Duration          `yaml:"delay,omitempty"`
-	Until        string                 `yaml:"until,omitempty"`
-	ChangedWhen  string                 `yaml:"changed_when,omitempty"`
-	FailedWhen   string                 `yaml:"failed_when,omitempty"`
-	Include      string                 `yaml:"include,omitempty"`
-	Serial       bool                   `yaml:"serial,omitempty"`
-	RetryDelay   time.Duration          `yaml:"retry_delay,omitempty"`
-	Become       bool                   `yaml:"become,omitempty"`
+	Name string `yaml:"name"`
+	// NameGenerated: the task had no name and the parser gave it one; results
+	// show the module name instead, as Ansible does (keys keep the name)
+	NameGenerated bool                   `yaml:"-" json:"-"`
+	Module        string                 `yaml:"module"`
+	Args          map[string]interface{} `yaml:"args,omitempty"`
+	When          string                 `yaml:"when,omitempty"`
+	Loop          *Loop                  `yaml:"loop,omitempty"`
+	Register      string                 `yaml:"register,omitempty"`
+	IgnoreErrors  bool                   `yaml:"ignore_errors,omitempty"`
+	Tags          []string               `yaml:"tags,omitempty"`
+	Notify        []string               `yaml:"notify,omitempty"`
+	Listen        string                 `yaml:"listen,omitempty"`
+	Timeout       time.Duration          `yaml:"timeout,omitempty"`
+	Retries       int                    `yaml:"retries,omitempty"`
+	Delay         time.Duration          `yaml:"delay,omitempty"`
+	Until         string                 `yaml:"until,omitempty"`
+	ChangedWhen   string                 `yaml:"changed_when,omitempty"`
+	FailedWhen    string                 `yaml:"failed_when,omitempty"`
+	Include       string                 `yaml:"include,omitempty"`
+	Serial        bool                   `yaml:"serial,omitempty"`
+	RetryDelay    time.Duration          `yaml:"retry_delay,omitempty"`
+	Become        bool                   `yaml:"become,omitempty"`
 	// BecomeSet tells become: false (run without escalation even in a play
 	// with become: true) from no become at all
 	BecomeSet bool `yaml:"-" json:"-"`

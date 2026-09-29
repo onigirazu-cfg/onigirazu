@@ -45,7 +45,7 @@ func (p *EnhancedParser) loadIncludedRole(ctx context.Context, task *types.Task,
 		role.Tasks = tasks
 	}
 	task.IncludedRole = &role
-	if task.Name == "" || strings.HasSuffix(task.Name, " task") {
+	if task.Name == "" || task.NameGenerated || strings.HasSuffix(task.Name, " task") {
 		task.Name = task.Module + " " + name
 	}
 	return nil
