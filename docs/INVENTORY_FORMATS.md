@@ -42,6 +42,8 @@ groups:
 A YAML file with a top-level `all:` key is read as an Ansible inventory, see
 [ANSIBLE_INVENTORY_QUICK_START.md](ANSIBLE_INVENTORY_QUICK_START.md).
 
+Hosts run in the order Ansible uses: as they first appear in the file, `all`'s own hosts, then each child group in turn, depth first. `serial` batches and `run_once` follow that order.
+
 ## JSON
 
 ```json

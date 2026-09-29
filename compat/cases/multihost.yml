@@ -1,0 +1,38 @@
+# compat-hosts: 3
+- hosts: all
+  gather_facts: false
+  tasks:
+    - set_fact: {me: "fact-{{ inventory_hostname }}"}
+    - debug: {msg: "{{ group_names | sort }} {{ groups['odd'] | sort }} {{ groups['all'] | length }}"}
+    - debug: {msg: "{{ hostvars['h2'].me }} {{ hostvars[inventory_hostname].me }}"}
+    - name: once
+      command: echo "ran once"
+      run_once: true
+      register: once
+      changed_when: false
+    - debug: {msg: "{{ once.stdout }}"}
+    - name: only odd
+      debug: {msg: "odd host"}
+      when: "'odd' in group_names"
+    - name: delegated to h1
+      command: hostname
+      delegate_to: h1
+      register: dl
+      changed_when: false
+    - debug: {msg: "{{ dl.rc }}"}
+
+- hosts: all
+  gather_facts: false
+  serial: 2
+  tasks:
+    - debug: {msg: "batch {{ ansible_play_batch | length }} of {{ ansible_play_hosts_all | length }}"}
+
+- hosts: all
+  gather_facts: false
+  any_errors_fatal: true
+  tasks:
+    - name: fails on h2 only
+      command: /bin/false
+      when: inventory_hostname == 'h2'
+    - name: never reached
+      debug: {msg: "reached"}
