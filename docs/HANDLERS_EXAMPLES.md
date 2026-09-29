@@ -1,124 +1,8 @@
 # Handler Examples
 
-Examples of handler usage. Handlers fire only when the notifying task reports `changed`, run only on the hosts that notified them, and run at the next flush point (after pre_tasks, after roles and tasks, after post_tasks, or at `meta: flush_handlers`). See [HANDLERS_GUIDE.md](HANDLERS_GUIDE.md).
+Longer handler examples. The rules (notify on `changed`, `listen`, flush points, failures) and the basic patterns (service restart, deployment, conditional handlers) are in the [Handlers Guide](HANDLERS_GUIDE.md).
 
-## Example 1: Web Server Configuration
-
-Restart the web server when its configuration or certificate changes.
-
-```yaml
----
-- name: Configure web server
-  hosts: webservers
-
-  tasks:
-    - name: Install nginx
-      package: name=nginx state=present
-
-    - name: Copy nginx configuration
-      template:
-        src: nginx.conf.j2
-        dest: /etc/nginx/nginx.conf
-        backup: true
-      notify: restart nginx
-
-    - name: Copy SSL certificate
-      copy:
-        src: cert.pem
-        dest: /etc/nginx/cert.pem
-        mode: '0600'
-      notify: restart nginx
-
-    - name: Create web root
-      file: path=/var/www/html state=directory
-
-  handlers:
-    - name: restart nginx
-      service: name=nginx state=restarted
-```
-
-If either the configuration or the certificate changes, nginx restarts once per host.
-
----
-
-## Example 2: Application Deployment
-
-Several tasks notify one event; several handlers listen to it.
-
-```yaml
----
-- name: Deploy application
-  hosts: app_servers
-
-  vars:
-    app_repo: https://github.com/example/app.git
-    app_version: v2.1.0
-    app_path: /opt/app
-    app_user: appuser
-
-  tasks:
-    - name: Create app directory
-      file: path={{ app_path }} state=directory owner={{ app_user }}
-
-    - name: Clone/update application
-      git:
-        repo: "{{ app_repo }}"
-        dest: "{{ app_path }}"
-        version: "{{ app_version }}"
-      become: true
-      become_user: "{{ app_user }}"
-      notify: deployment complete
-
-    - name: Install Python dependencies
-      shell: "{{ app_path }}/venv/bin/pip install -r {{ app_path }}/requirements.txt"
-      become: true
-      become_user: "{{ app_user }}"
-      notify: deployment complete
-
-    - name: Copy configuration
-      template:
-        src: app_config.j2
-        dest: "{{ app_path }}/config.json"
-      become: true
-      become_user: "{{ app_user }}"
-      notify: deployment complete
-
-  handlers:
-    - name: run database migrations
-      shell: cd {{ app_path }} && venv/bin/python manage.py migrate
-      become: true
-      become_user: "{{ app_user }}"
-      listen: deployment complete
-
-    - name: collect static files
-      shell: cd {{ app_path }} && venv/bin/python manage.py collectstatic --noinput
-      become: true
-      become_user: "{{ app_user }}"
-      listen: deployment complete
-
-    - name: restart application
-      service: name=myapp state=restarted
-      listen: deployment complete
-
-    - name: run health checks
-      uri:
-        url: http://localhost:8000/health
-        method: GET
-        status_code: 200
-      retries: 3
-      delay: 2
-      listen: deployment complete
-```
-
-**Key points**:
-
-- Three tasks notify "deployment complete"; each handler still runs once per host
-- Handlers run in definition order: migrations, static files, restart, health check
-- A failing handler stops the remaining handlers (unless it has `ignore_errors: true`)
-
----
-
-## Example 3: System Maintenance
+## Example 1: System Maintenance
 
 ```yaml
 ---
@@ -172,7 +56,7 @@ A loop notifies if any of its items changed; the handler still runs once per hos
 
 ---
 
-## Example 4: Database Configuration
+## Example 2: Database Configuration
 
 ```yaml
 ---
@@ -225,7 +109,7 @@ A loop notifies if any of its items changed; the handler still runs once per hos
 
 ---
 
-## Example 5: Docker Services
+## Example 3: Docker Services
 
 ```yaml
 ---
@@ -279,7 +163,7 @@ A loop notifies if any of its items changed; the handler still runs once per hos
 
 ---
 
-## Example 6: Firewall Configuration
+## Example 4: Firewall Configuration
 
 ```yaml
 ---
@@ -316,52 +200,7 @@ The `firewall` module reports `changed` only when the rule set actually changed,
 
 ---
 
-## Example 7: Conditional Handlers
-
-`when` on a handler is evaluated per host when the handler runs.
-
-```yaml
----
-- name: Conditional handler example
-  hosts: all
-
-  vars:
-    deploy_env: production
-    enable_monitoring: true
-
-  tasks:
-    - name: Update monitoring config
-      template:
-        src: monitoring.conf.j2
-        dest: /etc/monitoring/config.conf
-      notify: monitoring updated
-
-  handlers:
-    - name: restart monitoring on production
-      service: name=monitoring state=restarted
-      when: deploy_env == 'production'
-      listen: monitoring updated
-
-    - name: reload monitoring on staging
-      service: name=monitoring state=reloaded
-      when: deploy_env == 'staging'
-      listen: monitoring updated
-
-    - name: enable monitoring
-      service: name=monitoring enabled=yes
-      when: enable_monitoring
-      listen: monitoring updated
-
-    - name: run health checks
-      uri: url=http://localhost/metrics status_code=200
-      retries: 3
-      when: deploy_env in ['production', 'staging']
-      listen: monitoring updated
-```
-
----
-
-## Example 8: Error Handling and Early Flush
+## Example 5: Error Handling and Early Flush
 
 ```yaml
 ---
@@ -398,26 +237,3 @@ The `firewall` module reports `changed` only when the rule set actually changed,
       delay: 2
       listen: app deployed
 ```
-
----
-
-## Common Handler Patterns Summary
-
-| Pattern | Use Case | Handlers |
-|---------|----------|----------|
-| **Service Restart** | Config changes | Restart service |
-| **Deployment** | Code updates | Migrations, then restart |
-| **Maintenance** | System updates | Cleanup tasks |
-| **Configuration** | Setting changes | Reload, then verify |
-| **Early flush** | Later tasks need the restart | `meta: flush_handlers` |
-
----
-
-## Tips for Writing Effective Handlers
-
-1. **Use `listen` for semantic grouping** (one topic or a list)
-2. **Notify only from tasks that can report `changed`**; `debug` never does
-3. **Order handlers deliberately**: definition order is execution order
-4. **Use `ignore_errors` only for non-critical handlers**
-5. **Use `meta: flush_handlers`** when a later task depends on a handler
-6. **Expect a handler to run again** if it is notified again after a flush

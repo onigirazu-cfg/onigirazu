@@ -35,7 +35,7 @@ Exit code 0 (1 when a task could not be checked). `--format json|html` and
 `--output FILE` as for drift.
 
 Modules without check mode support are skipped in plan and drift and do not
-show up; see [Check mode](../README.md#check-mode) for the list.
+show up; see [Check mode](../README.md#check-mode-and-diffs) for the list.
 
 ## drift
 

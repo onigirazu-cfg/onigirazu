@@ -464,6 +464,5 @@ go test ./internal/modules -cover | grep docker_compose
 
 ## See Also
 
-- [Module Development Guide](../../docs/modules/development.md)
-- [Testing Best Practices](../../docs/testing.md)
-- [Code Style Guide](../../docs/code-style.md)
+- [Module Development Guide](../../docs/MODULE_DEVELOPMENT_GUIDE.md)
+- [Contributing](../../CONTRIBUTING.md)

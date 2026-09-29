@@ -271,7 +271,7 @@ onigirazu drift playbook.yml --tags setup
 ## Implementation Details
 
 - The tag filter is applied before `when` is evaluated.
-- Tasks filtered out count as skipped in the run statistics.
+- Tasks filtered out are not reported as skipped in the per-host results.
 - A looped task is filtered as a whole.
 
 ## See Also

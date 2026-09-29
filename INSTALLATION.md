@@ -1,20 +1,19 @@
 # Installation Guide
 
-Onigirazu provides multiple installation methods to suit different environments and preferences.
+## Pre-built Binaries
 
-## 📦 Pre-built Binaries (Recommended)
-
-Download the latest release for your platform from [GitHub Releases](https://github.com/onigirazu-cfg/onigirazu/releases):
+Download an archive for your platform from [GitHub Releases](https://github.com/onigirazu-cfg/onigirazu/releases).
+Archives are named `onigirazu_<Os>_<Arch>.tar.gz` (`.zip` for Windows). See [docs/PLATFORMS.md](docs/PLATFORMS.md) for the full list.
 
 ### Linux
 
 ```bash
-# Download for Linux x86_64
+# x86_64
 curl -LO https://github.com/onigirazu-cfg/onigirazu/releases/latest/download/onigirazu_Linux_x86_64.tar.gz
 tar -xzf onigirazu_Linux_x86_64.tar.gz
 sudo mv onigirazu /usr/local/bin/
 
-# Download for Linux ARM64
+# ARM64
 curl -LO https://github.com/onigirazu-cfg/onigirazu/releases/latest/download/onigirazu_Linux_arm64.tar.gz
 tar -xzf onigirazu_Linux_arm64.tar.gz
 sudo mv onigirazu /usr/local/bin/
@@ -23,12 +22,12 @@ sudo mv onigirazu /usr/local/bin/
 ### macOS
 
 ```bash
-# Download for macOS x86_64 (Intel)
+# Intel
 curl -LO https://github.com/onigirazu-cfg/onigirazu/releases/latest/download/onigirazu_Darwin_x86_64.tar.gz
 tar -xzf onigirazu_Darwin_x86_64.tar.gz
 sudo mv onigirazu /usr/local/bin/
 
-# Download for macOS ARM64 (Apple Silicon)
+# Apple Silicon
 curl -LO https://github.com/onigirazu-cfg/onigirazu/releases/latest/download/onigirazu_Darwin_arm64.tar.gz
 tar -xzf onigirazu_Darwin_arm64.tar.gz
 sudo mv onigirazu /usr/local/bin/
@@ -36,179 +35,104 @@ sudo mv onigirazu /usr/local/bin/
 
 ### Windows
 
-1. Download `onigirazu_Windows_x86_64.zip` from the [releases page](https://github.com/onigirazu-cfg/onigirazu/releases)
-2. Extract the ZIP file
-3. Add the extracted directory to your PATH environment variable
+1. Download `onigirazu_Windows_x86_64.zip` (or `onigirazu_Windows_i386.zip`) from the [releases page](https://github.com/onigirazu-cfg/onigirazu/releases).
+2. Extract it and add the directory to `PATH`.
 
-## 🍺 Homebrew (macOS/Linux)
+### Verify the download
 
 ```bash
-# Add the tap
-brew tap onigirazu-cfg/tap
-
-# Install Onigirazu
-brew install onigirazu
-
-# Update to latest version
-brew upgrade onigirazu
+curl -LO https://github.com/onigirazu-cfg/onigirazu/releases/latest/download/checksums.txt
+sha256sum --ignore-missing -c checksums.txt
 ```
 
-## 📋 Package Managers
+## Linux Packages
 
-### Debian/Ubuntu (DEB)
+Packages are published for amd64, arm64, armv6, armv7 and 386. File names contain the version
+(`onigirazu_<version>_<arch>.<ext>`), so pick the file from the release page, for example:
 
 ```bash
-# Download and install DEB package
-curl -LO https://github.com/onigirazu-cfg/onigirazu/releases/latest/download/onigirazu_linux_amd64.deb
-sudo dpkg -i onigirazu_linux_amd64.deb
+VERSION=1.99.0  # example; use the release you want, without the leading "v"
+BASE=https://github.com/onigirazu-cfg/onigirazu/releases/download/v${VERSION}
+
+# Debian/Ubuntu
+curl -LO $BASE/onigirazu_${VERSION}_amd64.deb
+sudo dpkg -i onigirazu_${VERSION}_amd64.deb
+
+# RHEL/Fedora
+curl -LO $BASE/onigirazu_${VERSION}_amd64.rpm
+sudo rpm -i onigirazu_${VERSION}_amd64.rpm
+
+# Alpine
+curl -LO $BASE/onigirazu_${VERSION}_amd64.apk
+sudo apk add --allow-untrusted onigirazu_${VERSION}_amd64.apk
+
+# Arch Linux
+curl -LO $BASE/onigirazu_${VERSION}_amd64.pkg.tar.zst
+sudo pacman -U onigirazu_${VERSION}_amd64.pkg.tar.zst
 ```
 
-### Red Hat/CentOS/Fedora (RPM)
+Packages install:
+
+- the binary as `/usr/bin/onigirazu`;
+- `/etc/onigirazu/onigirazu.yml`, created on first install from `/usr/share/onigirazu/onigirazu.default.yml` (an existing file is kept);
+- example configs in `/usr/share/onigirazu/examples/`;
+- documentation in `/usr/share/doc/onigirazu/`.
+
+Packages depend on `git`. Settings: [docs/CONFIGURATION_REFERENCE.md](docs/CONFIGURATION_REFERENCE.md).
+
+## Container Image
+
+Images are published to GitHub Container Registry only, for `linux/amd64` and `linux/arm64`.
+Tags: `latest`, `<version>`, `<major>.<minor>`, `<major>`.
 
 ```bash
-# Download and install RPM package
-curl -LO https://github.com/onigirazu-cfg/onigirazu/releases/latest/download/onigirazu_linux_amd64.rpm
-sudo rpm -i onigirazu_linux_amd64.rpm
+docker run --rm ghcr.io/onigirazu-cfg/onigirazu:latest --version
+
+docker run --rm -v "$(pwd)":/work -w /work ghcr.io/onigirazu-cfg/onigirazu:latest \
+  apply site.yml -i inventory.yml
 ```
 
-### Alpine Linux (APK)
+The image is built `FROM scratch`: it contains only the binary, CA certificates and time zone data,
+and runs as an unprivileged user.
+
+## Build from Source
+
+Requires Go 1.26.6 or later (see `go.mod`) and Git.
 
 ```bash
-# Download and install APK package
-curl -LO https://github.com/onigirazu-cfg/onigirazu/releases/latest/download/onigirazu_linux_amd64.apk
-sudo apk add --allow-untrusted onigirazu_linux_amd64.apk
-```
-
-### Arch Linux
-
-```bash
-# Download and install Arch package
-curl -LO https://github.com/onigirazu-cfg/onigirazu/releases/latest/download/onigirazu_linux_amd64.pkg.tar.xz
-sudo pacman -U onigirazu_linux_amd64.pkg.tar.xz
-```
-
-## 🐳 Docker
-
-### Docker Hub
-
-```bash
-# Run with Docker
-docker run --rm -v $(pwd):/workspace onigirazu/onigirazu:latest --version
-
-# Use in your own Dockerfile
-FROM onigirazu/onigirazu:latest
-```
-
-### GitHub Container Registry
-
-```bash
-# Run with Docker
-docker run --rm -v $(pwd):/workspace ghcr.io/onigirazu-cfg/onigirazu:latest --version
-
-# Use in your own Dockerfile
-FROM ghcr.io/onigirazu-cfg/onigirazu:latest
-```
-
-## 🔧 Build from Source
-
-### Prerequisites
-
-- Go 1.21 or later
-- Git
-
-### Build Steps
-
-```bash
-# Clone the repository
 git clone https://github.com/onigirazu-cfg/onigirazu.git
 cd onigirazu
-
-# Build the binary
-go build -o onigirazu ./cmd/onigirazu
-
-# Install to system PATH
-sudo mv onigirazu /usr/local/bin/
+make build            # writes bin/onigirazu
+make install          # copies it to /usr/local/bin (uses sudo)
 ```
 
-### Development Build
+Or with `go install`:
 
 ```bash
-# Install directly with Go
 go install github.com/onigirazu-cfg/onigirazu/cmd/onigirazu@latest
 ```
 
-## ✅ Verify Installation
-
-After installation, verify that Onigirazu is working correctly:
+## Verify Installation
 
 ```bash
-# Check version
 onigirazu --version
-
-# List available modules
-onigirazu --list-modules
-
-# Show help
+onigirazu version            # version and the list of modules
 onigirazu --help
 ```
 
-## 🔄 Updating
+## Updating
 
-### Pre-built Binaries
+- Binaries: replace the binary with the one from the new release.
+- Packages: install the new package with the same command.
+- Container: `docker pull ghcr.io/onigirazu-cfg/onigirazu:latest`.
 
-Simply download and replace the binary with the latest version from the releases page.
+## Requirements
 
-### Homebrew
+Binaries are statically linked (`CGO_ENABLED=0`). SSH is built in; no `ssh` client is needed.
+The `git` module needs `git` on the managed host.
 
-```bash
-brew upgrade onigirazu
-```
+## Next Steps
 
-### Package Managers
-
-Use your system's package manager update commands after downloading the latest package.
-
-### Docker
-
-```bash
-docker pull onigirazu/onigirazu:latest
-# or
-docker pull ghcr.io/onigirazu-cfg/onigirazu:latest
-```
-
-## 🆘 Troubleshooting
-
-### Permission Issues
-
-If you encounter permission issues, ensure the binary is executable:
-
-```bash
-chmod +x onigirazu
-```
-
-### PATH Issues
-
-Make sure `/usr/local/bin` is in your PATH:
-
-```bash
-echo $PATH
-export PATH="/usr/local/bin:$PATH"
-```
-
-### Dependencies
-
-Onigirazu binaries are statically compiled and have no external dependencies. However, for full functionality, you may want:
-
-- SSH client (for remote connections)
-- Git (for git module operations)
-
-## 📚 Next Steps
-
-After installation, check out:
-
-- [Getting Started Guide](docs/getting-started.md)
-- [Configuration Reference](docs/configuration.md)
-- [Module Documentation](docs/modules.md)
+- [Configuration Reference](docs/CONFIGURATION_REFERENCE.md)
+- [Module Documentation](docs/modules/README.md)
 - [Examples](examples/)
-
-For support, please visit our [GitHub Issues](https://github.com/onigirazu-cfg/onigirazu/issues) page.

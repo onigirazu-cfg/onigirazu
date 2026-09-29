@@ -128,8 +128,8 @@ Tasks are listed per play in the order pre_tasks, roles, tasks, post_tasks. Each
 | `✓` | would run |
 | `✓ … [ALWAYS TAG]` | would run because of the `always` tag |
 | `✗ … [SKIPPED: NEVER TAG]` | tagged `never` |
-| `✗ … [SKIPPED: TAG MISMATCH]` | none of its tags is in `--tags` |
 | `✗ … [SKIPPED: SKIP-TAG MATCH]` | one of its tags is in `--skip-tags` |
+| `✗ … [SKIPPED: TAG MISMATCH]` | none of its tags is in `--tags` |
 
 `when` conditions are not evaluated.
 
@@ -154,7 +154,7 @@ Play 1: Infrastructure Setup (Hosts: all)
 Play 2: Application Deployment (Hosts: webservers)
   ✓ [deployment, critical] Deploy Latest Code
   ✓ [deployment, packages] Install Dependencies
-  ✗ [testing, experimental] Run Tests [SKIPPED: TAG MISMATCH]
+  ✗ [testing, experimental] Run Tests [SKIPPED: SKIP-TAG MATCH]
   ✓ [always] Health Check [ALWAYS TAG]
   Summary: 3 would execute, 1 skipped
 
@@ -163,16 +163,17 @@ Overall Summary:
   Would execute:     3
   Would skip:        4
   Skip reasons:
-    - tag mismatch: 4
+    - skip-tag match: 1
+    - tag mismatch: 3
 ```
 
-`--tags` is checked before `--skip-tags`, so a task that matches neither is reported as a tag mismatch.
+A task that matches `--skip-tags` is reported as a skip-tag match even when it also misses `--tags`.
 
 ## Output Formats
 
 `--output` (`-o`) selects `text` (default), `json`, `yaml` or `csv`.
 
-With `json` and `yaml`, stdout carries only the document; the banner and logs go to stderr. With `text` and `csv`, the banner and logs are printed to stdout before the listing, so use `json` for scripts.
+`--list-tasks` writes only the listing to stdout in every format; the banner and logs go to stderr. `--list-tags` does so only with `json` and `yaml`; with `text` and `csv` the banner precedes the listing on stdout.
 
 ### `--list-tasks --output json`
 
@@ -291,7 +292,7 @@ for play in data['plays']:
    onigirazu apply playbook.yml --tags production
    ```
 
-2. **Use `--output json` in CI** so the banner does not mix with the data.
+2. **Use `--output json` in CI** for a stable document to parse.
 
 3. **Validate playbooks in advance**:
 
