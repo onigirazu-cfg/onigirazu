@@ -27,7 +27,7 @@ var moduleArgs = map[string][]string{
 	"firewall":         {"action", "operation", "port", "protocol", "service", "source", "state"},
 	"get_url":          {"backup", "checksum", "dest", "force", "group", "headers", "mode", "owner", "timeout", "url"},
 	"getent":           {"database", "fail_key", "key", "split"},
-	"git":              {"dest", "force", "repo", "update", "version"},
+	"git":              {"depth", "dest", "force", "repo", "update", "version"},
 	"group":            {"gid", "name", "state", "system"},
 	"hostname":         {"name"},
 	"include_vars":     {"dir", "file", "name"},
