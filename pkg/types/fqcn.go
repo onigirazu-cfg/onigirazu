@@ -37,6 +37,10 @@ func ShortModuleName(name string) string {
 	if name == "dnf" || name == "dnf5" {
 		return "yum"
 	}
+	// the v2 module with collections: [community.docker] or its bare name
+	if name == "docker_compose_v2" {
+		return "docker_compose"
+	}
 	if !strings.Contains(name, ".") {
 		return name
 	}
