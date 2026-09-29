@@ -142,6 +142,7 @@ func (e *ExecutionEngine) addMagicVars(vars map[string]interface{}) {
 	vars["ansible_play_hosts_all"] = list(e.playHosts, false)
 	vars["ansible_play_batch"] = list(batch, true)
 	vars["ansible_play_hosts"] = list(batch, true)
+	vars["play_hosts"] = list(batch, true) // the old name, still set by Ansible
 }
 
 // SetCheckMode tells the run it is a check (ansible_check_mode)

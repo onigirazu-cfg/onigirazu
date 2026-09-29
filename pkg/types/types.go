@@ -315,13 +315,14 @@ func (t *Task) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	if v, ok := taskMap["throttle"]; ok && v != nil {
 		t.Throttle = fmt.Sprint(v)
 	}
-	// with_items / with_list: the old spelling of loop
+	// with_items / with_list: the old spelling of loop; with_items also
+	// expands items that are lists, one level ([[1, 2], 3] is 1, 2, 3)
 	for _, key := range []string{"with_items", "with_list"} {
 		switch items := taskMap[key].(type) {
 		case []interface{}:
-			t.Loop = &Loop{Items: items}
+			t.Loop = &Loop{Items: items, FlattenOnce: key == "with_items"}
 		case string:
-			t.Loop = &Loop{Expr: items}
+			t.Loop = &Loop{Expr: items, FlattenOnce: key == "with_items"}
 		}
 	}
 	// with_sequence: start=1 end=5 stride=1 format=web%02d, or count=3
@@ -1207,6 +1208,8 @@ type Loop struct {
 	// with these terms, rendered per host (with_nested, with_file, ...)
 	Lookup string      `yaml:"lookup,omitempty" json:"lookup,omitempty"`
 	Terms  interface{} `yaml:"terms,omitempty" json:"terms,omitempty"`
+	// FlattenOnce: with_items expands items that are lists, one level
+	FlattenOnce bool `yaml:"flatten_once,omitempty" json:"flatten_once,omitempty"`
 }
 
 // WithLookups are the with_<name> loops besides with_items, with_list,

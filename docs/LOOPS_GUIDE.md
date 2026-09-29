@@ -74,7 +74,7 @@ A string is evaluated per host and must yield a list:
 
 ### with_items and with_list
 
-The older spelling of `loop`; they take a list or an expression. Nested lists are not flattened.
+The older spelling of `loop`; they take a list or an expression. As in Ansible, `with_items` expands items that are lists, one level (`[[1, 2], 3]` loops over 1, 2, 3); `with_list` and `loop` do not.
 
 ```yaml
 - name: Install packages
