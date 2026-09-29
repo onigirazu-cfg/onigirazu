@@ -320,7 +320,7 @@ list items too.
 
 | Group | Filters |
 |-------|---------|
-| Strings | `upper`, `lower`, `title`, `capitalize`, `trim`, `replace(old, new)`, `split(sep)`, `quote` (shell quoting), `basename`, `dirname` |
+| Strings | `upper`, `lower`, `title`, `capitalize`, `trim`, `replace(old, new)`, `split(sep)`, `quote` (shell quoting), `basename`, `dirname`, `splitext` ([root, ext]) |
 | Regular expressions | `regex_replace(pattern, repl)` (`\1` back references), `regex_search(pattern)` (match or none), `regex_findall(pattern)`, `regex_escape` |
 | Conversion | `int`, `float`, `string`, `bool`, `list`, `abs`, `round` |
 | Data formats | `to_json`, `to_nice_json`, `from_json`, `to_yaml`, `to_nice_yaml`, `from_yaml`, `b64encode`, `b64decode` |

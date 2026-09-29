@@ -31,7 +31,10 @@ func TestFilterKeywordArguments(t *testing.T) {
 		"d1 | combine(d2, list_merge='append')":         "map[a:1 b:map[d:3] l:[1 2]]",
 		"kv | items2dict(key_name='k', value_name='v')": "map[a:1]",
 		"[{'key': 'x', 'value': 2}] | items2dict":       "map[x:2]",
-		"1 == 1": "true",
+		"'/etc/nginx/site.conf' | splitext":             "[/etc/nginx/site .conf]",
+		"'/a/.bashrc' | splitext":                       "[/a/.bashrc ]",
+		"'x.tar.gz' | splitext | last":                  ".gz",
+		"1 == 1":                                        "true",
 	}
 	for in, want := range cases {
 		got, err := Eval(in, vars)

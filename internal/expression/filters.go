@@ -20,7 +20,7 @@ import (
 var filterNames = []string{
 	"length", "count", "lower", "upper", "int", "float", "string", "trim", "bool", "first", "last",
 	"dict2items", "items2dict", "to_json", "to_nice_json", "to_yaml", "to_nice_yaml", "from_json",
-	"from_yaml", "unique", "list", "capitalize", "title", "b64encode", "b64decode", "quote", "basename",
+	"from_yaml", "unique", "list", "capitalize", "title", "b64encode", "b64decode", "quote", "basename", "splitext",
 	"dirname", "sort", "sum", "max", "min", "reverse", "flatten", "join", "keys", "values", "abs", "round",
 	"select", "reject", "mandatory", "password_hash", "random", "shuffle",
 }
@@ -145,6 +145,17 @@ func filterFunctions() []expr.Option {
 			return "'" + strings.ReplaceAll(str(p[0]), "'", `'"'"'`) + "'", nil
 		}),
 		fn("basename", func(p ...interface{}) (interface{}, error) { return path.Base(str(p[0])), nil }),
+		// Python's os.path.splitext: [root, ext]; a leading dot is not an extension
+		fn("splitext", func(p ...interface{}) (interface{}, error) {
+			s := str(p[0])
+			base := s[strings.LastIndex(s, "/")+1:]
+			i := strings.LastIndex(strings.TrimLeft(base, "."), ".")
+			if i < 0 {
+				return []interface{}{s, ""}, nil
+			}
+			cut := len(s) - len(base) + (len(base) - len(strings.TrimLeft(base, "."))) + i
+			return []interface{}{s[:cut], s[cut:]}, nil
+		}),
 		fn("dirname", func(p ...interface{}) (interface{}, error) { return path.Dir(str(p[0])), nil }),
 		fn("ternary", func(p ...interface{}) (interface{}, error) {
 			if len(p) < 3 {
