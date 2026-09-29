@@ -1123,7 +1123,7 @@ Returns `status`, `url`, `headers`, `text` (the body), `json` (when the body is 
 
 ### get_url
 
-Download a file on the host with curl (or wget).
+Download a file on the host with curl, wget, or Python when neither is installed (container images).
 
 #### Parameters
 
