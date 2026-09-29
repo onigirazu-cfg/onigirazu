@@ -30,10 +30,10 @@ Where each setting is recognised:
 
 | Inventory | Recognised | Not recognised |
 |-----------|------------|----------------|
-| Onigirazu YAML (`groups:`) | host key `insecure_ignore_host_key: true`, host key `ansible_ssh_common_args` | the same keys under group `vars` |
+| Onigirazu YAML (`groups:`) | host or group `vars` key `insecure_ignore_host_key: true`, `ansible_ssh_common_args` | |
 | TOML | `insecure_ignore_host_key = true` in `[hosts.X]` or in group `vars` | |
-| JSON | `"insecure_ignore_host_key": true` in the host object inside the group's `hosts` | |
-| Ansible YAML (`all:`) | host or group variable `insecure_ignore_host_key: true`, host `ansible_ssh_host_key_checking: false`, group variable `ansible_ssh_common_args` | host variable `ansible_ssh_common_args` |
+| JSON | `"insecure_ignore_host_key": true` on a host or in a group's `vars` | |
+| Ansible YAML (`all:`) | host or group variable `insecure_ignore_host_key: true`, `ansible_ssh_common_args`, host `ansible_ssh_host_key_checking: false` | |
 | INI | `[group:vars]` line `ansible_ssh_common_args=-o StrictHostKeyChecking=no`; on a host line only without spaces: `ansible_ssh_common_args=-oStrictHostKeyChecking=no` | `insecure_ignore_host_key=true` (read as a string), a quoted value with spaces on a host line |
 | Plain host list | | nothing |
 
