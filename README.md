@@ -141,6 +141,8 @@ formats can be used side by side. Examples: [docs/examples](docs/examples/README
 
 Existing Ansible content runs as it is in most cases. What is supported:
 
+YAML is read as Ansible reads it: unquoted `yes`/`no`/`on`/`off` values are booleans (YAML 1.1); quote them to keep text.
+
 - **Playbooks**: plays with `pre_tasks`, `tasks`, `post_tasks`, `handlers`, `roles`,
   `vars`, `vars_files`, `environment`, `serial`, `max_fail_percentage`, `any_errors_fatal`,
   `force_handlers`; `import_playbook`, `include_tasks`/`import_tasks`,

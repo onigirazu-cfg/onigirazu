@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 
@@ -67,8 +68,9 @@ func ReadFile(path string) ([]byte, error) {
 	return out, nil
 }
 
-// Load opens the vault data of YAML text: a whole encrypted file becomes its
-// plain text, a !vault value its plain string; other text is returned as is
+// Load reads YAML text the way Ansible does: a whole encrypted file becomes
+// its plain text, a !vault value its plain string, and plain yes/no/on/off
+// values are booleans (YAML 1.1); other text is returned as is
 func Load(data []byte) ([]byte, error) {
 	if IsEncrypted(data) {
 		plain, err := Open(data)
@@ -77,7 +79,8 @@ func Load(data []byte) ([]byte, error) {
 		}
 		data = plain
 	}
-	if !bytes.Contains(data, []byte("!vault")) {
+	hasVault := bytes.Contains(data, []byte("!vault"))
+	if !hasVault && !yaml11Bool.Match(data) {
 		return data, nil
 	}
 	var doc yaml.Node
@@ -85,13 +88,41 @@ func Load(data []byte) ([]byte, error) {
 		return data, nil // not YAML the tag could be in; the caller reports parse errors
 	}
 	changed := false
-	if err := openVaultNodes(&doc, &changed); err != nil {
-		return nil, err
+	if hasVault {
+		if err := openVaultNodes(&doc, &changed); err != nil {
+			return nil, err
+		}
 	}
+	yaml11Bools(&doc, false, &changed)
 	if !changed {
 		return data, nil
 	}
 	return yaml.Marshal(&doc)
+}
+
+// yaml11Bool finds the YAML 1.1 booleans YAML 1.2 reads as strings
+var yaml11Bool = regexp.MustCompile(`(?m)[:\-\[,{]\s*(?:yes|Yes|YES|no|No|NO|on|On|ON|off|Off|OFF)\s*(?:$|[,\]}#])`)
+
+// yaml11Bools makes plain yes/no/on/off values booleans, as Ansible's YAML
+// (1.1) reads them; quoted strings and mapping keys stay text
+func yaml11Bools(n *yaml.Node, isKey bool, changed *bool) {
+	if n.Kind == yaml.ScalarNode {
+		if isKey || n.Style != 0 || n.Tag != "!!str" {
+			return
+		}
+		switch n.Value {
+		case "yes", "Yes", "YES", "on", "On", "ON":
+			n.Tag, n.Value = "!!bool", "true"
+			*changed = true
+		case "no", "No", "NO", "off", "Off", "OFF":
+			n.Tag, n.Value = "!!bool", "false"
+			*changed = true
+		}
+		return
+	}
+	for i, c := range n.Content {
+		yaml11Bools(c, n.Kind == yaml.MappingNode && i%2 == 0, changed)
+	}
 }
 
 func openVaultNodes(n *yaml.Node, changed *bool) error {
