@@ -110,7 +110,7 @@ Module-specific alternatives are listed with each module.
 ### Check Mode
 
 With `--check` only these modules run, reporting what they would change and changing nothing:
-ping, debug, set_fact, stat, find, fail, wait_for, assert, include_vars, slurp, getent, setup, gather_facts, docker_host_info,
+ping, debug, set_fact, stat, find, fail, wait_for, assert, include_vars, slurp, getent, setup, gather_facts, docker_host_info, async_status,
 file, copy, template, lineinfile, blockinfile, replace, ini_file, config, apt, yum, package, pip, apt_repository, apt_key,
 service, systemd, user, group, cron, sysctl, mount, timezone, hostname, get_url, git, unarchive, ufw,
 docker_container, docker_image, podman.
@@ -1123,7 +1123,7 @@ Returns `status`, `url`, `headers`, `text` (the body), `json` (when the body is 
 
 ### get_url
 
-Download a file on the host with curl (or wget).
+Download a file on the host with curl, wget, or Python when neither is installed (container images).
 
 #### Parameters
 
@@ -1846,6 +1846,31 @@ A new database is created with a `_init` collection. An existing user is not cha
 ```
 
 ## Utility Modules
+
+### async_status
+
+Status of a task started with `async` and `poll: 0`. While the job runs: `started: true`,
+`finished: false`; once it ends, the task's own result with `finished: true` (a failed job fails
+this task). Jobs live in the onigirazu process: a later run cannot see them, and the run waits for
+unfinished ones before it ends.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `jid` | string | - | `ansible_job_id` of the started task (required) |
+| `mode` | string | `status` | `status`, or `cleanup` to forget the job |
+
+```yaml
+- shell: /opt/app/migrate.sh
+  async: 1800
+  poll: 0
+  register: migrate
+- async_status:
+    jid: "{{ migrate.ansible_job_id }}"
+  register: job
+  until: job.finished
+  retries: 180
+  delay: 10
+```
 
 ### debug
 

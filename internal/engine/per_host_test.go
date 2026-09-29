@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/onigirazu-cfg/onigirazu/internal/asyncjob"
+
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -568,7 +570,24 @@ func TestAsync_TimesOutTheTask(t *testing.T) {
 	require.Len(t, play.Hosts, 1)
 	assert.Contains(t, play.Hosts[0].Tasks[0].Error, "did not complete within 1 seconds")
 
-	task = &types.Task{Name: "fire", Module: "command", Async: 10, Poll: 0, PollSet: true}
-	err := engine.executeTaskOnHost(context.Background(), task, &host, map[string]interface{}{}, &types.PlayResult{})
-	assert.Error(t, err, "poll: 0 is reported as not supported")
+	// poll: 0 returns at once with a job id; the job runs out its async seconds
+	task = &types.Task{Name: "fire", Module: "command", Async: 1, Poll: 0, PollSet: true}
+	play = &types.PlayResult{Success: true}
+	start := time.Now()
+	require.NoError(t, engine.executeTaskOnHost(context.Background(), task, &host, map[string]interface{}{}, play))
+	assert.Less(t, time.Since(start), time.Second)
+	launch := play.Hosts[0].Tasks[0]
+	jid, _ := launch.Output["ansible_job_id"].(string)
+	require.NotEmpty(t, jid)
+	assert.True(t, launch.Changed)
+	_, done, ok := asyncjob.Status(host.Name, jid)
+	assert.True(t, ok)
+	assert.False(t, done)
+	_, _, ok = asyncjob.Status("other", jid)
+	assert.False(t, ok, "a job belongs to its host")
+	assert.Equal(t, 1, asyncjob.Wait(context.Background()))
+	res, done, _ := asyncjob.Status(host.Name, jid)
+	assert.True(t, done)
+	assert.Contains(t, res.Error, "did not complete within 1 seconds")
+	assert.True(t, asyncjob.Cleanup(host.Name, jid))
 }

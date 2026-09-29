@@ -153,7 +153,9 @@ YAML is read as Ansible reads it: unquoted `yes`/`no`/`on`/`off` values are bool
   `delay`, `changed_when`, `failed_when`, `ignore_errors`, `notify`/`listen`, `tags`,
   `become`/`become_user`, `delegate_to`, `local_action`, `run_once`, `throttle`, `no_log`,
   `check_mode`, `diff`, `vars`, `environment`, `action` (also with a templated module name),
-  `async` with `poll` > 0 (the task fails after `async` seconds; `poll: 0` is not supported yet)
+  `async` with `poll` (the task fails after `async` seconds); `poll: 0` starts it in the
+  background and `async_status` reports on it (jobs live in the onigirazu process, which waits
+  for unfinished ones at the end of the run)
 - **Short forms**: `command: make install chdir=/src`, `file: path=/etc/app state=directory`,
   `args:`; argument aliases such as `apt: pkg:`, `file: dest:`, `systemd: unit:`
 - **Module names**: `ansible.builtin.*`, `ansible.legacy.*` and the collection modules
@@ -394,7 +396,7 @@ to change. Secrets become variables with an example file. See [docs/IMPORT.md](d
 | Containers | `docker_container`, `docker_image`, `docker_compose` (v1 and v2), `docker_host_info`, `podman` |
 | Databases | `mysql_db`, `mysql_user`, `postgresql_db`, `postgresql_user`, `mongodb` |
 | Source control | `git` |
-| Flow and data | `debug`, `assert`, `fail`, `set_fact`, `include_vars`, `setup`/`gather_facts`, `pause`, `ping`, `meta`, `include_role`/`import_role` |
+| Flow and data | `debug`, `assert`, `fail`, `set_fact`, `include_vars`, `setup`/`gather_facts`, `pause`, `ping`, `meta`, `async_status`, `include_role`/`import_role` |
 
 Modules compare the host with the task first and report `changed` only when they changed
 something (`command` and `shell` always do, unless `changed_when`, `creates` or `removes` say
@@ -481,8 +483,9 @@ Without a terminal the normal output is used. See [docs/INTERACTIVE_MODE.md](doc
 - `audit` keeps the history of runs with per-host statistics.
 - `onigirazu test` runs a role's Molecule scenarios (docker/podman instances, converge,
   idempotence, verify) without Molecule or Python: see [docs/TESTING_ROLES.md](docs/TESTING_ROLES.md).
-- Callback, filter and module plugins (Go plugins) hook into runs: see
-  [docs/PLUGIN_INTEGRATION.md](docs/PLUGIN_INTEGRATION.md).
+- Command plugins: `onigirazu NAME` runs the executable `onigirazu-NAME` (from
+  `~/.onigirazu/plugins`, `ONIGIRAZU_PLUGIN_PATH` or `PATH`); callback, filter and module plugins
+  (Go plugins) hook into runs. See [docs/PLUGIN_INTEGRATION.md](docs/PLUGIN_INTEGRATION.md).
 
 ## Configuration and security
 

@@ -1,0 +1,27 @@
+- hosts: all
+  gather_facts: false
+  tasks:
+    - name: waits for a short task
+      command: sh -c 'sleep 1; echo polled'
+      async: 30
+      poll: 1
+      register: polled
+      changed_when: false
+    - debug: {msg: "{{ polled.stdout }} {{ polled.finished }}"}
+    - name: starts in the background
+      shell: sleep 2; echo background > /root/compat/async.txt; echo done
+      async: 60
+      poll: 0
+      register: job
+    - debug: {msg: "{{ job.started }} {{ job.finished }} {{ job.ansible_job_id is string }}"}
+    - name: waits for the job
+      async_status: {jid: "{{ job.ansible_job_id }}"}
+      register: status
+      until: status.finished
+      retries: 30
+      delay: 1
+    - debug: {msg: "{{ status.stdout }} {{ status.rc }} {{ status.finished }}"}
+    - name: forgets the job
+      async_status: {jid: "{{ job.ansible_job_id }}", mode: cleanup}
+      register: gone
+    - debug: {msg: "{{ gone.erased.endswith(job.ansible_job_id) }}"}

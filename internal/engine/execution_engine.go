@@ -15,6 +15,7 @@ import (
 
 	"github.com/onigirazu-cfg/onigirazu/internal/expression"
 
+	"github.com/onigirazu-cfg/onigirazu/internal/asyncjob"
 	"github.com/onigirazu-cfg/onigirazu/internal/cache"
 	"github.com/onigirazu-cfg/onigirazu/internal/facts"
 	"github.com/onigirazu-cfg/onigirazu/internal/interfaces"
@@ -422,6 +423,12 @@ func (e *ExecutionEngine) ExecutePlaybook(ctx context.Context, playbook *types.P
 	}
 
 	// Finalize execution
+	// tasks started with poll: 0 finish before the run ends: the connections
+	// close with it (each job ends within its async seconds)
+	if n := asyncjob.Wait(ctx); n > 0 {
+		e.logger.Info("Waited for %d background (poll: 0) task(s)", n)
+	}
+
 	result.EndTime = time.Now()
 	result.Duration = result.EndTime.Sub(result.StartTime)
 	result.Stats = e.getExecutionStats()
@@ -1138,41 +1145,35 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 		target = e.delegateHost(strings.TrimSpace(delegate))
 	}
 
-	// async: the task may run at most that many seconds (Ansible polls it
-	// every poll seconds; here the connection waits for it)
+	moduleTask := &types.Task{
+		Name:         task.Name,
+		Module:       task.Module,
+		Args:         renderedArgs,
+		Become:       become.Become,
+		BecomeUser:   become.User,
+		BecomeMethod: become.Method,
+		CheckMode:    &check,
+		Environment:  environment,
+		Diff:         e.showDiff,
+		Capture:      e.adopt,
+	}
+
+	// async with poll: 0 starts the task in the background; async_status
+	// reports on it by the job id. The run waits for such jobs at its end.
 	if task.Async > 0 && task.PollSet && task.Poll == 0 {
-		return failed(fmt.Errorf("poll: 0 (start the task and do not wait for it) is not supported yet; use poll > 0"))
+		return e.startAsyncJob(ctx, task, moduleTask, host, target, taskVars, playResult)
 	}
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		// async: the task may run at most that many seconds (Ansible polls
+		// it every poll seconds; here the connection waits for it)
 		runCtx, cancelRun := ctx, context.CancelFunc(func() {})
 		if task.Async > 0 {
 			runCtx, cancelRun = context.WithTimeout(ctx, time.Duration(task.Async)*time.Second)
 		}
-		// Execute the task
-		result, err = e.moduleRegistry.ExecuteTask(runCtx, &types.Task{
-			Name:         task.Name,
-			Module:       task.Module,
-			Args:         renderedArgs,
-			Become:       become.Become,
-			BecomeUser:   become.User,
-			BecomeMethod: become.Method,
-			CheckMode:    &check,
-			Environment:  environment,
-			Diff:         e.showDiff,
-			Capture:      e.adopt,
-		}, target, taskVars)
+		result, err = e.moduleRegistry.ExecuteTask(runCtx, moduleTask, target, taskVars)
 		if task.Async > 0 {
-			if errors.Is(runCtx.Err(), context.DeadlineExceeded) && ctx.Err() == nil {
-				result.Failed, result.Success = true, false
-				result.Error = fmt.Sprintf("async task did not complete within %d seconds", task.Async)
-				err = errors.New(result.Error)
-			} else {
-				if result.Output == nil {
-					result.Output = map[string]interface{}{}
-				}
-				result.Output["finished"] = true
-			}
+			err = asyncOutcome(&result, err, runCtx, ctx, task.Async)
 		}
 		cancelRun()
 

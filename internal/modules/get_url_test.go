@@ -2,8 +2,13 @@ package modules
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
@@ -582,5 +587,40 @@ func BenchmarkGetURLModule_Execute(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_, _ = module.Execute(ctx, host, args)
+	}
+}
+
+// the Python fallback, for hosts without curl and wget
+func TestGetURLPythonFallback(t *testing.T) {
+	py, err := exec.LookPath("python3")
+	if err != nil {
+		t.Skip("no python3")
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-Token") != "a: b" {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+		_, _ = w.Write([]byte("payload"))
+	}))
+	defer server.Close()
+	dir := t.TempDir()
+	headers := filepath.Join(dir, "h")
+	if err := os.WriteFile(headers, []byte(fmt.Sprintf("header = %q\n", "X-Token: a: b")), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	dest := filepath.Join(dir, "out")
+	cmd := exec.Command(py, "-", dest, server.URL, "5", headers)
+	cmd.Stdin = strings.NewReader(pyDownload)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("download: %v %s", err, out)
+	}
+	if got, _ := os.ReadFile(dest); string(got) != "payload" {
+		t.Errorf("content = %q", got)
+	}
+	cmd = exec.Command(py, "-", dest, server.URL+"/x", "5", "")
+	cmd.Stdin = strings.NewReader(pyDownload)
+	if out, err := cmd.CombinedOutput(); err == nil || !strings.Contains(string(out), "403") {
+		t.Errorf("a refused download fails: %v %s", err, out)
 	}
 }
