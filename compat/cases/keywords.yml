@@ -41,3 +41,10 @@
     - debug: {msg: "{{ fw is changed }} {{ fw is failed }}"}
     - set_fact: {nested: {a: {b: [1, {c: 2}]}}}
     - debug: {msg: "{{ nested.a.b[1].c }} {{ nested['a']['b'] | length }}"}
+    - name: async with poll
+      command: echo async-done
+      async: 30
+      poll: 1
+      register: asy
+      changed_when: false
+    - debug: {msg: "{{ asy.stdout }} {{ asy.finished }}"}

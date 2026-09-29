@@ -152,7 +152,8 @@ YAML is read as Ansible reads it: unquoted `yes`/`no`/`on`/`off` values are bool
   together, subelements, indexed_items, file, fileglob, first_found, lines, ...), `loop_control`, `register`, `until`/`retries`/
   `delay`, `changed_when`, `failed_when`, `ignore_errors`, `notify`/`listen`, `tags`,
   `become`/`become_user`, `delegate_to`, `local_action`, `run_once`, `throttle`, `no_log`,
-  `check_mode`, `diff`, `vars`, `environment`, `action` (also with a templated module name)
+  `check_mode`, `diff`, `vars`, `environment`, `action` (also with a templated module name),
+  `async` with `poll` > 0 (the task fails after `async` seconds; `poll: 0` is not supported yet)
 - **Short forms**: `command: make install chdir=/src`, `file: path=/etc/app state=directory`,
   `args:`; argument aliases such as `apt: pkg:`, `file: dest:`, `systemd: unit:`
 - **Module names**: `ansible.builtin.*`, `ansible.legacy.*` and the collection modules

@@ -552,3 +552,23 @@ func TestExtendedLoopVars(t *testing.T) {
 	_, hasPrev := extendedLoopVars([]interface{}{"a"}, 0)["previtem"]
 	assert.False(t, hasPrev)
 }
+
+func TestAsync_TimesOutTheTask(t *testing.T) {
+	engine, mockConfig, mockLogger, _, mockRegistry, mockTemplate := createTestEngine()
+	mockConfig.On("GetDryRun").Return(false)
+	mockLogger.On("Retry", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
+	mockTemplate.On("RenderTaskArgs", mock.Anything, mock.Anything, mock.Anything).Return(nil, nil)
+	mockRegistry.On("ExecuteTask", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) { <-args.Get(0).(context.Context).Done() }).
+		Return(types.TaskResult{Success: true}, nil)
+	task := &types.Task{Name: "slow", Module: "command", Async: 1, Poll: 1, PollSet: true, IgnoreErrors: true, Register: "r"}
+	host := twoHosts()[0]
+	play := &types.PlayResult{Success: true}
+	require.NoError(t, engine.executeTaskOnHost(context.Background(), task, &host, map[string]interface{}{}, play))
+	require.Len(t, play.Hosts, 1)
+	assert.Contains(t, play.Hosts[0].Tasks[0].Error, "did not complete within 1 seconds")
+
+	task = &types.Task{Name: "fire", Module: "command", Async: 10, Poll: 0, PollSet: true}
+	err := engine.executeTaskOnHost(context.Background(), task, &host, map[string]interface{}{}, &types.PlayResult{})
+	assert.Error(t, err, "poll: 0 is reported as not supported")
+}
