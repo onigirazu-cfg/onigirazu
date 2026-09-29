@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -1325,8 +1326,12 @@ func (e *ExecutionEngine) finishTask(task *types.Task, host *types.Host, result 
 
 	// Print debug output if this is a debug module
 	if task.Module == "debug" && !result.Failed {
-		if msg, ok := result.Output["msg"].(string); ok {
-			fmt.Printf("    %s\n", msg)
+		if msg, ok := result.Output["msg"]; ok {
+			if text, isText := msg.(string); isText {
+				fmt.Printf("    %s\n", text)
+			} else if b, err := json.Marshal(msg); err == nil {
+				fmt.Printf("    %s\n", b)
+			}
 		}
 	}
 

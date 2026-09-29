@@ -132,8 +132,8 @@ func TestJinjaFilters(t *testing.T) {
 	}
 	cases := map[string]interface{}{
 		`pkgs | unique | sort | join(",")`:                    "curl,jq",
-		`d | to_json`:                                         `{"x":1}`,
-		`'{"a": [1]}' | from_json`:                            map[string]interface{}{"a": []interface{}{1.0}},
+		`d | to_json`:                                         `{"x": 1}`,
+		`'{"a": [1]}' | from_json`:                            map[string]interface{}{"a": []interface{}{1}},
 		`s | regex_replace("(\\w+) (\\w+)", "\\2 \\1")`:       "World Hello",
 		`s | regex_search("W\\w+")`:                           "World",
 		`s | lower | capitalize`:                              "Hello world",

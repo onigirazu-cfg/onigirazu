@@ -7,7 +7,6 @@ import (
 	"crypto/sha512"
 	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"hash"
 	"path"
@@ -44,23 +43,37 @@ func filterFunctions() []expr.Option {
 	return []expr.Option{
 		expr.DisableBuiltin("map"),
 		expr.DisableBuiltin("sort"),
-		fn("to_json", func(p ...interface{}) (interface{}, error) {
-			out, err := json.Marshal(p[0])
-			return string(out), err
+		// Jinja's string and join print as Python does (True, ['a'])
+		expr.DisableBuiltin("string"),
+		expr.DisableBuiltin("join"),
+		expr.DisableBuiltin("lower"),
+		expr.DisableBuiltin("upper"),
+		// {{ flag | lower }} is the usual way to get "true" out of a boolean
+		fn("lower", func(p ...interface{}) (interface{}, error) { return strings.ToLower(PyStr(p[0])), nil }),
+		fn("upper", func(p ...interface{}) (interface{}, error) { return strings.ToUpper(PyStr(p[0])), nil }),
+		fn("string", func(p ...interface{}) (interface{}, error) { return PyStr(p[0]), nil }),
+		fn("join", func(p ...interface{}) (interface{}, error) {
+			items, err := Items(p[0])
+			if err != nil {
+				return nil, fmt.Errorf("join: %w", err)
+			}
+			sep := ""
+			if len(p) > 1 {
+				sep = PyStr(p[1])
+			}
+			parts := make([]string, len(items))
+			for i, item := range items {
+				parts[i] = PyStr(item)
+			}
+			return strings.Join(parts, sep), nil
 		}),
-		fn("to_nice_json", func(p ...interface{}) (interface{}, error) {
-			out, err := json.MarshalIndent(p[0], "", "    ")
-			return string(out), err
-		}),
+		fn("to_json", func(p ...interface{}) (interface{}, error) { return pyJSON(p[0], 0) }),
+		fn("to_nice_json", func(p ...interface{}) (interface{}, error) { return pyJSON(p[0], 4) }),
 		fn("random", jinjaRandom),
 		fn("shuffle", jinjaShuffle),
 		fn("to_yaml", toYAML),
 		fn("to_nice_yaml", toYAML),
-		fn("from_json", func(p ...interface{}) (interface{}, error) {
-			var out interface{}
-			err := json.Unmarshal([]byte(str(p[0])), &out)
-			return out, err
-		}),
+		fn("from_json", func(p ...interface{}) (interface{}, error) { return fromJSON(str(p[0])) }),
 		fn("from_yaml", func(p ...interface{}) (interface{}, error) {
 			var out interface{}
 			err := yaml.Unmarshal([]byte(str(p[0])), &out)
@@ -380,7 +393,7 @@ func filterFunctions() []expr.Option {
 			var b strings.Builder
 			for _, v := range p {
 				if v != nil {
-					b.WriteString(str(v))
+					b.WriteString(PyStr(v))
 				}
 			}
 			return b.String(), nil

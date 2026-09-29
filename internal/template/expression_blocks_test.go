@@ -22,10 +22,10 @@ func TestRender_ExpressionBlocks(t *testing.T) {
 	cases := map[string]string{
 		"{{ r.results | length }}":                  "2",
 		"{{ name | upper }}-{{ port }}":             "WEB-8080",
-		`{{ r.rc == 0 }}`:                           "true",
+		`{{ r.rc == 0 }}`:                           "True",
 		`{{ missing | default("x") }}`:              "x",
 		"{{ ratio }}":                               "2.5",
-		"{{ tags }}":                                `["a","b"]`,
+		"{{ tags }}":                                `['a', 'b']`,
 		"{{ brace }}":                               "{{ not a template }}",
 		"{{ .name }} {{ name }}":                    "web web",
 		"{% if port %}on{% endif %} {{ port + 1 }}": "on 8081",
@@ -55,7 +55,7 @@ func TestRenderTaskArgs_ListsAndMapsKeepTheirType(t *testing.T) {
 	assert.Equal(t, []interface{}{"curl", "git"}, out["name"])
 	assert.Equal(t, map[string]interface{}{"A": "1"}, out["env"])
 	assert.Equal(t, "8080", out["port"])
-	assert.Equal(t, `pkgs: ["curl","git"]`, out["mixed"])
+	assert.Equal(t, `pkgs: ['curl', 'git']`, out["mixed"])
 }
 
 func TestRender_UndefinedVariableFails(t *testing.T) {

@@ -2,7 +2,6 @@ package template
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"regexp"
@@ -368,17 +367,7 @@ func restoreBlocks(text string, values []string) string {
 
 // formatValue prints scalars as Go does and lists and maps as JSON
 func formatValue(value interface{}) string {
-	switch v := value.(type) {
-	case string:
-		return v
-	case []interface{}, map[string]interface{}:
-		if b, err := json.Marshal(v); err == nil {
-			return string(b)
-		}
-	case float64:
-		return strconv.FormatFloat(v, 'f', -1, 64)
-	}
-	return fmt.Sprint(value)
+	return expression.PyStr(value)
 }
 
 // RenderFile renders a template file with variables
