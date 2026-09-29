@@ -1,8 +1,8 @@
 # Examples and Use Cases
 
-Example playbooks for common tasks. Templates (`./templates/*.j2`) and variables such as `db_host` or `vault_*` are placeholders you provide.
+Example playbooks for common tasks. Templates (`./templates/*.j2`), included task files and variables such as `db_host` or `vault_*` are placeholders you provide.
 
-## 📋 Table of Contents
+## Table of Contents
 
 - [Basic Examples](#basic-examples)
 - [Advanced Workflows](#advanced-workflows)
@@ -10,7 +10,7 @@ Example playbooks for common tasks. Templates (`./templates/*.j2`) and variables
 - [Security and Compliance](#security-and-compliance)
 - [Monitoring and Alerting](#monitoring-and-alerting)
 
-## 🚀 Basic Examples
+## Basic Examples
 
 ### Simple Task Execution
 
@@ -143,7 +143,7 @@ plays:
           enabled: true
 ```
 
-## 🔄 Advanced Workflows
+## Advanced Workflows
 
 ### Multi-Stage Deployment
 
@@ -238,12 +238,14 @@ plays:
         command:
           cmd: "pip install -r requirements.txt"
           chdir: "/opt/myapp/current"
+        become: true
         become_user: "appuser"
 
       - name: "Run database migrations"
         command:
           cmd: "python manage.py migrate"
           chdir: "/opt/myapp/current"
+        become: true
         become_user: "appuser"
         run_once: true
 
@@ -290,7 +292,7 @@ plays:
           method: "POST"
           body_format: "json"
           body:
-            text: "✅ Deployment successful: {{ app_version }} on {{ inventory_hostname }}"
+            text: "Deployment successful: {{ app_version }} on {{ inventory_hostname }}"
         delegate_to: "localhost"
         run_once: true
 ```
@@ -305,6 +307,7 @@ name: "Rolling Update with Rollback"
 plays:
   - name: "Rolling Update"
     hosts: "webservers"
+    serial: 1
     any_errors_fatal: true
 
     vars:
@@ -334,7 +337,7 @@ plays:
           seconds: 30
 
       - name: "Deploy new version"
-        include_tasks: "deploy-tasks.yml"
+        include_tasks: "deploy-tasks.yml"   # your file, next to the playbook
 
       - name: "Health check"
         uri:
@@ -343,7 +346,7 @@ plays:
           status_code: 200
         register: "health_check"
         until: "health_check.status == 200"
-        retries: 5         # retries/delay must be literal numbers, templates are not rendered
+        retries: 5
         delay: 10
         failed_when: false
 
@@ -398,7 +401,7 @@ plays:
         when: "health_check.status == 200"
 ```
 
-## 🏗️ Infrastructure Management
+## Infrastructure Management
 
 ### Server Provisioning
 
@@ -613,7 +616,7 @@ plays:
           state: "restarted"
 ```
 
-## 🔒 Security and Compliance
+## Security and Compliance
 
 ### Security Hardening
 
@@ -860,7 +863,7 @@ plays:
           flat: true
 ```
 
-## 📊 Monitoring and Alerting
+## Monitoring and Alerting
 
 ### Monitoring Setup
 

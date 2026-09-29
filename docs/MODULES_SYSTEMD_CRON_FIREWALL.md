@@ -1,6 +1,6 @@
-# Systemd, Cron, and Firewall Modules Documentation
+# Systemd, Cron, and Firewall Modules
 
-This document provides comprehensive documentation for the three new system management modules: **systemd**, **cron**, and **firewall**.
+Reference for the **systemd**, **cron** and **firewall** modules. `systemd` and `cron` support check mode; `firewall` is skipped in check mode.
 
 ## Table of Contents
 
@@ -14,7 +14,7 @@ This document provides comprehensive documentation for the three new system mana
 
 The **systemd** module manages systemd services, unit files, and timers. `operation` defaults to `service`.
 
-`daemon_reload: true` (as in Ansible) reloads systemd before the operation; without `name` the reload is all the task does.
+`daemon_reload: true` (as in Ansible) reloads systemd before the operation; with `operation: service` and no `name` the reload is all the task does.
 
 ### Operations
 
@@ -25,7 +25,7 @@ Manage systemd services (start, stop, restart, enable, disable, mask).
 **Parameters:**
 
 - `name` (required): Service name
-- `state`: Service state (`started`, `stopped`, `restarted`, `reloaded`)
+- `state`: Service state (`started`, `stopped`, `restarted`, `reloaded`); `restarted` and `reloaded` always report `changed`
 - `enabled`: Enable/disable service on boot (boolean)
 - `masked`: Mask/unmask service (boolean)
 
@@ -70,9 +70,11 @@ Create, modify, or remove systemd unit files.
 **Parameters:**
 
 - `name` (required): Unit file name (e.g., `myapp.service`)
-- `state`: `present` or `absent`
-- `content`: Unit file content; without it the unit file must already exist
-- `path`: Custom path for unit file (optional, defaults to `/etc/systemd/system/<name>`)
+- `state`: `present` (default) or `absent`
+- `content`: Unit file content
+- `path`: Unit file path (default `/etc/systemd/system/<name>`)
+
+With `state: present`, `content` or `path` is required; with `path` and no `content`, the file must already exist.
 
 When the file changes, the module runs `daemon-reload` itself. `state: absent` stops and disables the unit, removes the file and reloads.
 
@@ -162,7 +164,7 @@ Manage systemd timers (systemd's alternative to cron).
 
 #### 4. Daemon Reload (`operation: daemon-reload`)
 
-Reload the systemd configuration, e.g. after unit files were changed by other modules (`copy`, `template`).
+Reload the systemd configuration, e.g. after unit files were changed by other modules (`copy`, `template`). Always reports `changed`.
 
 **Examples:**
 
@@ -204,7 +206,9 @@ The **cron** module manages cron jobs, crontab files, and system cron directorie
 
 #### 1. Job Management (`operation: job`)
 
-Manage individual cron jobs in user crontab.
+Manage named jobs in a user's crontab. Each job is written as a `# Onigirazu: <name>` comment followed by the job line (`# Ansible: <name>` comments are read too).
+
+When the module writes the crontab, it keeps only named jobs: lines without such a comment are dropped. Use `operation: file` or `operation: system` for crontabs that also hold unmanaged lines.
 
 **Parameters:**
 
@@ -215,9 +219,9 @@ Manage individual cron jobs in user crontab.
 - `day`: Day of month (1-31, default: `*`)
 - `month`: Month (1-12, default: `*`)
 - `weekday`: Day of week (0-7, default: `*`)
-- `special_time`: Special time string (`reboot`, `yearly`, `annually`, `monthly`, `weekly`, `daily`, `hourly`)
+- `special_time`: Special time string (`reboot`, `yearly`, `annually`, `monthly`, `weekly`, `daily`, `hourly`); written as `@<value>` instead of the time fields
 - `user`: User whose crontab to modify (default: `root`)
-- `state`: `present` or `absent`
+- `state`: `present` (default) or `absent`
 
 **Examples:**
 
@@ -275,8 +279,8 @@ Manage entire crontab files for users.
 
 - `user`: User whose crontab to manage (default: `root`)
 - `content` (required when state is present): Complete crontab content
-- `backup`: Create backup before modifying (default: `true`)
-- `state`: `present` or `absent`
+- `backup`: Save the current crontab to `/root/crontab.<user>.<timestamp>.backup` before replacing it (default: `true`)
+- `state`: `present` (default) or `absent` (runs `crontab -r`)
 
 **Examples:**
 
@@ -310,10 +314,10 @@ Manage system cron files in `/etc/cron.d`, `/etc/cron.daily`, etc.
 
 **Parameters:**
 
-- `name` (required): File name
-- `cron_type`: Type of cron directory (`d`, `daily`, `hourly`, `weekly`, `monthly`)
-- `content` (required when state is present): File content
-- `state`: `present` or `absent`
+- `name` (required): File name, without `/`
+- `cron_type`: Cron directory: `d` (default, `/etc/cron.d`, mode `0644`), `daily`, `hourly`, `weekly`, `monthly` (`/etc/cron.<type>`, mode `0755`)
+- `content` (required when state is present): File content; a final newline is added if missing
+- `state`: `present` (default) or `absent`
 
 **Examples:**
 
@@ -363,7 +367,7 @@ Manage system cron files in `/etc/cron.d`, `/etc/cron.daily`, etc.
 
 #### 4. List Jobs (`operation: list`)
 
-List all cron jobs for a user.
+List the named jobs of a user's crontab. The result has `jobs` (name to job line), `jobs_count` and `raw_crontab`.
 
 **Parameters:**
 
@@ -389,11 +393,7 @@ List all cron jobs for a user.
 
 The **firewall** module manages UFW, firewalld or iptables, whichever the host has. `operation` defaults to `rule`.
 
-Rule, service and source operations report `changed` only when the rule set differs afterwards. The module is skipped in check mode.
-
-### Automatic Detection
-
-The module automatically detects which firewall system is available on the target host and uses the appropriate backend.
+The backend is detected on the host in this order: `ufw`, `firewall-cmd`, `iptables`. Rule, service and source operations report `changed` only when the rule set differs afterwards. The module is skipped in check mode.
 
 ### Operations
 
@@ -411,7 +411,7 @@ Enable and start the firewall.
 
 #### 2. Disable Firewall (`operation: disable`)
 
-Disable and stop the firewall.
+Disable and stop the firewall. With iptables this flushes all rules (`iptables -F`).
 
 **Examples:**
 
@@ -430,7 +430,7 @@ Manage firewall rules for specific ports.
 - `port` (required): Port number
 - `protocol`: Protocol (`tcp` or `udp`, default: `tcp`)
 - `action`: Action to take (`allow` or `deny`, default: `allow`)
-- `state`: `present` or `absent`
+- `state`: `present` (default) or `absent`
 
 **Examples:**
 
@@ -661,69 +661,17 @@ Reload firewall configuration.
 
 ---
 
-## Supported Systems
+## Requirements
 
-### Systemd Module
+- `systemd`: a host with systemd (`systemctl`)
+- `cron`: `crontab` on the host; `operation: job`, `file` and `list` run `crontab -u <user>`, which usually needs root (`become: true`)
+- `firewall`: `ufw`, `firewalld` or `iptables` on the host; `operation: service` does not work with iptables (use ports)
 
-- **Linux**: All distributions with systemd (Ubuntu 16.04+, Debian 8+, CentOS 7+, Fedora, Arch, etc.)
+## Notes
 
-### Cron Module
-
-- **Linux**: All distributions with cron/crontab
-
-### Firewall Module
-
-- **UFW**: Ubuntu, Debian, Linux Mint
-- **firewalld**: RHEL, CentOS, Fedora, Rocky Linux, AlmaLinux
-- **iptables**: All Linux distributions (fallback)
-
----
-
-## Best Practices
-
-### Systemd
-
-1. Run `operation: daemon-reload` after changing unit files with `copy` or `template` (`operation: unit` reloads itself)
-2. Use `enabled: true` to ensure services start on boot
-3. Use masking for services you never want to start
-4. Prefer systemd timers over cron for new projects
-
-### Cron
-
-1. Use descriptive job names for easy identification
-2. Enable backup when modifying crontab files
-3. Use system cron directories for application-specific tasks
-4. Test cron jobs manually before scheduling
-
-### Firewall
-
-1. Always allow SSH before enabling firewall to avoid lockout
-2. Test rules on non-production systems first
-3. Use service names when available (more readable)
-4. Document complex firewall configurations
-5. Reload firewall after making changes
-
----
-
-## Troubleshooting
-
-### Systemd
-
-- **Service fails to start**: Check logs with `journalctl -u <service>`
-- **Unit file not found**: Check `path`; units written by other modules need `operation: daemon-reload`
-- **Permission denied**: Ensure proper user permissions in unit file
-
-### Cron
-
-- **Job not running**: Check cron logs (`/var/log/cron` or `/var/log/syslog`)
-- **Permission denied**: Verify user has permission to run the command
-- **Path issues**: Use absolute paths in cron jobs
-
-### Firewall
-
-- **Locked out**: Ensure SSH is allowed before enabling firewall
-- **Rules not applying**: Run reload operation
-- **Service not found**: Use port numbers instead of service names for iptables
+- Allow SSH before `operation: enable`, or the connection may be cut.
+- Unit files written with `copy` or `template` need `operation: daemon-reload` (or `daemon_reload: true`); `operation: unit` reloads by itself.
+- Use absolute paths in cron jobs.
 
 ---
 

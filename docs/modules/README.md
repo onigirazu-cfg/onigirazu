@@ -1,35 +1,32 @@
 # Core Modules Documentation
 
-This document provides comprehensive documentation for all built-in modules in Onigirazu.
+Reference for the built-in modules of Onigirazu: 63 module names, 61 modules
+(`include_role`/`import_role` and `setup`/`gather_facts` are one module each under two names).
+For a one-line summary of each module see the [Alphabetical Index](INDEX.md).
 
-> 📑 **Looking for a specific module?** Check the [Alphabetical Index](INDEX.md) for a quick reference of all 50 modules.
-
-Arguments also take Ansible's aliases: `pkg`/`package` for apt and yum `name`,
-`dest`/`name` for the `path` of file, stat, lineinfile, blockinfile and replace,
-`service`/`unit` for service and systemd `name`, `key`/`val` for sysctl, and the
-dashed apt/systemd forms (`update-cache`, `daemon-reload`).
-
-## 📋 Table of Contents
+## Table of Contents
 
 - [Module Overview](#module-overview)
-- [System Modules](#-system-modules)
-- [File System Modules](#-file-system-modules)
-- [Configuration Modules](#-configuration-modules)
-- [Service Modules](#-service-modules)
-- [System Control Modules](#-system-control-modules)
+- [System Modules](#system-modules)
+- [File System Modules](#file-system-modules)
+- [Configuration Modules](#configuration-modules)
+- [Service Modules](#service-modules)
+- [System Control Modules](#system-control-modules)
 - [Package Modules](#package-modules)
 - [Network Modules](#network-modules)
-- [System Connectivity](#-system-connectivity)
-- [Version Control](#-version-control)
-- [Scheduled Jobs](#-scheduled-jobs)
-- [Security & Firewall](#-security--firewall)
-- [Container Management](#-container-management)
-- [Database Management](#-database-management)
-- [Utility Modules](#-utility-modules)
+- [Security Modules](#security-modules)
+- [System Connectivity](#system-connectivity)
+- [Version Control](#version-control)
+- [Scheduled Jobs](#scheduled-jobs)
+- [Security & Firewall](#security--firewall)
+- [Container Management](#container-management)
+- [Database Management](#database-management)
+- [Utility Modules](#utility-modules)
+- [Complete Module List](#complete-module-list)
 
-## 🔧 Module Overview
+## Module Overview
 
-Onigirazu modules are the building blocks for automation tasks. Each module performs specific operations on target hosts and returns structured results.
+Each task calls one module with its arguments. Arguments a module does not read are ignored.
 
 ### Module Structure
 
@@ -63,6 +60,8 @@ Every task accepts these keywords next to its module:
 
 `retries` must be a number and `delay`/`timeout` a number of seconds or a duration such as `10s`. `retries` and `delay` can also be templates (`retries: "{{ n }}"`), rendered per host.
 
+A registered result that has `stdout`/`stderr` also gets `stdout_lines`/`stderr_lines`.
+
 ### Short Forms
 
 Ansible's short forms work:
@@ -77,20 +76,53 @@ Ansible's short forms work:
 - local_action: command hostname    # runs on the control machine (delegate_to: localhost)
 ```
 
+Free-form modules: `command`, `shell` (the command), `script` (path and arguments), `meta` (the action) and `include_vars` (the file). `args:` adds to and overrides the short form.
+
 ### Argument Values
 
 - A YAML integer given as `mode` is octal, as in Ansible: `mode: 0644` and `mode: "0644"` are the same.
 - Other numbers are passed to modules as strings, so `minute: 0` works in cron.
+- Booleans accept `true`/`false`, `yes`/`no`, `on`/`off` and `1`/`0`, also as templated strings.
+
+### Module Names and Argument Aliases
+
+- `ansible.builtin.*` and `ansible.legacy.*` names run the built-in module; `dnf` and `dnf5` run `yum`.
+- Collection names that map to built-in modules: `ansible.posix.sysctl`, `ansible.posix.mount`, `ansible.posix.authorized_key`, `community.general.archive`, `community.general.ufw`, `community.general.ini_file`, `community.general.timezone`, `community.docker.docker_container`, `community.docker.docker_image`, `community.docker.docker_compose`, `community.docker.docker_compose_v2`, `community.docker.docker_host_info`, `community.mysql.mysql_db`, `community.mysql.mysql_user`, `community.postgresql.postgresql_db`, `community.postgresql.postgresql_user`.
+
+Argument aliases (an argument given under both names keeps its own value):
+
+| Module | Alias -> argument |
+|--------|-------------------|
+| apt | `pkg`, `package` -> `name`; `update-cache` -> `update_cache` |
+| yum (dnf), package, pip | `pkg` -> `name` |
+| file, stat | `dest`, `name` -> `path` |
+| lineinfile, blockinfile, replace | `dest`, `destfile`, `name` -> `path` |
+| ini_file | `dest` -> `path` |
+| mount, find | `name` -> `path` |
+| user | `user` -> `name` |
+| service | `service` -> `name` |
+| systemd | `service`, `unit` -> `name`; `daemon-reload` -> `daemon_reload` |
+| sysctl | `key` -> `name`, `val` -> `value` |
+| git | `name` -> `repo` |
+
+Module-specific alternatives are listed with each module.
 
 ### Check Mode
 
-With `--check` only these modules run, reporting what they would change: ping, debug, set_fact, stat, find, fail, wait_for, assert, include_vars, file, copy, template, lineinfile, blockinfile, replace, apt, yum, package, service, user, group, cron, sysctl, get_url, git, systemd, mount, config, timezone, unarchive, apt_repository, apt_key, docker_container, podman, docker_image. Every other module (command, shell, script, uri, firewall, archive, fetch, reboot, authorized_key, docker_compose, database modules, ...) is skipped.
+With `--check` only these modules run, reporting what they would change and changing nothing:
+ping, debug, set_fact, stat, find, fail, wait_for, assert, include_vars, slurp, getent, setup, gather_facts, docker_host_info,
+file, copy, template, lineinfile, blockinfile, replace, ini_file, config, apt, yum, package, pip, apt_repository, apt_key,
+service, systemd, user, group, cron, sysctl, mount, timezone, hostname, get_url, git, unarchive, ufw,
+docker_container, docker_image, podman.
 
-## 🖥️ System Modules
+Every other module (command, shell, script, fetch, archive, reboot, uri, firewall, authorized_key, pause,
+docker_compose and the database modules) is skipped.
+
+## System Modules
 
 ### Facts
 
-There is no facts module. Facts are gathered at the start of every play unless the play sets `gather_facts: false`. See the [Variables Cheat Sheet](../VARIABLES_CHEATSHEET.md) for their names (`ansible_*` and `onigirazu_*`).
+Facts are gathered at the start of every play unless the play sets `gather_facts: false`; the [setup](#setup) module gathers them again. See the [Variables Cheat Sheet](../VARIABLES_CHEATSHEET.md) for their names (`ansible_*` and `onigirazu_*`).
 
 ### command
 
@@ -100,11 +132,12 @@ Run a command without a shell: pipes, redirections and variables such as `$HOME`
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `cmd` | string | - | Command to run (required; free form in the short form) |
+| `cmd` | string | - | Command to run (required; free form in the short form; `command` is an alias) |
 | `chdir` | string | - | Change into this directory first |
 | `creates` | string | - | Skip when this path exists |
 | `removes` | string | - | Skip when this path does not exist |
-| `environment` | dict | - | Extra environment variables |
+| `environment` | dict | - | Extra environment variables (the task keyword `environment` works too) |
+| `shell` | boolean | `false` | Run through the shell, as the `shell` module does |
 
 A non-zero exit code fails the task; use `failed_when` or `ignore_errors` to accept it. The task always reports `changed`; use `changed_when: false` for read-only commands.
 
@@ -129,28 +162,28 @@ A non-zero exit code fails the task; use `failed_when` or `ignore_errors` to acc
   "stdout": "Filesystem  Size  Used Avail Use% Mounted on\n...",
   "stderr": "",
   "rc": 0,
-  "stdout_lines": ["Filesystem  Size  Used Avail Use% Mounted on", "..."],
-  "stderr_lines": [],
   "start": "2026-09-26 10:30:00.000000",
   "end": "2026-09-26 10:30:00.042000",
   "delta": "42ms"
 }
 ```
 
+A task skipped by `creates`/`removes` returns only `msg`.
+
 ### shell
 
-Run a command through a shell (`/bin/sh` unless `executable` is set). Same results and failure rule as `command`.
+Run a command through `/bin/sh` (or `executable`). Same arguments, results and failure rule as `command`.
 
 #### Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `cmd` | string | - | Shell command (required; free form in the short form) |
+| `cmd` | string | - | Shell command (required; free form in the short form; `command` is an alias) |
 | `chdir` | string | - | Working directory |
 | `executable` | string | - | Shell to run the command with, e.g. `/bin/bash` |
 | `creates` | string | - | Skip when this path exists |
 | `removes` | string | - | Skip when this path does not exist |
-| `environment` | dict | - | Extra environment variables |
+| `environment` | dict | - | Extra environment variables (string values) |
 
 #### Example
 
@@ -165,14 +198,16 @@ Run a command through a shell (`/bin/sh` unless `executable` is set). Same resul
 
 ### script
 
-Copy a local script to the host and run it with bash.
+Copy a script from the control machine to the host, run it with `bash` and remove it. Always reports `changed`; a non-zero exit fails the task.
 
 #### Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `script` | string | - | Path to the local script (required) |
-| `args` | string | - | Arguments, separated by spaces |
+| `script` | string | - | Path of the local script, relative to the working directory (required) |
+| `args` | string | - | Arguments, passed to the host's shell |
+
+Returns `stdout`, `rc` and `args` (`stderr` too when the host is local).
 
 #### Example
 
@@ -186,7 +221,7 @@ Copy a local script to the host and run it with bash.
   script: ./scripts/deploy.sh production v1.2.3
 ```
 
-## 📁 File System Modules
+## File System Modules
 
 ### file
 
@@ -199,6 +234,7 @@ Manage files, directories and links.
 | `path` | string | - | Path (required); `dest` and `name` are aliases |
 | `state` | string | see below | Desired state |
 | `src` | string | - | Link target (`link`, `hard`) |
+| `content` | string | - | With `state: present`: content to write when it differs |
 | `mode` | string | - | Permissions, e.g. `"0644"` |
 | `owner` | string | - | Owner |
 | `group` | string | - | Group |
@@ -238,21 +274,23 @@ Without `state` the module creates a link when `src` is given, and otherwise set
 
 ### copy
 
-Copy files to target hosts.
+Copy a file from the control machine (or, with `remote_src`, from the host) or write given content.
 
 #### Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `src` | string | - | Source file path |
+| `src` | string | - | Source file (not a directory); `src` or `content` is required |
+| `content` | string | - | File content instead of `src` |
 | `dest` | string | - | Destination path (required) |
-| `content` | string | - | File content (alternative to src) |
-| `backup` | boolean | `false` | Create backup |
-| `mode` | string | - | File permissions |
+| `backup` | boolean | `false` | Keep the old file as `<dest>.backup.<YYYYMMDD-HHMMSS>` |
+| `mode` | string | - | Octal permissions, e.g. `"0644"` |
 | `owner` | string | - | File owner |
 | `group` | string | - | File group |
 | `force` | boolean | `true` | `false` leaves an existing `dest` alone, whatever it contains |
 | `remote_src` | boolean | `false` | `src` is a path on the host, not on the control machine |
+
+Returns `dest`, `checksum` (SHA-256 of the source), `size`, `msg` and `backup_file` when a backup was made.
 
 #### Example
 
@@ -280,93 +318,19 @@ Copy files to target hosts.
 
 ### find
 
-Discover files on target hosts using glob patterns and file type filtering. Returns structured results for use in loops and conditionals.
-
-**Available since v1.51.0** ✨ - Native file discovery module with glob pattern support
+List the entries of a directory on the host that match a glob pattern and a type. Never changes anything.
 
 #### Parameters
 
-| Parameter | Type | Default | Required | Description |
-|-----------|------|---------|----------|-------------|
-| `path` | string | - | **YES** | Directory path to search (must be non-empty) |
-| `pattern` | string | `*` | NO | Glob pattern for file names (e.g., `*.log`, `temp_*`) |
-| `type` | string | `file` | NO | Filter by file type: `file`, `directory`, `link`, `socket`, `pipe`, `block`, `char` |
-| `limit` | integer | `0` | NO | Maximum files to return (0 = unlimited, capped at 999999) |
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `path` | string | `.` | Directory to search; `paths` and `name` are aliases (a single path) |
+| `pattern` | string | `*` | Glob for file names, e.g. `*.log`; `patterns` is an alias (a single pattern) |
+| `type` | string | `file` | `file`, `directory`, `link`, `socket`, `pipe`, `block` or `char` |
+| `recurse` | boolean | `false` | Search subdirectories too; otherwise only the directory's own entries |
+| `limit` | integer | `0` | Maximum number of entries (0 = no limit) |
 
-#### File Types
-
-| Type Value | Description | Use Case |
-|-----------|-------------|----------|
-| `file` | Regular files | Most common - for log files, configs, scripts |
-| `directory` | Directories only | Finding subdirectories |
-| `link` | Symbolic links | Managing symlinks |
-| `socket` | Socket files | System file discovery |
-| `pipe` | Named pipes (FIFOs) | Advanced IPC mechanisms |
-| `block` | Block devices | Device file discovery |
-| `char` | Character devices | Device file discovery |
-
-**Important**: If `type` is not specified or is empty, the module defaults to `file` type (regular files only), **not** all file types.
-
-#### Examples
-
-**Find and Process Log Files:**
-
-```yaml
-- name: "Find all log files in /var/log"
-  find:
-    path: "/var/log"
-    pattern: "*.log"
-    type: "file"
-    limit: 100
-  register: "log_files"
-
-- name: "Display found log files"
-  debug:
-    msg: "Found {{ log_files.file_count }} log files"
-
-- name: "Process each log file"
-  copy:
-    src: "{{ item.path }}"
-    dest: "./logs/{{ item.name }}"
-  loop: "{{ log_files.files }}"
-  ignore_errors: true
-```
-
-**Find All Directories:**
-
-```yaml
-- name: "Find all directories in /etc"
-  find:
-    path: "/etc"
-    type: "directory"
-    limit: 50
-  register: "directories"
-
-- name: "List found directories"
-  debug:
-    msg: "Directory: {{ item.path }}"
-  loop: "{{ directories.files }}"
-  when: item.isdir
-```
-
-**Delete Temporary Files with Size Check:**
-
-```yaml
-- name: "Find and remove temporary files"
-  find:
-    path: "/tmp"
-    pattern: "*.tmp"
-    type: "file"
-  register: "tmp_files"
-
-- name: "Remove large temporary files (>10MB)"
-  file:
-    path: "{{ item.path }}"
-    state: absent
-  loop: "{{ tmp_files.files }}"
-  when: "item.size | int > 10485760"  # Note: size is string, convert with | int
-  ignore_errors: true
-```
+A missing directory returns an empty list.
 
 #### Return Values
 
@@ -381,125 +345,71 @@ Discover files on target hosts using glob patterns and file type filtering. Retu
       "isdir": false,
       "islink": false,
       "size": "1024576",
-      "mode": "0644",
+      "mode": "644",
       "mtime": "1696086600"
     }
   ],
-  "file_count": 1
+  "file_count": 1,
+  "matched": 1
 }
 ```
 
-**Field Definitions:**
+- `type` of an entry is `file`, `directory`, `link` or `other`; a link to a directory reports `directory`.
+- `size` and `mtime` (Unix seconds) are strings: use `| int` to compare them.
+- `mode` has no leading zero (`644`).
 
-| Field | Type | Description |
-|-------|------|-------------|
-| **path** | string | Full absolute path to the file |
-| **name** | string | Filename only (basename) |
-| **type** | string | File type: `file`, `directory`, `link`, `socket`, `pipe`, `block`, `char`, `other` |
-| **isfile** | boolean | True if regular file (camelCase - not `is_file`) |
-| **isdir** | boolean | True if directory (camelCase - not `is_dir`) |
-| **islink** | boolean | True if symbolic link (camelCase - not `is_link`) |
-| **size** | string | File size in bytes (returned as **string**, convert with `\| int` for math) |
-| **mode** | string | File permissions in octal (e.g., `0644`) |
-| **mtime** | string | Modification time as Unix timestamp in seconds (e.g., `1696086600`) |
-| **file_count** | integer | Total number of files in results array |
-
-**Important Field Notes:**
-
-- **size**: Returned as STRING, not number. Use `{{ item.size \| int }}` for comparisons
-- **mtime**: Unix timestamp (seconds since epoch), not ISO8601 format
-- **Field names**: Boolean shortcuts use camelCase: `isfile`, `isdir`, `islink` (not snake_case)
-- **type**: For socket/pipe/block/char types, use: `{{ item.type == "socket" }}`
-- **Default type**: If not specified, only regular `file` type is returned, not all types
-
-#### Use Cases
-
-- **Log Management**: Find and process log files by pattern or size
-- **Backup Operations**: Locate files for backup with size filtering and pattern matching
-- **Cleanup Tasks**: Find and remove temporary or old files with conditional logic
-- **Deployment**: Discover configuration files across directories for verification
-- **Monitoring**: Locate specific file types for analysis and reporting
-
-#### Common Patterns
+#### Examples
 
 ```yaml
-# Find all Python files
-- find:
-    path: "/opt/app"
-    pattern: "*.py"
-    type: "file"
+- name: "Find log files"
+  find:
+    path: "/var/log"
+    pattern: "*.log"
+    limit: 100
+  register: log_files
 
-# Find configuration directories
-- find:
-    path: "/etc"
-    type: "directory"
-    limit: 20
+- name: "Fetch each log file"
+  fetch:
+    src: "{{ item.path }}"
+    dest: "./logs/"
+  loop: "{{ log_files.files }}"
 
-# Find files and process with loop
-- find:
+- name: "Find temporary files below /tmp"
+  find:
     path: "/tmp"
     pattern: "*.tmp"
-  register: "tmp_files"
+    recurse: true
+  register: tmp_files
 
-- file:
+- name: "Remove temporary files larger than 10 MB"
+  file:
     path: "{{ item.path }}"
     state: absent
   loop: "{{ tmp_files.files }}"
-
-# Find files by type and size
-- find:
-    path: "/home"
-    type: "file"
-  register: "files"
-
-- debug:
-    msg: "Large file: {{ item.name }} ({{ item.size | int / 1024 | int }}KB)"
-  loop: "{{ files.files }}"
-  when: "item.size | int > 102400"  # 100KB
+  when: "item.size | int > 10485760"
 ```
-
-#### Troubleshooting
-
-**No files returned but expect results?**
-
-- Does the path exist? Module returns empty array for non-existent paths (no error)
-- Is the pattern correct? Use `*` to match everything
-- Check the type filter - default is `file` only, not all types
-
-**Field names not working (is_file vs isfile)?**
-
-- Use camelCase: `item.isfile` not `item.is_file`
-- Boolean shortcuts available for: `isfile`, `isdir`, `islink` only
-
-**Can't compare file sizes?**
-
-- Size is returned as STRING: `{{ item.size \| int > 1000000 }}`
-
-**Checking for socket/pipe/block/char types?**
-
-- Use the type field: `{{ item.type == "socket" }}`
 
 ### template
 
-Process Jinja2 templates and copy to target hosts.
+Render a Jinja2 template on the control machine and write it to the host.
 
 #### Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `src` | string | - | Template file path (`src` or `content` required) |
+| `src` | string | - | Template file (`src` or `content` required) |
 | `content` | string | - | Template text instead of a file |
 | `dest` | string | - | Destination path (required) |
 | `vars` | dict | - | Extra variables for this template |
-| `backup` | boolean | `false` | Create backup |
-| `mode` | string | `0644` | File permissions |
+| `backup` | boolean | `false` | Keep the old file as `<dest>.backup.<YYYYMMDD-HHMMSS>` |
+| `mode` | string | `0644` | Permissions of a new file; an existing file keeps its mode unless `mode` is set |
 | `owner` | string | - | File owner |
 | `group` | string | - | File group |
 | `force` | boolean | `false` | Rewrite the file even when the content is unchanged |
+| `trim_blocks` | boolean | `true` | Remove the newline after a `{% ... %}` tag |
+| `lstrip_blocks` | boolean | `false` | Remove spaces before a tag at the start of a line (`{%+` keeps them) |
 
-As in Ansible, `trim_blocks: true` (default) removes the newline after a `{% ... %}` tag and
-`lstrip_blocks: true` (default false) removes spaces before a tag at the start of a line (`{%+` keeps them);
-`{%-`/`-%}` strip whitespace.
+`{%-`/`-%}` strip whitespace, as in Ansible. Returns `dest`, `size`, `checksum` and `backup_file` when a backup was made.
 
 #### Example
 
@@ -517,17 +427,19 @@ As in Ansible, `trim_blocks: true` (default) removes the newline after a `{% ...
 
 ### fetch
 
-Fetch files from target hosts to local machine.
+Fetch a file from the host to the control machine.
 
 #### Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `src` | string | - | Source file path (required) |
+| `src` | string | - | File on the host (required) |
 | `dest` | string | - | Local destination (required) |
-| `flat` | boolean | `false` | Store without host directory |
-| `fail_on_missing` | boolean | `true` | Fail if source missing |
+| `flat` | boolean | `false` | `false`: store as `<dest>/<host>/<src>`; `true`: `dest` is the file, or a directory when it ends with `/` |
+| `fail_on_missing` | boolean | `true` | Fail when `src` does not exist |
 | `validate` | boolean | `true` | Compare checksums after the transfer |
+
+A local file with the same content is left alone. Returns `src`, `dest` (the local path) and `checksum`.
 
 #### Example
 
@@ -536,7 +448,6 @@ Fetch files from target hosts to local machine.
   fetch:
     src: "/var/log/myapp.log"
     dest: "./logs/"
-    flat: false
 
 - name: "Backup configuration"
   fetch:
@@ -545,42 +456,53 @@ Fetch files from target hosts to local machine.
     flat: true
 ```
 
-## ⚙️ Configuration Modules
+### slurp
+
+Read a file from the host; `content` is base64 (`{{ r.content | b64decode }}`), `encoding` is `base64`, `source` the path.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `src` | string | - | File on the host (required; `path` is an alias) |
+
+```yaml
+- slurp:
+    src: /etc/hostname
+  register: r
+- debug:
+    msg: "{{ r.content | b64decode }}"
+```
+
+## Configuration Modules
 
 ### config
 
-Manage configuration files in various formats.
+Edit keys of a JSON or YAML file on the host.
 
 #### Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `path` | string | - | Configuration file path (required) |
-| `format` | string | `auto` | Configuration format |
-| `action` | string | `set` | Action to perform |
-| `key` | string | - | Configuration key |
-| `value` | any | - | Configuration value |
-| `backup` | boolean | `false` | Create backup |
-| `create` | boolean | `false` | Create file if missing |
-
-#### Formats
-
-- `json`: JSON format
-- `yaml`: YAML format
-- `ini`: INI format
-- `toml`: TOML format
-- `xml`: XML format
-- `auto`: Auto-detect format
+| `path` | string | - | File path (required) |
+| `format` | string | `json` | `json` or `yaml` |
+| `action` | string | `set` | See below |
+| `key` | string | - | Key; dots address nested keys (`database.host`) |
+| `value` | any | - | Value for `key` (`set`) |
+| `values` | dict | - | Map merged into the file (`set`, `merge`) |
+| `backup` | boolean | `false` | `set`, `delete`: back up the file first (`<path>.backup.<YYYYMMDD_HHMMSS>`) |
+| `backup_path` | string | - | Backup to restore from (`restore`) |
+| `schema` | dict | - | Simple schema (`required`, `properties` with `type`); required by `validate`, checked after `set` |
 
 #### Actions
 
-- `set`: Set configuration value
-- `get`: Get configuration value
-- `delete`: Delete configuration key
-- `merge`: Merge configuration
-- `backup`: Create backup
-- `restore`: Restore from backup
-- `validate`: Validate configuration
+- `set`: set `key` to `value`, or merge `values`; creates the file if it is missing; writes only on a change
+- `get`: return `value` of `key`, or the whole `config`
+- `delete`: remove `key`; without `key`, delete the file
+- `merge`: merge `values` into an existing file
+- `backup`: copy the file and return `backup_path`
+- `restore`: copy `backup_path` over the file
+- `validate`: check the file against `schema`
+
+The whole file is rewritten, so comments and key order of a YAML file are not kept.
 
 #### Example
 
@@ -589,7 +511,6 @@ Manage configuration files in various formats.
   config:
     path: "/etc/myapp/config.yml"
     format: "yaml"
-    action: "set"
     key: "database.host"
     value: "{{ database_host }}"
     backup: true
@@ -597,12 +518,10 @@ Manage configuration files in various formats.
 - name: "Merge configuration"
   config:
     path: "/etc/myapp/config.json"
-    format: "json"
     action: "merge"
-    value:
+    values:
       logging:
         level: "info"
-        file: "/var/log/myapp.log"
       cache:
         enabled: true
         ttl: 3600
@@ -610,55 +529,58 @@ Manage configuration files in various formats.
 
 ### lineinfile
 
-Manage single lines in text files.
+Ensure a line is present in a file, or remove matching lines.
 
 #### Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `path` | string | - | File path (required) |
-| `line` | string | - | Line content |
-| `regexp` | string | - | Regular expression pattern |
-| `state` | string | `present` | Line state |
-| `insertafter` | string | - | Insert after pattern |
-| `insertbefore` | string | - | Insert before pattern |
-| `backup` | boolean | `false` | Create backup |
-| `create` | boolean | `false` | Create file if missing |
+| `line` | string | - | Line content (required, also for `state: absent`) |
+| `regexp` | string | - | Regular expression: the first matching line is replaced (`present`), every matching line is removed (`absent`); without it lines are compared with `line` |
+| `state` | string | `present` | `present` or `absent` |
+| `insertafter` | string | - | Regular expression: a new line goes after the first matching line |
+| `insertbefore` | string | - | Regular expression: a new line goes before the first matching line |
+| `backup` | boolean | `false` | Keep the old file as `<path>.<unixtime>.backup` |
+| `create` | boolean | `false` | Create the file if it is missing (otherwise a missing file fails) |
+
+A new line goes to the end of the file when there is no `insertafter`/`insertbefore` or it matches nothing; `EOF` and `BOF` have no special meaning.
 
 #### Example
 
 ```yaml
-- name: "Add user to sudoers"
-  lineinfile:
-    path: "/etc/sudoers"
-    line: "myuser ALL=(ALL) NOPASSWD: ALL"
-    regexp: "^myuser"
-    backup: true
-
 - name: "Configure SSH"
   lineinfile:
     path: "/etc/ssh/sshd_config"
     regexp: "^#?PasswordAuthentication"
     line: "PasswordAuthentication no"
     backup: true
+
+- name: "Remove an old entry"
+  lineinfile:
+    path: "/etc/hosts"
+    regexp: "oldhost"
+    line: "unused"
+    state: absent
 ```
 
 ### blockinfile
 
-Manage blocks of text in files.
+Insert, update or remove a block of text between marker lines.
 
 #### Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `path` | string | - | File path (required) |
+| `path` | string | - | File path (required); a missing file is created |
 | `block` | string | - | Block content |
-| `marker` | string | `# {mark} ANSIBLE MANAGED BLOCK` | Block markers |
-| `insertafter` | string | - | Insert after pattern |
-| `insertbefore` | string | - | Insert before pattern |
-| `state` | string | `present` | Block state |
-| `backup` | boolean | `false` | Create backup |
-| `create` | boolean | `false` | Create file if missing |
+| `marker` | string | `# {mark} ANSIBLE MANAGED BLOCK` | Marker line; `{mark}` becomes `BEGIN` / `END` |
+| `insertafter` | string | - | Literal text: a new block goes after the first line containing it |
+| `insertbefore` | string | - | Literal text: a new block goes before the first line containing it |
+| `state` | string | `present` | `present` or `absent` |
+| `backup` | boolean | `false` | Keep the old file as `<path>.bak` |
+
+A new block goes to the end of the file without `insertafter`/`insertbefore`; when their text is not found, the block is not added. Returns `path`, `state`, `msg` and `backup`.
 
 #### Example
 
@@ -667,38 +589,74 @@ Manage blocks of text in files.
   blockinfile:
     path: "/etc/hosts"
     block: |
-      # Application servers
       192.168.1.10 app1.example.com
       192.168.1.11 app2.example.com
-      192.168.1.12 app3.example.com
     marker: "# {mark} APPLICATION SERVERS"
     backup: true
 ```
 
-## 🔧 Service Modules
+### replace
+
+Replace every match of a regular expression in a file (Go RE2 syntax, multiline mode).
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `path` | string | - | File path (required; must exist) |
+| `regexp` | string | - | Regular expression (required) |
+| `replace` | string | `""` | Replacement; `\1` and `\g<name>` refer to groups |
+| `backup` | boolean | `false` | Keep the old file as `<path>.<YYYYMMDDhhmmss>~` |
+
+Returns `msg` (number of replacements) and `backup_file`.
+
+```yaml
+- replace:
+    path: /etc/myapp.conf
+    regexp: '^port = (\d+)$'
+    replace: 'port = 8080'
+```
+
+### ini_file
+
+Set or remove one option of an INI file. Also `community.general.ini_file`.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `path` | string | - | File (required; `dest` is an alias) |
+| `section` | string | - | Section; none: before the first section |
+| `option` | string | - | Option; without it `present` makes sure the section exists and `absent` removes the section |
+| `value` | string | - | Value (required with `option` and `state: present` unless `allow_no_value`) |
+| `allow_no_value` | boolean | `false` | Allow an option without a value |
+| `state` | string | `present` | `present` or `absent` |
+| `no_extra_spaces` | boolean | `false` | `key=value` instead of `key = value` |
+| `create` | boolean | `true` | Create a missing file |
+| `backup` | boolean | `false` | Keep the old file as `<path>.<YYYYMMDDhhmmss>~` |
+| `mode` | string | - | Octal mode of the written file |
+
+Other lines of the option in the section are removed (Ansible's `exclusive`).
+
+```yaml
+- ini_file:
+    path: /etc/myapp.ini
+    section: server
+    option: port
+    value: "8080"
+```
+
+## Service Modules
 
 ### service
 
-Manage system services.
+Start, stop and enable services with `systemctl`.
 
 #### Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `name` | string | - | Service name (required) |
-| `state` | string | - | Service state; without it the service is not started or stopped |
+| `name` | string | - | Service name (required; `service` is an alias) |
+| `state` | string | - | `started`, `stopped`, `restarted` or `reloaded`; without it the service is not started or stopped |
 | `enabled` | boolean | - | Enable at boot |
-| `daemon_reload` | boolean | `false` | Reload systemd daemon |
-| `scope` | string | `system` | Service scope |
 
-One of `state` or `enabled` is required.
-
-#### States
-
-- `started`: Start service
-- `stopped`: Stop service
-- `restarted`: Restart service
-- `reloaded`: Reload service configuration
+One of `state` or `enabled` is required. `restarted` and `reloaded` always report `changed`. Returns `service_status`, `action` and `enabled` when they changed.
 
 #### Example
 
@@ -708,40 +666,45 @@ One of `state` or `enabled` is required.
     name: "nginx"
     state: "started"
     enabled: true
-
-- name: "Restart application service"
-  service:
-    name: "myapp"
-    state: "restarted"
-    daemon_reload: true
 ```
 
 ### systemd
 
-Advanced systemd service management.
+systemd services, unit files and timers.
 
 #### Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `name` | string | - | Service name (required) |
-| `state` | string | - | Service state |
-| `enabled` | boolean | - | Enable at boot |
-| `masked` | boolean | - | Mask service |
-| `daemon_reload` | boolean | `false` | Reload daemon |
-| `scope` | string | `system` | Service scope |
-| `user` | string | - | User for user services |
+| `name` | string | - | Unit name (required except for `daemon-reload`; `service` and `unit` are aliases) |
+| `operation` | string | `service` | `service`, `unit`, `timer`, `daemon-reload` or `status` |
+| `state` | string | see below | `service`: `started`, `stopped`, `restarted`, `reloaded`; `timer`: `started` (default), `stopped`; `unit`: `present` (default), `absent` |
+| `enabled` | boolean | - | Enable at boot (`service`, `timer`) |
+| `masked` | boolean | - | Mask or unmask (`service`) |
+| `daemon_reload` | boolean | `false` | Run `systemctl daemon-reload` first; alone it only reloads |
+| `content` | string | - | `unit`: unit file content |
+| `path` | string | `/etc/systemd/system/<name>` | `unit`: unit file path |
+
+`operation: unit` writes `content` (and reloads systemd when it changed); `state: absent` stops, disables and removes the unit file. `status` returns `status` (LoadState, ActiveState, ...). Returns `action`, `enabled`, `masked`, `status`.
 
 #### Example
 
 ```yaml
-- name: "Configure systemd service"
+- name: "Install a unit file"
+  systemd:
+    operation: unit
+    name: "myapp.service"
+    content: |
+      [Service]
+      ExecStart=/usr/local/bin/myapp
+      [Install]
+      WantedBy=multi-user.target
+
+- name: "Start and enable it"
   systemd:
     name: "myapp.service"
     state: "started"
     enabled: true
-    daemon_reload: true
-    scope: "system"
 
 - name: "Mask unwanted service"
   systemd:
@@ -749,22 +712,22 @@ Advanced systemd service management.
     masked: true
 ```
 
-## 🎛️ System Control Modules
+## System Control Modules
 
 ### sysctl
 
-Manage kernel parameters via sysctl. Configure kernel tuning for performance and system behavior.
+Set a kernel parameter now and in a sysctl file.
 
 #### Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `name` | string | - | Sysctl key (required) |
-| `value` | string | - | Sysctl value (required) |
-| `state` | string | `present` | Parameter state (`present` or `absent`) |
-| `sysctl_file` | string | `/etc/sysctl.d/99-onigirazu.conf` | Configuration file for persistence |
-| `persist` | boolean | `true` | Persist parameter to sysctl file |
-| `reload` | boolean | `true` | Reload sysctl settings after change |
+| `name` | string | - | Sysctl key (required; `key` is an alias) |
+| `value` | string | - | Value (required, also for `state: absent`; `val` is an alias) |
+| `state` | string | `present` | `present` or `absent` (removes the line from `sysctl_file`; the running value stays) |
+| `sysctl_file` | string | `/etc/sysctl.d/99-onigirazu.conf` | File for the persistent setting |
+| `persist` | boolean | `true` | Write the setting to `sysctl_file` |
+| `reload` | boolean | `true` | Run `sysctl -p <sysctl_file>` after the file changed |
 
 #### Example
 
@@ -773,18 +736,17 @@ Manage kernel parameters via sysctl. Configure kernel tuning for performance and
   sysctl:
     name: "net.ipv4.ip_forward"
     value: "1"
-    state: "present"
-    persist: true
 
-- name: "Configure TCP parameters"
+- name: "Tune TCP in its own file"
   sysctl:
     name: "net.ipv4.tcp_max_syn_backlog"
     value: "2048"
     sysctl_file: "/etc/sysctl.d/network.conf"
 
-- name: "Remove custom kernel parameter"
+- name: "Remove a persistent setting"
   sysctl:
-    name: "kernel.custom_param"
+    name: "vm.swappiness"
+    value: "10"
     state: "absent"
 ```
 
@@ -795,109 +757,66 @@ Manage kernel parameters via sysctl. Configure kernel tuning for performance and
   "sysctl_key": "net.ipv4.ip_forward",
   "current_value": "0",
   "desired_value": "1",
-  "changed": true,
   "msg": "Kernel parameter net.ipv4.ip_forward set to 1",
   "persisted_to_file": "/etc/sysctl.d/99-onigirazu.conf"
 }
 ```
 
-#### Common Use Cases
-
-```yaml
-# Enable IP forwarding for router
-- sysctl:
-    name: "net.ipv4.ip_forward"
-    value: "1"
-
-# Increase max connections for web server
-- sysctl:
-    name: "net.core.somaxconn"
-    value: "4096"
-
-# Tune TCP parameters
-- sysctl:
-    name: "net.ipv4.tcp_max_syn_backlog"
-    value: "2048"
-
-# Configure memory management
-- sysctl:
-    name: "vm.swappiness"
-    value: "10"
-```
-
 ### reboot
 
-Reboot the system with optional pre-reboot checks and delays.
+Reboot the host and wait until it is back (a new boot id).
 
 #### Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `pre_reboot_delay` | integer | `0` | Delay in seconds before reboot |
-| `msg` | string | "System will reboot in a few seconds" | Reboot message |
-| `test_boot` | boolean | `false` | Test boot without rebooting |
-| `reboot_command` | string | - | Custom reboot command |
+| `pre_reboot_delay` | integer | `0` | Seconds to wait before the reboot; `msg` is sent with `wall` first |
+| `post_reboot_delay` | integer | `0` | Seconds to wait after the host is back |
+| `reboot_timeout` | integer | `600` | Seconds to wait for the host to come back |
+| `msg` | string | `System will reboot in a few seconds` | Message for `wall` (with `pre_reboot_delay`) |
+| `reboot_command` | string | - | Command that reboots; default: `systemctl reboot` two seconds later |
+| `test_boot` | boolean | `false` | Only check `systemctl is-system-running` (`degraded` passes); no reboot |
+
+A local host (the control machine) is never rebooted. Returns `msg` and `elapsed` (seconds).
 
 #### Example
 
 ```yaml
-- name: "Reboot system immediately"
+- name: "Reboot"
   reboot:
 
-- name: "Reboot with delay and notification"
+- name: "Reboot with notice"
   reboot:
     pre_reboot_delay: 60
     msg: "System maintenance - rebooting in 1 minute"
-
-- name: "Test boot check"
-  reboot:
-    test_boot: true
-
-- name: "Custom reboot procedure"
-  reboot:
-    reboot_command: "shutdown -r now"
-    pre_reboot_delay: 30
+    reboot_timeout: 900
 ```
-
-#### Return Values
-
-```json
-{
-  "host": "server01",
-  "reboot_initiated": true,
-  "msg": "System reboot scheduled to start in 1 minute",
-  "changed": true
-}
-```
-
-#### Important Notes
-
-- Reboot is scheduled with `shutdown -r +1` (1 minute delay) to allow playbook to complete
-- Pre-reboot notifications are sent via `wall` command if delay is set
-- The module execution returns before actual reboot occurs
-- Use in playbooks with proper error handling
 
 ### mount
 
-Control active and persistent filesystem mounts. Manage mount points in /etc/fstab and current mount status.
+Manage `/etc/fstab` entries and mounted filesystems, as Ansible's mount.
 
 #### Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `path` | string | - | Mount point path (required) |
-| `src` | string | - | Device/source for state=present |
-| `state` | string | `present` | Mount state |
-| `fstype` | string | `defaults` | Filesystem type |
+| `path` | string | - | Mount point (required; `name` is an alias) |
+| `src` | string | - | Device or source (required for `present` and `mounted`) |
+| `state` | string | `present` | See below |
+| `fstype` | string | `auto` | Filesystem type |
 | `opts` | string | `defaults` | Mount options |
-| `backup` | boolean | `true` | Backup /etc/fstab before changes |
+| `dump` | string | `0` | fstab dump field |
+| `passno` | string | `0` | fstab pass field |
+| `backup` | boolean | `true` | Copy `/etc/fstab` to `/etc/fstab.bak` before writing it |
 
 #### States
 
-- `present`: Add to fstab and mount
-- `absent`: Remove from fstab and unmount
-- `mounted`: Ensure filesystem is mounted
-- `unmounted`: Ensure filesystem is unmounted
+- `present`: fstab entry only
+- `mounted`: fstab entry, mount point created, mounted (remounted when the entry changed)
+- `unmounted`: not mounted; fstab untouched
+- `absent`: not mounted and no fstab entry
+
+Returns `path` and `msg`.
 
 #### Example
 
@@ -906,220 +825,54 @@ Control active and persistent filesystem mounts. Manage mount points in /etc/fst
   mount:
     path: "/mnt/nfs"
     src: "192.168.1.100:/export/data"
-    state: "present"
     fstype: "nfs"
-    opts: "defaults,nfsvers=4.0,hard,intr"
+    opts: "defaults,nfsvers=4.0,hard"
+    state: "mounted"
 
-- name: "Mount USB drive"
-  mount:
-    path: "/mnt/usb"
-    src: "/dev/sdb1"
-    state: "present"
-    fstype: "ext4"
-    opts: "noatime,defaults"
-
-- name: "Unmount temporary mount"
+- name: "Remove a mount"
   mount:
     path: "/mnt/tmp"
     state: "absent"
-
-- name: "Ensure data partition is mounted"
-  mount:
-    path: "/data"
-    state: "mounted"
 ```
-
-#### Return Values
-
-```json
-{
-  "path": "/mnt/nfs",
-  "src": "192.168.1.100:/export/data",
-  "fstype": "nfs",
-  "opts": "defaults,nfsvers=4.0",
-  "changed": true,
-  "msg": "Mount point /mnt/nfs configured and mounted",
-  "mounted": true,
-  "added_to_fstab": true
-}
-```
-
-#### Common Use Cases
-
-```yaml
-# Production NFS mount with HA options
-- mount:
-    path: "/data"
-    src: "nfs-server:/export/prod"
-    fstype: "nfs"
-    opts: "defaults,hard,intr,bg,nfsvers=4"
-    state: "present"
-
-# Data drive with optimizations
-- mount:
-    path: "/var/lib/mysql"
-    src: "/dev/sdb1"
-    fstype: "ext4"
-    opts: "noatime,nodiratime,defaults"
-    state: "present"
-
-# Loop device or ISO mount
-- mount:
-    path: "/mnt/iso"
-    src: "/path/to/image.iso"
-    fstype: "iso9660"
-    opts: "ro,loop"
-    state: "present"
-```
-
-#### Troubleshooting
-
-- **Mount fails after adding to fstab**: Check filesystem type and options are correct
-- **Permission denied**: Ensure running with appropriate privileges (sudo/become)
-- **Device not found**: Verify source path/device exists and is accessible
 
 ### archive
 
-Create and manage compressed archives. Supports multiple formats including tar, gzip, bzip2, xz, and zip with glob pattern matching and selective exclusions.
-
-**Available since v1.57.0** ✨ - Native archive creation module with glob patterns and exclusions
+Create a tar or zip archive on the host with `tar`/`zip`.
 
 #### Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `path` | string/list | - | Source file(s) or pattern(s) (required) |
-| `dest` | string | - | Destination archive file (required) |
-| `format` | string | `tar.gz` | Archive format: `tar`, `tar.gz`, `tar.bz2`, `tar.xz`, `zip` |
-| `exclude` | list | `[]` | Exclude patterns (glob format) |
-| `remove` | boolean | `false` | Remove source files after successful archiving |
+| `path` | string/list | - | Files, directories or glob patterns (required) |
+| `dest` | string | - | Archive file (required); its directory is created |
+| `format` | string | `gz` | `gz` (tar.gz), `bz2`, `xz`, `tar` or `zip` (needs `zip` on the host) |
+| `exclude_path` | string/list | - | Patterns to exclude, relative to `/` (a leading `/` is removed) |
+| `remove` | boolean | `false` | Remove the sources after archiving |
 
-#### Supported Formats
-
-| Format | Description | File Extension | Use Case |
-|--------|-------------|-----------------|----------|
-| `tar` | Uncompressed tar archive | `.tar` | Large files, local transfers |
-| `tar.gz` | Gzip compressed tar | `.tar.gz` | Default, good compression ratio |
-| `tar.bz2` | Bzip2 compressed tar | `.tar.bz2` | Better compression, slower |
-| `tar.xz` | XZ compressed tar | `.tar.xz` | Best compression, very slow |
-| `zip` | ZIP archive | `.zip` | Cross-platform, Windows compatible |
+Paths are stored relative to `/`. The task is `ok` when `dest` exists and no source is newer; it fails when nothing matches `path`. Returns `dest` and `format`.
 
 #### Example
 
 ```yaml
-- name: "Create simple tar.gz archive"
+- name: "Archive logs"
   archive:
     path: "/var/log/app"
-    dest: "/backups/app-logs-{{ onigirazu_date_time.date }}.tar.gz"
-    format: "tar.gz"
-
-- name: "Archive multiple specific files"
-  archive:
-    path:
-      - "/etc/nginx/nginx.conf"
-      - "/etc/nginx/conf.d/"
-    dest: "/backups/nginx-config.tar.gz"
+    dest: "/backups/app-logs.tar.gz"
 
 - name: "Archive with exclusions"
   archive:
-    path: "/opt/application"
-    dest: "/backups/app-full.tar.gz"
-    format: "tar.gz"
-    exclude:
-      - "*.tmp"
-      - "cache/*"
-      - "logs/*"
-
-- name: "Archive and remove source files"
-  archive:
-    path: "/tmp/working_files"
-    dest: "/archive/project-v1.2.0.zip"
-    format: "zip"
-    remove: true
-
-- name: "Archive with glob patterns"
-  archive:
     path:
-      - "/var/log/*.log"
-      - "/var/log/app/*"
-    dest: "/backups/logs-archive.tar.bz2"
-    format: "tar.bz2"
-    exclude:
-      - "debug.log"
+      - "/opt/application"
+      - "/etc/application"
+    dest: "/backups/app.tar.xz"
+    format: "xz"
+    exclude_path:
+      - "/opt/application/cache"
 ```
-
-#### Return Values
-
-```json
-{
-  "archived": true,
-  "archive_path": "/backups/app-logs-2025-10-28.tar.gz",
-  "format": "tar.gz",
-  "file_count": 42,
-  "size_bytes": 5242880,
-  "size_human": "5.0 MB",
-  "files_archived": [
-    "/var/log/app/access.log",
-    "/var/log/app/error.log",
-    "/var/log/app/debug.log"
-  ],
-  "changed": true,
-  "msg": "Successfully created archive with 42 files"
-}
-```
-
-#### Common Use Cases
-
-```yaml
-# Database backup
-- archive:
-    path: "/var/backups/database"
-    dest: "/secure/backup-{{ onigirazu_date_time.epoch }}.tar.xz"
-    format: "tar.xz"
-
-# Log rotation archive
-- archive:
-    path: "/var/log"
-    dest: "/archive/logs-{{ onigirazu_date_time.year }}-{{ onigirazu_date_time.month }}.tar.gz"
-    exclude:
-      - "current/*"
-      - "*.sock"
-    remove: false
-
-# Application deployment archive
-- archive:
-    path:
-      - "/opt/app/src"
-      - "/opt/app/config"
-      - "/opt/app/README.md"
-    dest: "/releases/app-{{ app_version }}.zip"
-    format: "zip"
-    exclude:
-      - "*.pyc"
-      - "__pycache__"
-      - ".git"
-      - "node_modules"
-
-# Cross-platform compatible backup
-- archive:
-    path: "/home/user/documents"
-    dest: "/backup/docs-{{ onigirazu_date_time.date }}.zip"
-    format: "zip"
-    remove: false
-```
-
-#### Important Notes
-
-- **Glob Patterns**: The `path` parameter supports glob patterns (e.g., `*.log`, `app_*/`)
-- **Source Files**: Must exist and be readable by the executing user
-- **Destination**: Parent directory must exist and be writable
-- **Remove Safety**: Files are only removed after successful archive creation
-- **Exclusions**: Exclude patterns use glob matching (e.g., `*.tmp`, `dir/*`)
-- **Format Selection**: Choose `tar.xz` for maximum compression, `zip` for Windows compatibility
 
 ### unarchive
 
-Extracts a tar (any compression tar understands) or zip archive into an existing directory.
+Extract a tar (any compression tar understands) or zip archive into an existing directory.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
@@ -1144,33 +897,46 @@ the archive is extracted over it. Zip archives need `unzip` on the host.
 
 ### timezone
 
+Set the time zone. Also `community.general.timezone`.
+
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `name` | string | - | IANA time zone, e.g. `Europe/Madrid`, `UTC` |
+| `name` | string | - | IANA time zone, e.g. `Europe/Madrid`, `UTC` (required) |
 
 Uses `timedatectl` when systemd runs, else links `/etc/localtime` (and writes
-`/etc/timezone` where it exists). Also `community.general.timezone`.
+`/etc/timezone` where it exists). Returns `name` and `previous`.
 
-## 📦 Package Modules
+### hostname
+
+Set the host name with `hostnamectl`, else `/etc/hostname`.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `name` | string | - | New host name (required) |
+
+Returns `name` and updates the `ansible_hostname` fact.
+
+## Package Modules
 
 ### package
 
-Universal package management.
+Install or remove packages with the host's package manager: apt, yum/dnf or Homebrew. pacman, zypper and Chocolatey are detected but not implemented.
 
 #### Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `name` | string/list | - | Package name(s) (required) |
-| `state` | string | `present` | Package state |
-| `version` | string | - | Specific version |
-| `update_cache` | boolean | `false` | Update package cache |
+| `name` | string/list | - | Package, list of packages, or list of `{name, version, state}` (required; `pkg` is an alias) |
+| `state` | string | `present` | `present`, `absent` or `latest` |
+| `version` | string | - | Version for all packages |
+| `update_cache` | boolean | `false` | Refresh the package cache first |
+| `dry_run` | boolean | `false` | Only return `previews` of the operations |
+| `parallel` | boolean | `false` | Install several packages in parallel |
+| `max_retries` | integer | `3` | Retries per package |
+| `enable_rollback` | boolean | `false` | Undo the packages already changed when one fails |
+| `lock_file` | string | - | Local lock file recording installed versions |
 
-#### States
-
-- `present`: Install package
-- `absent`: Remove package
-- `latest`: Install latest version
+Returns `summary` and `batch_operation`, or `package_state` when nothing had to change.
 
 #### Example
 
@@ -1180,7 +946,6 @@ Universal package management.
     name:
       - "nginx"
       - "php-fpm"
-      - "mysql-client"
     state: "present"
     update_cache: true
 
@@ -1188,32 +953,29 @@ Universal package management.
   package:
     name: "docker-ce"
     version: "20.10.17"
-    state: "present"
 ```
 
 ### apt
 
-Debian/Ubuntu package management.
+Debian/Ubuntu packages with `apt-get`.
 
 #### Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `name` | string/list | - | Package name(s) (optional if only updating cache) |
-| `state` | string | `present` | Package state (`present`, `latest`, or `absent`) |
-| `update_cache` | boolean | `false` | Update apt cache before operation |
-| `cache_valid_time` | int | - | Skip the cache update if it is younger than this many seconds |
+| `name` | string/list | - | Package(s) (`pkg`, `package` are aliases); optional for cache, upgrade and cleanup runs |
+| `state` | string | `present` | `present`, `latest` or `absent` |
+| `update_cache` | boolean | `false` | Run `apt-get update` first (`update-cache` is an alias) |
+| `cache_valid_time` | int | `0` | Skip the cache update if it is younger than this many seconds |
 | `upgrade` | string | `no` | `yes`/`safe` (apt-get upgrade), `full`/`dist` (dist-upgrade); predicted in check mode |
 | `autoremove` | boolean | `false` | Remove unused packages |
-| `autoclean` | boolean | `false` | Clean package cache |
+| `autoclean` | boolean | `false` | Clean the package cache |
+
+`absent` removes with `apt-get remove` (configuration files stay). Returns `state`, `packages`, `msg`, `cache_updated`, `upgrade`.
 
 #### Example
 
 ```yaml
-- name: "Update package cache"
-  apt:
-    update_cache: true
-
 - name: "Upgrade nginx to the latest version"
   apt:
     name: nginx
@@ -1233,7 +995,7 @@ Debian/Ubuntu package management.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `repo` | string | - | A `deb ...` / `deb-src ...` line, or `ppa:owner/name` |
+| `repo` | string | - | A `deb ...` / `deb-src ...` line, or `ppa:owner/name` (required) |
 | `state` | string | `present` | `present` or `absent` |
 | `filename` | string | from the URL | File in `/etc/apt/sources.list.d/` (without `.list`) |
 | `update_cache` | boolean | `true` | Run `apt-get update` after a change |
@@ -1266,18 +1028,18 @@ key with gpg (`keyserver: hkps://keyserver.ubuntu.com`).
 
 ### yum
 
-RedHat/CentOS package management.
+RHEL/Fedora packages with the `yum` command (dnf provides it). `dnf` and `dnf5` tasks run this module.
 
 #### Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `name` | string/list | - | Package name(s) (optional if only updating cache) |
-| `state` | string | `present` | Package state (`present`, `latest`, or `absent`) |
-| `enablerepo` | string | - | Enable specific repository |
-| `disablerepo` | string | - | Disable specific repository |
-| `security` | boolean | `false` | Install only security updates |
-| `update_cache` | boolean | `false` | Update yum cache |
+| `name` | string/list | - | Package(s) (`pkg` is an alias; optional if only updating the cache) |
+| `state` | string | `present` | `present`, `latest` or `absent` |
+| `enablerepo` | string | - | Repositories to enable for this run |
+| `disablerepo` | string | - | Repositories to disable for this run |
+| `security` | boolean | `false` | Run `yum update --security` (all security updates) instead of installing `name` |
+| `update_cache` | boolean | `false` | Run `yum makecache` first |
 
 #### Example
 
@@ -1290,32 +1052,53 @@ RedHat/CentOS package management.
 - name: "Install from specific repo"
   yum:
     name: "docker-ce"
-    state: "present"
     enablerepo: "docker-ce-stable"
 ```
 
-## 🌐 Network Modules
+### pip
+
+Python packages with pip.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `name` | string/list | - | Packages; `pkg==1.2` pins a version (`name` or `requirements` is required; `pkg` is an alias) |
+| `version` | string | - | Version for a package without a specifier |
+| `state` | string | `present` | `present`, `absent`, `latest` or `forcereinstall` |
+| `requirements` | string | - | Requirements file on the host |
+| `virtualenv` | string | - | Virtualenv to use; created when missing |
+| `virtualenv_command` | string | `python3 -m venv` | Command that creates the virtualenv |
+| `executable` | string | `pip3`, else `pip` | pip to run |
+| `extra_args` | string | - | Extra arguments for `pip install` |
+
+```yaml
+- pip:
+    name: [requests, "flask==3.0.3"]
+    virtualenv: /opt/app/venv
+```
+
+## Network Modules
 
 ### uri
 
-Interact with HTTP/HTTPS services. The request is made from the host with
-curl, or with the host's Python (`python3`, then `python`) where curl is
-missing. With `return_content: true` the result has `content`;
-`validate_certs: false` skips TLS verification.
+Make an HTTP request from the host, with curl or, where curl is missing, the host's Python (`python3`, then `python`).
 
 #### Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `url` | string | - | Request URL (required) |
-| `method` | string | `GET` | HTTP method (GET, POST, PUT, DELETE, PATCH, HEAD) |
-| `body` | string/dict | - | Request body (string or dict for JSON) |
-| `body_format` | string | `raw` | Body format (`raw` or `json`) |
-| `headers` | dict | - | Custom HTTP headers |
+| `method` | string | `GET` | HTTP method |
+| `body` | string/dict | - | Request body; a dict is sent as JSON |
+| `body_format` | string | `raw` | `json` or `form-urlencoded` set the Content-Type |
+| `headers` | dict | - | Request headers |
 | `user` | string | - | Username for basic authentication |
 | `password` | string | - | Password for basic authentication |
 | `timeout` | integer | `30` | Request timeout in seconds |
-| `status_code` | list | - | Acceptable HTTP status codes |
+| `status_code` | int/list | `200` | Accepted status codes; others fail the task |
+| `return_content` | boolean | `false` | Also return the body as `content` |
+| `validate_certs` | boolean | `true` | `false` skips TLS verification |
+
+Returns `status`, `url`, `headers`, `text` (the body), `json` (when the body is JSON), `content` and `elapsed`. Never reports `changed`.
 
 #### Example
 
@@ -1323,38 +1106,39 @@ missing. With `return_content: true` the result has `content`;
 - name: "Check API health"
   uri:
     url: "https://api.example.com/health"
-    method: "GET"
     timeout: 10
-  register: "health_check"
+  register: health_check
 
 - name: "Send webhook notification"
   uri:
-    url: "https://hooks.slack.com/services/..."
+    url: "https://hooks.example.com/services/deploy"
     method: "POST"
     body_format: "json"
     body:
       text: "Deployment completed successfully"
-    headers:
-      Content-Type: "application/json"
+    status_code: [200, 204]
 ```
 
 ### get_url
 
-Download files from HTTP/HTTPS/FTP.
+Download a file on the host with curl (or wget).
 
 #### Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `url` | string | - | Download URL (required) |
-| `dest` | string | - | Destination path (required) |
-| `mode` | string | - | File permissions |
+| `dest` | string | - | Destination file (required) |
+| `checksum` | string | - | `<algorithm>:<hex>` (`md5`, `sha1`, `sha256`, `sha512`); the download must match, and an existing file that matches is kept |
+| `force` | boolean | `false` | Download even when `dest` exists |
+| `headers` | dict | - | Request headers |
+| `timeout` | integer | `30` | Download timeout in seconds |
+| `mode` | string | `0644` | File permissions |
 | `owner` | string | - | File owner |
 | `group` | string | - | File group |
-| `backup` | boolean | `false` | Create backup |
-| `force` | boolean | `false` | Force download |
-| `timeout` | integer | `30` | Download timeout |
-| `validate_certs` | boolean | `true` | Validate SSL certificates |
+| `backup` | boolean | `false` | Keep the old file as `<dest>.<unixtime>.backup` |
+
+Without `force` an existing `dest` is not downloaded again (unless `checksum` differs). Returns `url`, `dest`, `msg`, `size`, `checksum`.
 
 #### Example
 
@@ -1363,13 +1147,11 @@ Download files from HTTP/HTTPS/FTP.
   get_url:
     url: "https://releases.example.com/myapp/v1.2.3/myapp-linux-amd64"
     dest: "/usr/local/bin/myapp"
+    checksum: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
     mode: "0755"
-    owner: "root"
-    group: "root"
-    backup: true
 ```
 
-## 🔒 Security Modules
+## Security Modules
 
 ### user
 
@@ -1379,7 +1161,7 @@ Manage user accounts. An existing account is brought to the given settings.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `name` | string | - | Username (required) |
+| `name` | string | - | Username (required; `user` is an alias) |
 | `state` | string | `present` | `present` or `absent` |
 | `uid` | integer | - | User ID |
 | `group` | string | - | Primary group (name or GID) |
@@ -1446,19 +1228,18 @@ Manage groups.
 
 ### authorized_key
 
-Manage SSH authorized keys.
+Add or remove one SSH public key in `~<user>/.ssh/authorized_keys`. Also `ansible.posix.authorized_key`.
 
 #### Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `user` | string | - | Username (required) |
-| `key` | string | - | SSH public key (required) |
-| `state` | string | `present` | Key state |
-| `path` | string | - | Custom authorized_keys path |
-| `manage_dir` | boolean | `true` | Manage .ssh directory |
-| `exclusive` | boolean | `false` | Remove other keys |
-| `comment` | string | - | Key comment |
+| `user` | string | - | Account (required; must exist and have a home directory) |
+| `key` | string | - | One public key line (required) |
+| `state` | string | `present` | `present` or `absent` |
+| `exclusive` | boolean | `false` | With `present`: remove every other key |
+
+Keys are compared by type and key data, not by comment. `~/.ssh` (0700) and the file (0600) are created and owned by the user. Returns `user`, `state`, `key_count`, `msg`.
 
 #### Example
 
@@ -1466,40 +1247,32 @@ Manage SSH authorized keys.
 - name: "Add SSH key for user"
   authorized_key:
     user: "myuser"
-    key: "{{ lookup('file', '~/.ssh/id_rsa.pub') }}"
-    state: "present"
-    comment: "Deployment key"
+    key: "{{ lookup('file', '~/.ssh/id_ed25519.pub') }}"
 
-- name: "Set exclusive SSH keys"
+- name: "Allow only the deploy key"
   authorized_key:
     user: "appuser"
-    key: |
-      ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQ... user1@host1
-      ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQ... user2@host2
+    key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA... deploy@ci"
     exclusive: true
 ```
 
-## 🖥️ System Connectivity
+## System Connectivity
 
 ### ping
 
-Tests connectivity to target hosts.
+Test the connection to the host.
 
 #### Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `data` | string | `pong` | Custom response message |
+| `data` | string | `pong` | Value returned in `ping` |
 
 #### Example
 
 ```yaml
 - name: "Test connectivity to all hosts"
   ping:
-
-- name: "Test with custom data"
-  ping:
-    data: "custom_response"
 ```
 
 #### Return Values
@@ -1523,7 +1296,7 @@ Read the status of a path. Never changes anything.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `path` | string | - | Path (required) |
+| `path` | string | - | Path (required; `dest` and `name` are aliases) |
 | `get_checksum` | boolean | `true` | Compute a checksum of regular files |
 | `checksum_algorithm` | string | `sha1` | `md5`, `sha1`, `sha224`, `sha256`, `sha384` or `sha512` |
 
@@ -1572,23 +1345,25 @@ A link is reported as a link, not followed.
 }
 ```
 
-Links also carry `lnk_source` (resolved path) and `lnk_target` (link text). For a missing path only `exists: false` and `path` are returned. The same fields are also available at the top level of the result.
+`readable`, `writable` and `executable` are the owner's permission bits. Links also carry `lnk_source` (resolved path) and `lnk_target` (link text). For a missing path only `exists: false` and `path` are returned. The same fields are also available at the top level of the result.
 
-## 🔄 Version Control
+## Version Control
 
 ### git
 
-Manages Git repositories on target hosts.
+Clone a repository on the host, or update an existing clone.
 
 #### Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `repo` | string | - | Git repository URL (required) |
+| `repo` | string | - | Repository URL (required; `name` is an alias) |
 | `dest` | string | - | Destination path (required) |
-| `version` | string | `HEAD` | Branch, tag, or commit to checkout |
-| `force` | boolean | `false` | Force overwrite if dest exists |
-| `update` | boolean | `true` | Update existing repository |
+| `version` | string | `HEAD` | Branch, tag or commit to check out |
+| `update` | boolean | `true` | Fetch and check out `version` in an existing clone |
+| `force` | boolean | `false` | Clone even when `dest` exists and is not a git repository |
+
+`changed` means the checked-out commit changed. Returns `before`, `after`, `version`, `dest`, `info`.
 
 #### Example
 
@@ -1599,87 +1374,86 @@ Manages Git repositories on target hosts.
     dest: "/opt/myapp"
     version: "main"
 
-- name: "Checkout specific tag"
+- name: "Check out a tag"
   git:
     repo: "git@github.com:myorg/myapp.git"
     dest: "/opt/myapp"
     version: "v1.2.3"
-    update: true
 ```
 
-## ⏰ Scheduled Jobs
+## Scheduled Jobs
 
 ### cron
 
-Manage cron jobs and system crontabs.
+Cron jobs in a user's crontab, whole crontabs, and files in `/etc/cron.*`.
 
 #### Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `operation` | string | `job` | `job`, `file`, `system`, or `list` |
-| `name` | string | - | Job name/comment |
-| `job` | string | - | Job command to execute |
-| `minute` | string | `*` | Minute (0-59) |
-| `hour` | string | `*` | Hour (0-23) |
-| `day` | string | `*` | Day of month (1-31) |
-| `month` | string | `*` | Month (1-12) |
-| `weekday` | string | `*` | Day of week (0-6) |
-| `user` | string | `root` | Cron user |
+| `operation` | string | `job` | `job`, `file`, `system` or `list` |
+| `name` | string | - | `job`: job name (required); `system`: file name in the cron directory (required) |
+| `job` | string | - | Command (`job`, required with `state: present`) |
+| `minute`, `hour`, `day`, `month`, `weekday` | string | `*` | Schedule (`job`) |
+| `special_time` | string | - | `reboot`, `hourly`, `daily`, ... without `@` (`job`; replaces the schedule) |
+| `user` | string | `root` | Crontab owner (`job`, `file`, `list`) |
 | `state` | string | `present` | `present` or `absent` |
-| `special_time` | string | - | Special time string (@reboot, @hourly, etc.) |
+| `content` | string | - | `file`: the whole crontab; `system`: the file content |
+| `cron_type` | string | `d` | `system`: `d` (`/etc/cron.d`), `hourly`, `daily`, `weekly` or `monthly` |
+| `backup` | boolean | `true` | `file`: save the old crontab to `/root/crontab.<user>.<time>.backup` |
+
+`operation: job` names each job with a `# Onigirazu: <name>` (or `# Ansible: <name>`) comment and
+rewrites the whole crontab with the named jobs only: lines without such a comment are dropped.
+`list` returns `jobs` (name to line), `jobs_count` and `raw_crontab`.
 
 #### Examples
 
 ```yaml
 - name: "Create daily backup job"
   cron:
-    operation: "job"
     name: "Daily database backup"
     job: "/usr/local/bin/backup-db.sh"
     minute: "0"
     hour: "2"
-    day: "*"
-    state: "present"
     user: "backupuser"
 
-- name: "Schedule task to run at reboot"
+- name: "Run at reboot"
   cron:
-    operation: "job"
     name: "Start application"
     job: "/opt/myapp/start.sh"
-    special_time: "@reboot"
-    user: "appuser"
+    special_time: "reboot"
 
-- name: "List all cron jobs"
+- name: "Cron file in /etc/cron.d"
+  cron:
+    operation: "system"
+    name: "myapp"
+    content: "*/5 * * * * root /opt/myapp/tick.sh"
+
+- name: "List cron jobs"
   cron:
     operation: "list"
-  register: "cron_jobs"
+  register: cron_jobs
 ```
 
-## 🔥 Security & Firewall
+## Security & Firewall
 
 ### firewall
 
-Manage firewall rules and services.
-
-#### Supported Firewalls
-
-- UFW (Ubuntu/Debian)
-- firewalld (RHEL/CentOS)
-- iptables (Generic Linux)
+Firewall rules through whichever of ufw, firewalld or iptables the host has (in that order).
 
 #### Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `operation` | string | `rule` | `enable`, `disable`, `rule`, `service`, `source`, `list`, `reload` |
+| `operation` | string | `rule` | `enable`, `disable`, `rule`, `service`, `source`, `list` or `reload` |
+| `action` | string | `allow` | `allow` or `deny` (`rule`, `service`, `source`) |
 | `state` | string | `present` | `present` or `absent` |
-| `port` | string | - | Port number or port range |
-| `protocol` | string | `tcp` | `tcp`, `udp`, or both |
-| `service` | string | - | Service name (http, ssh, etc.) |
-| `source` | string | - | Source IP or network |
-| `rule` | string | - | Custom firewall rule |
+| `port` | string | - | Port or range (`rule`, required) |
+| `protocol` | string | `tcp` | `tcp` or `udp` (`rule`) |
+| `service` | string | - | Service name such as `http`, `ssh` (`service`, required) |
+| `source` | string | - | Source IP or network (`source`, required) |
+
+Returns `firewall_type`, `action`, and for `list` `rules` and `rules_count`.
 
 #### Examples
 
@@ -1690,77 +1464,105 @@ Manage firewall rules and services.
 
 - name: "Allow SSH port"
   firewall:
-    operation: "rule"
     port: "22"
     protocol: "tcp"
-    state: "present"
 
-- name: "Allow HTTP/HTTPS services"
+- name: "Allow HTTP service"
   firewall:
     operation: "service"
     service: "http"
-    state: "present"
 
-- name: "Allow traffic from specific IP"
+- name: "Allow traffic from a network"
   firewall:
     operation: "source"
     source: "192.168.1.0/24"
-    state: "present"
 
 - name: "List all firewall rules"
   firewall:
     operation: "list"
-  register: "fw_rules"
+  register: fw_rules
 ```
 
-## 🐳 Container Management
+### ufw
+
+The Uncomplicated Firewall. Also `community.general.ufw`. One of `state`, `rule`, `policy` or `logging` is required.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `state` | string | - | `enabled`, `disabled`, `reloaded` or `reset` |
+| `policy` | string | - | Default policy `allow`, `deny` or `reject` (`default` is an alias), for `direction` |
+| `direction` | string | `incoming` for `policy` | `incoming`/`in`, `outgoing`/`out`, `routed`; for a rule: `in` or `out` |
+| `logging` | string | - | `on`, `off`, `low`, `medium`, `high`, `full` |
+| `rule` | string | - | `allow`, `deny`, `limit` or `reject` |
+| `port` | string | - | Destination port (`to_port` is an alias) |
+| `proto` | string | - | `tcp`, `udp`, ... (`protocol` is an alias) |
+| `src` | string | `any` | Source address (`from_ip`, `from` are aliases) |
+| `from_port` | string | - | Source port |
+| `dest` | string | `any` | Destination address (`to_ip`, `to` are aliases) |
+| `interface` | string | - | Interface (`if` is an alias) |
+| `route` | boolean | `false` | Routed rule |
+| `delete` | boolean | `false` | Delete the rule |
+| `insert` | string | - | Insert at this rule number |
+| `log` | boolean | `false` | Log matching packets |
+| `comment` | string | - | Rule comment |
+
+A rule that exists is not added again. Returns `rule` and `commands`.
+
+```yaml
+- ufw: {rule: allow, port: "22", proto: tcp}
+- ufw: {policy: deny, direction: incoming}
+- ufw: {state: enabled}
+```
+
+## Container Management
 
 ### docker_container
 
-Manage Docker containers.
+Manage Docker containers with the docker CLI on the host.
 
 #### Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `name` | string | - | Container name (required) |
-| `image` | string | - | Docker image name |
-| `state` | string | `started` | `present`, `started`, `stopped`, `absent` |
-| `ports` | list | - | Port mappings (e.g., ["8080:80"]) |
+| `image` | string | - | Image (required to create the container) |
+| `state` | string | `started` | `present`, `started`, `stopped`, `restarted` or `absent` |
+| `command` | string | - | Command, split like a shell would |
+| `ports` | list | - | Port mappings (e.g. `"8080:80"`) |
 | `volumes` | list | - | Volume mounts |
 | `env` | dict | - | Environment variables |
+| `networks` | list | - | Network names |
 | `restart_policy` | string | - | Restart policy |
 | `cpus` | number | - | CPU limit (e.g. `1.5`) |
 | `memory` | string | - | Memory limit (`512m`, `1g` or bytes) |
+| `force` | boolean | `false` | Remove with `docker rm -f` (`absent`) |
 
-The container is not compared with the other arguments: an existing container is
-kept as it is, so `comparisons` is accepted and has no effect. Only `cpus` and
-`memory` are compared and changed in place with `docker update`; the swap limit
-stays unlimited if it was, otherwise it becomes twice the memory, as docker sets
-for a new container.
+A new container is created with `docker run -d` (so `present` also starts it). An existing container is not compared
+with the other arguments and is kept as it is. Only `cpus` and `memory` are compared and changed in place with
+`docker update`; the swap limit stays unlimited if it was, otherwise it becomes twice the memory, as docker sets
+for a new container. Returns `action`, `container`, `updated`.
 
 #### Examples
 
 ```yaml
-- name: "Cap a running container"
-  docker_container:
-    name: "myapp"
-    image: "nginx:latest"
-    state: present
-    cpus: 1
-    memory: 512m
-
 - name: "Create and run web container"
   docker_container:
     name: "myapp"
     image: "nginx:latest"
-    state: "started"
     ports:
       - "8080:80"
     volumes:
       - "/var/www/html:/usr/share/nginx/html"
     env:
       ENVIRONMENT: "production"
+    restart_policy: "unless-stopped"
+
+- name: "Cap a running container"
+  docker_container:
+    name: "myapp"
+    image: "nginx:latest"
+    cpus: 1
+    memory: 512m
 
 - name: "Stop container"
   docker_container:
@@ -1770,25 +1572,32 @@ for a new container.
 
 ### docker_image
 
-Manage Docker images.
+Pull, build or remove Docker images.
 
 #### Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `name` | string | - | Image name (required) |
+| `name` | string | - | Image name without tag (required) |
 | `tag` | string | `latest` | Image tag |
-| `state` | string | `present` | `present` or `absent` |
-| `force` | boolean | `false` | Force pull/removal |
+| `state` | string | `present` | `present` (pull when missing), `absent` or `build` |
+| `force` | boolean | `false` | `present`: pull again; `absent`: remove with `-f` |
+| `platform` | string | - | Platform for the pull |
+| `path` | string | - | `build`: build context |
+| `dockerfile` | string | - | `build`: Dockerfile |
+| `build_args` | dict | - | `build`: build arguments |
+| `nocache` | boolean | `false` | `build`: no cache |
+| `pull` | boolean | `false` | `build`: pull newer base images |
+
+`build` always reports `changed`. Returns `action` and `image`.
 
 #### Examples
 
 ```yaml
-- name: "Pull latest nginx image"
+- name: "Pull nginx"
   docker_image:
     name: "nginx"
-    tag: "latest"
-    state: "present"
+    tag: "1.27"
 
 - name: "Remove old image"
   docker_image:
@@ -1799,44 +1608,57 @@ Manage Docker images.
 
 ### docker_compose
 
-Manage Docker Compose applications.
+Docker Compose projects (`docker compose`, else `docker-compose`). Also `community.docker.docker_compose` and `community.docker.docker_compose_v2`.
 
 #### Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
+| `project_dir` | string | - | Directory of the project (required; `project_src` is an alias) |
+| `file` | string | - | Compose file (the first of `files` is used too) |
 | `project_name` | string | - | Project name |
-| `compose_file` | string | `docker-compose.yml` | Path to compose file |
-| `state` | string | `present` | `present`, `started`, `stopped`, `absent` |
+| `state` | string | `present` | `present` (up), `absent` (down), `restarted`, `pull` or `build` |
+| `services` | list | - | Services (`present`, `restarted`, `build`) |
+| `detach` | boolean | `true` | `false` runs `up` in the foreground |
+| `build` | boolean | `false` | `present`: `up --build` (`always` = true; `never`, `missing`, `policy` = false) |
+| `force_recreate` | boolean | `false` | `present`: `--force-recreate` |
+| `remove_volumes` | boolean | `false` | `absent`: `down -v` |
+| `remove_orphans` | boolean | `false` | `absent`: `--remove-orphans` |
+| `nocache`, `pull` | boolean | `false` | `build`: `--no-cache`, `--pull` |
+
+`present` and `absent` report `changed` when the project's containers changed; `restarted`, `pull` and `build` always do. Returns `action`.
 
 #### Examples
 
 ```yaml
-- name: "Start docker-compose services"
+- name: "Start the stack"
   docker_compose:
-    project_name: "mystack"
-    compose_file: "/opt/mystack/docker-compose.yml"
-    state: "started"
+    project_dir: "/opt/mystack"
+    state: present
 
-- name: "Stop services"
+- name: "Stop and remove it"
   docker_compose:
-    project_name: "mystack"
-    state: "stopped"
+    project_dir: "/opt/mystack"
+    state: absent
 ```
 
 ### podman
 
-Manage Podman containers (Docker-compatible).
+Manage Podman containers; same arguments and behaviour as `docker_container` without the limits.
 
 #### Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `name` | string | - | Container name (required) |
-| `image` | string | - | Container image |
-| `state` | string | `started` | `started`, `stopped`, `absent` |
-| `ports` | list | - | Port mappings |
-| `volumes` | list | - | Volume mounts |
+| `image` | string | - | Image (required to create the container) |
+| `state` | string | `started` | `present`, `started`, `stopped`, `restarted` or `absent` |
+| `command` | string | - | Command |
+| `ports`, `volumes`, `networks` | list | - | Port mappings, volume mounts, network names |
+| `env` | dict | - | Environment variables |
+| `restart_policy` | string | - | Restart policy |
+| `rootless` | boolean | `false` | Add `--userns=keep-id` |
+| `force` | boolean | `false` | Remove with `-f` (`absent`) |
 
 #### Examples
 
@@ -1844,26 +1666,46 @@ Manage Podman containers (Docker-compatible).
 - name: "Run podman container"
   podman:
     name: "myapp"
-    image: "myapp:latest"
-    state: "started"
+    image: "docker.io/library/nginx:latest"
     ports:
-      - "8080:8080"
+      - "8080:80"
 ```
 
-## 🗄️ Database Management
+### docker_host_info
+
+Docker host information (`community.docker.docker_host_info`). Never changes anything.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `containers` | boolean | `false` | Also list the containers |
+| `containers_all` | boolean | `false` | Include stopped containers |
+| `containers_filters` | dict | - | `docker ps` filters, e.g. `name: [a, b]` |
+
+Returns `host_info` (`docker info`), `can_talk_to_docker` and `containers` as the Docker API lists them
+(`Id`, `Names` with the leading `/`, `Image`, `State`).
+
+## Database Management
+
+The database modules run the client on the host (`mysql`, `psql`, `mongosh`/`mongo`). They share the
+connection arguments `login_user`, `login_password`, `login_host` and `login_port`; without host and port the
+local socket is used, where root (MySQL/MariaDB) and `postgres` (with `become_user: postgres`) log in without a password.
+MongoDB also takes `login_database` (default `admin`).
 
 ### mysql_db
 
-Manage MySQL databases.
+Manage MySQL/MariaDB databases.
 
 #### Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `name` | string | - | Database name (required) |
-| `state` | string | `present` | `present` or `absent` |
-| `collation` | string | `utf8mb4_general_ci` | Database collation |
-| `encoding` | string | `utf8mb4` | Database encoding |
+| `state` | string | `present` | `present`, `absent`, `dump` or `import` |
+| `charset` | string | `utf8mb4` | Character set of a new database |
+| `collation` | string | `utf8mb4_unicode_ci` | Collation of a new database |
+| `target` | string | - | File on the host for `dump` / `import` (required there) |
+
+An existing database is not altered. `dump` and `import` always report `changed`. Returns `action` and `database`.
 
 #### Examples
 
@@ -1871,29 +1713,28 @@ Manage MySQL databases.
 - name: "Create application database"
   mysql_db:
     name: "myapp_db"
-    state: "present"
-    encoding: "utf8mb4"
-    collation: "utf8mb4_unicode_ci"
+    collation: "utf8mb4_general_ci"
 
-- name: "Remove database"
+- name: "Dump it"
   mysql_db:
-    name: "temp_db"
-    state: "absent"
+    name: "myapp_db"
+    state: dump
+    target: "/var/backups/myapp_db.sql"
 ```
 
 ### mysql_user
 
-Manage MySQL users and permissions.
+Manage MySQL/MariaDB accounts.
 
 #### Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `name` | string | - | Username (required) |
-| `host` | string | `%` | Host pattern |
-| `password` | string | - | User password |
+| `host` | string | `localhost` | Host part of the account |
+| `password` | string | - | Password, set when the account is created |
 | `state` | string | `present` | `present` or `absent` |
-| `priv` | string | - | Privileges (e.g., "mydb.*:ALL") |
+| `priv` | string | - | `db.table:PRIV,PRIV/db2.*:ALL`; granted, never revoked |
 
 #### Examples
 
@@ -1902,14 +1743,8 @@ Manage MySQL users and permissions.
   mysql_user:
     name: "appuser"
     host: "192.168.%"
-    password: "securepassword"
+    password: "{{ vault_db_password }}"
     priv: "myapp_db.*:ALL"
-    state: "present"
-
-- name: "Remove user"
-  mysql_user:
-    name: "tempuser"
-    state: "absent"
 ```
 
 ### postgresql_db
@@ -1921,9 +1756,12 @@ Manage PostgreSQL databases.
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `name` | string | - | Database name (required) |
-| `state` | string | `present` | `present` or `absent` |
-| `owner` | string | - | Database owner role |
-| `encoding` | string | `UTF8` | Database encoding |
+| `state` | string | `present` | `present`, `absent`, `dump` or `restore` |
+| `owner` | string | - | Owner role of a new database |
+| `encoding` | string | - | Encoding of a new database (created from `template0`) |
+| `target` | string | - | File on the host for `dump` / `restore` (required there) |
+
+An existing database is not altered.
 
 #### Examples
 
@@ -1933,21 +1771,25 @@ Manage PostgreSQL databases.
     name: "myapp_db"
     owner: "appuser"
     encoding: "UTF8"
-    state: "present"
+  become: true
+  become_user: postgres
 ```
 
 ### postgresql_user
 
-Manage PostgreSQL users and roles.
+Manage PostgreSQL login roles.
 
 #### Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `name` | string | - | Username (required) |
-| `password` | string | - | User password |
+| `name` | string | - | Role name (required) |
+| `password` | string | - | Password, set when the role is created |
 | `state` | string | `present` | `present` or `absent` |
-| `priv` | string | - | Privileges |
+| `db` | string | - | Database for `priv` |
+| `priv` | string | - | Database privileges, e.g. `CONNECT,CREATE` (needs `db`); granted, never revoked |
+| `superuser` | boolean | `false` | `SUPERUSER` for a new role |
+| `createdb` | boolean | `false` | `CREATEDB` for a new role |
 
 #### Examples
 
@@ -1955,9 +1797,11 @@ Manage PostgreSQL users and roles.
 - name: "Create PostgreSQL user"
   postgresql_user:
     name: "appuser"
-    password: "securepassword"
-    priv: "myapp_db:ALL"
-    state: "present"
+    password: "{{ vault_db_password }}"
+    db: "myapp_db"
+    priv: "CONNECT"
+  become: true
+  become_user: postgres
 ```
 
 ### mongodb
@@ -1971,6 +1815,11 @@ Manage MongoDB databases and users.
 | `name` | string | - | Database or user name (required) |
 | `operation` | string | `database` | `database` or `user` |
 | `state` | string | `present` | `present` or `absent` |
+| `database` | string | - | `user`: database of the user (required) |
+| `password` | string | - | `user`: password of a new user |
+| `roles` | list | - | `user`: roles of a new user, e.g. `[{role: readWrite, db: myapp_db}]` |
+
+A new database is created with a `_init` collection. An existing user is not changed.
 
 #### Examples
 
@@ -1978,17 +1827,18 @@ Manage MongoDB databases and users.
 - name: "Create MongoDB database"
   mongodb:
     name: "myapp_db"
-    operation: "database"
-    state: "present"
 
 - name: "Create MongoDB user"
   mongodb:
-    name: "appuser"
     operation: "user"
-    state: "present"
+    name: "appuser"
+    database: "myapp_db"
+    password: "{{ vault_db_password }}"
+    roles:
+      - {role: readWrite, db: myapp_db}
 ```
 
-## 🛠️ Utility Modules
+## Utility Modules
 
 ### debug
 
@@ -1998,17 +1848,17 @@ Print a message or a variable.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `msg` | string | - | Message (templated) |
+| `msg` | any | - | Message (templated) |
 | `var` | string | - | Variable or expression to print: `result.stdout`, `result['stdout']`, `items \| length` |
 
-`var` does not evaluate expressions or brackets (`hostvars[inventory_hostname]` prints "VARIABLE IS NOT DEFINED!"); use `msg: "{{ ... }}"` for those.
+One of them is required; `msg` wins when both are given. An undefined `var` prints "VARIABLE IS NOT DEFINED!".
 
 #### Example
 
 ```yaml
 - name: "Debug variable"
   debug:
-    var: ansible_facts
+    var: hostvars[inventory_hostname]['ansible_distribution']
 
 - name: "Debug message"
   debug:
@@ -2017,7 +1867,7 @@ Print a message or a variable.
 
 ### set_fact
 
-Set variables for the current host for the rest of the run. Every argument becomes a variable; types are kept.
+Set variables for the current host for the rest of the run. Every argument becomes a variable; types are kept. `cacheable` is accepted and ignored.
 
 #### Example
 
@@ -2041,6 +1891,8 @@ Fail unless every expression holds.
 | `fail_msg` | string | `Assertion failed` | Message on failure (`msg` is an alias) |
 | `success_msg` | string | `All assertions passed` | Message on success |
 
+On failure the result has `assertion` (the failed expression) and `evaluated_to: false`.
+
 #### Example
 
 ```yaml
@@ -2054,7 +1906,7 @@ Fail unless every expression holds.
 
 ### include_vars
 
-Load variables from YAML files on the control machine into the host's variables.
+Load variables from YAML or JSON files on the control machine into the host's variables.
 
 #### Parameters
 
@@ -2063,6 +1915,8 @@ Load variables from YAML files on the control machine into the host's variables.
 | `file` | string | - | File, relative to the playbook directory (free form in the short form) |
 | `dir` | string | - | Load every `.yml`, `.yaml` and `.json` file of this directory, in name order |
 | `name` | string | - | Put the variables under this one key |
+
+`file` or `dir` is required. Returns `ansible_included_var_files`.
 
 #### Example
 
@@ -2084,7 +1938,7 @@ Run a role's tasks at this point. Both are resolved when the playbook is loaded.
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `name` | string | - | Role name (required) |
-| `tasks_from` | string | `main` | Task file of the role to run |
+| `tasks_from` | string | `main` | Task file of the role to run (`.yml` is added when there is no extension) |
 
 Tags of the task are added to the role's tasks.
 
@@ -2099,28 +1953,35 @@ Tags of the task are added to the role's tasks.
 
 ### setup
 
-Gathers the facts of the host again (also `gather_facts`), e.g. after a task
+Gather the facts of the host again (also `gather_facts`), e.g. after a task
 wrote a local fact. The host's variables get the new facts; the result's
 `ansible_facts` holds those `filter` selects.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `filter` | string/list | all | Fact names or globs, e.g. `ansible_local`, `ansible_distribution*` |
+| `filter` | string/list | all | Fact names or globs, e.g. `ansible_local`, `ansible_distribution*` (a string may be comma-separated) |
 | `fact_path` | string | `/etc/ansible/facts.d` | Directory of the local facts |
 
 Local facts (`ansible_local`) are the `*.fact` files of `fact_path` by name:
 JSON, else INI sections, else text; an executable file is run and its output
-read. `gather_subset` is accepted and has no effect.
+read. Other arguments such as `gather_subset` are ignored.
 
 ```yaml
 - ansible.builtin.setup:
     filter: ansible_local
+```
+
 ### getent
 
-Reads a getent database into the `getent_<database>` fact: the first field of
-each entry is the key, the others its list. `database` (passwd, group, hosts,
-...), `key`, `split` (default `:` for passwd/group/shadow, else whitespace),
-`fail_key` (default true: a missing key fails).
+Read a getent database into the `getent_<database>` fact: the first field of
+each entry is the key, the others its list.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `database` | string | - | `passwd`, `group`, `hosts`, ... (required) |
+| `key` | string | - | Only this entry |
+| `split` | string | `:` for passwd/group/shadow/gshadow, else whitespace | Field separator |
+| `fail_key` | boolean | `true` | A missing `key` fails the task |
 
 ```yaml
 - ansible.builtin.getent: {database: passwd, key: deploy}
@@ -2144,47 +2005,48 @@ Engine actions.
 
 ### wait_for
 
-Wait for conditions to be met.
+Wait on the host until a port answers or a file exists (or contains a pattern), or until that stops being true.
 
 #### Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `port` | integer | - | Port number to wait for (check if listening) |
-| `host` | string | `127.0.0.1` | Hostname/IP address to check |
-| `path` | string | - | File path to wait for (check if exists) |
-| `search_regex` | string | - | Regex pattern to search in file content |
-| `state` | string | `started` | Condition state (`started` = expect condition met, `stopped` = expect condition failed) |
-| `timeout` | integer | `300` | Maximum wait time in seconds |
-| `delay` | integer | `0` | Initial delay before checking in seconds |
+| `port` | integer | - | TCP port to connect to, from the host (needs bash) |
+| `host` | string | `127.0.0.1` | Address for `port`, as the host sees it |
+| `path` | string | - | File that must exist |
+| `search_regex` | string | - | With `path`: extended regular expression the file must contain |
+| `state` | string | `started` | `started`/`present`: wait until true; `stopped`/`absent`: wait until false |
+| `timeout` | integer | `300` | Seconds before the task fails |
+| `delay` | integer | `0` | Seconds to wait before the first check |
+
+`port` or `path` is required. Returns `elapsed` and `msg`.
 
 #### Example
 
 ```yaml
-- name: "Wait for service to start"
+- name: "Wait for the service port"
   wait_for:
     port: 8080
-    host: "{{ inventory_hostname }}"
     timeout: 60
 
 - name: "Wait for log message"
   wait_for:
     path: "/var/log/myapp.log"
-    search_regex: "Server started successfully"
+    search_regex: "Server started"
     timeout: 120
 ```
 
 ### pause
 
-Pause execution for user input or time.
+Wait for a time or for input on the control machine.
 
 #### Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `seconds` | integer | - | Pause duration in seconds |
-| `minutes` | integer | - | Pause duration in minutes |
-| `prompt` | string | - | User prompt message (waits for user input if provided) |
+| `seconds` | integer | `0` | Seconds to wait |
+| `minutes` | integer | `0` | Minutes to wait (added to `seconds`) |
+| `prompt` | string | - | Print this and wait for a line of input (returned as `user_input`); the time is then ignored |
 
 #### Example
 
@@ -2200,7 +2062,7 @@ Pause execution for user input or time.
 
 ### fail
 
-Fail execution with custom message.
+Fail the task with a message.
 
 #### Parameters
 
@@ -2217,69 +2079,20 @@ Fail execution with custom message.
   when: "database_check.rc != 0"
 ```
 
-### slurp
+## Complete Module List
 
-Read a file from the host; `content` is base64 (`{{ r.content | b64decode }}`).
-Parameters: `src` (required).
+63 module names, 61 modules:
 
-### hostname
-
-Set the host name (`hostnamectl`, else /etc/hostname). Parameters: `name` (required).
-
-### ini_file
-
-One option of an INI file. Also `community.general.ini_file`.
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `path` | - | File (created unless `create: false`) |
-| `section` | - | Section; none: before the first section |
-| `option`, `value` | - | Option and value; without option `present` makes sure the section exists, `absent` removes it |
-| `state` | `present` | `present` or `absent` |
-| `no_extra_spaces` | `false` | `key=value` instead of `key = value` |
-| `backup`, `mode` | - | Backup copy; file mode |
-
-Other lines of the option in the section are removed (Ansible's `exclusive`).
-
-### pip
-
-Python packages. Parameters: `name` (list; `pkg==1.2` pins), `version`, `state`
-(`present`, `absent`, `latest`, `forcereinstall`), `requirements`, `virtualenv` (created with
-`virtualenv_command`, default `python3 -m venv`), `executable`, `extra_args`.
-
-### ufw
-
-The Uncomplicated Firewall (`community.general.ufw`): `state` (`enabled`, `disabled`, `reloaded`,
-`reset`), `policy` with `direction`, `logging`, and rules: `rule` (`allow`, `deny`, `limit`,
-`reject`) with `port`, `proto`, `src`/`from_ip`, `dest`/`to_ip`, `from_port`, `interface`,
-`direction`, `route`, `delete`, `insert`, `comment`. A rule that exists is not added again.
-
-### docker_host_info
-
-Docker host information (`community.docker.docker_host_info`); with `containers: true` the
-containers as the Docker API lists them (`Id`, `Names` with the leading `/`, `Image`, `State`),
-filtered by `containers_filters` (`name: [a, b]`), `containers_all` for stopped ones too.
-
-`community.docker.docker_compose_v2` runs `docker_compose`: `project_src`, `files`, and `build`/
-`pull` policies (`always`, `missing`, `policy`, `never`) are understood.
-
-## 📚 Complete Module List
-
-All 56 modules:
-
-**Execution**: command, shell, script
-**Files on the host**: slurp, ini_file
-**Connectivity and Utilities**: ping, debug, set_fact, assert, fail, wait_for, pause
-**Playbook Control**: include_vars, include_role, import_role, meta
-**File Management**: file, copy, fetch, find, template, lineinfile, blockinfile, replace, stat, archive
-**Package Management**: package, apt, yum, pip
-**Service Management**: service, systemd, cron, reboot
-**System Control**: sysctl, mount, hostname, timezone
-**Security & Firewall**: firewall, ufw, authorized_key
-**Version Control**: git
-**Configuration**: config
-**Containers**: docker_container, docker_image, docker_compose, docker_host_info, podman
-**Databases**: mysql_db, mysql_user, postgresql_db, postgresql_user, mongodb
-**Network**: get_url, uri
-**User Management**: user, group
-
+- **Execution**: command, shell, script
+- **Files**: file, copy, fetch, find, stat, slurp, template, archive, unarchive
+- **Configuration**: config, lineinfile, blockinfile, replace, ini_file
+- **Packages**: package, apt, apt_repository, apt_key, yum, pip
+- **Services and scheduling**: service, systemd, cron
+- **System control**: sysctl, reboot, mount, timezone, hostname
+- **Network**: uri, get_url
+- **Users and access**: user, group, authorized_key
+- **Firewall**: firewall, ufw
+- **Version control**: git
+- **Containers**: docker_container, docker_image, docker_compose, podman, docker_host_info
+- **Databases**: mysql_db, mysql_user, postgresql_db, postgresql_user, mongodb
+- **Playbook control**: ping, debug, set_fact, assert, fail, pause, wait_for, include_vars, include_role, import_role, setup, gather_facts, getent, meta

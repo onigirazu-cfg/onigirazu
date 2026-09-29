@@ -1,169 +1,63 @@
 # Release Process
 
-## Overview
+Releases are automatic. Merging a pull request to `main` with a squash subject that starts with `feat` or `fix` produces a new version.
 
-The Onigirazu project uses a **quality-gated release process** to ensure that all releases meet high standards for security, code quality, and functionality.
+## Pipeline
 
-This process was implemented in **Phase 2** and automatically validates all releases before they go public.
+1. **Auto Release** (`auto-release.yml`) runs on every push to `main`, except pushes that only change `docs/**`, `*.md`, `.github/**` or `examples/**`. It looks at commits since the latest tag:
+   - any commit containing `BREAKING CHANGE` - major
+   - a subject starting with `feat` - minor
+   - a subject starting with `fix` - patch
+   - otherwise no release
 
-## How It Works
+   It runs `go test -race ./...`, pushes the tag `vX.Y.Z`, creates the GitHub Release with a changelog, and starts the Release Gate.
+2. **Release Gate** (`release-gate.yml`) on the tag: gosec (report only), govulncheck, gofmt/goimports/vet/staticcheck, race tests with coverage >= 15%, builds, golangci-lint. If all pass, it starts Release.
+3. **Release** (`release.yml`): GoReleaser publishes archives, packages and `checksums.txt` to the GitHub Release; then the multi-arch image is pushed to GHCR.
 
-### 1. Quality Gate (Automatic)
+The whole chain takes about 20 minutes.
 
-When you push a version tag (e.g., `v1.56.0`), the **Release Gate** workflow automatically runs:
+## Artifacts
 
-```bash
-git tag -a v1.56.0 -m "Release v1.56.0"
-git push origin v1.56.0
-```
+- Archives: Linux (x86_64, arm64, armv6, armv7, i386), macOS (x86_64, arm64), Windows (x86_64, i386, zip), FreeBSD, OpenBSD, NetBSD (x86_64, i386)
+- Packages: deb, rpm, apk for amd64, 386, arm64, armv6, armv7; Arch (`.pkg.tar.zst`) for all but armv6
+- `checksums.txt` (SHA-256)
+- Image `ghcr.io/onigirazu-cfg/onigirazu`, `linux/amd64` and `linux/arm64`, tags `X.Y.Z`, `X.Y`, `X`, `latest` (no `v` prefix)
 
-The Release Gate performs the following checks:
+Artifacts are not signed and no SBOM is produced.
 
-- ✅ **Security Scan**: Runs `gosec` and `govulncheck` to detect security vulnerabilities
-- ✅ **Code Quality**: Checks formatting, imports, runs `go vet` and `staticcheck`
-- ✅ **Tests**: Runs full test suite with race detection and coverage checks (minimum 15%)
-- ✅ **Build**: Verifies that binaries can be built for all target platforms
-- ✅ **Lint**: Runs `golangci-lint` to catch code issues
-
-### 2. Release (Automatic)
-
-**Only if all quality checks pass**, the **Release** workflow is automatically triggered:
-
-- 📦 Builds binaries for all platforms using GoReleaser
-- 🐳 Builds and pushes Docker images
-- 📝 Creates GitHub Release with artifacts
-- 🔐 Signs artifacts with cosign
-- 📢 Publishes to package managers
-
-### 3. If Quality Gate Fails
-
-If any check fails, the release is **blocked** and you'll see:
-
-```
-❌ Quality gate FAILED! Release is blocked.
-Please fix the failing checks before releasing.
-```
-
-**What to do:**
-
-1. Check the failed workflow logs
-2. Fix the issues locally
-3. Commit and push the fixes
-4. Delete and recreate the tag:
-
-   ```bash
-   git tag -d v1.56.0
-   git push origin :refs/tags/v1.56.0
-   git tag -a v1.56.0 -m "Release v1.56.0"
-   git push origin v1.56.0
-   ```
-
-### Monitoring the Release
-
-After pushing a tag, monitor the pipelines:
+## Monitoring
 
 ```bash
-# Check Release Gate status
-gh run list --workflow=release-gate.yml --limit=1
-
-# Watch in real-time
-gh run watch <RUN_ID>
-
-# Get detailed release info
-gh release view --json tagName,name,publishedAt
+gh run list --workflow=auto-release.yml --limit=3
+gh run list --workflow=release-gate.yml --limit=3
+gh run list --workflow=release.yml --limit=3
+gh release view
 ```
 
-Expected timeline:
+## Manual release
 
-- **Release Gate**: 5-7 minutes (quality checks)
-- **Release Workflow**: 8-12 minutes (build & publish)
-- **Total**: 15-20 minutes until GitHub Release is created
+Start Auto Release by hand; it releases regardless of commit types:
 
-## Manual Release (Emergency)
+```bash
+gh workflow run auto-release.yml --ref main -f release_type=minor   # patch (default), minor, major, prerelease
+```
 
-In case you need to bypass quality checks (not recommended), you can trigger a manual release:
+`prerelease` produces `vX.Y.Z-alpha`. A tag can also be pushed by hand (`make release` prompts for it); a pushed `v*` tag starts the Release Gate.
 
-1. Go to **Actions** → **Release** workflow
-2. Click **Run workflow**
-3. Enter the tag name (e.g., `v1.56.0`)
-4. Optionally check **Skip quality checks** (⚠️ use with caution)
-5. Click **Run workflow**
+To run only the publishing step for a tag (runs the tests first unless `-f skip_checks=true`):
 
-## Release Checklist
-
-Before creating a release:
-
-- [ ] All changes are committed and pushed
-- [ ] CHANGELOG.md is updated
-- [ ] Version number follows semantic versioning
-- [ ] All tests pass locally: `go test ./...`
-- [ ] Code is formatted: `gofmt -s -w .`
-- [ ] No security issues: `gosec ./...`
-- [ ] Documentation is updated
-
-## Version Numbering
-
-We follow [Semantic Versioning](https://semver.org/):
-
-- **Major** (v2.0.0): Breaking changes
-- **Minor** (v1.56.0): New features, backward compatible (e.g., Phase 2 configuration management)
-- **Patch** (v1.56.1): Bug fixes, backward compatible
-
-Pre-release versions:
-
-- **Alpha** (v1.28.0-alpha.1): Early testing
-- **Beta** (v1.28.0-beta.1): Feature complete, testing
-- **RC** (v1.28.0-rc.1): Release candidate
-
-## Workflow Files
-
-- `.github/workflows/release-gate.yml` - Quality checks before release
-- `.github/workflows/release.yml` - Actual release process
-- `.github/workflows/ci.yml` - Continuous integration
-- `.github/workflows/security.yml` - Security scanning
-- `.github/workflows/code-quality.yml` - Code quality checks
-
-## Benefits of Quality-Gated Releases
-
-✅ **Reliability**: Every release is tested and verified
-✅ **Security**: No releases with known vulnerabilities
-✅ **Quality**: Consistent code quality standards
-✅ **Confidence**: Automated checks catch issues early
-✅ **Transparency**: Clear visibility into what's being released
+```bash
+gh workflow run release.yml -f tag=vX.Y.Z
+```
 
 ## Troubleshooting
 
-### "Quality gate failed" error
+- **Auto Release fails with "refusing to allow a GitHub App ... without `workflows` permission"**: the run tried to tag a commit behind `main` after workflow files changed. Run it again from `main`: `gh workflow run auto-release.yml --ref main -f release_type=<minor|patch>`.
+- **Release Gate failed**: the tag and an empty GitHub Release exist, nothing is published. For a flaky failure rerun the gate on the tag (`gh workflow run release-gate.yml --ref vX.Y.Z`); otherwise fix `main`, and the next `feat`/`fix` merge releases a new version.
+- **No release after a merge**: the squash subject did not start with lowercase `feat` or `fix`, or the merge only touched ignored paths.
 
-Check which specific check failed:
-
-- Security Scan → Fix security issues
-- Code Quality → Run `gofmt`, `goimports`, fix linting issues
-- Tests → Fix failing tests, improve coverage
-- Build → Fix compilation errors
-- Lint → Fix linting issues
-
-### Tag already exists
-
-Delete the tag locally and remotely:
+## Local test
 
 ```bash
-git tag -d v1.56.0
-git push origin :refs/tags/v1.56.0
+make release-test   # goreleaser release --snapshot --clean --skip=publish
 ```
-
-### Release workflow not triggered
-
-Ensure:
-
-1. Tag follows format `v*.*.*`
-2. Quality gate workflow completed successfully
-3. You have proper permissions
-
-## Questions?
-
-If you have questions about the release process, please:
-
-1. Check the workflow logs in GitHub Actions
-2. Review this documentation
-3. Open an issue with the `release` label
