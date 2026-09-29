@@ -228,9 +228,13 @@ formats can be used side by side. Examples: <a href="docs/examples/README.md">do
 <li><strong>Command line</strong>: <code>-i</code>, <code>-e</code> (also <code>@file</code>), <code>--limit</code>, <code>--tags</code>/<code>--skip-tags</code>, <code>--check</code>,
   <code>--diff</code>, <code>-b</code>/<code>--become-user</code>, <code>-u</code>, <code>--private-key</code>, <code>--start-at-task</code>, <code>--list-hosts</code>,
   <code>--list-tasks</code>, <code>--list-tags</code>, <code>--syntax-check</code></li>
+<li><strong>Ansible Vault</strong>: encrypted files and <code>!vault</code> values anywhere variables are read, <code>copy</code> and
+  <code>template</code> sources; <code>--vault-password-file</code>, <code>--vault-id</code>, <code>--ask-vault-pass</code>, the
+  <code>ANSIBLE_VAULT_*</code> variables and <code>ansible.cfg</code>; <code>onigirazu vault encrypt|decrypt|view|encrypt_string</code>.
+  See <a href="docs/VAULT.md">docs/VAULT.md</a></li>
 </ul>
 <p>Not supported: Python modules and plugins from collections (Onigirazu has its own modules;
-<code>validate</code> names any module it lacks), Windows hosts (WinRM), and <code>ansible-vault</code> files.
+<code>validate</code> names any module it lacks) and Windows hosts (WinRM).
 For Packer builds see <a href="docs/PACKER.md">docs/PACKER.md</a>.</p>
 <h2>Playbooks</h2>
 <h3>Variables and templates</h3>
@@ -493,6 +497,10 @@ return values and examples: <a href="docs/modules/README.md">docs/modules/README
 <tr>
 <td><code>galaxy install -r FILE</code></td>
 <td>Install roles and collections from a requirements file</td>
+</tr>
+<tr>
+<td><code>vault</code></td>
+<td><code>encrypt</code>, <code>decrypt</code>, <code>view</code>, <code>encrypt_string</code> of Ansible Vault data</td>
 </tr>
 <tr>
 <td><code>healthcheck</code></td>
