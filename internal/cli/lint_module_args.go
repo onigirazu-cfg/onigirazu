@@ -9,6 +9,7 @@ var moduleArgs = map[string][]string{
 	"apt_repository":   {"filename", "repo", "state", "update_cache"},
 	"archive":          {"dest", "exclude_path", "force_archive", "format", "path", "remove"},
 	"assert":           {"fail_msg", "msg", "success_msg", "that"},
+	"async_status":     {"jid", "mode"},
 	"authorized_key":   {"exclusive", "key", "state", "user"},
 	"blockinfile":      {"backup", "block", "firstmatch", "insertafter", "insertbefore", "marker", "path", "state"},
 	"command":          {"chdir", "cmd", "command", "creates", "environment", "executable", "removes", "shell"},
