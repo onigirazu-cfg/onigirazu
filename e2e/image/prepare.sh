@@ -25,6 +25,13 @@ pull docker mongo:7
 pull docker alpine:3.20
 pull podman docker.io/library/alpine:3.20
 
+# Guest customization of a clone renames the image's netplan file and writes
+# its own DHCP config without "dhcp-identifier: mac"; on 26.04 the initramfs
+# and networkd then lease with different client ids and the address changes
+# on reboot. A networkd drop-in survives the customization.
+mkdir -p /etc/systemd/network/10-netplan-ens192.network.d
+printf '[DHCPv4]\nClientIdentifier=mac\n' > /etc/systemd/network/10-netplan-ens192.network.d/10-client-id.conf
+
 # The database cases start their server; idle VMs do not need them
 systemctl disable --now mariadb postgresql >/dev/null 2>&1 || true
 trap - EXIT
