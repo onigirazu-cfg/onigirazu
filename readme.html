@@ -198,7 +198,8 @@ formats can be used side by side. Examples: <a href="docs/examples/README.md">do
   together, subelements, indexed_items, file, fileglob, first_found, lines, ...), <code>loop_control</code>, <code>register</code>, <code>until</code>/<code>retries</code>/
   <code>delay</code>, <code>changed_when</code>, <code>failed_when</code>, <code>ignore_errors</code>, <code>notify</code>/<code>listen</code>, <code>tags</code>,
   <code>become</code>/<code>become_user</code>, <code>delegate_to</code>, <code>local_action</code>, <code>run_once</code>, <code>throttle</code>, <code>no_log</code>,
-  <code>check_mode</code>, <code>diff</code>, <code>vars</code>, <code>environment</code>, <code>action</code> (also with a templated module name)</li>
+  <code>check_mode</code>, <code>diff</code>, <code>vars</code>, <code>environment</code>, <code>action</code> (also with a templated module name),
+  <code>async</code> with <code>poll</code> &gt; 0 (the task fails after <code>async</code> seconds; <code>poll: 0</code> is not supported yet)</li>
 <li><strong>Short forms</strong>: <code>command: make install chdir=/src</code>, <code>file: path=/etc/app state=directory</code>,
   <code>args:</code>; argument aliases such as <code>apt: pkg:</code>, <code>file: dest:</code>, <code>systemd: unit:</code></li>
 <li><strong>Module names</strong>: <code>ansible.builtin.*</code>, <code>ansible.legacy.*</code> and the collection modules
