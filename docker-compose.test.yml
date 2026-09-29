@@ -97,6 +97,35 @@ services:
     stdin_open: true
     tty: true
 
+  arch:
+    build:
+      context: ./docker
+      dockerfile: Dockerfile.arch
+    platform: linux/amd64
+    container_name: onigirazu-arch
+    hostname: arch
+    networks:
+      testnet:
+        ipv4_address: 192.168.56.33
+    ports:
+      - "2227:22"
+    stdin_open: true
+    tty: true
+
+  opensuse:
+    build:
+      context: ./docker
+      dockerfile: Dockerfile.opensuse
+    container_name: onigirazu-opensuse
+    hostname: opensuse
+    networks:
+      testnet:
+        ipv4_address: 192.168.56.34
+    ports:
+      - "2228:22"
+    stdin_open: true
+    tty: true
+
 networks:
   testnet:
     driver: bridge

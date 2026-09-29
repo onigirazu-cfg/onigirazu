@@ -1,0 +1,25 @@
+FROM archlinux:latest
+
+# pacman's download sandbox fails under amd64 emulation
+RUN sed -i '/^\[options\]/a DisableSandbox' /etc/pacman.conf
+
+RUN pacman -Syu --noconfirm openssh python sudo && \
+    pacman -Scc --noconfirm && \
+    ssh-keygen -A
+
+RUN useradd -m -s /bin/bash testuser && \
+    echo 'testuser:testpass' | chpasswd && \
+    usermod -aG wheel testuser
+
+COPY ssh/id_rsa.pub /root/.ssh/authorized_keys
+
+RUN chmod 700 /root/.ssh && \
+    chmod 600 /root/.ssh/authorized_keys
+
+RUN sed -i 's/#PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config && \
+    sed -i 's/#PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config && \
+    sed -i 's/#PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config
+
+EXPOSE 22
+
+CMD ["/usr/sbin/sshd", "-D"]

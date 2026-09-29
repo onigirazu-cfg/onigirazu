@@ -1,0 +1,21 @@
+FROM opensuse/leap:15.6
+
+RUN zypper --non-interactive install openssh-server python3 sudo shadow && \
+    zypper clean --all && \
+    ssh-keygen -A
+
+RUN useradd -m -s /bin/bash testuser && \
+    echo 'testuser:testpass' | chpasswd && \
+    groupadd -f wheel && usermod -aG wheel testuser
+
+COPY ssh/id_rsa.pub /root/.ssh/authorized_keys
+
+RUN chmod 700 /root/.ssh && \
+    chmod 600 /root/.ssh/authorized_keys
+
+RUN mkdir -p /etc/ssh/sshd_config.d && \
+    printf 'PermitRootLogin yes\nPasswordAuthentication yes\nPubkeyAuthentication yes\n' > /etc/ssh/sshd_config.d/10-test.conf
+
+EXPOSE 22
+
+CMD ["/usr/sbin/sshd", "-D"]

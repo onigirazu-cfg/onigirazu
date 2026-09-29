@@ -921,7 +921,7 @@ Returns `name` and updates the `ansible_hostname` fact.
 
 ### package
 
-Install or remove packages with the host's package manager: apt, yum/dnf or Homebrew. pacman, zypper and Chocolatey are detected but not implemented.
+Install or remove packages with the host's package manager: apt, yum/dnf, pacman, zypper or Homebrew. Chocolatey is not supported. pacman and zypper run without sudo, so installing needs `become: true`; pacman cannot install a given `version`.
 
 #### Parameters
 

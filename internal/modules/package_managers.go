@@ -19,46 +19,23 @@ import (
 
 // createUnifiedPackageManager creates appropriate package manager with executor
 func createUnifiedPackageManager(ctx context.Context, exec *executor.CommandExecutor, hostname string) UnifiedPackageManager {
-	// Detect package management system on the REMOTE host
-	// Try to detect by executing commands on the remote host
-
-	// Try apt (Debian/Ubuntu)
-	if _, err := exec.Execute("which", "apt-get"); err == nil {
+	// One probe on the target host; minimal images (Arch, openSUSE) have no which
+	out, _ := exec.Execute("for m in apt-get yum dnf pacman zypper brew choco; do command -v $m >/dev/null 2>&1 && { echo $m; break; }; done")
+	switch strings.TrimSpace(out) {
+	case "apt-get":
 		return NewUnifiedAptManager(exec, hostname)
-	}
-
-	// Try yum (RHEL/CentOS)
-	if _, err := exec.Execute("which", "yum"); err == nil {
+	case "yum":
 		return NewUnifiedYumManager(exec, hostname)
-	}
-
-	// Try dnf (Fedora/RHEL 8+)
-	if _, err := exec.Execute("which", "dnf"); err == nil {
+	case "dnf":
 		return NewUnifiedDnfManager(exec, hostname)
-	}
-
-	// Try pacman (Arch)
-	if _, err := exec.Execute("which", "pacman"); err == nil {
-		return NewUnifiedPacmanManager(exec, hostname)
-	}
-
-	// Try zypper (openSUSE)
-	if _, err := exec.Execute("which", "zypper"); err == nil {
-		return NewUnifiedZypperManager(exec, hostname)
-	}
-
-	// Try brew (macOS)
-	if _, err := exec.Execute("which", "brew"); err == nil {
+	case "pacman", "zypper":
+		return newCmdPackageManager(strings.TrimSpace(out), exec)
+	case "brew":
 		return NewUnifiedBrewManager(exec, hostname)
+	case "choco":
+		return &unsupportedPackageManager{tool: "choco"}
 	}
-
-	// Try choco (Windows)
-	if _, err := exec.Execute("which", "choco"); err == nil {
-		return NewUnifiedChocoManager(exec, hostname)
-	}
-
-	// Fallback to generic
-	return NewUnifiedGenericManager(exec, hostname)
+	return &unsupportedPackageManager{}
 }
 
 // ============================================================================
@@ -1702,112 +1679,67 @@ func NewUnifiedDnfManager(exec *executor.CommandExecutor, hostname string) *Unif
 	}
 }
 
-// UnifiedPacmanManager - stub for Arch Linux
-type UnifiedPacmanManager struct {
-	executor *executor.CommandExecutor
-	hostname string
-	cache    *PackageStateCache
-}
+// unsupportedPackageManager fails every operation: the host has no package
+// tool onigirazu drives (Chocolatey, or none found)
+type unsupportedPackageManager struct{ tool string }
 
-func NewUnifiedPacmanManager(exec *executor.CommandExecutor, hostname string) *UnifiedPacmanManager {
-	return &UnifiedPacmanManager{
-		executor: exec,
-		hostname: hostname,
-		cache:    NewPackageStateCache(10 * time.Minute),
+func (u *unsupportedPackageManager) err() error {
+	if u.tool == "" {
+		return fmt.Errorf("no supported package manager found (apt, dnf, yum, pacman, zypper, brew)")
 	}
+	return fmt.Errorf("the package module does not support %s", u.tool)
 }
 
-// Implement stub methods (similar pattern to YUM)
-func (p *UnifiedPacmanManager) Install(ctx context.Context, name, version string) (*PackageOperation, error) {
-	return &PackageOperation{Package: name, Operation: "install", Success: false, Error: "pacman support not fully implemented"}, fmt.Errorf("not implemented")
+func (u *unsupportedPackageManager) fail(name, operation string) (*PackageOperation, error) {
+	return &PackageOperation{Package: name, Operation: operation, Error: u.err().Error()}, u.err()
 }
 
-func (p *UnifiedPacmanManager) Remove(ctx context.Context, name string) (*PackageOperation, error) {
-	return &PackageOperation{Package: name, Operation: "remove", Success: false, Error: "pacman support not fully implemented"}, fmt.Errorf("not implemented")
+func (u *unsupportedPackageManager) Install(ctx context.Context, name, version string) (*PackageOperation, error) {
+	return u.fail(name, "install")
 }
-
-func (p *UnifiedPacmanManager) Update(ctx context.Context, name string) (*PackageOperation, error) {
-	return &PackageOperation{Package: name, Operation: "update", Success: false, Error: "pacman support not fully implemented"}, fmt.Errorf("not implemented")
+func (u *unsupportedPackageManager) Remove(ctx context.Context, name string) (*PackageOperation, error) {
+	return u.fail(name, "remove")
 }
-
-func (p *UnifiedPacmanManager) UpdateAll(ctx context.Context) (*PackageOperation, error) {
-	return &PackageOperation{Package: "all", Operation: "update_all", Success: false, Error: "pacman support not fully implemented"}, fmt.Errorf("not implemented")
+func (u *unsupportedPackageManager) Update(ctx context.Context, name string) (*PackageOperation, error) {
+	return u.fail(name, "update")
 }
-
-func (p *UnifiedPacmanManager) IsInstalled(ctx context.Context, name string) (*PackageState, error) {
-	return &PackageState{Name: name, Installed: false}, nil
+func (u *unsupportedPackageManager) UpdateAll(ctx context.Context) (*PackageOperation, error) {
+	return u.fail("all", "update_all")
 }
-
-func (p *UnifiedPacmanManager) GetPackageInfo(ctx context.Context, name string) (*PackageInfo, error) {
-	return &PackageInfo{Name: name}, nil
+func (u *unsupportedPackageManager) IsInstalled(ctx context.Context, name string) (*PackageState, error) {
+	return nil, u.err()
 }
-
-func (p *UnifiedPacmanManager) InstallMultiple(ctx context.Context, packages []PackageSpec) (*BatchOperation, error) {
-	return &BatchOperation{Success: false}, fmt.Errorf("not implemented")
+func (u *unsupportedPackageManager) GetPackageInfo(ctx context.Context, name string) (*PackageInfo, error) {
+	return nil, u.err()
 }
-
-func (p *UnifiedPacmanManager) RemoveMultiple(ctx context.Context, packages []string) (*BatchOperation, error) {
-	return &BatchOperation{Success: false}, fmt.Errorf("not implemented")
+func (u *unsupportedPackageManager) InstallMultiple(ctx context.Context, packages []PackageSpec) (*BatchOperation, error) {
+	return nil, u.err()
 }
-
-func (p *UnifiedPacmanManager) RefreshCache(ctx context.Context) error {
-	return nil
+func (u *unsupportedPackageManager) RemoveMultiple(ctx context.Context, packages []string) (*BatchOperation, error) {
+	return nil, u.err()
 }
-
-func (p *UnifiedPacmanManager) ValidateState(ctx context.Context) error {
-	return nil
+func (u *unsupportedPackageManager) RefreshCache(ctx context.Context) error  { return u.err() }
+func (u *unsupportedPackageManager) ValidateState(ctx context.Context) error { return u.err() }
+func (u *unsupportedPackageManager) DryRun(ctx context.Context, operation string, args ...string) (*OperationPreview, error) {
+	return nil, u.err()
 }
-
-func (p *UnifiedPacmanManager) DryRun(ctx context.Context, operation string, args ...string) (*OperationPreview, error) {
-	return &OperationPreview{}, nil
+func (u *unsupportedPackageManager) GetDependencies(ctx context.Context, name string) ([]string, error) {
+	return nil, u.err()
 }
-
-func (p *UnifiedPacmanManager) GetDependencies(ctx context.Context, name string) ([]string, error) {
-	return nil, nil
+func (u *unsupportedPackageManager) VerifyChecksum(ctx context.Context, name, version string) (bool, error) {
+	return false, u.err()
 }
-
-func (p *UnifiedPacmanManager) VerifyChecksum(ctx context.Context, name, version string) (bool, error) {
-	return true, nil
+func (u *unsupportedPackageManager) Search(ctx context.Context, query string) ([]PackageInfo, error) {
+	return nil, u.err()
 }
-
-// Stub implementations for new methods
-func (p *UnifiedPacmanManager) Search(ctx context.Context, query string) ([]PackageInfo, error) {
-	return []PackageInfo{}, fmt.Errorf("not implemented")
+func (u *unsupportedPackageManager) ListInstalled(ctx context.Context) ([]PackageInfo, error) {
+	return nil, u.err()
 }
-
-func (p *UnifiedPacmanManager) ListInstalled(ctx context.Context) ([]PackageInfo, error) {
-	return []PackageInfo{}, fmt.Errorf("not implemented")
+func (u *unsupportedPackageManager) ListUpgradable(ctx context.Context) ([]PackageInfo, error) {
+	return nil, u.err()
 }
-
-func (p *UnifiedPacmanManager) ListUpgradable(ctx context.Context) ([]PackageInfo, error) {
-	return []PackageInfo{}, fmt.Errorf("not implemented")
+func (u *unsupportedPackageManager) Clean(ctx context.Context) error { return u.err() }
+func (u *unsupportedPackageManager) AutoRemove(ctx context.Context) ([]string, error) {
+	return nil, u.err()
 }
-
-func (p *UnifiedPacmanManager) Clean(ctx context.Context) error {
-	return fmt.Errorf("not implemented")
-}
-
-func (p *UnifiedPacmanManager) AutoRemove(ctx context.Context) ([]string, error) {
-	return []string{}, fmt.Errorf("not implemented")
-}
-
-func (p *UnifiedPacmanManager) VerifyIntegrity(ctx context.Context) error {
-	return fmt.Errorf("not implemented")
-}
-
-// Similar stubs for Zypper, Chocolatey, Generic
-type UnifiedZypperManager struct{ *UnifiedPacmanManager }
-type UnifiedChocoManager struct{ *UnifiedPacmanManager }
-type UnifiedGenericManager struct{ *UnifiedPacmanManager }
-
-func NewUnifiedZypperManager(exec *executor.CommandExecutor, hostname string) *UnifiedZypperManager {
-	return &UnifiedZypperManager{NewUnifiedPacmanManager(exec, hostname)}
-}
-
-func NewUnifiedChocoManager(exec *executor.CommandExecutor, hostname string) *UnifiedChocoManager {
-	return &UnifiedChocoManager{NewUnifiedPacmanManager(exec, hostname)}
-}
-
-func NewUnifiedGenericManager(exec *executor.CommandExecutor, hostname string) *UnifiedGenericManager {
-	return &UnifiedGenericManager{NewUnifiedPacmanManager(exec, hostname)}
-}
+func (u *unsupportedPackageManager) VerifyIntegrity(ctx context.Context) error { return u.err() }
