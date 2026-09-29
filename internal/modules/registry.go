@@ -3,6 +3,7 @@ package modules
 import (
 	"context"
 	"fmt"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"time"
@@ -252,7 +253,7 @@ func (r *Registry) ExecuteTask(ctx context.Context, task *types.Task, host types
 		}
 	}
 
-	result, err := module.Execute(ctx, host, args)
+	result, err := executeRecovering(ctx, module, host, args, task)
 	if result.Changed && before != nil && before["error"] == nil {
 		result.Before = before
 	}
@@ -313,6 +314,25 @@ func normalizeArgs(args map[string]interface{}) {
 			args[key] = strconv.FormatFloat(v, 'f', -1, 64)
 		}
 	}
+}
+
+// executeRecovering runs a module; a panic in it fails this task only, with
+// the panic in the error, instead of ending the whole run (and leaving the
+// managed state locked)
+func executeRecovering(ctx context.Context, module types.Module, host types.Host, args map[string]interface{}, task *types.Task) (result types.TaskResult, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			stack := debug.Stack()
+			if len(stack) > 2048 {
+				stack = stack[:2048]
+			}
+			result = types.TaskResult{TaskName: task.Name, Host: host.Name, Module: task.Module,
+				Failed: true, Timestamp: time.Now(),
+				Error: fmt.Sprintf("module %s crashed: %v (please report this bug)\n%s", task.Module, r, stack)}
+			err = fmt.Errorf("module %s crashed: %v", task.Module, r)
+		}
+	}()
+	return module.Execute(ctx, host, args)
 }
 
 // resolveDynamicAction reads the module of an action whose module name was
