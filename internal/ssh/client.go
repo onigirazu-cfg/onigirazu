@@ -30,6 +30,8 @@ type Logger interface {
 // Client wraps SSH connection functionality
 type Client struct {
 	client *ssh.Client
+	// jumps: connections to the ProxyJump hosts, closed with the client
+	jumps  []*ssh.Client
 	host   types.Host
 	logger Logger
 	shells shellPool
@@ -146,9 +148,13 @@ func NewClientWithHostKeyManagerAndLogger(host types.Host, hostKeyManager *HostK
 		Timeout:         dialTimeout,
 	}
 
+	opts := parseSSHArgs(host.SSHArgs)
+	if opts.ConnectTimeout > 0 {
+		config.Timeout = opts.ConnectTimeout
+	}
 	address := dialAddress(host)
 	lg.Debug("Attempting to connect to %s as user %s", address, host.User)
-	client, err := ssh.Dial("tcp", address, config)
+	client, jumps, err := dialHost(host, address, config, auth, hostKeyManager, opts)
 	if err != nil {
 		lg.Debug("Connection failed: %v", err)
 		return nil, fmt.Errorf("failed to connect to %s: %v", address, err)
@@ -157,6 +163,7 @@ func NewClientWithHostKeyManagerAndLogger(host types.Host, hostKeyManager *HostK
 
 	return &Client{
 		client: client,
+		jumps:  jumps,
 		host:   host,
 		logger: lg,
 	}, nil
@@ -183,10 +190,12 @@ func (c *Client) GetClient() *ssh.Client {
 func (c *Client) Close() error {
 	c.closed.Store(true)
 	c.closeShells()
+	var err error
 	if c.client != nil {
-		return c.client.Close()
+		err = c.client.Close()
 	}
-	return nil
+	closeAll(c.jumps)
+	return err
 }
 
 // HealthCheck sends a ping to verify the connection is alive

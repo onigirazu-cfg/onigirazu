@@ -170,7 +170,9 @@ YAML is read as Ansible reads it: unquoted `yes`/`no`/`on`/`off` values are bool
   `onigirazu inventory --list --json` prints what `ansible-inventory --list` prints
 - **Connection variables**: `ansible_host`, `ansible_port`, `ansible_user`,
   `ansible_password`, `ansible_ssh_private_key_file`, `ansible_become_password`,
-  `ansible_ssh_common_args`, `ansible_connection` `local`, `docker`, `podman`; templated values and `-e` overrides
+  `ansible_ssh_common_args`/`ansible_ssh_extra_args` (`ConnectTimeout`, `ProxyJump`/`-J`,
+  `ProxyCommand`, `StrictHostKeyChecking=no`), `ansible_connection` `local`, `docker`, `podman`;
+  templated values and `-e` overrides
 - **Jinja**: filters (`default`, `map`, `select`/`selectattr`, `combine`, `regex_*`,
   `to_json`/`from_yaml`, `ternary`, set operations, `password_hash`, ...), tests (`is defined`,
   `is version`, `is success`/`failed`/`changed`/`skipped`, `is match`/`search`, ...), `~`,
@@ -488,7 +490,8 @@ Without a terminal the normal output is used. See [docs/INTERACTIVE_MODE.md](doc
   [docs/CONFIGURATION_REFERENCE.md](docs/CONFIGURATION_REFERENCE.md).
 - SSH host keys are checked against `~/.ssh/known_hosts`: a new host is added, a changed key
   fails the connection. Per host, `insecure_ignore_host_key` (or
-  `ansible_ssh_common_args: -o StrictHostKeyChecking=no`) turns the check off.
+  `ansible_ssh_common_args: -o StrictHostKeyChecking=no`) turns the check off. Jump hosts
+  (`-J`/`ProxyJump`, aliases from `~/.ssh/config`) are checked the same way.
 - Passwords (`ansible_password`, `ansible_become_password`) never appear on command lines;
   sudo reads them on stdin. `no_log: true` keeps a task's values out of logs, state and output.
 - Secrets come from Bitwarden/Vaultwarden (`bw` CLI, `BW_SESSION`) or HashiCorp Vault when a

@@ -166,7 +166,7 @@ Existing Ansible inventory scripts work unchanged. As in Ansible, a host that is
 | `onigirazu_ssh_private_key_file` / `ansible_ssh_private_key_file` (`key_file`) | private key | — |
 | `onigirazu_password` / `ansible_password` (`password`) | SSH password | — |
 | `onigirazu_become_password` / `ansible_become_password` (`ansible_become_pass`) | sudo password for `become` (passed on stdin, never on a command line) | — (`sudo -n`) |
-| `ansible_ssh_common_args` | `-o StrictHostKeyChecking=no` in it skips the host key check; other options are ignored | — |
+| `ansible_ssh_common_args`, `ansible_ssh_extra_args` | `-o ConnectTimeout=N`; `-J`/`-o ProxyJump=[user@]host[:port][,...]` (aliases from `~/.ssh/config` give HostName, User, Port, IdentityFile); `-o ProxyCommand=...` (`%h`, `%p`, `%r`); `-o StrictHostKeyChecking=no` skips the host key check; other options are ignored | — |
 | `onigirazu_connection` / `ansible_connection` | `ssh`; `local` (this machine); `docker` or `podman` (also `community.docker.docker`, `containers.podman.podman`): commands run with `docker exec` in the container named by `ansible_host`, else the host name, as `ansible_user` if set; no SSH in the container | ssh |
 | any other key | host variable for templates | — |
 

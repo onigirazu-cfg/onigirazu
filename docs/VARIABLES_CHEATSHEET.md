@@ -218,7 +218,7 @@ groups:
         ansible_ssh_private_key_file: ~/.ssh/id_rsa
 ```
 
-Recognised connection variables: `ansible_host`, `ansible_port`, `ansible_user`, `ansible_password`, `ansible_ssh_private_key_file`, `ansible_connection` (`local`); the `onigirazu_` spellings of the same names also work. `ansible_ssh_common_args` and `onigirazu_ssh_common_args` are not read.
+Recognised connection variables: `ansible_host`, `ansible_port`, `ansible_user`, `ansible_password`, `ansible_ssh_private_key_file`, `ansible_connection` (`local`); the `onigirazu_` spellings of the same names also work. `ansible_ssh_common_args` and `ansible_ssh_extra_args` give `ConnectTimeout`, `ProxyJump` (`-J`), `ProxyCommand` and `StrictHostKeyChecking=no`; other ssh options are ignored.
 
 ### Privilege Escalation
 

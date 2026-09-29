@@ -72,7 +72,8 @@ Hosts may be defined under `all.hosts` or directly in any group, at any depth of
 
 Every variable keeps its name, as in Ansible (`hostvars[h].ansible_host`); a host with
 `ansible_connection: local` runs on the control machine, and `ansible_ssh_common_args` with
-`-o StrictHostKeyChecking=no` turns the host key check off for that host. The connection
+`-o StrictHostKeyChecking=no` turns the host key check off for that host (`-J bastion`,
+`-o ProxyCommand=...` and `-o ConnectTimeout=N` are honoured too). The connection
 variables above also work as group variables (`all.vars`, a group's `vars`, `group_vars/`).
 
 Top-level keys outside `all:` are ignored; variables belong on a host, in a group's
