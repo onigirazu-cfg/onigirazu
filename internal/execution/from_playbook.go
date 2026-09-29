@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/onigirazu-cfg/onigirazu/internal/logger"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
@@ -23,11 +24,16 @@ func FromPlaybookResult(result *types.PlaybookResult, playbookPath, playbookName
 		PlaybookResult: result,
 	}
 
-	index := make(map[string]int) // play + task name -> position in exec.Tasks
-	for _, play := range result.Plays {
+	// Tasks are matched across hosts by their key; without one, by their
+	// position in the host's run. Names repeat (unnamed tasks share one).
+	index := make(map[string]int) // play + task -> position in exec.Tasks
+	for p, play := range result.Plays {
 		for _, host := range play.Hosts {
-			for _, t := range host.Tasks {
-				key := play.Name + "\x00" + t.TaskName
+			for n, t := range host.Tasks {
+				key := fmt.Sprintf("%d\x00%d", p, n)
+				if t.TaskKey != "" {
+					key = fmt.Sprintf("%d\x00%s", p, t.TaskKey)
+				}
 				i, ok := index[key]
 				if !ok {
 					exec.Tasks = append(exec.Tasks, TaskResult{Name: t.TaskName, HostResults: map[string]HostResult{}, ErrorsByType: map[string][]string{}, StartTime: t.Timestamp})
@@ -54,7 +60,8 @@ func FromPlaybookResult(result *types.PlaybookResult, playbookPath, playbookName
 				if t.Duration > task.Duration {
 					task.Duration = t.Duration
 				}
-				task.HostResults[host.Host] = HostResult{Hostname: host.Host, Status: status, Error: t.Error, Timestamp: t.Timestamp}
+				task.HostResults[host.Host] = HostResult{Hostname: host.Host, Status: status, Error: t.Error,
+					Output: logger.TaskMessage(t), Timestamp: t.Timestamp}
 
 				switch {
 				case status == "skipped":
