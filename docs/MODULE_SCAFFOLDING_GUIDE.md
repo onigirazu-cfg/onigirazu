@@ -1,20 +1,23 @@
 # Module Scaffolding
 
-`scripts/module_scaffold` is a generator for module boilerplate. **Its output does not compile**: the templates are malformed and target an old API (`interfaces.Executor`, `types.TaskDefinition`, `types.ModuleResult`) that no longer exists. Start a new module from an existing one instead, following the [Module Development Guide](MODULE_DEVELOPMENT_GUIDE.md).
-
-## Usage
+`scripts/module_scaffold` writes a module skeleton that compiles: `internal/modules/<name>.go`
+(the structure of the [Module Development Guide](MODULE_DEVELOPMENT_GUIDE.md): validation,
+reading arguments, a command on the host, check mode) and `<name>_test.go`.
 
 ```bash
-go run ./scripts/module_scaffold -name my_module -output internal/modules \
-  -desc "Description" -params "path,state"
+go run ./scripts/module_scaffold -name my_module -desc "Manage X" -params path,state
 ```
 
-| Flag | Default | Meaning |
-|------|---------|---------|
-| `-name` | required | module name, lowercase with underscores |
-| `-desc` | `""` | description |
-| `-params` | `""` | comma-separated parameter names |
-| `-output` | an absolute path on the author's machine | output directory; always pass `-output internal/modules` |
-| `-idempotent` | `true` | also write `<name>_idempotency_test.go` |
+Flags: `-name` (required), `-desc`, `-params` (the first is required by `Validate`),
+`-output` (default `internal/modules`), `-force`.
 
-It writes `<name>.go`, `<name>_test.go` and, unless `-idempotent=false`, `<name>_idempotency_test.go`. The module is not registered; see [Registration](MODULE_DEVELOPMENT_GUIDE.md#registration).
+After generating:
+
+1. `registry.RegisterModule(NewMyModuleModule())` in `NewRegistry` (`internal/modules/registry.go`);
+   add the name to `checkModeModules` once check mode works.
+2. `go generate ./internal/cli`, so `onigirazu lint` knows the arguments.
+3. Fill in the state comparison and the change, write tests, document the module in
+   `docs/modules/README.md` and `INDEX.md`, add an e2e case.
+
+A test (`go test ./scripts/module_scaffold`) compiles the generated code inside the modules
+package.
