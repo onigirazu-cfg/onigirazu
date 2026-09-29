@@ -47,8 +47,8 @@ all:
 EOF
 }
 
-# one line per task: name | status | message. Error texts differ between the
-# tools; only the message of the fail module is compared for a failure.
+# one line per task: name | status | message (JSON messages in one spelling).
+# Error texts differ between the tools; only the fail module's is compared.
 # onigirazu reports each loop item ("name (item N)"), Ansible the whole loop:
 # items are folded into one task, changed if any changed, skipped if all were
 normalize() {
@@ -57,12 +57,13 @@ normalize() {
       | if ($r.task | test(" \\(item [0-9]+\\)$")) and length > 0 and .[-1].task == $t and .[-1].loop then
           .[-1] |= (.changed = (.changed or $r.changed) | .skipped = (.skipped and $r.skipped)
                     | .success = (.success and $r.success) | .ignored = (.ignored or $r.ignored))
-        elif ($r.task | test(" \\(item [0-9]+\\)$")) then . + [$r + {task: $t, loop: true, msg: "All items completed"}]
+        elif ($r.task | test(" \\(item [0-9]+\\)$")) then . + [$r + {task: $t, loop: true, msg: (if $r.module == "debug" then "All items completed" else "" end)}]
         else . + [$r] end) | .[]' "$1" |
   jq -r '(if .ignored then "ignored" elif .success == false then "failed" elif .skipped then "skipped"
      elif .changed then "changed" else "ok" end) as $st
-    | [.task, $st, (if ($st == "failed" or $st == "ignored") and .module != "fail" then "" else (.msg // "") end)]
-    | join(" | ")' "$1"
+    | (.msg // "" | tostring) as $raw | ($raw | try (fromjson | tojson) catch $raw) as $msg
+    | [.task, $st, (if ($st == "failed" or $st == "ignored") and .module != "fail" then "" else $msg end)]
+    | join(" | ")'
 }
 
 files() {  # container -> checksums of /root/compat
