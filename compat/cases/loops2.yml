@@ -1,0 +1,32 @@
+- hosts: all
+  gather_facts: false
+  vars:
+    pairs: {x: 1, y: 2}
+    nested: [[1, 2], [3]]
+    users:
+      - {name: ann, groups: [a, b]}
+      - {name: bob, groups: [c]}
+  tasks:
+    - debug: {msg: "{{ item }}"}
+      with_items: [[1, 2], 3]
+    - debug: {msg: "{{ item }}"}
+      with_list: [[1, 2], 3]
+    - debug: {msg: "{{ item.0 }}-{{ item.1 }}"}
+      with_subelements: ["{{ users }}", groups]
+    - debug: {msg: "{{ item }}"}
+      with_sequence: start=1 end=5 stride=2
+    - debug: {msg: "{{ item.0 }} {{ item.1 }}"}
+      with_nested: [[a, b], [1, 2]]
+    - debug: {msg: "{{ item }}"}
+      loop: "{{ nested | flatten }}"
+    - debug: {msg: "{{ ansible_loop.index }}/{{ ansible_loop.length }} {{ ansible_loop.first }} {{ ansible_loop.last }}"}
+      loop: [a, b, c]
+      loop_control: {extended: true}
+    - set_fact:
+        collected: "{{ collected | default([]) + [item * 2] }}"
+      loop: [1, 2, 3]
+    - debug: {msg: "{{ collected }}"}
+    - command: "echo {{ item }}"
+      loop: [a, b]
+      register: out
+    - debug: {msg: "{{ out.results | map(attribute='item') | list }} {{ out.results | map(attribute='rc') | list }} {{ out.changed }}"}

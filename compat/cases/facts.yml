@@ -1,0 +1,22 @@
+- hosts: all
+  gather_facts: false
+  tasks:
+    - set_fact:
+        cfg: {name: app, ports: [80, 443], tls: true}
+        count: 3
+        ratio: 0.5
+    - debug: {msg: "{{ cfg.ports | sum }} {{ cfg.tls }} {{ count + 1 }} {{ ratio * 2 }}"}
+    - debug: {msg: "{{ cfg | dict2items | map(attribute='key') | sort | join(',') }}"}
+    - set_fact:
+        cfg: "{{ cfg | combine({'ports': cfg.ports + [8080]}) }}"
+    - debug: {msg: "{{ cfg.ports }}"}
+    - debug: {msg: "{{ hostvars[inventory_hostname].count }} {{ inventory_hostname }} {{ play_hosts }}"}
+    - debug: {msg: "once"}
+      run_once: true
+    - debug: {msg: "{{ ansible_play_hosts | length }} {{ ansible_play_batch | length }}"}
+    - name: delegated
+      command: hostname
+      delegate_to: localhost
+      register: dh
+      changed_when: false
+    - debug: {msg: "{{ dh.rc }}"}
