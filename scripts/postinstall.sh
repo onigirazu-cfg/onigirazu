@@ -10,6 +10,17 @@ CONF_DIR="/etc/onigirazu"
 CONF_FILE="$CONF_DIR/onigirazu.yml"
 DEFAULT_CONF="/usr/share/onigirazu/onigirazu.default.yml"
 
+# Earlier packages installed a default that set default_timeout: 30s (every
+# run stopped after 30 seconds) and many keys that do nothing. An unchanged
+# copy of it is replaced; an edited one is kept.
+OLD_DEFAULT_SHA256="4d545e8a05c3e26337315bb8762bee5a0fdafc1f9f666c205e34501a5b67fcad"
+if [ -f "$CONF_FILE" ] && [ -f "$DEFAULT_CONF" ] && command -v sha256sum >/dev/null 2>&1; then
+    if [ "$(sha256sum "$CONF_FILE" | cut -d' ' -f1)" = "$OLD_DEFAULT_SHA256" ]; then
+        mv "$CONF_FILE" "$CONF_FILE.old"
+        echo "Replacing the unchanged earlier default configuration (kept as $CONF_FILE.old)"
+    fi
+fi
+
 # Create config if it doesn't exist
 if [ ! -f "$CONF_FILE" ] && [ -f "$DEFAULT_CONF" ]; then
     echo "Creating default configuration in $CONF_DIR..."
