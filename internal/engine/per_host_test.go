@@ -135,6 +135,7 @@ func TestUntil_RetriesUntilConditionHolds(t *testing.T) {
 	require.NoError(t, err)
 	mockRegistry.AssertNumberOfCalls(t, "ExecuteTask", 3)
 	assert.Equal(t, 3, engine.getHostVar("h1", "r").(map[string]interface{})["n"])
+	assert.Equal(t, 3, engine.getHostVar("h1", "r").(map[string]interface{})["attempts"])
 }
 
 func TestRegisteredValue_Lines(t *testing.T) {

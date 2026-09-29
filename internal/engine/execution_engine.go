@@ -1153,6 +1153,13 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 			Capture:      e.adopt,
 		}, target, taskVars)
 
+		// Ansible records how many attempts an until loop took
+		if task.Until != "" && err == nil {
+			if result.Output == nil {
+				result.Output = map[string]interface{}{}
+			}
+			result.Output["attempts"] = attempt
+		}
 		if task.Until != "" && err == nil {
 			untilVars := taskVars
 			if task.Register != "" {
