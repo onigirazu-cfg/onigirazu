@@ -241,6 +241,29 @@ func (c *Client) IsAlive() bool {
 	return true
 }
 
+// Container returns the container runtime (docker or podman) and the
+// container a host is reached through with ansible_connection docker/podman
+// (community.docker.docker, containers.podman.podman): the host's address,
+// else its name, as in Ansible. ok is false for any other connection.
+func Container(host types.Host) (runtime, name string, ok bool) {
+	for _, key := range []string{"onigirazu_connection", "ansible_connection"} {
+		switch fmt.Sprint(host.Vars[key]) {
+		case "docker", "community.docker.docker":
+			runtime = "docker"
+		case "podman", "containers.podman.podman":
+			runtime = "podman"
+		default:
+			continue
+		}
+		name = host.Address
+		if name == "" {
+			name = host.Name
+		}
+		return runtime, name, true
+	}
+	return "", "", false
+}
+
 // IsLocal checks if the host is localhost
 func IsLocal(host types.Host) bool {
 	// An explicit connection type wins
@@ -251,6 +274,10 @@ func IsLocal(host types.Host) bool {
 		case "ssh":
 			return false
 		}
+	}
+	// a container is not this machine, and has no SSH either
+	if _, _, ok := Container(host); ok {
+		return false
 	}
 
 	// A non-default SSH port on a loopback address is a forwarded remote (container, tunnel)

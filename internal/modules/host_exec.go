@@ -158,8 +158,13 @@ func statRemoteFile(ctx context.Context, host types.Host, args map[string]interf
 func installRemoteFile(ctx context.Context, host types.Host, args map[string]interface{}, client *sshpkg.Client,
 	path string, data []byte, mode os.FileMode, existing remoteFile) error {
 	tmp := remoteTempName(".onigirazu-", filepath.Base(path))
-	// a local host has no SSH client: the temporary file is written directly
-	if client == nil {
+	// a container gets the file through its runtime; a local host has no SSH
+	// client: the temporary file is written directly
+	if client == nil && inContainer(host) {
+		if err := putContainerFile(ctx, host, tmp, data, 0600); err != nil {
+			return err
+		}
+	} else if client == nil {
 		if err := os.WriteFile(tmp, data, 0600); err != nil {
 			return fmt.Errorf("failed to write %s: %w", tmp, err)
 		}
