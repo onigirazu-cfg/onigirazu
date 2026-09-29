@@ -199,7 +199,9 @@ formats can be used side by side. Examples: <a href="docs/examples/README.md">do
   <code>delay</code>, <code>changed_when</code>, <code>failed_when</code>, <code>ignore_errors</code>, <code>notify</code>/<code>listen</code>, <code>tags</code>,
   <code>become</code>/<code>become_user</code>, <code>delegate_to</code>, <code>local_action</code>, <code>run_once</code>, <code>throttle</code>, <code>no_log</code>,
   <code>check_mode</code>, <code>diff</code>, <code>vars</code>, <code>environment</code>, <code>action</code> (also with a templated module name),
-  <code>async</code> with <code>poll</code> &gt; 0 (the task fails after <code>async</code> seconds; <code>poll: 0</code> is not supported yet)</li>
+  <code>async</code> with <code>poll</code> (the task fails after <code>async</code> seconds); <code>poll: 0</code> starts it in the
+  background and <code>async_status</code> reports on it (jobs live in the onigirazu process, which waits
+  for unfinished ones at the end of the run)</li>
 <li><strong>Short forms</strong>: <code>command: make install chdir=/src</code>, <code>file: path=/etc/app state=directory</code>,
   <code>args:</code>; argument aliases such as <code>apt: pkg:</code>, <code>file: dest:</code>, <code>systemd: unit:</code></li>
 <li><strong>Module names</strong>: <code>ansible.builtin.*</code>, <code>ansible.legacy.*</code> and the collection modules
@@ -432,7 +434,7 @@ to change. Secrets become variables with an example file. See <a href="docs/IMPO
 </tr>
 <tr>
 <td>Flow and data</td>
-<td><code>debug</code>, <code>assert</code>, <code>fail</code>, <code>set_fact</code>, <code>include_vars</code>, <code>setup</code>/<code>gather_facts</code>, <code>pause</code>, <code>ping</code>, <code>meta</code>, <code>include_role</code>/<code>import_role</code></td>
+<td><code>debug</code>, <code>assert</code>, <code>fail</code>, <code>set_fact</code>, <code>include_vars</code>, <code>setup</code>/<code>gather_facts</code>, <code>pause</code>, <code>ping</code>, <code>meta</code>, <code>async_status</code>, <code>include_role</code>/<code>import_role</code></td>
 </tr>
 </tbody>
 </table>
