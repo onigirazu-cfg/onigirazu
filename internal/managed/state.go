@@ -96,9 +96,13 @@ type State struct {
 }
 
 // Path is where the state of a playbook lives: .onigirazu/<name>.state.json
-// next to it, so every playbook of a directory has its own
+// next to it, so every playbook of a directory has its own, or in
+// $ONIGIRAZU_MANAGED_STATE_DIR
 func Path(playbook string) string {
 	base := strings.TrimSuffix(filepath.Base(playbook), filepath.Ext(playbook))
+	if dir := os.Getenv("ONIGIRAZU_MANAGED_STATE_DIR"); dir != "" {
+		return filepath.Join(dir, base+".state.json")
+	}
 	return filepath.Join(filepath.Dir(playbook), ".onigirazu", base+".state.json")
 }
 

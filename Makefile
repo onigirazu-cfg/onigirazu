@@ -10,6 +10,7 @@ LDFLAGS=-ldflags "-s -w -X github.com/onigirazu-cfg/onigirazu/internal/version.V
 # Build project
 build:
 	CGO_ENABLED=0 go build -trimpath $(LDFLAGS) -o bin/$(BINARY_NAME) cmd/onigirazu/main.go
+	CGO_ENABLED=0 go build -trimpath -o bin/onigirazu-test ./cmd/onigirazu-test
 
 # Build for all platforms
 build-all:
@@ -23,7 +24,7 @@ build-all:
 
 # Install to system
 install: build
-	sudo cp bin/$(BINARY_NAME) /usr/local/bin/
+	sudo cp bin/$(BINARY_NAME) bin/onigirazu-test /usr/local/bin/
 
 # Run tests
 test:
