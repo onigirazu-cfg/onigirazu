@@ -110,7 +110,7 @@ The registry adds these to `args` before `Execute`; modules must not treat them 
 
 1. Add `registry.RegisterModule(NewExampleModule())` to `NewRegistry()` in `internal/modules/registry.go`. The parser's module validator takes its list of known names from the registry.
 2. If the module supports check mode, add its name to `checkModeModules` in `registry.go`; otherwise tasks using it are skipped in check mode.
-3. Optional: argument aliases in `pkg/types/arg_aliases.go`; argument names for `onigirazu lint` in `knownModules` in `internal/cli/lint.go`.
+3. Optional: argument aliases in `pkg/types/arg_aliases.go`; then `go generate ./internal/cli` updates the argument names `onigirazu lint` knows (a test fails while they are out of date).
 
 ## Executor safety
 
