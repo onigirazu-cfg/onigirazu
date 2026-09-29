@@ -539,12 +539,13 @@ Ensure a line is present in a file, or remove matching lines.
 | `line` | string | - | Line content (required, also for `state: absent`) |
 | `regexp` | string | - | Regular expression: the first matching line is replaced (`present`), every matching line is removed (`absent`); without it lines are compared with `line` |
 | `state` | string | `present` | `present` or `absent` |
-| `insertafter` | string | - | Regular expression: a new line goes after the first matching line |
-| `insertbefore` | string | - | Regular expression: a new line goes before the first matching line |
+| `insertafter` | string | `EOF` | Regular expression: a new line goes after the last matching line; `EOF` is the end of the file |
+| `insertbefore` | string | - | Regular expression: a new line goes before the last matching line; `BOF` is the start of the file |
+| `firstmatch` | boolean | `false` | Use the first matching line for `insertafter`/`insertbefore` instead of the last |
 | `backup` | boolean | `false` | Keep the old file as `<path>.<unixtime>.backup` |
 | `create` | boolean | `false` | Create the file if it is missing (otherwise a missing file fails) |
 
-A new line goes to the end of the file when there is no `insertafter`/`insertbefore` or it matches nothing; `EOF` and `BOF` have no special meaning.
+A new line goes to the end of the file when there is no `insertafter`/`insertbefore` or it matches nothing, as in Ansible. An invalid pattern fails the task.
 
 #### Example
 
@@ -575,12 +576,13 @@ Insert, update or remove a block of text between marker lines.
 | `path` | string | - | File path (required); a missing file is created |
 | `block` | string | - | Block content |
 | `marker` | string | `# {mark} ANSIBLE MANAGED BLOCK` | Marker line; `{mark}` becomes `BEGIN` / `END` |
-| `insertafter` | string | - | Literal text: a new block goes after the first line containing it |
-| `insertbefore` | string | - | Literal text: a new block goes before the first line containing it |
+| `insertafter` | string | `EOF` | Regular expression: a new block goes after the last matching line; `EOF` is the end of the file |
+| `insertbefore` | string | - | Regular expression: a new block goes before the last matching line; `BOF` is the start of the file |
+| `firstmatch` | boolean | `false` | Use the first matching line for `insertafter`/`insertbefore` instead of the last |
 | `state` | string | `present` | `present` or `absent` |
 | `backup` | boolean | `false` | Keep the old file as `<path>.bak` |
 
-A new block goes to the end of the file without `insertafter`/`insertbefore`; when their text is not found, the block is not added. Returns `path`, `state`, `msg` and `backup`.
+A new block goes to the end of the file when there is no `insertafter`/`insertbefore` or it matches nothing, as in Ansible; an existing block is updated in place. An invalid pattern fails the task. Returns `path`, `state`, `msg` and `backup`.
 
 #### Example
 
