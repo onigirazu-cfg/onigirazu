@@ -265,50 +265,19 @@ func checkTaskListNames(tasks []types.Task, section, playName, filename string, 
 	}
 }
 
+//go:generate go run ./gen_modargs ../modules lint_module_args.go
+
+// acceptedArgs are Ansible arguments a module accepts and ignores on purpose
+var acceptedArgs = map[string][]string{
+	"docker_container": {"comparisons"},
+}
+
+// checkModuleArgs warns about arguments a module does not read (moduleArgs
+// is generated from internal/modules, so it follows the modules)
 func checkModuleArgs(playbook *types.Playbook, filename string, result *LintResult) {
-	knownModules := map[string][]string{
-		// Core modules
-		"shell":    {"cmd", "chdir", "creates", "removes"},
-		"command":  {"cmd", "chdir", "creates", "removes"},
-		"copy":     {"src", "dest", "content", "mode", "owner", "group", "backup"},
-		"template": {"src", "dest", "mode", "owner", "group", "backup"},
-		"file":     {"path", "state", "mode", "owner", "group", "recurse"},
-		"package":  {"name", "state", "version"},
-		"service":  {"name", "state", "enabled"},
-		"user":     {"name", "state", "uid", "group", "groups", "home", "shell", "password"},
-		"group":    {"name", "state", "gid"},
-		"debug":    {"msg", "var"},
-		"set_fact": {"cacheable"},
-		"fetch":    {"src", "dest", "flat"},
-		"stat":     {"path", "follow"},
-		"get_url":  {"url", "dest", "mode", "checksum"},
-
-		// File search and manipulation
-		"find":       {"path", "pattern", "type", "limit"},
-		"lineinfile": {"path", "line", "regexp", "insertbefore", "insertafter", "state", "backup"},
-
-		// System modules
-		"ping":     {},
-		"systemd":  {"name", "state", "enabled", "daemon_reload"},
-		"cron":     {"name", "minute", "hour", "day", "month", "weekday", "job", "state", "user", "special_time"},
-		"firewall": {"service", "state", "permanent", "immediate"},
-		"config":   {"path", "key", "value", "state"},
-
-		// Git module
-		"git": {"repo", "dest", "version", "depth", "recursive", "force", "key_file", "accept_hostkey"},
-
-		// Docker/Container modules
-		"docker_container": {"name", "image", "state", "command", "ports", "volumes", "env", "networks"},
-		"docker_image":     {"name", "state", "build", "path", "pull", "force_pull", "tag"},
-		"docker_compose":   {"project_src", "state", "files", "services"},
-		"podman":           {"name", "image", "state", "command", "ports", "volumes", "env"},
-
-		// Database modules
-		"mysql_db":        {"name", "login_user", "login_password", "login_host", "state", "collation", "encoding"},
-		"mysql_user":      {"name", "password", "login_user", "login_password", "login_host", "state", "host", "priv"},
-		"postgresql_db":   {"name", "login_user", "login_password", "login_host", "state", "encoding", "locale", "owner"},
-		"postgresql_user": {"name", "password", "login_user", "login_password", "login_host", "state", "groups", "role_attr_flags"},
-		"mongodb":         {"name", "login_user", "login_password", "login_host", "state", "database"},
+	knownModules := make(map[string][]string, len(moduleArgs))
+	for m, a := range moduleArgs {
+		knownModules[m] = append(append([]string{}, a...), acceptedArgs[m]...)
 	}
 
 	for _, play := range playbook.Plays {
@@ -338,8 +307,11 @@ func checkTaskListModules(tasks []types.Task, playName, filename string, knownMo
 			continue
 		}
 
-		// Check for unknown arguments
+		// Check for unknown arguments; "_" arguments are added by the parser
 		for arg := range task.Args {
+			if strings.HasPrefix(arg, "_") {
+				continue
+			}
 			found := false
 			for _, validArg := range validArgs {
 				if arg == validArg {
