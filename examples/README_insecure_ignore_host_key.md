@@ -2,19 +2,18 @@
 
 ## Default behaviour
 
-- Host keys are checked against `~/.ssh/known_hosts`. The config keys
-  `ssh_known_hosts_file` and `ssh_strict_host_key` currently have no effect on `run` and
-  `apply`.
-- An entry matches when its host field is exactly `address:port` (for example
-  `10.0.0.5:22`) or the plain IP address of the server. Hashed entries (`|1|…`, as written
-  by `ssh-keygen -H` or `ssh-keyscan -H`), `[host]:port` entries and plain host names are
-  not matched.
-- A host without a matching entry is accepted and its key is appended to
-  `~/.ssh/known_hosts`. That line is not read back on the next run, so such a host is
-  accepted again every time.
-- A host whose key differs from a matching entry fails with
-  `host key verification failed for …: key mismatch`. Remove the stale entry
-  (`ssh-keygen -R <ip>`) and connect again.
+- Host keys are checked against `~/.ssh/known_hosts` (`ssh_known_hosts_file` in
+  `onigirazu.yml` names another file; `~` is the home directory). The file is read with
+  OpenSSH's rules: plain and hashed names (`|1|…`), `[host]:port` for other ports, several
+  names per line, `@revoked`. Lines that hold no key are skipped.
+- A host without an entry is accepted and one OpenSSH line is appended
+  (`web1 ssh-ed25519 AAAA…`, `[10.0.0.5]:2222 …` for another port). With
+  `ssh_strict_host_key: true` an unknown host fails instead.
+- A host whose key differs from its entry fails with `the host key changed`. Remove the
+  stale entry (`ssh-keygen -R <host>` or `ssh-keygen -R '[host]:port'`) and connect again.
+- Earlier versions appended lines with the key type written twice
+  (`host ssh-ed25519 ssh-ed25519 AAAA…`), one per run. They are skipped; to remove them:
+  `grep -vE '^\S+ (ssh-[a-z0-9]+|ecdsa-sha2-nistp[0-9]+) (ssh-[a-z0-9]+|ecdsa-sha2-nistp[0-9]+) ' ~/.ssh/known_hosts > kh.tmp && mv kh.tmp ~/.ssh/known_hosts`.
 
 ## Disabling the check for a host
 
@@ -24,9 +23,8 @@ Two inventory settings mark a host as "ignore host key":
 - `ansible_ssh_common_args` (or `ansible_ssh_extra_args`) containing
   `-o StrictHostKeyChecking=no`; `ansible_ssh_host_key_checking: false` in Ansible YAML
 
-Currently only fact gathering honours this mark. Module tasks of `run` and `apply` connect
-through the connection pool, which checks the key anyway, so a changed key still fails
-them.
+The mark applies to every connection to the host: fact gathering, tasks, `run` and
+`healthcheck`.
 
 Where each setting is recognised:
 
