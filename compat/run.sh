@@ -63,7 +63,7 @@ normalize() {
      elif .changed then "changed" else "ok" end) as $st
     | (.msg // "" | tostring) as $raw
     | ($raw | if . == "True" then "true" elif . == "False" then "false" else . end
-       | try (fromjson | tojson) catch .) as $msg
+       | . as $s | try (fromjson | tojson) catch $s) as $msg
     | [.task, $st, (if ($st == "failed" or $st == "ignored") and .module != "fail" then "" else $msg end)]
     | join(" | ")'
 }
