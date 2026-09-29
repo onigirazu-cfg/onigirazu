@@ -6,7 +6,8 @@
 onigirazu run <host-pattern> [command] -i <inventory> [flags]
 ```
 
-`-i` is required. The host pattern is `all`, a group or a host name. The exit code is 1
+An inventory is required: `-i` (repeatable, also a host list such as `web1,web2`) or
+`$ANSIBLE_INVENTORY`. The host pattern is `all`, a group or a host name. The exit code is 1
 when any host failed.
 
 ## Ways to give the command

@@ -50,4 +50,4 @@ Start with the [Quick Start](QUICK_START_CONFIGURATION.md). The project
 
 - [Supported platforms](PLATFORMS.md)
 - [CI/CD](ci-cd.md)
-- [Release process](RELEASE_PROCESS.md) and [release quick start](QUICK_START_RELEASE.md)
+- [Release process](RELEASE_PROCESS.md)
