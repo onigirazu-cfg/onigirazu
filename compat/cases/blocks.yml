@@ -1,0 +1,21 @@
+- hosts: all
+  gather_facts: false
+  tasks:
+    - block:
+        - name: in block
+          debug: msg="before failure"
+        - name: fails
+          command: "false"
+        - name: never runs
+          debug: msg="never"
+      rescue:
+        - name: rescued
+          debug: msg="rescued {{ ansible_failed_task.name }}"
+      always:
+        - name: always
+          debug: msg="always"
+    - block:
+        - debug: msg="block with when"
+      when: false
+    - name: after
+      debug: msg="continues"

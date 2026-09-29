@@ -1,0 +1,39 @@
+- hosts: all
+  gather_facts: false
+  vars:
+    port: 8080
+  tasks:
+    - file: path=/root/compat state=directory mode="0755"
+    - copy:
+        dest: /root/compat/copied.txt
+        content: "port={{ port }}\n"
+        mode: "0644"
+    - lineinfile:
+        path: /root/compat/copied.txt
+        line: "debug=1"
+    - lineinfile:
+        path: /root/compat/copied.txt
+        regexp: "^port="
+        line: "port=9090"
+    - blockinfile:
+        path: /root/compat/block.txt
+        create: true
+        block: |
+          a=1
+          b=2
+    - replace:
+        path: /root/compat/block.txt
+        regexp: "b=2"
+        replace: "b=3"
+    - copy:
+        dest: /root/compat/tpl.j2
+        content: "{% for i in range(3) %}{{ i }}{% if not loop.last %},{% endif %}{% endfor %}\n"
+      delegate_to: localhost
+      run_once: true
+      become: false
+      check_mode: false
+      when: false
+    - file: path=/root/compat/link src=/root/compat/copied.txt state=link
+    - stat: path=/root/compat/copied.txt
+      register: st
+    - debug: msg="{{ st.stat.exists }} {{ st.stat.mode }} {{ st.stat.size }}"

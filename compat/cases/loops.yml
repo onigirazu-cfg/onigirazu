@@ -1,0 +1,35 @@
+- hosts: all
+  gather_facts: false
+  vars:
+    users: [{name: ann, uid: 1}, {name: bob, uid: 2}]
+    conf: {port: 80, host: example}
+  tasks:
+    - name: loop over a list
+      command: "echo {{ item }}"
+      loop: [one, two]
+      register: out
+    - name: registered loop results
+      debug: msg="{{ out.results | map(attribute='stdout') | list }}"
+    - name: loop over dicts with label and index
+      debug: msg="{{ idx }}={{ item.name }}"
+      loop: "{{ users }}"
+      loop_control:
+        index_var: idx
+        label: "{{ item.name }}"
+    - name: with_dict
+      debug: msg="{{ item.key }}={{ item.value }}"
+      with_dict: "{{ conf }}"
+    - name: dict2items
+      debug: msg="{{ conf | dict2items | map(attribute='key') | sort | join(',') }}"
+    - name: loop with when per item
+      debug: msg="{{ item }}"
+      loop: [1, 2, 3]
+      when: item > 1
+    - name: until retries
+      shell: "echo x >> /tmp/until; wc -l < /tmp/until"
+      register: cnt
+      until: cnt.stdout | int >= 3
+      retries: 5
+      delay: 0
+    - name: until result
+      debug: msg="{{ cnt.stdout }} {{ cnt.attempts }}"

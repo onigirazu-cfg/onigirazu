@@ -1,0 +1,36 @@
+- hosts: all
+  gather_facts: false
+  vars:
+    n: 3
+    s: "yes"
+    empty: ""
+    nothing: null
+    items: [a, b]
+    flag: true
+  tasks:
+    - name: number comparison
+      debug: msg="n>2"
+      when: n > 2
+    - name: skipped comparison
+      debug: msg="never"
+      when: n > 5
+    - name: string truthiness
+      debug: msg="s is truthy"
+      when: s | bool
+    - name: empty string is false
+      debug: msg="never"
+      when: empty
+    - name: defined and none
+      debug: msg="{{ nothing is defined }} {{ nothing is none }} {{ missing is defined }}"
+    - name: in list
+      debug: msg="a in items"
+      when: "'a' in items"
+    - name: list of conditions
+      debug: msg="all true"
+      when:
+        - flag
+        - n == 3
+    - name: and or not
+      debug: msg="{{ (flag and n > 1) or not flag }}"
+    - name: inline if
+      debug: msg="{{ 'big' if n > 2 else 'small' }}"
