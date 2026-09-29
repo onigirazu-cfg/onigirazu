@@ -3,10 +3,17 @@
 Runs every case in `cases/` on disposable vSphere VMs cloned from the current
 `[latest]` Ubuntu golden images, then deletes the VMs.
 
-- Workflow `E2E`: by hand (optionally a subset of cases, or keep the VMs) and
-  nightly at 05:00 UTC; only on self-hosted runners labelled `vsphere-e2e`.
-- Cases are split over four shards (`E2E_SHARD=i/4`, every fourth case), each
-  on its own VMs; runs of different branches do not wait for each other.
+- Workflow `E2E`: on pull requests from branches of this repository (not forks,
+  not Dependabot), by hand (optionally a subset of cases, or keep the VMs) and
+  nightly at 05:00 UTC (all cases); only on self-hosted runners labelled `vsphere-e2e`.
+  A new push to a pull request cancels its running e2e.
+- A pull request runs only the cases its changes need (`select-cases.sh`): docs,
+  packaging and unit tests need none; `internal/modules/<name>.go` needs the cases
+  using module `<name>` (all when no case uses it); a changed case needs itself;
+  anything else needs all.
+- Shards: one per ~5 minutes of cases, at most four (`E2E_SHARD=i/n`), each on its
+  own VMs, balanced by `case-seconds.tsv` (longest case first onto the least loaded
+  shard). Add a new slow case there.
 - VMs are named `tmp-e2e-onigirazu-<run>-<os>`, live in a dedicated folder and
   carry a "TEMPORARY" note with the run link and expiry time.
 - `janitor.sh` runs hourly and deletes e2e VMs older than 3 hours from that

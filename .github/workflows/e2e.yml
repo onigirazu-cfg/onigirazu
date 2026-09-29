@@ -1,8 +1,12 @@
 name: E2E
 
-# Disposable vSphere VMs on a self-hosted runner. Never runs for pull requests:
-# only by hand, nightly after the golden images are rebuilt, and the janitor.
+# Disposable vSphere VMs on a self-hosted runner: for pull requests from this
+# repository (only the cases the change needs), by hand, nightly after the
+# golden images are rebuilt, and the janitor. Pull requests from forks never
+# reach the self-hosted runners.
 on:
+  pull_request:
+    types: [opened, synchronize, reopened]
   workflow_dispatch:
     inputs:
       cases:
@@ -29,19 +33,56 @@ permissions:
   actions: read   # janitor: keep VMs of runs in progress
 
 jobs:
+  # Which cases, on how many shards: a pull request runs the cases its changes
+  # need (e2e/select-cases.sh), one shard per ~5 min of cases, at most four
+  plan:
+    if: >-
+      (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository &&
+       github.actor != 'dependabot[bot]') ||
+      (github.event_name == 'workflow_dispatch' && !inputs.purge_vms) || github.event.schedule == '0 5 * * *'
+    runs-on: ubuntu-latest
+    outputs:
+      cases: ${{ steps.plan.outputs.cases }}
+      shards: ${{ steps.plan.outputs.shards }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: plan
+        env:
+          EVENT: ${{ github.event_name }}
+          INPUT_CASES: ${{ inputs.cases }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          cases="$INPUT_CASES"
+          if [ "$EVENT" = pull_request ]; then
+            cases="$(e2e/select-cases.sh "$BASE" HEAD | paste -sd' ' -)"
+            [ -n "$cases" ] || { echo "no e2e case needed"; echo "shards=[]" >> "$GITHUB_OUTPUT"; exit 0; }
+            [ "$cases" = all ] && cases=""
+          fi
+          # seconds of the chosen cases (unknown: 10 s) -> shards of ~300 s
+          list="${cases:-$(ls e2e/cases)}"
+          secs="$(for c in $list; do awk -F'\t' -v c="$c" '$1 == c { print $2; f = 1 } END { if (!f) print 10 }' e2e/case-seconds.tsv; done | awk '{ s += $1 } END { print s + 0 }')"
+          n=$(( (secs + 299) / 300 )); [ "$n" -ge 1 ] || n=1; [ "$n" -le 4 ] || n=4
+          echo "cases: ${cases:-all} (${secs}s) on $n shard(s)"
+          echo "cases=$cases" >> "$GITHUB_OUTPUT"
+          echo "shards=[$(seq 1 "$n" | paste -sd, -)]" >> "$GITHUB_OUTPUT"
+
   e2e:
-    if: (github.event_name == 'workflow_dispatch' && !inputs.purge_vms) || github.event.schedule == '0 5 * * *'
-    name: e2e (shard ${{ matrix.shard }}/4)
+    needs: plan
+    if: needs.plan.outputs.shards != '[]'
+    name: e2e (shard ${{ matrix.shard }})
     runs-on: [self-hosted, vsphere-e2e]
     timeout-minutes: 60
-    # Cases are split over four shards, each on its own pair of VMs
+    # Each shard runs on its own pair of VMs
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: ${{ fromJSON(needs.plan.outputs.shards) }}
+    # A new push to a pull request replaces its running e2e
     concurrency:
       group: e2e-${{ github.ref }}-${{ matrix.shard }}
-      cancel-in-progress: false
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
     env:
       GOVC_VERSION: v0.56.0
     steps:
@@ -86,9 +127,9 @@ jobs:
           TF_VAR_library: ${{ secrets.E2E_LIBRARY }}
           RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          E2E_CASES: ${{ inputs.cases }}
+          E2E_CASES: ${{ needs.plan.outputs.cases }}
           KEEP_VMS: ${{ inputs.keep_vms && '1' || '' }}
-          E2E_SHARD: ${{ matrix.shard }}/4
+          E2E_SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}
         run: e2e/run.sh
 
   janitor:
