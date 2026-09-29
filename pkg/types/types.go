@@ -14,14 +14,17 @@ import (
 
 // Host represents a target host
 type Host struct {
-	Name                  string                 `yaml:"name"`
-	Address               string                 `yaml:"address"`
-	Port                  int                    `yaml:"port,omitempty"`
-	User                  string                 `yaml:"user,omitempty"`
-	Password              string                 `yaml:"password,omitempty"`
-	KeyFile               string                 `yaml:"key_file,omitempty"`
-	InsecureIgnoreHostKey bool                   `yaml:"insecure_ignore_host_key,omitempty"`
-	Vars                  map[string]interface{} `yaml:"vars,omitempty"`
+	Name                  string `yaml:"name"`
+	Address               string `yaml:"address"`
+	Port                  int    `yaml:"port,omitempty"`
+	User                  string `yaml:"user,omitempty"`
+	Password              string `yaml:"password,omitempty"`
+	KeyFile               string `yaml:"key_file,omitempty"`
+	InsecureIgnoreHostKey bool   `yaml:"insecure_ignore_host_key,omitempty"`
+	// SSHArgs: ansible_ssh_common_args and ansible_ssh_extra_args
+	// (ConnectTimeout, ProxyJump, ProxyCommand are used)
+	SSHArgs string                 `yaml:"-" json:"-"`
+	Vars    map[string]interface{} `yaml:"vars,omitempty"`
 	// BecomePassword is given to sudo (ansible_become_password); never
 	// written anywhere
 	BecomePassword string `yaml:"-" json:"-"`
