@@ -14,13 +14,11 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/onigirazu-cfg/onigirazu/internal/cache"
-	"github.com/onigirazu-cfg/onigirazu/internal/config"
 	"github.com/onigirazu-cfg/onigirazu/internal/executor"
 	"github.com/onigirazu-cfg/onigirazu/internal/importer"
 	"github.com/onigirazu-cfg/onigirazu/internal/inventory"
 	"github.com/onigirazu-cfg/onigirazu/internal/logger"
 	"github.com/onigirazu-cfg/onigirazu/internal/parser"
-	sshpkg "github.com/onigirazu-cfg/onigirazu/internal/ssh"
 	"github.com/onigirazu-cfg/onigirazu/internal/template"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
@@ -73,10 +71,8 @@ a faithful import has nothing to change.`,
 			}
 			// known_hosts file, strict mode and timeout from the configuration, as
 			// apply uses them (the default pool would write ~/.ssh/known_hosts)
-			if cfg, err := config.LoadConfigWithDiscovery(configPath, "."); err == nil {
-				sshpkg.InitializeGlobalPoolWithLogger(cfg, logger.New(false))
-			} else {
-				return fmt.Errorf("failed to load configuration: %w", err)
+			if err := setupSSHFromConfig("."); err != nil {
+				return err
 			}
 			fmt.Fprintf(out, "Collecting %d host(s)...\n", len(collect))
 			snaps, err := collectHosts(cmd.Context(), collect, !noBecome, becomeUser)

@@ -79,6 +79,11 @@ func runRollback(cmd *cobra.Command, args []string) error {
 	// Create snapshot manager
 	sm := rollback.NewSnapshotManager(snapshotDir)
 
+	// known_hosts and host key settings from the configuration
+	if err := setupSSHFromConfig("."); err != nil {
+		return err
+	}
+
 	// Create module registry (built-in modules are registered automatically)
 	registry := modules.NewRegistry()
 
