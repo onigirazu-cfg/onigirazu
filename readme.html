@@ -187,6 +187,7 @@ onigirazu apply site.yml -i hosts.ini
 formats can be used side by side. Examples: <a href="docs/examples/README.md">docs/examples</a>.</p>
 <h2>Coming from Ansible</h2>
 <p>Existing Ansible content runs as it is in most cases. What is supported:</p>
+<p>YAML is read as Ansible reads it: unquoted <code>yes</code>/<code>no</code>/<code>on</code>/<code>off</code> values are booleans (YAML 1.1); quote them to keep text.</p>
 <ul>
 <li><strong>Playbooks</strong>: plays with <code>pre_tasks</code>, <code>tasks</code>, <code>post_tasks</code>, <code>handlers</code>, <code>roles</code>,
   <code>vars</code>, <code>vars_files</code>, <code>environment</code>, <code>serial</code>, <code>max_fail_percentage</code>, <code>any_errors_fatal</code>,
