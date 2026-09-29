@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Deletes e2e VMs left behind by cancelled or crashed runs.
 # Only touches VMs directly inside the e2e folder whose name starts with the
-# e2e prefix and that were created more than TTL_HOURS ago. With GH_TOKEN and
+# e2e prefix and that were created more than TTL_HOURS ago, and work
+# directories of killed runs on this runner. With GH_TOKEN and
 # GITHUB_REPOSITORY set, VMs of workflow runs still in progress are kept.
 #
 # Environment: GOVC_URL GOVC_USERNAME GOVC_PASSWORD GOVC_INSECURE,
@@ -43,3 +44,13 @@ done < <(govc vm.info -json "$folder/*" 2>/dev/null | jq -r '
   (.virtualMachines // .VirtualMachines // [])[] | [.name, (.config.createDate // "")] | @tsv')
 
 echo "e2e VMs found: $found, deleted: $deleted"
+
+# Work directories of runs that were killed (a cancelled job gets no EXIT
+# trap): they hold the run's private key. At least 3 hours old even when
+# purging VMs, so runs in progress keep theirs.
+dir_ttl=$(( TTL_HOURS > 3 ? TTL_HOURS : 3 ))
+stale="$(find "${TMPDIR:-/tmp}" -maxdepth 1 -type d -name 'onigirazu-e2e.*' -user "$(id -un)" -mmin +$((dir_ttl * 60)) 2>/dev/null)"
+if [ -n "$stale" ]; then
+  echo "removing $(wc -l <<<"$stale" | tr -d ' ') stale work dir(s)"
+  [ -n "${DRY_RUN:-}" ] || xargs rm -rf <<<"$stale"
+fi
