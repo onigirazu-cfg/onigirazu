@@ -53,3 +53,39 @@ func TestGitShallowClone(t *testing.T) {
 		t.Errorf("after switching to main HEAD is %q", msg)
 	}
 }
+
+func TestGitHeadUpdateMovesToTheTip(t *testing.T) {
+	src := t.TempDir()
+	git := func(dir string, args ...string) string {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		cmd.Env = append(cmd.Environ(), "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	git(src, "init", "-q", "-b", "main")
+	git(src, "commit", "-q", "--allow-empty", "-m", "one")
+	dest := filepath.Join(t.TempDir(), "clone")
+	host := types.Host{Name: "h", Address: "localhost"}
+	run := func() types.TaskResult {
+		res, err := NewGitModule().Execute(context.Background(), host, map[string]interface{}{"repo": src, "dest": dest})
+		if err != nil || !res.Success {
+			t.Fatalf("%+v, %v", res, err)
+		}
+		return res
+	}
+	run()
+	git(src, "commit", "-q", "--allow-empty", "-m", "two")
+	if !run().Changed {
+		t.Error("a new commit on the default branch must be pulled")
+	}
+	if msg := git(dest, "log", "-1", "--format=%s"); msg != "two" {
+		t.Errorf("HEAD is %q", msg)
+	}
+	if run().Changed {
+		t.Error("nothing new: no change")
+	}
+}
