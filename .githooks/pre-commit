@@ -26,7 +26,12 @@ fi
 
 lint="$(command -v golangci-lint || echo "$HOME/.cache/bin/golangci-lint")"
 if [ -x "$lint" ]; then
-  "$lint" run --new-from-rev=HEAD ./... >&2 || { echo "pre-commit: golangci-lint failed" >&2; exit 1; }
+  # its config warnings go to the output too: show them only on a failure
+  if ! out="$("$lint" run --new-from-rev=HEAD ./... 2>&1)"; then
+    grep -v '^level=warning' <<<"$out" >&2
+    echo "pre-commit: golangci-lint failed" >&2
+    exit 1
+  fi
 else
   echo "pre-commit: golangci-lint not found, lint skipped (make dev-setup installs it)" >&2
 fi
