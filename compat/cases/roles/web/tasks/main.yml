@@ -1,0 +1,5 @@
+- name: role var
+  debug: msg="{{ greeting }} {{ extra | default('none') }}"
+- name: role file
+  copy: content="{{ port }}\n" dest=/root/compat/role-{{ port }}.txt
+  notify: role handler

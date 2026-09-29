@@ -1,0 +1,16 @@
+- hosts: all
+  gather_facts: false
+  tasks:
+    - file: path=/root/compat state=directory
+    - include_tasks: tasks/inc.yml
+      vars: {x: 1}
+    - import_tasks: tasks/inc.yml
+      vars: {x: 2}
+    - include_tasks: tasks/inc.yml
+      loop: [a, b]
+      loop_control: {loop_var: x}
+    - include_role:
+        name: web
+      vars: {port: 8080, extra: yes}
+    - import_role:
+        name: web
