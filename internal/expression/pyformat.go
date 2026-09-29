@@ -83,8 +83,10 @@ func pyFormat(format string, args []interface{}) (string, error) {
 		case 'c':
 			if s, ok := arg.(string); ok {
 				fmt.Fprintf(&b, "%"+spec+"s", s)
-			} else if v, ok := asInt(arg); ok {
-				fmt.Fprintf(&b, "%"+spec+"c", rune(v))
+			} else if v, ok := asInt(arg); ok && v >= 0 && v <= 0x10ffff {
+				fmt.Fprintf(&b, "%"+spec+"c", rune(v)) // #nosec G115 -- range checked
+			} else {
+				return "", fmt.Errorf("format: %%c needs a character or a code point, got %v", arg)
 			}
 		default:
 			return "", fmt.Errorf("format: unsupported format character %q", verb)
