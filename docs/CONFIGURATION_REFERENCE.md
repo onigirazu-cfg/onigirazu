@@ -35,7 +35,7 @@ Environment variables only change the defaults; a key in `onigirazu.yml` wins ov
 |-----|--------------|---------|--------|
 | `max_concurrency` | `ONIGIRAZU_MAX_CONCURRENCY` | `10` | Hosts worked on in parallel. `apply -f N` overrides it (when N is not 10). |
 | `log_level` | `ONIGIRAZU_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error`. `apply -l` and `-v` override it. |
-| `log_format` | `ONIGIRAZU_LOG_FORMAT` | `text` | `text` or `json`. `apply --log-format` overrides it. |
+| `log_format` | `ONIGIRAZU_LOG_FORMAT` | `text` | `text` or `json` ([MACHINE_OUTPUT.md](MACHINE_OUTPUT.md)). `apply --log-format` overrides it. |
 | `state_file` | `ONIGIRAZU_STATE_FILE` | `.onigirazu-state` | State file. `-s` overrides it. |
 | `roles_path` | `ANSIBLE_ROLES_PATH` | - | Directories searched for roles after `roles/` next to the playbook (list; relative to the config file). ansible.cfg `roles_path` is read too. |
 | `collections_path` | `ANSIBLE_COLLECTIONS_PATH` | `~/.ansible/collections` | Where `namespace.collection.role` roles are found (`ansible_collections/<ns>/<coll>/roles/<role>`). ansible.cfg `collections_path` is read too. |

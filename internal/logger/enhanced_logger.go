@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
 // LogLevel represents logging levels
@@ -432,6 +434,67 @@ func (l *EnhancedLogger) TaskEnd(taskName, hostName string, changed, success boo
 		"success": success,
 		"changed": changed,
 	}).Info("Task '%s' on host '%s': %s%s", taskName, hostName, status, changeStatus)
+}
+
+// TaskFinished logs a task_end event with the task's status and message:
+// the debug output, or the error of a failed task
+func (l *EnhancedLogger) TaskFinished(r types.TaskResult) {
+	status := "SUCCESS"
+	switch {
+	case r.Failed && r.Ignored:
+		status = "FAILED (ignored)"
+	case r.Failed:
+		status = "FAILED"
+	case r.Skipped:
+		status = "SKIPPED"
+	}
+	changeStatus := ""
+	if r.Changed {
+		changeStatus = " (changed)"
+	}
+	fields := map[string]interface{}{
+		"host":    r.Host,
+		"task":    r.TaskName,
+		"module":  r.Module,
+		"type":    "task_end",
+		"success": !r.Failed,
+		"changed": r.Changed,
+		"skipped": r.Skipped,
+		"ignored": r.Ignored,
+	}
+	if msg := TaskMessage(r); msg != "" {
+		fields["msg"] = msg
+	}
+	l.WithFields(fields).Info("Task '%s' on host '%s': %s%s", r.TaskName, r.Host, status, changeStatus)
+}
+
+// TaskMessage is what a task reports: the error of a failed task, the
+// message or the variables of a debug task
+func TaskMessage(r types.TaskResult) string {
+	if r.Failed {
+		return r.Error
+	}
+	if r.Module != "debug" || r.Skipped {
+		return ""
+	}
+	if msg, ok := r.Output["msg"]; ok {
+		if s, ok := msg.(string); ok {
+			return s
+		}
+		b, _ := json.Marshal(msg)
+		return string(b)
+	}
+	vars := map[string]interface{}{}
+	for k, v := range r.Output {
+		if !strings.HasPrefix(k, "_") && k != "changed" && k != "failed" {
+			vars[k] = v
+		}
+	}
+	if len(vars) == 0 {
+		return ""
+	}
+	b, _ := json.Marshal(vars)
+	return string(b)
 }
 
 // flushBuffer flushes the log buffer to output (must be called with lock held)

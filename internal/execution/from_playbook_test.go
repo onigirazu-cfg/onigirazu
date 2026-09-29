@@ -43,3 +43,31 @@ func TestFromPlaybookResult(t *testing.T) {
 	other := FromPlaybookResult(result, "/p/site.yml", "site.yml", start.Add(time.Millisecond), time.Second)
 	assert.NotEqual(t, exec.ExecutionID, other.ExecutionID, "runs within one second get their own id")
 }
+
+func TestFromPlaybookResultKeepsTasksWithTheSameName(t *testing.T) {
+	res := &types.PlaybookResult{Plays: []types.PlayResult{{Name: "p", Hosts: []types.HostResult{
+		{Host: "a", Tasks: []types.TaskResult{
+			{TaskName: "debug", Module: "debug", Output: map[string]interface{}{"msg": "one"}},
+			{TaskName: "debug", Module: "debug", Skipped: true},
+			{TaskName: "fail", Module: "fail", Failed: true, Ignored: true, Error: "boom"},
+		}},
+		{Host: "b", Tasks: []types.TaskResult{
+			{TaskName: "debug", Module: "debug", Output: map[string]interface{}{"msg": "one"}},
+			{TaskName: "debug", Module: "debug", Changed: true},
+			{TaskName: "fail", Module: "fail"},
+		}},
+	}}}}
+	exec := FromPlaybookResult(res, "p.yml", "p.yml", time.Now(), time.Second)
+	if len(exec.Tasks) != 3 {
+		t.Fatalf("tasks = %d, want 3", len(exec.Tasks))
+	}
+	if got := exec.Tasks[0].HostResults["a"].Output; got != "one" {
+		t.Errorf("debug output = %q", got)
+	}
+	if exec.Tasks[1].HostResults["a"].Status != "skipped" || exec.Tasks[1].HostResults["b"].Status != "changed" {
+		t.Errorf("second task = %+v", exec.Tasks[1].HostResults)
+	}
+	if r := exec.Tasks[2].HostResults["a"]; r.Status != "ignored" || r.Output != "boom" {
+		t.Errorf("ignored failure = %+v", r)
+	}
+}

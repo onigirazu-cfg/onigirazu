@@ -1215,6 +1215,11 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 	return e.finishTask(task, host, result, playResult)
 }
 
+// taskResultLogger is a logger that records the whole task result
+type taskResultLogger interface {
+	TaskFinished(result types.TaskResult)
+}
+
 // finishTask records a task result for a host: metrics, stats, play result,
 // register and set_fact. It returns an error when the task failed.
 func (e *ExecutionEngine) finishTask(task *types.Task, host *types.Host, result types.TaskResult,
@@ -1222,6 +1227,10 @@ func (e *ExecutionEngine) finishTask(task *types.Task, host *types.Host, result 
 	// no_log: register and set_fact get the real result; logs, the play
 	// result, state and the returned error get a placeholder
 	result.TaskKey = task.Key
+	// an unnamed task is called after its module, as Ansible does
+	if result.TaskName == "" {
+		result.TaskName = task.Module
+	}
 	if task.PreventDestroy {
 		for i := range result.Resources {
 			result.Resources[i].PreventDestroy = true
@@ -1294,8 +1303,16 @@ func (e *ExecutionEngine) finishTask(task *types.Task, host *types.Host, result 
 	}
 	e.resultMu.Unlock()
 
-	// Log result
-	e.logger.TaskEnd(task.Name, host.Name, result.Changed, !result.Failed)
+	// Log result; a logger that takes the whole result reports skipped,
+	// ignored and the message too
+	logged := result
+	logged.Host = host.Name // not every module fills it in
+	logged.Ignored = result.Failed && (task.IgnoreErrors || task.Rescuable)
+	if l, ok := e.logger.(taskResultLogger); ok {
+		l.TaskFinished(logged)
+	} else {
+		e.logger.TaskEnd(result.TaskName, host.Name, result.Changed, !result.Failed)
+	}
 
 	// Print debug output if this is a debug module
 	if task.Module == "debug" && !result.Failed {
@@ -1305,7 +1322,7 @@ func (e *ExecutionEngine) finishTask(task *types.Task, host *types.Host, result 
 	}
 
 	// Update progress
-	e.progressTracker.UpdateTask(host.Name, task.Name, !result.Failed)
+	e.progressTracker.UpdateTask(host.Name, result.TaskName, !result.Failed)
 
 	// register and set_fact belong to this host. A failed or skipped task
 	// is registered too, so later tasks can test r.failed / r.skipped.
