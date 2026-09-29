@@ -26,6 +26,19 @@ func (localRunner) ExecuteCommand(command string) (string, error) {
 	return string(out), err
 }
 
+// containerRunner serves hosts with a docker or podman connection
+type containerRunner struct{ runtime, name, user string }
+
+func (c containerRunner) ExecuteCommand(command string) (string, error) {
+	args := []string{"exec"}
+	if c.user != "" {
+		args = append(args, "-u", c.user)
+	}
+	args = append(args, c.name, "sh", "-c", command)
+	out, err := exec.Command(c.runtime, args...).Output() // #nosec G204 -- docker/podman exec into the inventory's container
+	return string(out), err
+}
+
 // Gatherer collects system facts from remote hosts
 type Gatherer struct {
 	cache *cache.FactsCache
@@ -59,7 +72,9 @@ func (g *Gatherer) Regather(ctx context.Context, host types.Host, factPath strin
 
 func (g *Gatherer) gather(ctx context.Context, host types.Host, factPath string) (*cache.SystemFacts, error) {
 	var client commandRunner = localRunner{}
-	if !ssh.IsLocal(host) {
+	if runtime, name, ok := ssh.Container(host); ok {
+		client = containerRunner{runtime: runtime, name: name, user: host.User}
+	} else if !ssh.IsLocal(host) {
 		sshClient, err := ssh.NewClient(host)
 		if err != nil {
 			return nil, fmt.Errorf("failed to connect to host %s: %w", host.Name, err)
