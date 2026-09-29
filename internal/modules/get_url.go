@@ -178,10 +178,16 @@ h=%[1]s
 trap 'rm -f "$t" ${h:+"$h"}' EXIT
 if command -v curl >/dev/null 2>&1; then
   curl -fsSL --max-time %[2]d%[3]s -o "$t" %[4]s
-else
+elif command -v wget >/dev/null 2>&1; then
   wget -q -T %[2]d -O "$t" %[4]s
+else
+  py=$(command -v python3 || command -v python || true)
+  [ -n "$py" ] || { echo "get_url needs curl, wget or python on the host" >&2; exit 127; }
+  "$py" - "$t" %[4]s %[2]d "$h" <<'PY'
+%[5]s
+PY
 fi
-`, shellQuote(headerFile), timeout, curlConfig, shellQuote(url))
+`, shellQuote(headerFile), timeout, curlConfig, shellQuote(url), pyDownload)
 	if hashCmd != "" {
 		script += fmt.Sprintf(`want=%s
 got=$(%s "$t" | cut -d' ' -f1)
@@ -225,6 +231,28 @@ wc -c < %[1]s
 	}
 	return result, nil
 }
+
+// pyDownload fetches argv[2] into argv[1] with Python's standard library,
+// for hosts without curl and wget (container images often have neither);
+// argv[4] is the curl config file with the headers
+const pyDownload = `import json, shutil, sys
+try:
+    from urllib.request import Request, urlopen
+except ImportError:
+    from urllib2 import Request, urlopen
+dest, url, timeout, headers = sys.argv[1], sys.argv[2], int(sys.argv[3]), sys.argv[4]
+req = Request(url, headers={"User-Agent": "onigirazu"})
+if headers:
+    for line in open(headers):
+        k, _, v = json.loads(line.split("=", 1)[1]).partition(":")
+        req.add_header(k.strip(), v.strip())
+try:
+    resp = urlopen(req, timeout=timeout)
+    with open(dest, "wb") as f:
+        shutil.copyfileobj(resp, f)
+except Exception as e:
+    sys.stderr.write("%s: %s\n" % (url, e))
+    sys.exit(22)`
 
 // getRemoteFileChecksum calculates checksum of a file on remote host
 func (m *GetURLModule) getRemoteFileChecksum(ctx context.Context, exec *executor.CommandExecutor, path string, checksumType string) (string, error) {
