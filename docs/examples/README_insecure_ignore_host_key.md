@@ -11,7 +11,7 @@
   `ssh_strict_host_key: true` an unknown host fails instead.
 - A host whose key differs from its entry fails with `the host key changed`. Remove the
   stale entry (`ssh-keygen -R <host>` or `ssh-keygen -R '[host]:port'`) and connect again.
-- Versions before 1.114 appended lines with the key type written twice
+- Earlier versions appended lines with the key type written twice
   (`host ssh-ed25519 ssh-ed25519 AAAA…`), one per run. They are skipped; to remove them:
   `grep -vE '^\S+ (ssh-[a-z0-9]+|ecdsa-sha2-nistp[0-9]+) (ssh-[a-z0-9]+|ecdsa-sha2-nistp[0-9]+) ' ~/.ssh/known_hosts > kh.tmp && mv kh.tmp ~/.ssh/known_hosts`.
 
