@@ -67,6 +67,11 @@ func (m *TemplateModule) Execute(ctx context.Context, host types.Host, args map[
 		return m.executeLocal(ctx, host, args, result, startTime)
 	}
 
+	// a container has no SSH: files go through its runtime
+	if inContainer(host) {
+		return m.executeRemote(ctx, host, nil, args, result, startTime)
+	}
+
 	// The module instance is shared by all hosts, so the connection is per call
 	pool := sshpkg.GetGlobalPool()
 	client, err := pool.GetConnection(host)

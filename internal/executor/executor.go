@@ -25,6 +25,20 @@ type CommandExecutor struct {
 	// becomePassword goes to sudo -S on stdin; empty: sudo -n
 	becomePassword string
 	env            string // "env 'K=V' ..." for the task's environment, or empty
+	// container: commands run through "<runtime> exec" (ansible_connection
+	// docker or podman) instead of SSH
+	runtime, container, containerUser string
+}
+
+// containerCmd is the command running a shell line in the host's container
+func (e *CommandExecutor) containerCmd(ctx context.Context, line string) *exec.Cmd {
+	argv := []string{"exec", "-i"}
+	if e.containerUser != "" {
+		argv = append(argv, "-u", e.containerUser)
+	}
+	argv = append(argv, e.container, "sh", "-c", line)
+	// #nosec G204 -- the runtime and container come from the inventory
+	return exec.CommandContext(ctx, e.runtime, argv...)
 }
 
 // NewCommandExecutor creates a new command executor for the given host
@@ -36,6 +50,10 @@ func NewCommandExecutor(host types.Host) (*CommandExecutor, error) {
 	}
 
 	isLocal := sshpkg.IsLocal(host)
+	if runtime, name, ok := sshpkg.Container(host); ok {
+		executor.runtime, executor.container, executor.containerUser = runtime, name, host.User
+		isLocal = true // no SSH client
+	}
 
 	// If it's not a local host, get SSH client from pool
 	if !isLocal {
@@ -211,6 +229,12 @@ func (e *CommandExecutor) execute(command string, args ...string) (string, error
 			return out, fmt.Errorf("command failed: %w", err)
 		}
 		return out, nil
+	} else if e.container != "" {
+		out, err := e.containerCmd(context.Background(), fullCommand).CombinedOutput()
+		if err != nil {
+			return string(out), fmt.Errorf("command failed: %w", err)
+		}
+		return string(out), nil
 	} else if e.become || e.env != "" {
 		// A single string with spaces goes through sh -c
 		return e.executeLocal(fullCommand)
@@ -235,6 +259,9 @@ func (e *CommandExecutor) executeWithContext(ctx context.Context, command string
 	if e.sshClient != nil {
 		// Execute on remote host via SSH with context support
 		return e.executeSSHWithContext(ctx, fullCommand)
+	} else if e.container != "" {
+		output, err := e.containerCmd(ctx, fullCommand).CombinedOutput()
+		return string(output), err
 	} else if e.become || e.env != "" {
 		// #nosec G204 -- privilege escalation wraps the module's own command
 		cmd := exec.CommandContext(ctx, "sh", "-c", fullCommand)
@@ -327,7 +354,8 @@ func (e *CommandExecutor) Close() error {
 	return nil
 }
 
-// IsRemote returns true if this executor is for a remote host
+// IsRemote returns true if this executor is for a remote host (SSH or a
+// container)
 func (e *CommandExecutor) IsRemote() bool {
-	return e.sshClient != nil
+	return e.sshClient != nil || e.container != ""
 }
