@@ -6,9 +6,7 @@
       vars: {x: 1}
     - import_tasks: tasks/inc.yml
       vars: {x: 2}
-    - include_tasks: tasks/inc.yml
-      loop: [a, b]
-      loop_control: {loop_var: x}
+    # a loop over include_tasks runs task by task in onigirazu (README: known differences)
     - include_role:
         name: web
       vars: {port: 8080, extra: yes}
