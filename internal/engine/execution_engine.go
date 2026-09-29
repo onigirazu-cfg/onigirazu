@@ -1306,6 +1306,7 @@ func (e *ExecutionEngine) finishTask(task *types.Task, host *types.Host, result 
 	// Log result; a logger that takes the whole result reports skipped,
 	// ignored and the message too
 	logged := result
+	logged.Host = host.Name // not every module fills it in
 	logged.Ignored = result.Failed && (task.IgnoreErrors || task.Rescuable)
 	if l, ok := e.logger.(taskResultLogger); ok {
 		l.TaskFinished(logged)
