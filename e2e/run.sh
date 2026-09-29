@@ -10,7 +10,7 @@
 #   TF_VAR_network TF_VAR_folder TF_VAR_library
 # Optional: E2E_IMAGES (default "u2404=ubuntu-24.04 u2604=ubuntu-26.04"),
 #   E2E_CASES (case directory names, default all), RUN_ID, RUN_URL, KEEP_VMS=1,
-#   E2E_SHARD=i/n (run every n-th case starting with the i-th, on own VMs)
+#   E2E_SHARD=i/n (the i-th of n shards balanced by case-seconds.tsv, on own VMs)
 # TF_VAR_* come from the environment and are checked below
 # shellcheck disable=SC2154
 set -euo pipefail
@@ -31,8 +31,20 @@ RUN_ID="${RUN_ID:-local-$(date -u +%m%d%H%M)}"
 cases="${E2E_CASES:-$(cd "$HERE/cases" && ls)}"
 if [ -n "${E2E_SHARD:-}" ]; then
   shard="${E2E_SHARD%/*}" shards="${E2E_SHARD#*/}"
+  # Longest cases first, each onto the shard with the least time so far
+  # (case-seconds.tsv; an unknown case counts 10 s)
   # shellcheck disable=SC2086 # one case per word
-  cases="$(printf '%s\n' $cases | sort | awk -v i="$shard" -v n="$shards" '(NR - 1) % n == i - 1')"
+  cases="$(printf '%s\n' $cases | sort -u | awk -v i="$shard" -v n="$shards" -F'\t' '
+    NR == FNR { if ($0 !~ /^#/) secs[$1] = $2; next }
+    { c[++m] = $1; w[m] = ($1 in secs) ? secs[$1] : 10 }
+    END {
+      for (a = 1; a <= m; a++) for (b = a + 1; b <= m; b++)
+        if (w[b] > w[a] || (w[b] == w[a] && c[b] < c[a])) { t = w[a]; w[a] = w[b]; w[b] = t; t = c[a]; c[a] = c[b]; c[b] = t }
+      for (a = 1; a <= m; a++) {
+        best = 1; for (k = 2; k <= n; k++) if (load[k] < load[best]) best = k
+        load[best] += w[a]; if (best == i) print c[a]
+      }
+    }' "$HERE/case-seconds.tsv" - | sort)"
   RUN_ID="$RUN_ID-s$shard"
 fi
 RUN_URL="${RUN_URL:-local run}"
