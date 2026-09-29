@@ -44,7 +44,6 @@ require (
 	github.com/hashicorp/go-sockaddr v1.0.7 // indirect
 	github.com/hashicorp/hcl v1.0.1-vault-7 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
-	github.com/kevinburke/ssh_config v1.6.0 // indirect
 	github.com/klauspost/compress v1.19.2 // indirect
 	github.com/klauspost/cpuid/v2 v2.4.0 // indirect
 	github.com/klauspost/crc32 v1.3.0 // indirect
@@ -84,6 +83,7 @@ require (
 
 require (
 	github.com/expr-lang/expr v1.17.8
+	github.com/kevinburke/ssh_config v1.6.0
 	github.com/minio/minio-go/v7 v7.3.0
 	github.com/pmezard/go-difflib v1.0.0
 	github.com/stretchr/testify v1.12.1
