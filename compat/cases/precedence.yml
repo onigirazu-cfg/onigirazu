@@ -1,0 +1,17 @@
+- hosts: all
+  gather_facts: false
+  vars:
+    a: play
+    b: play
+    c: play
+  vars_files: []
+  tasks:
+    - debug: msg="{{ a }} {{ b }} {{ c }}"
+    - debug: msg="{{ a }} {{ b }}"
+      vars: {a: task}
+    - set_fact: {b: fact}
+    - debug: msg="{{ a }} {{ b }} {{ c }}"
+    - block:
+        - debug: msg="{{ c }}"
+      vars: {c: block}
+    - debug: msg="{{ inventory_hostname }} {{ groups['all'] | length }} {{ hostvars[inventory_hostname]['b'] }}"

@@ -1,0 +1,46 @@
+- hosts: all
+  gather_facts: false
+  vars:
+    words: [b, a, c, a]
+    nums: ["3", "10", "2"]
+    people: [{n: x, age: 30}, {n: y, age: 20}]
+    d1: {a: 1, b: {c: 2}}
+    d2: {b: {d: 3}}
+    path: /etc/nginx/conf.d/site.conf
+  tasks:
+    - debug:
+        msg: "{{ words | unique | sort | join('-') }}"
+    - debug:
+        msg: "{{ nums | map('int') | sort | list }}"
+    - debug:
+        msg: "{{ nums | map('int') | max }} {{ nums | map('int') | sum }}"
+    - debug:
+        msg: "{{ people | selectattr('age', 'gt', 25) | map(attribute='n') | list }}"
+    - debug:
+        msg: "{{ people | sort(attribute='age') | map(attribute='n') | first }}"
+    - debug:
+        msg: "{{ d1 | combine(d2) }}"
+    - debug:
+        msg: "{{ d1 | combine(d2, recursive=true) }}"
+    - debug:
+        msg: "{{ path | basename }} {{ path | dirname }} {{ path | splitext | first }}"
+    - debug:
+        msg: "{{ 'Hello World' | regex_replace('o', '0') | lower }}"
+    - debug:
+        msg: "{{ 'a,b,,c' | split(',') | reject('equalto', '') | list | length }}"
+    - debug:
+        msg: "{{ undefined_var | default('dflt') }} {{ '' | default('empty', true) }}"
+    - debug:
+        msg: "{{ 'abc' | b64encode }} {{ 'YWJj' | b64decode }}"
+    - debug:
+        msg: "{{ 'abc' | hash('sha1') }}"
+    - debug:
+        msg: "{{ {'k': [1, 2]} | to_json }} {{ '{\"x\": 1}' | from_json }}"
+    - debug:
+        msg: "{{ [[1, 2], [3]] | flatten }} {{ [1, 2] | zip(['a', 'b']) | list }}"
+    - debug:
+        msg: "{{ (5 > 3) | ternary('yes', 'no') }} {{ 3.7 | int }} {{ '2.5' | float + 1 }}"
+    - debug:
+        msg: "{{ [{'k': 'a', 'v': 1}] | items2dict(key_name='k', value_name='v') }}"
+    - debug:
+        msg: "{{ 'x' * 3 }} {{ [1, 2] + [3] }} {{ 7 // 2 }} {{ 7 % 3 }}"

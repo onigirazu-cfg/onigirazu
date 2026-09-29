@@ -1,0 +1,21 @@
+- hosts: all
+  gather_facts: false
+  tasks:
+    - file: path=/root/compat state=directory
+    - name: changes
+      copy: content="a\n" dest=/root/compat/h.txt
+      notify: [first, second]
+    - name: no change
+      command: "true"
+      changed_when: false
+      notify: never
+    - meta: flush_handlers
+    - name: after flush
+      debug: msg="after"
+  handlers:
+    - name: second
+      shell: echo second >> /root/compat/order.txt
+    - name: first
+      shell: echo first >> /root/compat/order.txt
+    - name: never
+      shell: echo never >> /root/compat/order.txt

@@ -1,0 +1,19 @@
+- hosts: all
+  gather_facts: false
+  vars:
+    s: "  Hello, World  "
+    csv: "a,b,,c"
+    ver: "22.04.3"
+  tasks:
+    - debug: {msg: "{{ s.strip() }}|{{ s | trim }}|{{ s.lstrip() }}|"}
+    - debug: {msg: "{{ s.strip().lower() }} {{ s.strip().upper() }} {{ 'ab cd' | title }} {{ 'ab cd' | capitalize }}"}
+    - debug: {msg: "{{ csv.split(',') }} {{ csv.split(',', 1) }} {{ ver.split('.')[0] | int + 1 }}"}
+    - debug: {msg: "{{ 'hello' | replace('l', 'L') }} {{ 'hello'.replace('l', 'L', 1) }} {{ 'abc'[1:] }} {{ 'abc'[-1] }}"}
+    - debug: {msg: "{{ 'x-1.2.3' | regex_search('[0-9.]+') }} {{ 'a1b22' | regex_findall('[0-9]+') }}"}
+    - debug: {msg: "{{ 'Foo Bar' | regex_replace('(\\w+) (\\w+)', '\\2 \\1') }} {{ 'abc' | regex_escape }}"}
+    - debug: {msg: "{{ 'abc' is match('a') }} {{ 'abc' is search('c') }} {{ 'abc' is regex('^b') }}"}
+    - debug: {msg: "{{ 'hello world' | wordcount }} {{ 'abc' | length }} {{ 'a' ~ 1 ~ true }}"}
+    - debug: {msg: "{{ 'hello'.startswith('he') }} {{ 'hello'.endswith('x') }} {{ 'a-b' in 'xa-by' }}"}
+    - debug: {msg: "{{ '%s=%s' | format('k', 'v') }} {{ 'x' | center(5) }}|{{ '5' | int * 2 }}"}
+    - debug: {msg: "{{ ver is version('20.04', '>=') }} {{ ver is version('22.10', '<') }}"}
+    - debug: {msg: "{{ '  a  b ' | split | list }} {{ 'a\nb' | splitlines if false else 'a\nb'.splitlines() }}"}

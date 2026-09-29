@@ -1,0 +1,18 @@
+- hosts: all
+  gather_facts: false
+  vars:
+    enabled: true
+    users:
+      - {name: ann, uid: 1, admin: true}
+      - {name: bob, uid: 2, admin: false}
+  tasks:
+    - file: path=/root/compat state=directory
+    - template:
+        src: files/conf.j2
+        dest: /root/compat/conf
+        mode: "0640"
+    - template:
+        src: files/conf.j2
+        dest: /root/compat/conf-trim
+        trim_blocks: false
+        lstrip_blocks: true

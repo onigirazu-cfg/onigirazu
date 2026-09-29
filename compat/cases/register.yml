@@ -1,0 +1,32 @@
+- hosts: all
+  gather_facts: false
+  vars:
+    level: play
+  tasks:
+    - name: command result
+      command: sh -c "echo out; echo err >&2; exit 0"
+      register: r
+    - debug: msg="{{ r.stdout }}|{{ r.stderr }}|{{ r.rc }}|{{ r.changed }}|{{ r.stdout_lines }}"
+    - name: failed rc ignored
+      command: sh -c "exit 3"
+      register: bad
+      ignore_errors: true
+    - debug: msg="{{ bad.rc }} {{ bad.failed }}"
+    - set_fact:
+        level: fact
+        computed: "{{ r.stdout | upper }}"
+    - debug: msg="{{ level }} {{ computed }}"
+    - name: changed_when false
+      command: "true"
+      changed_when: false
+    - name: failed_when on output
+      command: echo ERROR
+      register: e
+      failed_when: "'ERROR' in e.stdout"
+      ignore_errors: true
+    - name: skipped register
+      command: "true"
+      register: sk
+      when: false
+    - debug: msg="{{ sk.skipped }} {{ sk.changed }}"
+    - debug: var=r.rc

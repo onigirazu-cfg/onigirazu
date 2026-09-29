@@ -1,0 +1,12 @@
+# {{ ansible_managed | default('managed') }}
+{% for u in users %}
+user {{ u.name }} {{ u.uid }}{% if u.admin %} admin{% endif %}
+
+{% endfor %}
+{%- set total = users | map(attribute='uid') | sum %}
+total={{ total }}
+enabled={{ enabled }}
+{% if extra is defined %}extra={{ extra }}{% else %}no extra{% endif %}
+
+list={{ users | map(attribute='name') | list }}
+{{ '%-5s|' | format('ab') }}

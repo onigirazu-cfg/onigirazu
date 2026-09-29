@@ -1,0 +1,20 @@
+- hosts: all
+  gather_facts: false
+  tasks:
+    - file: path=/root/compat state=directory
+    - name: would create
+      copy: content="x\n" dest=/root/compat/check.txt
+      check_mode: true
+    - name: really create
+      copy: content="y\n" dest=/root/compat/real.txt
+    - name: would change
+      lineinfile: path=/root/compat/real.txt line=z
+      check_mode: true
+    - name: command in check mode
+      command: touch /root/compat/cmd.txt
+      check_mode: true
+    - stat: path=/root/compat/check.txt
+      register: st
+    - debug: msg="{{ st.stat.exists }} {{ ansible_check_mode }}"
+    - debug: msg="{{ lookup('env', 'HOME') | length > 0 }} {{ query('items', [1, 2]) }} {{ lookup('file', 'files/conf.j2') | length > 10 }}"
+      delegate_to: localhost

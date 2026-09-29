@@ -1,0 +1,14 @@
+- hosts: all
+  gather_facts: false
+  tasks:
+    - file: path=/root/compat state=directory
+    - include_tasks: tasks/inc.yml
+      vars: {x: 1}
+    - import_tasks: tasks/inc.yml
+      vars: {x: 2}
+    # a loop over include_tasks runs task by task in onigirazu (README: known differences)
+    - include_role:
+        name: web
+      vars: {port: 8080, extra: yes}
+    - import_role:
+        name: web
