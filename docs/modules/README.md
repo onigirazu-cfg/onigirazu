@@ -536,7 +536,7 @@ Ensure a line is present in a file, or remove matching lines.
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `path` | string | - | File path (required) |
-| `line` | string | - | Line content (required, also for `state: absent`) |
+| `line` | string | - | Line content (required for `state: present`; with `state: absent`, `line` or `regexp` says what to remove) |
 | `regexp` | string | - | Regular expression: the first matching line is replaced (`present`), every matching line is removed (`absent`); without it lines are compared with `line` |
 | `state` | string | `present` | `present` or `absent` |
 | `insertafter` | string | - | Regular expression: a new line goes after the first matching line |
@@ -560,8 +560,7 @@ A new line goes to the end of the file when there is no `insertafter`/`insertbef
   lineinfile:
     path: "/etc/hosts"
     regexp: "oldhost"
-    line: "unused"
-    state: absent
+    state: absent            # a missing file changes nothing
 ```
 
 ### blockinfile

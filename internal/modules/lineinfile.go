@@ -99,6 +99,17 @@ func (m *LineinfileModule) Execute(ctx context.Context, host types.Host, args ma
 		return result, err
 	}
 
+	// nothing to remove from a file that is not there
+	if !fileExists && state == "absent" {
+		if result.Output == nil {
+			result.Output = map[string]interface{}{}
+		}
+		result.Output["msg"] = "file does not exist"
+		result.Success = true
+		result.Duration = time.Since(startTime)
+		return result, nil
+	}
+
 	if !fileExists && !create {
 		result.Success = false
 		result.Error = fmt.Sprintf("file %s does not exist and create=false", path)
@@ -188,19 +199,28 @@ func (m *LineinfileModule) Validate(args map[string]interface{}) error {
 		return fmt.Errorf("argument 'path' must be a string")
 	}
 
-	line, exists := args["line"]
-	if !exists {
-		return fmt.Errorf("argument 'line' is required")
-	}
-	if _, ok := line.(string); !ok {
-		return fmt.Errorf("argument 'line' must be a string")
-	}
-
 	// Validate state if provided
-	if state, ok := args["state"].(string); ok {
-		if state != "present" && state != "absent" {
+	state := "present"
+	if st, ok := args["state"].(string); ok {
+		if st != "present" && st != "absent" {
 			return fmt.Errorf("state must be 'present' or 'absent'")
 		}
+		state = st
+	}
+
+	// present needs the line; absent removes the line or what regexp matches
+	line, hasLine := args["line"]
+	if hasLine {
+		if _, ok := line.(string); !ok {
+			return fmt.Errorf("argument 'line' must be a string")
+		}
+	}
+	re, hasRegexp := args["regexp"].(string)
+	if state == "present" && !hasLine {
+		return fmt.Errorf("argument 'line' is required")
+	}
+	if state == "absent" && !hasLine && (!hasRegexp || re == "") {
+		return fmt.Errorf("state=absent needs 'line' or 'regexp'")
 	}
 
 	return nil

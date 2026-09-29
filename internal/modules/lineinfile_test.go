@@ -756,3 +756,21 @@ func BenchmarkLineinfileModule_Execute(b *testing.B) {
 		_, _ = module.Execute(ctx, host, args)
 	}
 }
+
+func TestLineinfileAbsentWithRegexpOnly(t *testing.T) {
+	m := NewLineinfileModule()
+	for name, tc := range map[string]struct {
+		args map[string]interface{}
+		ok   bool
+	}{
+		"absent by regexp":    {map[string]interface{}{"path": "/tmp/x", "state": "absent", "regexp": "^foo"}, true},
+		"absent by line":      {map[string]interface{}{"path": "/tmp/x", "state": "absent", "line": "foo"}, true},
+		"absent with nothing": {map[string]interface{}{"path": "/tmp/x", "state": "absent"}, false},
+		"present needs line":  {map[string]interface{}{"path": "/tmp/x", "regexp": "^foo"}, false},
+	} {
+		err := m.Validate(tc.args)
+		if (err == nil) != tc.ok {
+			t.Errorf("%s: err = %v", name, err)
+		}
+	}
+}

@@ -8,3 +8,13 @@ plays:
           path: /etc/onigirazu-e2e-lines.conf
           line: "timeout=30"
           create: true
+      - name: Remove it by regexp alone
+        lineinfile:
+          path: /etc/onigirazu-e2e-lines.conf
+          regexp: "^debug="
+          state: absent
+      - name: Removing from a missing file changes nothing
+        lineinfile:
+          path: /etc/onigirazu-e2e-no-such-file.conf
+          regexp: "^x="
+          state: absent
