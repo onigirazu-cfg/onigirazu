@@ -188,3 +188,11 @@ func TestAdoptRecordsWhatExists(t *testing.T) {
 	assert.Equal(t, OriginAdopted, st.Find("h", "file", "/a").Origin)
 	assert.Nil(t, st.Find("h", "file", "/b"), "missing: the first apply creates and records it")
 }
+
+func TestPathManagedStateDir(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("ONIGIRAZU_MANAGED_STATE_DIR", dir)
+	if got := Path("/x/site.yml"); got != filepath.Join(dir, "site.state.json") {
+		t.Errorf("Path = %s", got)
+	}
+}

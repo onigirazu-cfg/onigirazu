@@ -18,6 +18,9 @@ chmod +x ~/.onigirazu/plugins/onigirazu-hosts
 onigirazu hosts -i inventory.yml
 ```
 
+`onigirazu test` ([TESTING_ROLES.md](TESTING_ROLES.md)), which runs Molecule scenarios, is such a
+plugin.
+
 ## Go plugins
 
 Go plugins (`.so` files) add template filters, modules and execution callbacks; they are loaded

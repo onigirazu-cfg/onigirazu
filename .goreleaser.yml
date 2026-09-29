@@ -59,11 +59,28 @@ builds:
     flags:
       - -trimpath
     mod_timestamp: '{{ .CommitTimestamp }}'
+  # the "onigirazu test" command plugin (Molecule scenarios), shipped next to onigirazu
+  - id: onigirazu-test
+    main: ./cmd/onigirazu-test
+    binary: onigirazu-test
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+    flags:
+      - -trimpath
+    mod_timestamp: '{{ .CommitTimestamp }}'
 
 archives:
   - id: onigirazu
     ids:
       - onigirazu
+      - onigirazu-test
     name_template: >-
       {{ .ProjectName }}_
       {{- title .Os }}_
