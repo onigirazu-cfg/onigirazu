@@ -151,6 +151,14 @@ func compile(expression string) (*vm.Program, error) {
 			return jinjaAdd(params[0], params[1])
 		}, new(func(interface{}, interface{}) interface{})),
 		expr.Operator("+", "jinja_add"),
+		// * repeats strings and lists; // is floor division (see floorDivToCalls)
+		expr.Function("jinja_mul", func(params ...interface{}) (interface{}, error) {
+			return jinjaMul(params[0], params[1])
+		}, new(func(interface{}, interface{}) interface{})),
+		expr.Operator("*", "jinja_mul"),
+		expr.Function("jinja_floordiv", func(params ...interface{}) (interface{}, error) {
+			return jinjaFloorDiv(params[0], params[1])
+		}),
 		expr.Function("jinja_index", func(params ...interface{}) (interface{}, error) {
 			return jinjaIndex(params[0], params[1]), nil
 		}),
@@ -164,7 +172,7 @@ func compile(expression string) (*vm.Program, error) {
 			return params[0], nil
 		}),
 	}, append(extraFilterOptions(), filterFunctions()...)...)
-	program, err := expr.Compile(notToBang(testsToCalls(pipesToCalls(translate(nestedConcat(expression))))), options...)
+	program, err := expr.Compile(notToBang(testsToCalls(pipesToCalls(translate(nestedConcat(floorDivToCalls(expression)))))), options...)
 	if err != nil {
 		return nil, err
 	}

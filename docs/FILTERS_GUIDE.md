@@ -388,6 +388,7 @@ loop: "{{ query('fileglob', 'files/conf.d/*.conf') }}"
 ### Expression Syntax
 
 - Inline if: `{{ 'big' if n > 3 else 'small' }}`
+- Arithmetic as in Jinja: `//` floor division (`{{ size // 1024 }}`), `%`, `**`; `*` repeats strings and lists (`{{ '-' * 20 }}`)
 - Python methods: strings `split`, `rsplit`, `strip`, `lstrip`, `rstrip`, `lower`, `upper`, `title`, `capitalize`, `startswith`, `endswith`, `replace`, `find`, `count`, `join`, `splitlines`, `isdigit`; dicts `get`, `items`, `keys`, `values`; lists `index`, `count` (`{{ opts.split() }}`, `{{ host.split('.')[0] }}`)
 - Literal braces: `{{ '{{' }} .Field {{ '}}' }}` gives `{{ .Field }}` (docker `--format`); braces inside quotes and dict literals do not end a `{{ }}` block
 - String concatenation: `{{ name ~ '-' ~ version }}`, also inside parentheses and lists, as inline ifs (`('yes' if x else 'no')`) (`when: ('version ' ~ v) not in out.stdout`); `+` adds numbers and concatenates strings and lists (`(a | intersect(b) + ['Other']) | first`)
