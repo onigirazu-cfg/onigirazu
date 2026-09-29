@@ -1,0 +1,36 @@
+- hosts: all
+  gather_facts: false
+  tasks:
+    - file: {path: /root/compat, state: directory, mode: "0755"}
+    - group: {name: compatg, gid: 4321}
+    - user: {name: compatu, uid: 4321, group: compatg, shell: /bin/sh, create_home: true}
+    - command: id compatu
+      register: idu
+      changed_when: false
+    - copy: {dest: /root/compat/id.txt, content: "{{ idu.stdout }}\n"}
+    - copy:
+        dest: /root/compat/app.conf
+        content: |
+          # app
+          listen 80
+          name old
+          [section]
+          key = 1
+          [other]
+    - lineinfile: {path: /root/compat/app.conf, regexp: '^listen (\d+)$', line: 'listen \1 ssl', backrefs: true}
+    - lineinfile: {path: /root/compat/app.conf, line: 'inserted', insertbefore: '^\[other\]'}
+    - lineinfile: {path: /root/compat/app.conf, regexp: '^nomatch', line: 'x', backrefs: true}
+    - replace: {path: /root/compat/app.conf, regexp: '^key = .*$', replace: 'key = 2', after: '\[section\]'}
+    - replace: {path: /root/compat/app.conf, regexp: 'old', replace: 'new'}
+    - file: {path: /root/compat/touched, state: touch, mode: "0600", modification_time: preserve, access_time: preserve}
+    - file: {path: /root/compat/dir/sub, state: directory, mode: "0750"}
+    - copy: {src: /root/compat/app.conf, dest: /root/compat/dir/app.copy, remote_src: true}
+    - file: {path: /root/compat/touched-gone, state: absent}
+    - find: {paths: /root/compat, patterns: '*.conf,*.copy', recurse: true}
+      register: fnd
+    - debug: {msg: "{{ fnd.matched }} {{ fnd.files | map(attribute='path') | map('basename') | sort | list }}"}
+    - stat: {path: /root/compat/app.conf, checksum_algorithm: sha1}
+      register: st
+    - debug: {msg: "{{ st.stat.checksum }} {{ st.stat.isreg }} {{ st.stat.pw_name }}"}
+    - user: {name: compatu, state: absent, remove: true}
+    - group: {name: compatg, state: absent}

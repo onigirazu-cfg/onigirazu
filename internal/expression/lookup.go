@@ -293,20 +293,40 @@ func fileExists(p string) bool {
 
 // jinjaLookup is lookup(): one value, or the values joined with commas
 func jinjaLookup(p ...interface{}) (interface{}, error) {
-	items, err := lookupItems(p[0], p[1], p[2:])
+	terms, kw := splitKwargs(p[2:])
+	items, err := lookupItems(p[0], p[1], terms)
 	if err != nil {
-		return nil, err
+		return lookupError(err, kw, nil)
+	}
+	// wantlist=True: a list, as query() gives
+	if Truthy(kw["wantlist"]) {
+		return items, nil
 	}
 	if len(items) == 1 {
 		return items[0], nil
 	}
 	parts := make([]string, len(items))
 	for i, v := range items {
-		parts[i] = fmt.Sprint(v)
+		parts[i] = PyStr(v)
 	}
 	return strings.Join(parts, ","), nil
 }
 
 func jinjaQuery(p ...interface{}) (interface{}, error) {
-	return lookupItems(p[0], p[1], p[2:])
+	terms, kw := splitKwargs(p[2:])
+	items, err := lookupItems(p[0], p[1], terms)
+	if err != nil {
+		return lookupError(err, kw, []interface{}{})
+	}
+	return items, nil
+}
+
+// lookupError applies errors='ignore'/'warn' (Ansible's lookup option): the
+// lookup yields nothing instead of failing the task
+func lookupError(err error, kw map[string]interface{}, empty interface{}) (interface{}, error) {
+	switch fmt.Sprint(kw["errors"]) {
+	case "ignore", "warn":
+		return empty, nil
+	}
+	return nil, err
 }

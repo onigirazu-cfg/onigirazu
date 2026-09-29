@@ -48,8 +48,15 @@ func (m *FindModule) Execute(ctx context.Context, host types.Host, args map[stri
 	}
 
 	// Ansible spells them paths/patterns
-	path := getStringArg(args, "path", getStringArg(args, "paths", "."))
-	pattern := getStringArg(args, "pattern", getStringArg(args, "patterns", "*"))
+	// a list or a comma separated string, as in Ansible
+	paths := listArg(args, "paths", "path")
+	if len(paths) == 0 {
+		paths = []string{"."}
+	}
+	patterns := listArg(args, "patterns", "pattern")
+	if len(patterns) == 0 {
+		patterns = []string{"*"}
+	}
 	recurse := getBoolArg(args, "recurse", false)
 	fileType := getStringArg(args, "type", "")
 	limit := getIntArg(args, "limit", 0)
@@ -65,7 +72,7 @@ func (m *FindModule) Execute(ctx context.Context, host types.Host, args map[stri
 	defer exec.Close()
 
 	// Find files matching pattern
-	files, err := m.findFiles(exec, path, pattern, fileType, limit, recurse)
+	files, err := m.findFiles(exec, paths, patterns, fileType, limit, recurse)
 	if err != nil {
 		result.Failed = true
 		result.Error = fmt.Sprintf("find failed: %v", err)
@@ -84,7 +91,7 @@ func (m *FindModule) Execute(ctx context.Context, host types.Host, args map[stri
 }
 
 // findFiles searches for files matching the pattern
-func (m *FindModule) findFiles(exec *executor.CommandExecutor, path, pattern, fileType string, limit int, recurse bool) ([]map[string]interface{}, error) {
+func (m *FindModule) findFiles(exec *executor.CommandExecutor, paths, patterns []string, fileType string, limit int, recurse bool) ([]map[string]interface{}, error) {
 	var files []map[string]interface{}
 
 	// Like Ansible, only the given directory unless recurse is set
@@ -92,8 +99,16 @@ func (m *FindModule) findFiles(exec *executor.CommandExecutor, path, pattern, fi
 	if recurse {
 		depth = ""
 	}
-	cmd := fmt.Sprintf("find '%s' %s-type %s -name '%s' -print0 2>/dev/null | tr '\\0' '\\n' | head -n %d",
-		escapeSingleQuotes(path), depth, m.getTypeFlag(fileType), escapeSingleQuotes(pattern), m.getLimitValue(limit))
+	quoted := make([]string, len(paths))
+	for i, p := range paths {
+		quoted[i] = "'" + escapeSingleQuotes(p) + "'"
+	}
+	names := make([]string, len(patterns))
+	for i, p := range patterns {
+		names[i] = "-name '" + escapeSingleQuotes(p) + "'"
+	}
+	cmd := fmt.Sprintf("find %s %s-type %s \\( %s \\) -print0 2>/dev/null | tr '\\0' '\\n' | head -n %d",
+		strings.Join(quoted, " "), depth, m.getTypeFlag(fileType), strings.Join(names, " -o "), m.getLimitValue(limit))
 
 	// Execute find command
 	output, err := exec.Execute(cmd)
@@ -240,5 +255,29 @@ func (m *FindModule) Validate(args map[string]interface{}) error {
 		return fmt.Errorf("'limit' must be non-negative")
 	}
 
+	return nil
+}
+
+// listArg reads a list argument given as a list or a comma separated string,
+// from the first of the keys that is set
+func listArg(args map[string]interface{}, keys ...string) []string {
+	for _, k := range keys {
+		switch v := args[k].(type) {
+		case string:
+			var out []string
+			for _, part := range strings.Split(v, ",") {
+				if part = strings.TrimSpace(part); part != "" {
+					out = append(out, part)
+				}
+			}
+			return out
+		case []interface{}:
+			out := make([]string, 0, len(v))
+			for _, item := range v {
+				out = append(out, fmt.Sprint(item))
+			}
+			return out
+		}
+	}
 	return nil
 }
