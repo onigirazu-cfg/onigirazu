@@ -252,6 +252,7 @@ func (p *EnhancedParser) validateTask(task *types.Task, context string) error {
 
 	if task.Name == "" {
 		task.Name = fmt.Sprintf("%s task", task.Module)
+		task.NameGenerated = true
 	}
 
 	// Validate loop syntax

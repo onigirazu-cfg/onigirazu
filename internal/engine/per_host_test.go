@@ -489,3 +489,23 @@ func TestRoleVariablePrecedence(t *testing.T) {
 	assert.Equal(t, "param", vars["p"], "role params over role vars")
 	assert.Equal(t, "extra", vars["e"], "-e wins")
 }
+
+func TestUnnamedTask_ResultIsNamedAfterItsModule(t *testing.T) {
+	for _, task := range []*types.Task{
+		{Module: "debug"},
+		{Name: "debug task", NameGenerated: true, Module: "debug"},
+	} {
+		engine, _, _ := perHostEngine(t, types.TaskResult{Success: true, TaskName: task.Name})
+		host := twoHosts()[0]
+		play := &types.PlayResult{Success: true}
+		require.NoError(t, engine.executeTaskOnHost(context.Background(), task, &host, map[string]interface{}{}, play))
+		require.Len(t, play.Hosts, 1)
+		assert.Equal(t, "debug", play.Hosts[0].Tasks[0].TaskName)
+	}
+	named := &types.Task{Name: "debug task", Module: "debug"}
+	engine, _, _ := perHostEngine(t, types.TaskResult{Success: true, TaskName: named.Name})
+	host := twoHosts()[0]
+	play := &types.PlayResult{Success: true}
+	require.NoError(t, engine.executeTaskOnHost(context.Background(), named, &host, map[string]interface{}{}, play))
+	assert.Equal(t, "debug task", play.Hosts[0].Tasks[0].TaskName, "a name the user wrote stays")
+}

@@ -1235,8 +1235,12 @@ func (e *ExecutionEngine) finishTask(task *types.Task, host *types.Host, result 
 	// result, state and the returned error get a placeholder
 	result.TaskKey = task.Key
 	// an unnamed task is called after its module, as Ansible does
-	if result.TaskName == "" {
+	switch {
+	case result.TaskName == "":
 		result.TaskName = task.Module
+	case task.NameGenerated:
+		// "debug task (item 2)" -> "debug (item 2)"
+		result.TaskName = task.Module + strings.TrimPrefix(result.TaskName, task.Name)
 	}
 	if task.PreventDestroy {
 		for i := range result.Resources {
