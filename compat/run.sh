@@ -34,6 +34,29 @@ start() {  # prints the host port of a fresh container's sshd
   echo "container $id: no ssh" >&2; return 1
 }
 
+# onigirazu reports each loop item ("name (item N)"), Ansible the whole loop:
+# items are folded into one task, changed if any changed, skipped if all were
+normalize() {
+  jq -s -c 'reduce .[] as $r ([];
+      ($r.task | sub(" \\(item [0-9]+\\)$"; "")) as $t
+      | if ($r.task | test(" \\(item [0-9]+\\)$")) and ($r.task | test(" \\(item 1\\)$") | not)
+           and length > 0 and .[-1].task == $t and .[-1].loop then
+          .[-1] |= (.changed = (.changed or $r.changed) | .skipped = (.skipped and $r.skipped)
+                    | .success = (.success and $r.success) | .ignored = (.ignored or $r.ignored))
+        elif ($r.task | test(" \\(item [0-9]+\\)$")) then . + [$r + {task: $t, loop: true, msg: (if $r.module == "debug" then "All items completed" else "" end)}]
+        else . + [$r] end) | .[]' "$1" |
+  jq -r '(if .ignored then "ignored" elif .success == false then "failed" elif .skipped then "skipped"
+     elif .changed then "changed" else "ok" end) as $st
+    | (.msg // "" | tostring) as $raw
+    | ($raw | if . == "True" then "true" elif . == "False" then "false" else . end
+       | . as $s | try (fromjson | tojson) catch $s) as $msg
+    | [.task, $st, (if ($st == "failed" or $st == "ignored") and .module != "fail" then "" else $msg end)]
+    | join(" | ")'
+}
+files() {  # container -> checksums of /root/compat
+  docker exec "$1" sh -c 'cd /root/compat 2>/dev/null && find . -type f | sort | xargs -r md5sum' || true
+}
+
 # hosts: "h" alone, or h1..hN for "# compat-hosts: N" in the case, in groups
 # odd and even
 host_names() {
@@ -69,6 +92,9 @@ inventory() {  # file name:port...
 # the task results of one host
 of_host() { jq -c --arg h "$2" 'select(.host == $h)' "$1"; }
 
+for f in start inventory normalize files of_host; do
+  declare -F "$f" >/dev/null || { echo "compat/run.sh: $f is not defined" >&2; exit 2; }
+done
 if [ $# -gt 0 ]; then playbooks=("$@"); else playbooks=("$HERE"/cases/*.yml); fi
 pass=0 fail=0
 for pb in "${playbooks[@]}"; do
