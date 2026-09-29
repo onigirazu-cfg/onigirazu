@@ -95,12 +95,17 @@ func (h *playHandlers) takeNotified(hosts []types.Host) [][]types.Host {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	out := make([][]types.Host, len(h.entries))
+	// of handlers with the same name only the first runs, as in Ansible (a
+	// role included twice loads its handlers twice)
+	seen := map[string]bool{}
 	for i, entry := range h.entries {
+		byName := !seen[entry.task.Name]
+		seen[entry.task.Name] = true
 		for _, host := range hosts {
 			if h.ended[host.Name] {
 				continue
 			}
-			if h.notified[entry.task.Name][host.Name] || listensTo(&entry.task, h.notified, host.Name) {
+			if (byName && h.notified[entry.task.Name][host.Name]) || listensTo(&entry.task, h.notified, host.Name) {
 				out[i] = append(out[i], host)
 			}
 		}
