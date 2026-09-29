@@ -145,16 +145,21 @@ func (m *ScriptModule) executeRemote(ctx context.Context, host types.Host, args 
 		return fail(fmt.Sprintf("failed to read script: %v", err))
 	}
 
-	pool := sshpkg.GetGlobalPool()
-	client, err := pool.GetConnection(host)
-	if err != nil {
-		return fail(fmt.Sprintf("failed to get SSH connection: %v", err))
-	}
-	defer pool.ReleaseConnection(host)
-
 	remotePath := remoteTempName("onigirazu-script-", filepath.Base(scriptPath))
-	if err := client.WriteFile(remotePath, data, 0700); err != nil {
-		return fail(fmt.Sprintf("failed to upload script: %v", err))
+	if inContainer(host) {
+		if err := putContainerFile(ctx, host, remotePath, data, 0700); err != nil {
+			return fail(fmt.Sprintf("failed to upload script: %v", err))
+		}
+	} else {
+		pool := sshpkg.GetGlobalPool()
+		client, err := pool.GetConnection(host)
+		if err != nil {
+			return fail(fmt.Sprintf("failed to get SSH connection: %v", err))
+		}
+		defer pool.ReleaseConnection(host)
+		if err := client.WriteFile(remotePath, data, 0700); err != nil {
+			return fail(fmt.Sprintf("failed to upload script: %v", err))
+		}
 	}
 	defer func() { _, _ = runOnHost(context.WithoutCancel(ctx), host, nil, "rm", "-f", remotePath) }()
 

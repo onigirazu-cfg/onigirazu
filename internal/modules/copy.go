@@ -233,7 +233,7 @@ func (m *CopyModule) executeRemote(ctx context.Context, host types.Host, args ma
 	// reaches this path only in check mode, which does neither over SSH
 	var sshClient *sshpkg.Client
 	var err error
-	if !sshpkg.IsLocal(host) {
+	if !sshpkg.IsLocal(host) && !inContainer(host) {
 		pool := sshpkg.GetGlobalPool()
 		sshClient, err = pool.GetConnection(host)
 		if err != nil {
@@ -244,7 +244,9 @@ func (m *CopyModule) executeRemote(ctx context.Context, host types.Host, args ma
 
 	// If remote_src is true, read source file from remote host
 	if remoteSrc && sourceData == nil && srcPath != "" {
-		if sshClient == nil {
+		if inContainer(host) {
+			sourceData, _, err = readHostFile(ctx, host, args, srcPath)
+		} else if sshClient == nil {
 			sourceData, err = os.ReadFile(srcPath) // #nosec G304 -- remote_src on the local host
 		} else {
 			sourceData, err = sshClient.ReadFile(srcPath)

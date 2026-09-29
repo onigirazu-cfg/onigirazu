@@ -165,15 +165,21 @@ func uploadArchive(ctx context.Context, host types.Host, args map[string]interfa
 		abs, err := filepath.Abs(src)
 		return abs, func() {}, err
 	}
-	pool := sshpkg.GetGlobalPool()
-	client, err := pool.GetConnection(host)
-	if err != nil {
-		return "", nil, fmt.Errorf("failed to get SSH connection: %w", err)
-	}
-	defer pool.ReleaseConnection(host)
 	tmp := remoteTempName(".onigirazu-unarchive-", filepath.Base(src))
-	if err := client.WriteFile(tmp, data, 0600); err != nil {
-		return "", nil, fmt.Errorf("failed to upload %s: %w", src, err)
+	if inContainer(host) {
+		if err := putContainerFile(ctx, host, tmp, data, 0600); err != nil {
+			return "", nil, err
+		}
+	} else {
+		pool := sshpkg.GetGlobalPool()
+		client, err := pool.GetConnection(host)
+		if err != nil {
+			return "", nil, fmt.Errorf("failed to get SSH connection: %w", err)
+		}
+		defer pool.ReleaseConnection(host)
+		if err := client.WriteFile(tmp, data, 0600); err != nil {
+			return "", nil, fmt.Errorf("failed to upload %s: %w", src, err)
+		}
 	}
 	// with become the archive must be readable for the other user
 	if _, err := runShellOnHost(ctx, host, map[string]interface{}{}, "chmod 0644 "+shellQuote(tmp)); err != nil {

@@ -391,11 +391,63 @@ func (p *InventoryParser) parseAnsibleYamlInventory(data []byte) (*types.Invento
 	if err := yaml.Unmarshal(data, &ansibleInv); err != nil {
 		return nil, fmt.Errorf("error parsing Ansible YAML inventory: %w", err)
 	}
-	return p.parseAnsibleTree(ansibleInv.All)
+	var doc yaml.Node
+	order := map[string][]string{}
+	if yaml.Unmarshal(data, &doc) == nil && len(doc.Content) > 0 {
+		if all := mappingValue(doc.Content[0], "all"); all != nil {
+			collectKeyOrder("all", all, order, 0)
+		}
+	}
+	return p.parseAnsibleTreeOrdered(ansibleInv.All, order)
+}
+
+// collectKeyOrder records the document order of the hosts and children of
+// every group
+func collectKeyOrder(group string, n *yaml.Node, order map[string][]string, depth int) {
+	if n == nil || n.Kind != yaml.MappingNode || depth > 32 {
+		return
+	}
+	if hosts := mappingValue(n, "hosts"); hosts != nil && hosts.Kind == yaml.MappingNode {
+		if _, done := order[group+"/hosts"]; !done {
+			order[group+"/hosts"] = mappingKeys(hosts)
+		}
+	}
+	if children := mappingValue(n, "children"); children != nil && children.Kind == yaml.MappingNode {
+		if _, done := order[group+"/children"]; !done {
+			order[group+"/children"] = mappingKeys(children)
+		}
+		for i := 0; i+1 < len(children.Content); i += 2 {
+			collectKeyOrder(children.Content[i].Value, children.Content[i+1], order, depth+1)
+		}
+	}
+}
+
+func mappingValue(n *yaml.Node, key string) *yaml.Node {
+	if n.Kind != yaml.MappingNode {
+		return nil
+	}
+	for i := 0; i+1 < len(n.Content); i += 2 {
+		if n.Content[i].Value == key {
+			return n.Content[i+1]
+		}
+	}
+	return nil
+}
+
+func mappingKeys(n *yaml.Node) []string {
+	keys := make([]string, 0, len(n.Content)/2)
+	for i := 0; i+1 < len(n.Content); i += 2 {
+		keys = append(keys, n.Content[i].Value)
+	}
+	return keys
 }
 
 // parseAnsibleTree builds an inventory from the Ansible tree under "all"
 func (p *InventoryParser) parseAnsibleTree(all map[string]interface{}) (*types.Inventory, error) {
+	return p.parseAnsibleTreeOrdered(all, nil)
+}
+
+func (p *InventoryParser) parseAnsibleTreeOrdered(all map[string]interface{}, keyOrder map[string][]string) (*types.Inventory, error) {
 	inventory := &types.Inventory{
 		Groups: make(map[string]*types.Group),
 		Hosts:  make([]types.Host, 0),
@@ -405,7 +457,7 @@ func (p *InventoryParser) parseAnsibleTree(all map[string]interface{}) (*types.I
 	// through children (as a map of groups or a list of names), and every
 	// host belongs to "all"
 	if all != nil {
-		w := &ansibleWalk{inventory: inventory, raw: map[string]map[string]interface{}{}, members: map[string][]string{}}
+		w := &ansibleWalk{inventory: inventory, raw: map[string]map[string]interface{}{}, members: map[string][]string{}, keyOrder: keyOrder}
 		w.group("all", all, 0)
 		// a host may be listed in several groups: its settings from all of
 		// them are merged, then it is parsed once
@@ -874,6 +926,30 @@ type ansibleWalk struct {
 	raw       map[string]map[string]interface{} // host -> merged settings
 	members   map[string][]string               // group -> host names
 	order     []string                          // hosts as they first appear
+	// keyOrder: the order of the keys under "<group>/hosts" and
+	// "<group>/children" in the document; Ansible runs hosts in that order
+	keyOrder map[string][]string
+}
+
+// ordered returns the keys of m in document order where it is known, the
+// rest sorted
+func (w *ansibleWalk) ordered(path string, m map[string]interface{}) []string {
+	names := make([]string, 0, len(m))
+	seen := map[string]bool{}
+	for _, k := range w.keyOrder[path] {
+		if _, ok := m[k]; ok && !seen[k] {
+			names = append(names, k)
+			seen[k] = true
+		}
+	}
+	var rest []string
+	for k := range m {
+		if !seen[k] {
+			rest = append(rest, k)
+		}
+	}
+	sort.Strings(rest)
+	return append(names, rest...)
 }
 
 func (w *ansibleWalk) group(name string, data interface{}, depth int) *types.Group {
@@ -887,12 +963,7 @@ func (w *ansibleWalk) group(name string, data interface{}, depth int) *types.Gro
 		return group
 	}
 	if hostsData, ok := m["hosts"].(map[string]interface{}); ok {
-		names := make([]string, 0, len(hostsData))
-		for hostName := range hostsData {
-			names = append(names, hostName)
-		}
-		sort.Strings(names)
-		for _, hostName := range names {
+		for _, hostName := range w.ordered(name+"/hosts", hostsData) {
 			if _, seen := w.raw[hostName]; !seen {
 				w.raw[hostName] = map[string]interface{}{}
 				w.order = append(w.order, hostName)
@@ -912,12 +983,7 @@ func (w *ansibleWalk) group(name string, data interface{}, depth int) *types.Gro
 	}
 	switch children := m["children"].(type) {
 	case map[string]interface{}:
-		names := make([]string, 0, len(children))
-		for childName := range children {
-			names = append(names, childName)
-		}
-		sort.Strings(names)
-		for _, childName := range names {
+		for _, childName := range w.ordered(name+"/children", children) {
 			w.group(childName, children[childName], depth+1)
 			group.Children = appendUnique(group.Children, childName)
 		}

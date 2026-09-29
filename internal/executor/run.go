@@ -24,6 +24,9 @@ func (e *CommandExecutor) Run(ctx context.Context, commandLine string) (RunResul
 	if e.sshClient == nil {
 		// #nosec G204 -- modules run the commands they manage
 		cmd := exec.CommandContext(ctx, "sh", "-c", full)
+		if e.container != "" {
+			cmd = e.containerCmd(ctx, full)
+		}
 		cmd.Stdout, cmd.Stderr = &stdout, &stderr
 		err := cmd.Run()
 		var exitErr *exec.ExitError

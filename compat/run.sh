@@ -34,21 +34,6 @@ start() {  # prints the host port of a fresh container's sshd
   echo "container $id: no ssh" >&2; return 1
 }
 
-inventory() {  # port file
-  cat > "$2" <<EOF
-all:
-  hosts:
-    h:
-      ansible_host: 127.0.0.1
-      ansible_port: $1
-      ansible_user: root
-      ansible_ssh_private_key_file: $KEY
-      ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
-EOF
-}
-
-# one line per task: name | status | message (JSON messages in one spelling).
-# Error texts differ between the tools; only the fail module's is compared.
 # onigirazu reports each loop item ("name (item N)"), Ansible the whole loop:
 # items are folded into one task, changed if any changed, skipped if all were
 normalize() {
@@ -68,20 +53,63 @@ normalize() {
     | [.task, $st, (if ($st == "failed" or $st == "ignored") and .module != "fail" then "" else $msg end)]
     | join(" | ")'
 }
-
 files() {  # container -> checksums of /root/compat
   docker exec "$1" sh -c 'cd /root/compat 2>/dev/null && find . -type f | sort | xargs -r md5sum' || true
 }
 
+# hosts: "h" alone, or h1..hN for "# compat-hosts: N" in the case, in groups
+# odd and even
+host_names() {
+  if [ "$1" = 1 ]; then echo h; else seq -f 'h%g' 1 "$1"; fi
+}
+
+inventory() {  # file name:port...
+  local file="$1" odd="" even="" n=0 entry
+  shift
+  for entry in "$@"; do
+    n=$((n + 1))
+    local line="        ${entry%%:*}: {ansible_host: 127.0.0.1, ansible_port: ${entry#*:}}"$'\n'
+    if [ $((n % 2)) = 1 ]; then odd+="$line"; else even+="$line"; fi
+  done
+  {
+    echo "all:"
+    echo "  vars:"
+    echo "    ansible_user: root"
+    echo "    ansible_ssh_private_key_file: $KEY"
+    echo "    ansible_ssh_common_args: \"-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null\""
+    echo "  children:"
+    echo "    odd:"
+    echo "      hosts:"
+    printf '%s' "$odd"
+    if [ -n "$even" ]; then
+      echo "    even:"
+      echo "      hosts:"
+      printf '%s' "$even"
+    fi
+  } > "$file"
+}
+
+# the task results of one host
+of_host() { jq -c --arg h "$2" 'select(.host == $h)' "$1"; }
+
+for f in start inventory normalize files of_host; do
+  declare -F "$f" >/dev/null || { echo "compat/run.sh: $f is not defined" >&2; exit 2; }
+done
 if [ $# -gt 0 ]; then playbooks=("$@"); else playbooks=("$HERE"/cases/*.yml); fi
 pass=0 fail=0
 for pb in "${playbooks[@]}"; do
   pb="$(cd "$(dirname "$pb")" && pwd)/$(basename "$pb")"
   name="$(basename "$pb" .yml)"
-  read -r a aport < <(start)
-  read -r b bport < <(start)
-  inventory "$aport" "$WORK/a.yml"
-  inventory "$bport" "$WORK/b.yml"
+  count="$(sed -n 's/^# compat-hosts: *\([0-9]*\).*/\1/p' "$pb" | head -1)"
+  count="${count:-1}"
+  hosts="$(host_names "$count")"
+  a_ids=() b_ids=() a_entries=() b_entries=()
+  for h in $hosts; do
+    read -r id port < <(start); a_ids+=("$id"); a_entries+=("$h:$port")
+    read -r id port < <(start); b_ids+=("$id"); b_entries+=("$h:$port")
+  done
+  inventory "$WORK/a.yml" "${a_entries[@]}"
+  inventory "$WORK/b.yml" "${b_entries[@]}"
   report=""
   for run in 1 2; do
     (cd "$(dirname "$pb")" && ANSIBLE_STDOUT_CALLBACK=compat_results ANSIBLE_CALLBACK_PLUGINS="$HERE/callback_plugins" \
@@ -90,19 +118,30 @@ for pb in "${playbooks[@]}"; do
     (cd "$(dirname "$pb")" && ONIGIRAZU_SSH_KNOWN_HOSTS_FILE="$WORK/known_hosts" \
       "$WORK/onigirazu" apply "$pb" -i "$WORK/b.yml" --log-format json --no-color --state "$WORK/state-$name" 2>&1 |
       grep -o '{"timestamp.*' | jq -c 'select(.fields.type == "task_end") | .fields' > "$WORK/b$run.jsonl") || true
-    if ! d="$(diff <(normalize "$WORK/a$run.jsonl") <(normalize "$WORK/b$run.jsonl"))"; then
-      report+=$'\n'"  run $run tasks (< ansible, > onigirazu):"$'\n'"$(sed 's/^/    /' <<<"$d")"
-    fi
+    # hosts run in parallel: each host's tasks are compared on their own
+    for h in $hosts; do
+      of_host "$WORK/a$run.jsonl" "$h" > "$WORK/ah.jsonl"
+      of_host "$WORK/b$run.jsonl" "$h" > "$WORK/bh.jsonl"
+      label="run $run"
+      [ "$count" = 1 ] || label="run $run, $h"
+      if ! d="$(diff <(normalize "$WORK/ah.jsonl") <(normalize "$WORK/bh.jsonl"))"; then
+        report+=$'\n'"  $label tasks (< ansible, > onigirazu):"$'\n'"$(sed 's/^/    /' <<<"$d")"
+      fi
+    done
   done
-  if ! d="$(diff <(files "$a") <(files "$b"))"; then
-    report+=$'\n'"  /root/compat (< ansible, > onigirazu):"$'\n'"$(sed 's/^/    /' <<<"$d")"
-  fi
-  docker rm -f "$a" "$b" >/dev/null
+  i=0
+  for h in $hosts; do
+    if ! d="$(diff <(files "${a_ids[$i]}") <(files "${b_ids[$i]}"))"; then
+      report+=$'\n'"  /root/compat on $h (< ansible, > onigirazu):"$'\n'"$(sed 's/^/    /' <<<"$d")"
+    fi
+    i=$((i + 1))
+  done
+  docker rm -f "${a_ids[@]}" "${b_ids[@]}" >/dev/null
   if [ ! -s "$WORK/a1.jsonl" ]; then
     echo "ERROR $name: ansible-playbook ran no task (ansible-playbook --syntax-check $pb)"; fail=$((fail + 1)); continue
   fi
   if [ -z "$report" ]; then
-    echo "PASS $name ($(wc -l < "$WORK/a1.jsonl" | tr -d ' ') tasks)"; pass=$((pass + 1))
+    echo "PASS $name ($(wc -l < "$WORK/a1.jsonl" | tr -d ' ') task results)"; pass=$((pass + 1))
   else
     echo "DIFF $name$report"; fail=$((fail + 1))
   fi

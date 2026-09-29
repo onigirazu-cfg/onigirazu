@@ -50,242 +50,197 @@ func (m *DockerComposeModule) Execute(ctx context.Context, host types.Host, args
 		result.Error = "project_dir is required"
 		return result, fmt.Errorf("project_dir is required")
 	}
+	p := newComposeProject(projectDir, args)
 
 	state, _ := args["state"].(string)
 	if state == "" {
 		state = "present"
 	}
 
-	composeFile, _ := args["file"].(string)
+	run := func(action, sub string) error {
+		before := m.snapshot(exec, p)
+		if _, err := exec.Execute(m.buildComposeCmd(p, sub)); err != nil {
+			result.Success = false
+			result.Error = fmt.Sprintf("compose %s failed: %v", action, err)
+			return err
+		}
+		result.Changed = m.snapshot(exec, p) != before
+		return nil
+	}
 
-	projectName, _ := args["project_name"].(string)
-
+	err = nil
 	switch state {
 	case "present":
-		before := m.snapshot(exec, projectDir, composeFile, projectName)
-		if err := m.composeUp(ctx, exec, projectDir, composeFile, projectName, args); err != nil {
-			result.Success = false
-			result.Error = fmt.Sprintf("failed to start compose: %v", err)
-			return result, err
-		}
-		result.Changed = m.snapshot(exec, projectDir, composeFile, projectName) != before
+		err = run("up", upCommand(args))
 		result.Output["action"] = "started"
-
 	case "absent":
-		before := m.snapshot(exec, projectDir, composeFile, projectName)
-		if err := m.composeDown(ctx, exec, projectDir, composeFile, projectName, args); err != nil {
-			result.Success = false
-			result.Error = fmt.Sprintf("failed to stop compose: %v", err)
-			return result, err
-		}
-		result.Changed = m.snapshot(exec, projectDir, composeFile, projectName) != before
+		err = run("down", downCommand(args))
 		result.Output["action"] = "stopped"
-
+	case "stopped":
+		err = run("stop", "stop"+servicesArg(args))
+		result.Output["action"] = "stopped"
 	case "restarted":
-		if err := m.composeRestart(ctx, exec, projectDir, composeFile, projectName, args); err != nil {
+		if _, err = exec.Execute(m.buildComposeCmd(p, "restart"+servicesArg(args))); err != nil {
 			result.Success = false
-			result.Error = fmt.Sprintf("failed to restart compose: %v", err)
-			return result, err
+			result.Error = fmt.Sprintf("compose restart failed: %v", err)
 		}
 		result.Changed = true
 		result.Output["action"] = "restarted"
-
 	case "pull":
-		if err := m.composePull(ctx, exec, projectDir, composeFile, projectName); err != nil {
+		if _, err = exec.Execute(m.buildComposeCmd(p, "pull"+servicesArg(args))); err != nil {
 			result.Success = false
-			result.Error = fmt.Sprintf("failed to pull images: %v", err)
-			return result, err
+			result.Error = fmt.Sprintf("compose pull failed: %v", err)
 		}
 		result.Changed = true
 		result.Output["action"] = "pulled"
-
 	case "build":
-		if err := m.composeBuild(ctx, exec, projectDir, composeFile, projectName, args); err != nil {
+		sub := "build"
+		if getBoolArg(args, "nocache", false) {
+			sub += " --no-cache"
+		}
+		if b, _ := args["pull"].(bool); b {
+			sub += " --pull"
+		}
+		if _, err = exec.Execute(m.buildComposeCmd(p, sub+servicesArg(args))); err != nil {
 			result.Success = false
-			result.Error = fmt.Sprintf("failed to build: %v", err)
-			return result, err
+			result.Error = fmt.Sprintf("compose build failed: %v", err)
 		}
 		result.Changed = true
 		result.Output["action"] = "built"
+	default:
+		err = fmt.Errorf("state must be present, absent, stopped, restarted, pull or build, got %q", state)
+		result.Success = false
+		result.Error = err.Error()
+	}
+	if err != nil {
+		result.Duration = time.Since(startTime)
+		return result, err
 	}
 
 	result.Duration = time.Since(startTime)
 	return result, nil
 }
 
+// composeProject is where compose runs and its global flags (-f, -p,
+// --profile, --env-file), already quoted
+type composeProject struct {
+	dir   string
+	flags []string
+}
+
+func newComposeProject(dir string, args map[string]interface{}) composeProject {
+	p := composeProject{dir: dir}
+	add := func(flag string, values []string) {
+		for _, v := range values {
+			p.flags = append(p.flags, flag, shellQuote(v))
+		}
+	}
+	add("-f", listArg(args, "files", "file"))
+	if name, ok := args["project_name"].(string); ok && name != "" {
+		add("-p", []string{name})
+	}
+	add("--profile", listArg(args, "profiles"))
+	add("--env-file", listArg(args, "env_files"))
+	return p
+}
+
 // buildComposeCmd prefers the Compose v2 plugin and falls back to the v1
-// docker-compose binary. The file is passed only when set explicitly, so
-// compose.yaml and docker-compose.yml are both found by default.
-func (m *DockerComposeModule) buildComposeCmd(projectDir, composeFile, projectName string, baseCmd string) string {
-	parts := []string{"c"}
-	if composeFile != "" {
-		parts = append(parts, "-f", shellQuote(composeFile))
-	}
-	if projectName != "" {
-		parts = append(parts, "-p", shellQuote(projectName))
-	}
-	parts = append(parts, baseCmd)
+// docker-compose binary. Files are passed only when set, so compose.yaml and
+// docker-compose.yml are both found by default.
+func (m *DockerComposeModule) buildComposeCmd(p composeProject, sub string) string {
 	script := `c() { if docker compose version >/dev/null 2>&1; then docker compose "$@"; else docker-compose "$@"; fi; }; ` +
-		"cd " + shellQuote(projectDir) + " && " + strings.Join(parts, " ")
+		"cd " + shellQuote(p.dir) + " && c " + strings.Join(append(append([]string{}, p.flags...), sub), " ")
 	return "sh -c " + shellQuote(script)
 }
 
 // snapshot lists all project containers and the running ones; comparing it
-// before and after tells whether up/down changed anything
-func (m *DockerComposeModule) snapshot(exec *executor.CommandExecutor, projectDir, composeFile, projectName string) string {
-	out, err := exec.Execute(m.buildComposeCmd(projectDir, composeFile, projectName, "ps -a -q; echo --; c "+composeArgs(composeFile, projectName)+"ps -q"))
+// before and after tells whether a command changed anything
+func (m *DockerComposeModule) snapshot(exec *executor.CommandExecutor, p composeProject) string {
+	out, err := exec.Execute(m.buildComposeCmd(p, "ps -a -q; echo --; c "+strings.Join(p.flags, " ")+" ps -q"))
 	if err != nil {
 		return "error: " + err.Error()
 	}
 	return out
 }
 
-func composeArgs(composeFile, projectName string) string {
+func servicesArg(args map[string]interface{}) string {
 	s := ""
-	if composeFile != "" {
-		s += "-f " + shellQuote(composeFile) + " "
-	}
-	if projectName != "" {
-		s += "-p " + shellQuote(projectName) + " "
+	for _, svc := range listArg(args, "services") {
+		s += " " + shellQuote(svc)
 	}
 	return s
 }
 
-func (m *DockerComposeModule) composeUp(ctx context.Context, exec *executor.CommandExecutor, projectDir, composeFile, projectName string, args map[string]interface{}) error {
-	cmdParts := []string{}
-
-	detach := getBoolArg(args, "detach", false)
-	if detach || args["detach"] == nil {
-		cmdParts = append(cmdParts, "up -d")
-	} else {
-		cmdParts = append(cmdParts, "up")
+// upCommand is "up" with the options of docker_compose (booleans) and of
+// docker_compose_v2 (build/pull/recreate policies, wait, remove_orphans)
+func upCommand(args map[string]interface{}) string {
+	parts := []string{"up"}
+	if detach, set := args["detach"]; !set || detach == nil || getBoolArg(args, "detach", true) {
+		parts = append(parts, "-d")
 	}
-
-	build := getBoolArg(args, "build", false)
-	if build {
-		cmdParts = append(cmdParts, "--build")
-	}
-
-	forceRecreate := getBoolArg(args, "force_recreate", false)
-	if forceRecreate {
-		cmdParts = append(cmdParts, "--force-recreate")
-	}
-
-	if services, ok := args["services"].([]interface{}); ok {
-		for _, svc := range services {
-			cmdParts = append(cmdParts, fmt.Sprintf("%v", svc))
+	switch v := args["build"].(type) {
+	case bool:
+		if v {
+			parts = append(parts, "--build")
+		}
+	case string:
+		switch v {
+		case "always":
+			parts = append(parts, "--build")
+		case "never":
+			parts = append(parts, "--no-build")
 		}
 	}
-
-	cmd := m.buildComposeCmd(projectDir, composeFile, projectName, strings.Join(cmdParts, " "))
-	_, err := exec.Execute(cmd)
-	if err != nil {
-		return fmt.Errorf("compose up failed: %s", err.Error())
-	}
-
-	return nil
-}
-
-func (m *DockerComposeModule) composeDown(ctx context.Context, exec *executor.CommandExecutor, projectDir, composeFile, projectName string, args map[string]interface{}) error {
-	cmdParts := []string{"down"}
-
-	removeVolumes := getBoolArg(args, "remove_volumes", false)
-	if removeVolumes {
-		cmdParts = append(cmdParts, "-v")
-	}
-
-	removeOrphans := getBoolArg(args, "remove_orphans", false)
-	if removeOrphans {
-		cmdParts = append(cmdParts, "--remove-orphans")
-	}
-
-	cmd := m.buildComposeCmd(projectDir, composeFile, projectName, strings.Join(cmdParts, " "))
-	_, err := exec.Execute(cmd)
-	if err != nil {
-		return fmt.Errorf("compose down failed: %s", err.Error())
-	}
-
-	return nil
-}
-
-func (m *DockerComposeModule) composeRestart(ctx context.Context, exec *executor.CommandExecutor, projectDir, composeFile, projectName string, args map[string]interface{}) error {
-	cmdParts := []string{"restart"}
-
-	if services, ok := args["services"].([]interface{}); ok {
-		for _, svc := range services {
-			cmdParts = append(cmdParts, fmt.Sprintf("%v", svc))
+	switch v := args["pull"].(type) {
+	case bool:
+		if v {
+			parts = append(parts, "--pull", "always")
+		}
+	case string:
+		switch v {
+		case "always", "missing", "never":
+			parts = append(parts, "--pull", v)
 		}
 	}
-
-	cmd := m.buildComposeCmd(projectDir, composeFile, projectName, strings.Join(cmdParts, " "))
-	_, err := exec.Execute(cmd)
-	if err != nil {
-		return fmt.Errorf("compose restart failed: %s", err.Error())
+	switch fmt.Sprint(args["recreate"]) {
+	case "always":
+		parts = append(parts, "--force-recreate")
+	case "never":
+		parts = append(parts, "--no-recreate")
 	}
-
-	return nil
-}
-
-func (m *DockerComposeModule) composePull(ctx context.Context, exec *executor.CommandExecutor, projectDir, composeFile, projectName string) error {
-	cmd := m.buildComposeCmd(projectDir, composeFile, projectName, "pull")
-	_, err := exec.Execute(cmd)
-	if err != nil {
-		return fmt.Errorf("compose pull failed: %s", err.Error())
+	if getBoolArg(args, "force_recreate", false) {
+		parts = append(parts, "--force-recreate")
 	}
-
-	return nil
-}
-
-func (m *DockerComposeModule) composeBuild(ctx context.Context, exec *executor.CommandExecutor, projectDir, composeFile, projectName string, args map[string]interface{}) error {
-	cmdParts := []string{"build"}
-
-	noCache := getBoolArg(args, "nocache", false)
-	if noCache {
-		cmdParts = append(cmdParts, "--no-cache")
+	if getBoolArg(args, "remove_orphans", false) {
+		parts = append(parts, "--remove-orphans")
 	}
-
-	pull := getBoolArg(args, "pull", false)
-	if pull {
-		cmdParts = append(cmdParts, "--pull")
-	}
-
-	if services, ok := args["services"].([]interface{}); ok {
-		for _, svc := range services {
-			cmdParts = append(cmdParts, fmt.Sprintf("%v", svc))
+	if getBoolArg(args, "wait", false) {
+		parts = append(parts, "--wait")
+		if t := getIntArg(args, "wait_timeout", 0); t > 0 {
+			parts = append(parts, "--wait-timeout", fmt.Sprint(t))
 		}
 	}
+	return strings.Join(parts, " ") + servicesArg(args)
+}
 
-	cmd := m.buildComposeCmd(projectDir, composeFile, projectName, strings.Join(cmdParts, " "))
-	_, err := exec.Execute(cmd)
-	if err != nil {
-		return fmt.Errorf("compose build failed: %s", err.Error())
+func downCommand(args map[string]interface{}) string {
+	parts := []string{"down"}
+	if getBoolArg(args, "remove_volumes", false) {
+		parts = append(parts, "-v")
 	}
-
-	return nil
+	if getBoolArg(args, "remove_orphans", false) {
+		parts = append(parts, "--remove-orphans")
+	}
+	return strings.Join(parts, " ")
 }
 
 // composeV2Args reads the arguments of community.docker.docker_compose_v2:
-// project_src for project_dir, files for file, build and pull as policies
-// (always / missing / policy / never) instead of booleans
+// project_src for project_dir; files, profiles and env_files are read by
+// newComposeProject; build, pull and recreate stay policies
 func composeV2Args(args map[string]interface{}) {
 	if _, ok := args["project_dir"]; !ok {
 		if src, ok := args["project_src"].(string); ok {
 			args["project_dir"] = src
-		}
-	}
-	if files, ok := args["files"].([]interface{}); ok && len(files) > 0 {
-		if _, set := args["file"]; !set {
-			args["file"] = fmt.Sprint(files[0])
-		}
-	}
-	for _, key := range []string{"build", "pull"} {
-		if policy, ok := args[key].(string); ok {
-			switch policy {
-			case "always":
-				args[key] = true
-			case "never", "policy", "missing":
-				args[key] = false
-			}
 		}
 	}
 }

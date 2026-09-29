@@ -9,7 +9,8 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
-WORK="$(mktemp -d)"
+# the prefix lets the janitor find what a killed (cancelled) run left behind
+WORK="$(mktemp -d -t onigirazu-e2e.XXXXXX)"
 TF_DIR="$WORK/terraform"
 KEY="$WORK/id_e2e"
 TFVARS="$WORK/run.tfvars.json"

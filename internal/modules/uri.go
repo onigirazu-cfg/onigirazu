@@ -294,6 +294,9 @@ func curlConfigEscape(s string) string {
 // putPrivateFile creates a 0600 file on the host without passing its content
 // on a command line: SFTP for remote hosts, the local filesystem otherwise
 func putPrivateFile(ctx context.Context, host types.Host, path string, data []byte) error {
+	if inContainer(host) {
+		return putContainerFile(ctx, host, path, data, 0600)
+	}
 	if sshpkg.IsLocal(host) {
 		return os.WriteFile(path, data, 0600)
 	}
