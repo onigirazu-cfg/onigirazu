@@ -229,6 +229,14 @@ func NewExecutionEngine(
 }
 
 // SetTagFilter sets the tag filter for this execution engine
+// SetMetrics makes the engine count into m (the instance the metrics server
+// serves) instead of its own
+func (e *ExecutionEngine) SetMetrics(m *metrics.Metrics) {
+	if m != nil {
+		e.metricsManager = m
+	}
+}
+
 func (e *ExecutionEngine) SetTagFilter(filter *tagfilter.Filter) {
 	if filter != nil {
 		e.tagFilter = filter
@@ -384,7 +392,6 @@ func (e *ExecutionEngine) ExecutePlaybook(ctx context.Context, playbook *types.P
 			e.logger.Error("Play '%s' failed: %v", play.Name, err)
 			result.Failed = true
 			result.Error = err.Error()
-			e.metricsManager.IncrementTasksFailed()
 
 			// Check if error is due to context cancellation (graceful shutdown)
 			if err == context.Canceled || strings.Contains(err.Error(), "context canceled") {
@@ -397,10 +404,6 @@ func (e *ExecutionEngine) ExecutePlaybook(ctx context.Context, playbook *types.P
 				break
 			}
 			continue // the failed play is already in result.Plays
-		} else if playResult.Success {
-			e.metricsManager.IncrementTasksSucceeded()
-		} else {
-			e.metricsManager.IncrementTasksFailed()
 		}
 
 		result.Plays = append(result.Plays, *playResult)
@@ -465,7 +468,6 @@ func (e *ExecutionEngine) ExecutePlaybook(ctx context.Context, playbook *types.P
 
 	// Record playbook execution metrics
 	e.metricsManager.AddExecutionTime(time.Since(playbookStartTime))
-	e.metricsManager.IncrementPlaybooksExecuted()
 
 	// Notify observers of execution end
 	e.notifyExecutionEnd(result, result.Duration)
@@ -1231,11 +1233,14 @@ func (e *ExecutionEngine) finishTask(task *types.Task, host *types.Host, result 
 	}
 	if result.Failed {
 		e.metricsManager.IncrementTasksFailed()
+		e.metricsManager.CountTask("failed", task.Module)
 		e.metricsManager.IncrementErrorByType("task_execution")
 	} else if result.Skipped {
 		e.metricsManager.IncrementTasksSkipped()
+		e.metricsManager.CountTask("skipped", task.Module)
 	} else {
 		e.metricsManager.IncrementTasksSucceeded()
+		e.metricsManager.CountTask("success", task.Module)
 		if result.Changed {
 			e.metricsManager.IncrementTasksChanged()
 		}

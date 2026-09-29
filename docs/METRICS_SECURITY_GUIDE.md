@@ -3,10 +3,9 @@
 With `enable_metrics: true`, `onigirazu apply` (and `plan`/`drift`, which run through it)
 starts an HTTP server for the duration of the run. It stops when the process exits.
 
-> **Current limitation:** the server exposes a metrics instance that the execution
-> engine does not update. All counters stay at zero and `/summary` shows no tasks,
-> whatever the run does. Use the run summary, `onigirazu audit` or `show-last-execution`
-> for results until this is fixed.
+The counters cover the run so far: `onigirazu_playbooks_total`, `onigirazu_plays_total`,
+`onigirazu_tasks_total{status,module}` (status `success`, `failed`, `skipped`), task
+durations per module and host, errors and module usage.
 
 ## Configuration
 
@@ -39,8 +38,10 @@ metrics_auth_token: a-long-random-token
 
 All three go through the same checks, in this order:
 
-1. IP whitelist (if set): the client IP must equal one of the entries exactly, otherwise
-   `403 Forbidden: IP not in whitelist`. CIDR ranges are not supported.
+1. IP whitelist (if set): the address of the connecting peer must equal one of the
+   entries exactly, otherwise `403 Forbidden: IP not in whitelist`. CIDR ranges are not
+   supported. `X-Forwarded-For` and `X-Real-IP` are ignored: behind a reverse proxy the
+   peer is the proxy.
 2. Token (if set): the request needs `Authorization: Bearer <token>`, otherwise `401`.
 
 ```bash
@@ -60,9 +61,6 @@ HTTP only.
 
 - The default listen address `127.0.0.1` keeps the endpoint local. Change it only
   together with `metrics_auth_token`.
-- The whitelist is not a security boundary: the client IP is taken from the
-  `X-Forwarded-For` or `X-Real-IP` header when present, so any client can claim a
-  whitelisted address. Rely on the listen address, a firewall and the token.
 - The token is compared as a plain string. Keep it out of files in version control:
   set it through `ONIGIRAZU_METRICS_AUTH_TOKEN`.
 - Terminate TLS in a reverse proxy if the endpoint must leave the host.
@@ -72,5 +70,5 @@ HTTP only.
 
 - Connection refused: `enable_metrics` is not set, the run has already finished, or the
   port is taken (the log then shows `Metrics server error: …` and the run continues).
-- `403`: the client IP (or the forwarded one) is not in `metrics_ip_whitelist`.
+- `403`: the peer address is not in `metrics_ip_whitelist`.
 - `401`: the `Authorization` header is missing or is not `Bearer <token>`.
