@@ -608,6 +608,8 @@ per-host counts and a browser for task results.</p>
 <li><code>drift</code> and <code>plan</code> have JSON and HTML reports; <code>drift --notify</code> posts to webhooks.</li>
 <li><code>apply --background</code> returns at once; <code>show-execution</code> reads the result later.</li>
 <li><code>audit</code> keeps the history of runs with per-host statistics.</li>
+<li><code>onigirazu test</code> runs a role's Molecule scenarios (docker/podman instances, converge,
+  idempotence, verify) without Molecule or Python: see <a href="docs/TESTING_ROLES.md">docs/TESTING_ROLES.md</a>.</li>
 <li>Command plugins: <code>onigirazu NAME</code> runs the executable <code>onigirazu-NAME</code> (from
   <code>~/.onigirazu/plugins</code>, <code>ONIGIRAZU_PLUGIN_PATH</code> or <code>PATH</code>); callback, filter and module plugins
   (Go plugins) hook into runs. See <a href="docs/PLUGIN_INTEGRATION.md">docs/PLUGIN_INTEGRATION.md</a>.</li>
