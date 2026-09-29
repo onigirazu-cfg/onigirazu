@@ -320,7 +320,7 @@ list items too.
 
 | Group | Filters |
 |-------|---------|
-| Strings | `format(args...)` (Python `%` formatting: `'%-10s|' \| format(name)`; also `'%s items' % n`), `upper`, `lower`, `title`, `capitalize`, `trim`, `replace(old, new)`, `split(sep)`, `quote` (shell quoting), `basename`, `dirname`, `splitext` ([root, ext]), `hash(alg)` (md5, sha1 (default), sha224, sha256, sha384, sha512) |
+| Strings | `format(args...)` (Python `%` formatting: `'%-10s|' \| format(name)`; also `'%s items' % n`), `upper`, `lower`, `title`, `capitalize`, `trim`, `replace(old, new)`, `split(sep, maxsplit)` (no separator: runs of whitespace), `wordcount`, `center(width)`, `quote` (shell quoting), `basename`, `dirname`, `splitext` ([root, ext]), `hash(alg)` (md5, sha1 (default), sha224, sha256, sha384, sha512) |
 | Regular expressions | `regex_replace(pattern, repl)` (`\1` back references), `regex_search(pattern)` (match or none), `regex_findall(pattern)`, `regex_escape` |
 | Conversion | `int`, `float`, `string`, `bool`, `list`, `abs`, `round` |
 | Data formats | `to_json`, `to_nice_json`, `from_json`, `to_yaml`, `to_nice_yaml`, `from_yaml`, `b64encode`, `b64decode` |

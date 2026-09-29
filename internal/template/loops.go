@@ -16,10 +16,10 @@ import (
 // template module, the newline right after a for/endfor tag is dropped.
 
 var (
-	forTag = regexp.MustCompile(`\{%-?\s*for\s+(\w+)(?:\s*,\s*(\w+))?\s+in\s+(.+?)\s*-?%\}\n?`)
+	forTag = regexp.MustCompile(`\{%-?\s*for\s+(\w+)(?:\s*,\s*(\w+))?\s+in\s+(.+?)\s*-?%\}`)
 	// any for or endfor tag, to find the matching endfor of nested loops
 	loopTag = regexp.MustCompile(`\{%-?\s*(for\s|endfor\s*-?%\})`)
-	endTag  = regexp.MustCompile(`\{%-?\s*endfor\s*-?%\}\n?`)
+	endTag  = regexp.MustCompile(`\{%-?\s*endfor\s*-?%\}`)
 	// `d.items()` and `d | dictsort` give key, value pairs
 	itemsCall = regexp.MustCompile(`^(.+?)(?:\.items\(\)|\s*\|\s*dictsort)$`)
 )
@@ -38,10 +38,18 @@ func (e *Engine) expandLoops(ctx context.Context, text string, variables map[str
 			return out.String(), loops, nil
 		}
 		m := forTag.FindStringSubmatch(text)
+		// trim_blocks: the newline after a block tag goes
+		trim := blockOptionsFrom(ctx).trim
 		bodyStart := loc[1]
+		if trim && bodyStart < len(text) && text[bodyStart] == '\n' {
+			bodyStart++
+		}
 		bodyEnd, afterEnd, err := matchEndfor(text, bodyStart)
 		if err != nil {
 			return "", nil, err
+		}
+		if trim && afterEnd < len(text) && text[afterEnd] == '\n' {
+			afterEnd++
 		}
 		rendered, err := e.renderLoop(ctx, m[1], m[2], m[3], text[bodyStart:bodyEnd], variables)
 		if err != nil {

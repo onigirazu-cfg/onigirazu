@@ -124,6 +124,10 @@ func (m *TemplateModule) executeLocal(ctx context.Context, host types.Host, args
 	allVars["onigirazu_hostname"] = host.Name
 	allVars["onigirazu_user"] = host.User
 	allVars["onigirazu_port"] = host.Port
+	// the header Ansible's template module offers; a playbook may set its own
+	if _, ok := allVars["ansible_managed"]; !ok {
+		allVars["ansible_managed"] = "Ansible managed"
+	}
 
 	// Render template
 	var renderedContent string
@@ -287,6 +291,10 @@ func (m *TemplateModule) executeRemote(ctx context.Context, host types.Host, cli
 	allVars["onigirazu_hostname"] = host.Name
 	allVars["onigirazu_user"] = host.User
 	allVars["onigirazu_port"] = host.Port
+	// the header Ansible's template module offers; a playbook may set its own
+	if _, ok := allVars["ansible_managed"]; !ok {
+		allVars["ansible_managed"] = "Ansible managed"
+	}
 
 	// Render template
 	var renderedContent string

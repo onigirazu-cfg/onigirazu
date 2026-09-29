@@ -533,3 +533,22 @@ func TestUnnamedLoopTask_ItemsAreNamedAfterTheModule(t *testing.T) {
 	require.NoError(t, engine.executeTaskOnHost(context.Background(), &types.Task{Module: "debug"}, &host, map[string]interface{}{}, play))
 	assert.Equal(t, "debug (item 2)", play.Hosts[0].Tasks[0].TaskName)
 }
+
+func TestUnnamedTask_ModuleThatNamesItselfIsNotDoubled(t *testing.T) {
+	engine, _, _ := perHostEngine(t, types.TaskResult{Success: true, TaskName: "template"})
+	host := twoHosts()[0]
+	play := &types.PlayResult{Success: true}
+	require.NoError(t, engine.executeTaskOnHost(context.Background(), &types.Task{Module: "template"}, &host, map[string]interface{}{}, play))
+	assert.Equal(t, "template", play.Hosts[0].Tasks[0].TaskName)
+}
+
+func TestExtendedLoopVars(t *testing.T) {
+	v := extendedLoopVars([]interface{}{"a", "b", "c"}, 1)
+	assert.Equal(t, 2, v["index"])
+	assert.Equal(t, 2, v["revindex"])
+	assert.Equal(t, "a", v["previtem"])
+	assert.Equal(t, "c", v["nextitem"])
+	assert.Equal(t, false, v["first"])
+	_, hasPrev := extendedLoopVars([]interface{}{"a"}, 0)["previtem"]
+	assert.False(t, hasPrev)
+}

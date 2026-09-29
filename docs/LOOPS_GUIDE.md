@@ -72,6 +72,8 @@ A string is evaluated per host and must yield a list:
   loop: "{{ range(1, 4) | list }}"     # 1, 2, 3
 ```
 
+`ansible_loop` holds `index`, `index0`, `revindex`, `revindex0`, `first`, `last`, `length`, `allitems`, `previtem`, `nextitem` (Ansible's `loop_control: {extended: true}`; always set here), `ansible_loop_var` the item variable's name.
+
 ### with_items and with_list
 
 The older spelling of `loop`; they take a list or an expression. As in Ansible, `with_items` expands items that are lists, one level (`[[1, 2], 3]` loops over 1, 2, 3); `with_list` and `loop` do not.

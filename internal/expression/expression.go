@@ -179,7 +179,7 @@ func compile(expression string) (*vm.Program, error) {
 			return params[0], nil
 		}),
 	}, append(extraFilterOptions(), filterFunctions()...)...)
-	program, err := expr.Compile(notToBang(testsToCalls(pipesToCalls(translate(nestedConcat(floorDivToCalls(expression)))))), options...)
+	program, err := expr.Compile(notToBang(testsToCalls(pipesToCalls(translate(nestedConcat(floorDivToCalls(keepUnknownEscapes(expression))))))), options...)
 	if err != nil {
 		return nil, err
 	}

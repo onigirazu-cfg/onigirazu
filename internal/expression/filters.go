@@ -25,7 +25,7 @@ import (
 var filterNames = []string{
 	"length", "count", "lower", "upper", "int", "float", "string", "trim", "bool", "first", "last",
 	"dict2items", "items2dict", "to_json", "to_nice_json", "to_yaml", "to_nice_yaml", "from_json",
-	"from_yaml", "unique", "list", "capitalize", "title", "b64encode", "b64decode", "quote", "basename", "splitext",
+	"from_yaml", "unique", "list", "capitalize", "title", "b64encode", "b64decode", "quote", "basename", "splitext", "wordcount", "center",
 	"dirname", "sort", "sum", "max", "min", "reverse", "flatten", "join", "keys", "values", "abs", "round",
 	"select", "reject", "mandatory", "password_hash", "random", "shuffle",
 }
@@ -46,6 +46,46 @@ func filterFunctions() []expr.Option {
 		// Jinja's string and join print as Python does (True, ['a'])
 		expr.DisableBuiltin("string"),
 		expr.DisableBuiltin("join"),
+		expr.DisableBuiltin("split"),
+		// Python's str.split(sep=None, maxsplit=-1): no separator splits on
+		// runs of whitespace
+		fn("split", func(p ...interface{}) (interface{}, error) {
+			s := PyStr(p[0])
+			maxsplit := -1
+			if len(p) > 2 {
+				if n, ok := asInt(p[2]); ok {
+					maxsplit = n
+				}
+			}
+			var parts []string
+			if len(p) < 2 || p[1] == nil {
+				fields := strings.Fields(s)
+				if maxsplit >= 0 && len(fields) > maxsplit+1 {
+					// keep the rest as one piece, from where field maxsplit starts
+					rest := s
+					parts = nil
+					for i := 0; i < maxsplit; i++ {
+						rest = strings.TrimLeft(rest, " \t\n\r\v\f")
+						end := strings.IndexAny(rest, " \t\n\r\v\f")
+						parts = append(parts, rest[:end])
+						rest = rest[end:]
+					}
+					parts = append(parts, strings.TrimLeft(rest, " \t\n\r\v\f"))
+				} else {
+					parts = fields
+				}
+			} else {
+				parts = strings.SplitN(s, PyStr(p[1]), maxsplit+1)
+				if maxsplit < 0 {
+					parts = strings.Split(s, PyStr(p[1]))
+				}
+			}
+			out := make([]interface{}, len(parts))
+			for i, v := range parts {
+				out[i] = v
+			}
+			return out, nil
+		}),
 		expr.DisableBuiltin("lower"),
 		expr.DisableBuiltin("upper"),
 		// {{ flag | lower }} is the usual way to get "true" out of a boolean
@@ -137,6 +177,27 @@ func filterFunctions() []expr.Option {
 			return out, nil
 		}),
 		fn("list", func(p ...interface{}) (interface{}, error) { return Items(p[0]) }),
+		// Jinja's wordcount: runs of word characters
+		fn("wordcount", func(p ...interface{}) (interface{}, error) {
+			return len(wordRe.FindAllString(PyStr(p[0]), -1)), nil
+		}),
+		// Jinja's center(width=80): Python str.center
+		fn("center", func(p ...interface{}) (interface{}, error) {
+			s := PyStr(p[0])
+			width := 80
+			if len(p) > 1 {
+				if w, ok := asInt(p[1]); ok {
+					width = w
+				}
+			}
+			n := len([]rune(s))
+			if width <= n {
+				return s, nil
+			}
+			pad := width - n
+			left := pad/2 + (pad & width & 1) // CPython's str.center
+			return strings.Repeat(" ", left) + s + strings.Repeat(" ", pad-left), nil
+		}),
 		fn("capitalize", func(p ...interface{}) (interface{}, error) {
 			s := strings.ToLower(str(p[0]))
 			if s == "" {
@@ -593,3 +654,5 @@ func setOp(p []interface{}, op string) (interface{}, error) {
 	}
 	return out, nil
 }
+
+var wordRe = regexp.MustCompile(`\w+`)

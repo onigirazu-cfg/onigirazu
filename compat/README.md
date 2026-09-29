@@ -30,3 +30,5 @@ the docker-test-lab VM. A case is a plain Ansible playbook for `hosts: all`; wri
   include_tasks/include_role as tasks of their own.
 - A loop over `include_tasks` runs each included task over the items in turn (Ansible runs the whole
   file per item).
+- A template that renders to a Python literal, such as `content: "{{ port }}\n"`, becomes that value
+  in Ansible (the number 80, written as `80` without the newline); onigirazu keeps the text.

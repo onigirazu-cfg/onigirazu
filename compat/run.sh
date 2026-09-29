@@ -54,7 +54,8 @@ EOF
 normalize() {
   jq -s -c 'reduce .[] as $r ([];
       ($r.task | sub(" \\(item [0-9]+\\)$"; "")) as $t
-      | if ($r.task | test(" \\(item [0-9]+\\)$")) and length > 0 and .[-1].task == $t and .[-1].loop then
+      | if ($r.task | test(" \\(item [0-9]+\\)$")) and ($r.task | test(" \\(item 1\\)$") | not)
+           and length > 0 and .[-1].task == $t and .[-1].loop then
           .[-1] |= (.changed = (.changed or $r.changed) | .skipped = (.skipped and $r.skipped)
                     | .success = (.success and $r.success) | .ignored = (.ignored or $r.ignored))
         elif ($r.task | test(" \\(item [0-9]+\\)$")) then . + [$r + {task: $t, loop: true, msg: (if $r.module == "debug" then "All items completed" else "" end)}]
