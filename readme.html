@@ -215,7 +215,7 @@ formats can be used side by side. Examples: <a href="docs/examples/README.md">do
   <code>onigirazu inventory --list --json</code> prints what <code>ansible-inventory --list</code> prints</li>
 <li><strong>Connection variables</strong>: <code>ansible_host</code>, <code>ansible_port</code>, <code>ansible_user</code>,
   <code>ansible_password</code>, <code>ansible_ssh_private_key_file</code>, <code>ansible_become_password</code>,
-  <code>ansible_ssh_common_args</code>, <code>ansible_connection=local</code>; templated values and <code>-e</code> overrides</li>
+  <code>ansible_ssh_common_args</code>, <code>ansible_connection</code> <code>local</code>, <code>docker</code>, <code>podman</code>; templated values and <code>-e</code> overrides</li>
 <li><strong>Jinja</strong>: filters (<code>default</code>, <code>map</code>, <code>select</code>/<code>selectattr</code>, <code>combine</code>, <code>regex_*</code>,
   <code>to_json</code>/<code>from_yaml</code>, <code>ternary</code>, set operations, <code>password_hash</code>, ...), tests (<code>is defined</code>,
   <code>is version</code>, <code>is success</code>/<code>failed</code>/<code>changed</code>/<code>skipped</code>, <code>is match</code>/<code>search</code>, ...), <code>~</code>,
