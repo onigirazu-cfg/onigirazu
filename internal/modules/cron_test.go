@@ -296,7 +296,6 @@ func TestCronModule_parseCrontab(t *testing.T) {
 	}
 }
 
-
 func TestEditCronJobKeepsOtherLines(t *testing.T) {
 	crontab := "MAILTO=ops@example.com\n# nightly report, by hand\n0 2 * * * /usr/local/bin/report\n#Ansible: backup\n0 3 * * * /bin/backup\n"
 
