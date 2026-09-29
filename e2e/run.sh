@@ -247,10 +247,10 @@ for c in $cases; do
       continue
     fi
     if [ -f "$dir/verify.sh" ] && ! out="$(on_host "$h" 'sudo -n bash -s' < "$dir/verify.sh" 2>&1)"; then
-      record "$c" "$h" FAIL "verify: $(echo "$out" | tail -1)"; continue
+      record "$c" "$h" FAIL "verify: $(echo "$out" | grep -v '^$' | tail -2 | paste -sd' ' - | cut -c1-300)"; continue
     fi
     if [ -f "$dir/verify-local.sh" ] && ! out="$(cd "$dir" && HOST="$h" BIN="$BIN" INVENTORY="$INVENTORY" bash verify-local.sh 2>&1)"; then
-      record "$c" "$h" FAIL "verify-local: $(echo "$out" | tail -1)"; continue
+      record "$c" "$h" FAIL "verify-local: $(echo "$out" | grep -v '^$' | tail -2 | paste -sd' ' - | cut -c1-300)"; continue
     fi
     record "$c" "$h" PASS "apply+verify"
     passed="$passed $h"
