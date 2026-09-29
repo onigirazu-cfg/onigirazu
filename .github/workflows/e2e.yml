@@ -129,6 +129,8 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           E2E_CASES: ${{ needs.plan.outputs.cases }}
           KEEP_VMS: ${{ inputs.keep_vms && '1' || '' }}
+          # the nightly run tests the golden images themselves
+          E2E_BASE: ${{ github.event_name == 'schedule' && '0' || '1' }}
           E2E_SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}
         run: e2e/run.sh
 
