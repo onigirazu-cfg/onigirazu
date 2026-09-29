@@ -813,6 +813,9 @@ Examples:
 				}
 			}
 
+			// the engine counts into the instance the metrics server serves
+			executionEngine.SetMetrics(metricsInstance)
+
 			// === EXECUTION ===
 			log.Info("Starting playbook execution")
 			// -u / --private-key apply to the loaded inventory

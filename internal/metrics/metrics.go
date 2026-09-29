@@ -3,6 +3,7 @@ package metrics
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"sort"
 	"strings"
@@ -267,6 +268,9 @@ func (m *Metrics) IncrementPlaybooksExecuted() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.PlaybooksExecuted++
+	if m.promMetrics != nil {
+		m.promMetrics.PlaybooksTotal.Inc()
+	}
 }
 
 // IncrementPlaysExecuted increments the plays executed counter
@@ -274,6 +278,17 @@ func (m *Metrics) IncrementPlaysExecuted() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.PlaysExecuted++
+	if m.promMetrics != nil {
+		m.promMetrics.PlaysTotal.Inc()
+	}
+}
+
+// CountTask adds a finished task to onigirazu_tasks_total{status,module}
+// (the other counters are kept by the Increment methods)
+func (m *Metrics) CountTask(status, module string) {
+	if m.promMetrics != nil {
+		m.promMetrics.TasksTotal.WithLabelValues(status, module).Inc()
+	}
 }
 
 // IncrementTasksExecuted increments the tasks executed counter
@@ -744,32 +759,14 @@ func (m *Metrics) securityMiddleware(next http.Handler, authToken string, ipWhit
 	})
 }
 
-// getClientIP extracts the client IP address from the request
+// getClientIP is the address of the peer of the connection. Headers such as
+// X-Forwarded-For are not used: any client can send them, so trusting them
+// would let anyone past the IP whitelist.
 func getClientIP(r *http.Request) string {
-	// Check X-Forwarded-For header first (for proxied requests)
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		// Take the first IP in the list
-		ips := strings.Split(xff, ",")
-		if len(ips) > 0 {
-			return strings.TrimSpace(ips[0])
-		}
+	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		return host
 	}
-
-	// Check X-Real-IP header
-	if xri := r.Header.Get("X-Real-IP"); xri != "" {
-		return xri
-	}
-
-	// Fall back to remote address
-	if r.RemoteAddr != "" {
-		// Remove port if present
-		if idx := strings.LastIndex(r.RemoteAddr, ":"); idx >= 0 {
-			return r.RemoteAddr[:idx]
-		}
-		return r.RemoteAddr
-	}
-
-	return ""
+	return r.RemoteAddr
 }
 
 // isIPAllowed checks if the given IP is in the whitelist
