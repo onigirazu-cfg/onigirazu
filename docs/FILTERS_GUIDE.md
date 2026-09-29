@@ -394,6 +394,7 @@ loop: "{{ query('fileglob', 'files/conf.d/*.conf') }}"
 - String concatenation: `{{ name ~ '-' ~ version }}`, also inside parentheses and lists, as inline ifs (`('yes' if x else 'no')`) (`when: ('version ' ~ v) not in out.stdout`); `+` adds numbers and concatenates strings and lists (`(a | intersect(b) + ['Other']) | first`)
 - `{% set name = expression %}` in templates, for the rest of the template (inside a for loop, for that iteration)
 - `True`, `False` and `None` as in Jinja; `and`, `or`, `not`, `in`
+- Values inside text print as Ansible prints them (Python's `str`): `enabled={{ flag }}` gives `enabled=True`, lists `['a', 1]`, dicts `{'k': 'v'}`; `{{ flag | lower }}` gives `true`. A value that is the whole argument keeps its type. `to_json` writes `{"k": [1, 2]}` as Ansible does, `to_nice_json` indents by 4 with sorted keys, `from_json` keeps whole numbers whole. Unlike Ansible, dict keys are printed sorted (Ansible keeps the playbook's order)
 - A variable set to `null`/`None` is defined (`x is defined` is true, `x is none` is true) and prints as an empty string, as in Ansible; an undefined name in `{{ }}` fails the task. Unlike Ansible, `default(...)` also replaces `None`
 - Dictionary methods `d.keys()` and `d.values()`
 - Precedence as in Jinja: a filter applies to the operand right before it
