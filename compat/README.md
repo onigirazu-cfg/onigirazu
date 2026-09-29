@@ -15,6 +15,9 @@ compat/run.sh                       # all cases
 compat/run.sh compat/cases/loops.yml
 ```
 
+A case that starts with `# compat-hosts: N` runs on N hosts (`h1`..`hN`, in groups `odd` and `even`); each host's
+tasks and files are compared on their own, since hosts run in parallel.
+
 Needs docker, `ansible-playbook` (ansible-core, e.g. `uv tool install ansible-core`) and go. Runs on
 the docker-test-lab VM. A case is a plain Ansible playbook for `hosts: all`; write results under
 `/root/compat` or print them with `debug`.
