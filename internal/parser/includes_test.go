@@ -137,3 +137,35 @@ func TestIncludeRole_ImportedTasksFindRoleFiles(t *testing.T) {
 	assert.Equal(t, want, role.Tasks[0].Args["src"], "templates/ relative to the role")
 	assert.Equal(t, want, role.Tasks[1].Args["src"])
 }
+
+func TestIncludes_VarsAndLoopReachTheIncludedTasks(t *testing.T) {
+	dir := t.TempDir()
+	files := map[string]string{
+		"site.yml": `plays:
+  - name: p
+    hosts: all
+    tasks:
+      - include_tasks: inc.yml
+        vars: {x: 1, y: from_include}
+      - include_tasks: inc.yml
+        loop: [a, b]
+        loop_control: {loop_var: x}
+`,
+		"inc.yml": `- name: included
+  debug: {msg: "{{ x }} {{ y }}"}
+  vars: {y: own, z: own}
+`,
+	}
+	for name, content := range files {
+		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(content), 0o600))
+	}
+	p := NewEnhancedParser(&mockTemplateEngine{}, &mockLogger{})
+	pb, err := p.ParsePlaybook(context.Background(), filepath.Join(dir, "site.yml"))
+	require.NoError(t, err)
+	tasks := pb.Plays[0].Tasks
+	require.Len(t, tasks, 2)
+	assert.Equal(t, map[string]interface{}{"x": 1, "y": "from_include", "z": "own"}, tasks[0].Vars)
+	require.NotNil(t, tasks[1].Loop)
+	assert.Equal(t, "x", tasks[1].Loop.Variable)
+	assert.Equal(t, []interface{}{"a", "b"}, tasks[1].Loop.Items)
+}
