@@ -206,9 +206,7 @@ The **cron** module manages cron jobs, crontab files, and system cron directorie
 
 #### 1. Job Management (`operation: job`)
 
-Manage named jobs in a user's crontab. Each job is written as a `# Onigirazu: <name>` comment followed by the job line (`# Ansible: <name>` comments are read too).
-
-When the module writes the crontab, it keeps only named jobs: lines without such a comment are dropped. Use `operation: file` or `operation: system` for crontabs that also hold unmanaged lines.
+Manage named jobs in a user's crontab, as Ansible does: each job is a `#Ansible: <name>` comment followed by the job line (the `# Onigirazu: <name>` comments older versions wrote are read too). Only the job's own two lines change; every other line of the crontab stays as it is.
 
 **Parameters:**
 
