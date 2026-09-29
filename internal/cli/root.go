@@ -51,6 +51,7 @@ across your infrastructure with a focus on simplicity and reliability.`,
 	}
 
 	// Global flags
+	addVaultFlags(rootCmd)
 	rootCmd.PersistentFlags().StringVarP(&configPath, "config", "c", "", "Path to configuration file")
 	rootCmd.PersistentFlags().StringArrayVarP(&inventoryPaths, "inventory", "i", envInventory(), "Inventory file, directory or script, or a host list such as host1,user@host2:2222 (repeatable; default: $ANSIBLE_INVENTORY)")
 	rootCmd.PersistentFlags().StringVarP(&statePath, "state", "s", ".onigirazu-state", "Path to state file")
@@ -75,6 +76,7 @@ across your infrastructure with a focus on simplicity and reliability.`,
 	// Add subcommands
 	// Use apply command with proper TUI architecture
 	rootCmd.AddCommand(NewApplyCommand())
+	rootCmd.AddCommand(newVaultCommand())
 	rootCmd.AddCommand(NewVersionCommand())
 	rootCmd.AddCommand(newValidateCmd())
 	rootCmd.AddCommand(newPlanCmd())

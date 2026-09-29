@@ -719,7 +719,7 @@ func (m *Manager) hostView(host *types.Host) types.Host {
 	}
 
 	hostCopy := *host
-	hostCopy.Vars = make(map[string]interface{}, len(host.Vars)+len(merged)+1)
+	hostCopy.Vars = make(map[string]interface{}, len(host.Vars))
 	for k, v := range merged {
 		hostCopy.Vars[k] = v
 	}

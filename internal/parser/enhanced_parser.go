@@ -3,9 +3,10 @@ package parser
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/onigirazu-cfg/onigirazu/internal/vault"
 
 	"gopkg.in/yaml.v3"
 
@@ -58,7 +59,7 @@ func (p *EnhancedParser) ParsePlaybook(ctx context.Context, filePath string) (*t
 	p.logger.Debug("Parsing playbook: %s", filePath)
 
 	// Read file content
-	content, err := os.ReadFile(filePath) // #nosec G304 -- filePath is provided by user as playbook file
+	content, err := vault.ReadFile(filePath) // #nosec G304 -- filePath is provided by user as playbook file
 	if err != nil {
 		return nil, fmt.Errorf("failed to read playbook file %s: %w", filePath, err)
 	}
@@ -488,7 +489,7 @@ func (p *EnhancedParser) expandIncludes(ctx context.Context, tasks []types.Task,
 // loadIncludedTasks reads the tasks of an included file. They are rendered
 // at run time like any other task, with the variables of each host.
 func (p *EnhancedParser) loadIncludedTasks(ctx context.Context, path string) ([]types.Task, error) {
-	content, err := os.ReadFile(path) // #nosec G304 -- include paths come from the playbook
+	content, err := vault.ReadFile(path) // #nosec G304 -- include paths come from the playbook
 	if err != nil {
 		return nil, fmt.Errorf("failed to read included file %s: %w", path, err)
 	}
@@ -531,7 +532,7 @@ func (p *EnhancedParser) ValidateFile(filePath string) error {
 	}
 
 	// Check if file exists and is readable
-	content, err := os.ReadFile(filePath) // #nosec G304 -- filePath is provided by user for validation
+	content, err := vault.ReadFile(filePath) // #nosec G304 -- filePath is provided by user for validation
 	if err != nil {
 		return fmt.Errorf("cannot read file %s: %w", filePath, err)
 	}
@@ -588,7 +589,7 @@ func loadVarsFiles(play *types.Play, baseDir string) error {
 		if !filepath.IsAbs(path) {
 			path = filepath.Join(baseDir, path)
 		}
-		content, err := os.ReadFile(path) // #nosec G304 -- vars_files come from the playbook
+		content, err := vault.ReadFile(path) // #nosec G304 -- vars_files come from the playbook
 		if err != nil {
 			return fmt.Errorf("vars_files: %w", err)
 		}

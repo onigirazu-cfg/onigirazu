@@ -1,0 +1,31 @@
+plays:
+  - name: vault
+    hosts: all
+    become: true
+    vars_files:
+      - secrets.yml            # encrypted by ansible-vault
+    vars:
+      app_port: 8080
+      inline_secret: !vault |
+                $ANSIBLE_VAULT;1.1;AES256
+                38316263613637613661623730653466313339356566303938623237323631643461666464333337
+                6134613466323361313934663966323033376361363530340a666132306534646337313838303162
+                30306331326333613966306637356166323462663961323139626230316161336633363837323965
+                6333333038663662330a336264336530363732336631666664353061343131363230346236346136
+                3362
+    tasks:
+      - name: Values from the encrypted file and the inline value
+        copy:
+          content: "{{ db_password }} {{ api.key }} {{ inline_secret }}\n"
+          dest: /root/onigirazu-e2e-vault-vars
+          mode: "0600"
+      - name: An encrypted source file is copied decrypted
+        copy:
+          src: files/key.txt
+          dest: /root/onigirazu-e2e-vault-key
+          mode: "0600"
+      - name: An encrypted template
+        template:
+          src: templates/app.conf.j2
+          dest: /root/onigirazu-e2e-vault-conf
+          mode: "0600"

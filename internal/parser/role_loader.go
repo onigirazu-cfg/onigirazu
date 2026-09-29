@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/onigirazu-cfg/onigirazu/internal/vault"
+
 	"github.com/onigirazu-cfg/onigirazu/internal/interfaces"
 	"github.com/onigirazu-cfg/onigirazu/internal/validator"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
@@ -183,7 +185,7 @@ func (rl *RoleLoader) GetParameterSchema(role *types.Role) string {
 func (rl *RoleLoader) loadTasks(ctx context.Context, role *types.Role) error {
 	mainTasksPath := filepath.Join(role.Path, "tasks", "main.yml")
 
-	data, err := os.ReadFile(mainTasksPath)
+	data, err := vault.ReadFile(mainTasksPath)
 	if os.IsNotExist(err) {
 		// tasks/main.yml is optional
 		return nil
@@ -205,7 +207,7 @@ func (rl *RoleLoader) loadTasks(ctx context.Context, role *types.Role) error {
 func (rl *RoleLoader) loadHandlers(ctx context.Context, role *types.Role) error {
 	handlersPath := filepath.Join(role.Path, "handlers", "main.yml")
 
-	data, err := os.ReadFile(handlersPath)
+	data, err := vault.ReadFile(handlersPath)
 	if os.IsNotExist(err) {
 		// handlers/main.yml is optional
 		return nil
@@ -227,7 +229,7 @@ func (rl *RoleLoader) loadHandlers(ctx context.Context, role *types.Role) error 
 func (rl *RoleLoader) loadDefaults(ctx context.Context, role *types.Role) error {
 	defaultsPath := filepath.Join(role.Path, "defaults", "main.yml")
 
-	data, err := os.ReadFile(defaultsPath)
+	data, err := vault.ReadFile(defaultsPath)
 	if os.IsNotExist(err) {
 		return nil
 	}
@@ -246,7 +248,7 @@ func (rl *RoleLoader) loadDefaults(ctx context.Context, role *types.Role) error 
 func (rl *RoleLoader) loadVars(ctx context.Context, role *types.Role) error {
 	varsPath := filepath.Join(role.Path, "vars", "main.yml")
 
-	data, err := os.ReadFile(varsPath)
+	data, err := vault.ReadFile(varsPath)
 	if os.IsNotExist(err) {
 		return nil
 	}
@@ -276,7 +278,7 @@ func (rl *RoleLoader) loadFiles(role *types.Role) error {
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			filePath := filepath.Join(filesPath, entry.Name())
-			data, err := os.ReadFile(filePath)
+			data, err := vault.ReadFile(filePath)
 			if err != nil {
 				return err
 			}
@@ -302,7 +304,7 @@ func (rl *RoleLoader) loadTemplates(role *types.Role) error {
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			filePath := filepath.Join(templatesPath, entry.Name())
-			data, err := os.ReadFile(filePath)
+			data, err := vault.ReadFile(filePath)
 			if err != nil {
 				return err
 			}
@@ -317,7 +319,7 @@ func (rl *RoleLoader) loadTemplates(role *types.Role) error {
 func (rl *RoleLoader) loadMeta(ctx context.Context, role *types.Role) error {
 	metaPath := filepath.Join(role.Path, "meta", "main.yml")
 
-	data, err := os.ReadFile(metaPath)
+	data, err := vault.ReadFile(metaPath)
 	if os.IsNotExist(err) {
 		return nil
 	}
