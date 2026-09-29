@@ -1362,6 +1362,7 @@ Clone a repository on the host, or update an existing clone.
 | `version` | string | `HEAD` | Branch, tag or commit to check out |
 | `update` | boolean | `true` | Fetch and check out `version` in an existing clone |
 | `force` | boolean | `false` | Clone even when `dest` exists and is not a git repository |
+| `depth` | integer | - | Shallow clone with that many commits; a branch or tag clones just that ref, a commit needs its full hash |
 
 `changed` means the checked-out commit changed. Returns `before`, `after`, `version`, `dest`, `info`.
 

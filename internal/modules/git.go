@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -82,6 +83,9 @@ func (m *GitModuleFixed) Execute(ctx context.Context, host types.Host, args map[
 
 	update := getBoolArg(args, "update", true)
 
+	// depth: a shallow clone with that many commits, as in Ansible
+	depth := getIntArg(args, "depth", 0)
+
 	// Check if destination exists and is a git repository
 	isGitRepo := m.isGitRepository(exec, dest)
 	destExists := m.pathExists(exec, dest)
@@ -98,10 +102,10 @@ func (m *GitModuleFixed) Execute(ctx context.Context, host types.Host, args map[
 
 	if !destExists || (destExists && !isGitRepo && force) {
 		// Clone repository
-		return m.cloneRepository(exec, repo, dest, version, result, startTime)
+		return m.cloneRepository(exec, repo, dest, version, depth, result, startTime)
 	} else if isGitRepo && update {
 		// Update existing repository
-		return m.updateRepository(exec, dest, version, result, startTime)
+		return m.updateRepository(exec, dest, version, depth, result, startTime)
 	} else {
 		// Repository exists and update is false
 		result.Success = true
@@ -152,10 +156,14 @@ func (m *GitModuleFixed) Validate(args map[string]interface{}) error {
 		}
 	}
 
+	if _, exists := args["depth"]; exists && getIntArg(args, "depth", -1) < 0 {
+		return fmt.Errorf("argument 'depth' must be a non-negative integer")
+	}
+
 	return nil
 }
 
-func (m *GitModuleFixed) cloneRepository(exec *executor.CommandExecutor, repo, dest, version string, result types.TaskResult, startTime time.Time) (types.TaskResult, error) {
+func (m *GitModuleFixed) cloneRepository(exec *executor.CommandExecutor, repo, dest, version string, depth int, result types.TaskResult, startTime time.Time) (types.TaskResult, error) {
 	// Create parent directory if it doesn't exist
 	parentDir := filepath.Dir(dest)
 	_, err := exec.Execute("mkdir", "-p", parentDir)
@@ -165,17 +173,34 @@ func (m *GitModuleFixed) cloneRepository(exec *executor.CommandExecutor, repo, d
 		return result, nil
 	}
 
-	// Clone the repository
-	output, err := exec.Execute("git", "clone", repo, dest)
+	// Clone the repository; a shallow clone of a branch or tag clones just
+	// that ref. A commit can only be fetched shallow by its full hash.
+	cloneArgs := []string{"clone"}
+	checkout := version != "HEAD"
+	if depth > 0 && (!isCommitHash(version) || len(version) == 40) {
+		cloneArgs = append(cloneArgs, "--depth", strconv.Itoa(depth))
+		if checkout && !isCommitHash(version) {
+			cloneArgs = append(cloneArgs, "--branch", version)
+			checkout = false
+		}
+	}
+	output, err := exec.Execute("git", append(cloneArgs, repo, dest)...)
 	if err != nil {
 		result.Error = fmt.Sprintf("failed to clone repository: %v", err)
 		result.Output["stdout"] = output
 		result.Duration = time.Since(startTime)
 		return result, nil
 	}
+	if checkout && depth > 0 && len(version) == 40 {
+		if _, err := m.executeInDirectory(exec, dest, "git", "fetch", "--depth", strconv.Itoa(depth), "origin", version); err != nil {
+			result.Error = fmt.Sprintf("failed to fetch %s: %v", version, err)
+			result.Duration = time.Since(startTime)
+			return result, nil
+		}
+	}
 
 	// Checkout specific version if not HEAD
-	if version != "HEAD" {
+	if checkout {
 		err = m.checkoutVersion(exec, dest, version)
 		if err != nil {
 			result.Error = fmt.Sprintf("failed to checkout version %s: %v", version, err)
@@ -204,7 +229,7 @@ func (m *GitModuleFixed) cloneRepository(exec *executor.CommandExecutor, repo, d
 	return result, nil
 }
 
-func (m *GitModuleFixed) updateRepository(exec *executor.CommandExecutor, dest, version string, result types.TaskResult, startTime time.Time) (types.TaskResult, error) {
+func (m *GitModuleFixed) updateRepository(exec *executor.CommandExecutor, dest, version string, depth int, result types.TaskResult, startTime time.Time) (types.TaskResult, error) {
 	// Get current commit before update
 	currentCommit, err := m.getCurrentCommit(exec, dest)
 	if err != nil {
@@ -213,16 +238,28 @@ func (m *GitModuleFixed) updateRepository(exec *executor.CommandExecutor, dest, 
 		return result, nil
 	}
 
-	// Fetch latest changes
-	_, err = m.executeInDirectory(exec, dest, "git", "fetch", "origin")
+	// Fetch latest changes; a shallow repository fetches just the version
+	fetchArgs := []string{"fetch", "origin"}
+	if depth > 0 {
+		fetchArgs = []string{"fetch", "--depth", strconv.Itoa(depth), "origin"}
+		if version != "HEAD" {
+			fetchArgs = append(fetchArgs, version)
+		}
+	}
+	_, err = m.executeInDirectory(exec, dest, "git", fetchArgs...)
 	if err != nil {
 		result.Error = fmt.Sprintf("failed to fetch changes: %v", err)
 		result.Duration = time.Since(startTime)
 		return result, nil
 	}
 
-	// Checkout the specified version
-	err = m.checkoutVersion(exec, dest, version)
+	// Checkout the specified version; in a shallow repository the fetched
+	// branch or tag may have no local ref, FETCH_HEAD is it
+	if depth > 0 && version != "HEAD" {
+		err = m.checkoutVersion(exec, dest, "FETCH_HEAD")
+	} else {
+		err = m.checkoutVersion(exec, dest, version)
+	}
 	if err != nil {
 		result.Error = fmt.Sprintf("failed to checkout version %s: %v", version, err)
 		result.Duration = time.Since(startTime)
