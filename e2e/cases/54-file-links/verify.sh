@@ -8,4 +8,4 @@ test "$(stat -c %U /root/onigirazu-e2e-fl-tree/a/b/f)" = nobody
 test "$(stat -c %a /root/onigirazu-e2e-fl-tree/a/b/f)" = 750
 test "$(stat -c %U /root/onigirazu-e2e-fl-tree)" = nobody
 test ! -e /root/onigirazu-e2e-fl-missing
-test "$(cat /root/onigirazu-e2e-fl-missing-result)" = true
+test "$(cat /root/onigirazu-e2e-fl-missing-result)" = True

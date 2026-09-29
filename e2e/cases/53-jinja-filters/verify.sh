@@ -2,7 +2,7 @@ set -e
 f=/root/onigirazu-e2e-filters
 grep -qx 'admins=alice' $f
 grep -qx 'names=ALICE BOB' $f
-grep -qx 'json={"host":"0.0.0.0","port":8080}' $f
+grep -qx 'json={"host": "0.0.0.0", "port": 8080}' $f
 grep -qx 'mode=debug' $f
 grep -qx 'file=app.conf' $f
 grep -qx 'b64=aGk=' $f
