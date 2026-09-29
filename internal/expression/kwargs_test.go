@@ -34,6 +34,9 @@ func TestFilterKeywordArguments(t *testing.T) {
 		"'/etc/nginx/site.conf' | splitext":             "[/etc/nginx/site .conf]",
 		"'/a/.bashrc' | splitext":                       "[/a/.bashrc ]",
 		"'x.tar.gz' | splitext | last":                  ".gz",
+		"'abc' | hash('sha1')":                          "a9993e364706816aba3e25717850c26c9cd0d89d",
+		"'abc' | hash('md5')":                           "900150983cd24fb0d6963f7d28e17f72",
+		"'abc' | hash":                                  "a9993e364706816aba3e25717850c26c9cd0d89d",
 		"1 == 1":                                        "true",
 	}
 	for in, want := range cases {
