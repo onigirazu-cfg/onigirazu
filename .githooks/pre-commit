@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Checks the staged Go code before a commit: gofmt, the generated lint table,
+# golangci-lint on what changed. Enable with `make hooks`; skip once with
+# `git commit --no-verify`.
+set -euo pipefail
+
+staged="$(git diff --cached --name-only --diff-filter=ACMR -- '*.go')"
+[ -n "$staged" ] || exit 0
+
+# shellcheck disable=SC2086 # one path per word
+unformatted="$(gofmt -l $staged)"
+if [ -n "$unformatted" ]; then
+  echo "pre-commit: not gofmt-ed:" >&2; echo "$unformatted" >&2
+  echo "run: gofmt -w $unformatted" >&2
+  exit 1
+fi
+
+# lint reads module arguments from a table generated from the modules
+if grep -q '^internal/modules/' <<<"$staged"; then
+  go generate ./internal/cli
+  if ! git diff --quiet -- internal/cli/lint_module_args.go; then
+    echo "pre-commit: internal/cli/lint_module_args.go was stale and is regenerated: stage it" >&2
+    exit 1
+  fi
+fi
+
+lint="$(command -v golangci-lint || echo "$HOME/.cache/bin/golangci-lint")"
+if [ -x "$lint" ]; then
+  "$lint" run --new-from-rev=HEAD ./... >&2 || { echo "pre-commit: golangci-lint failed" >&2; exit 1; }
+else
+  echo "pre-commit: golangci-lint not found, lint skipped (make dev-setup installs it)" >&2
+fi

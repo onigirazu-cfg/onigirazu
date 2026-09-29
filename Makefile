@@ -1,4 +1,4 @@
-.PHONY: build test clean run-example install lint fmt vet security coverage release-test ci-setup ci-status ci-validate ci-pipeline ci-pre-check ci-release-prepare ci-release-create test-race test-coverage docs docs-generate docs-serve docs-open docs-clean vagrant-up vagrant-up-all vagrant-halt vagrant-halt-all vagrant-destroy vagrant-destroy-all vagrant-status vagrant-ssh vagrant-test vagrant-test-all vagrant-provision docker-setup docker-up docker-down docker-logs docker-build docker-run docker-test docker-test-all docker-test-comprehensive docker-test-quick docker-test-concurrent
+.PHONY: hooks build test clean run-example install lint fmt vet security coverage release-test ci-setup ci-status ci-validate ci-pipeline ci-pre-check ci-release-prepare ci-release-create test-race test-coverage docs docs-generate docs-serve docs-open docs-clean vagrant-up vagrant-up-all vagrant-halt vagrant-halt-all vagrant-destroy vagrant-destroy-all vagrant-status vagrant-ssh vagrant-test vagrant-test-all vagrant-provision docker-setup docker-up docker-down docker-logs docker-build docker-run docker-test docker-test-all docker-test-comprehensive docker-test-quick docker-test-concurrent
 
 # Variables
 BINARY_NAME=onigirazu
@@ -346,6 +346,10 @@ vagrant-test: build
 vagrant-test-all: build
 	@echo "Running comprehensive tests on all VMs..."
 	./scripts/vagrant-test.sh
+
+# Git hooks from .githooks (gofmt, generated lint table, golangci-lint on changes)
+hooks:
+	git config core.hooksPath .githooks
 
 docker-setup:
 	@echo "Setting up Docker test environment..."
