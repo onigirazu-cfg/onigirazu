@@ -380,6 +380,8 @@ loop: "{{ packages | select('match', '^python3-') | list }}"
 | `indexed_items` | `[index, item]` |
 | `random_choice` | One of the terms |
 
+`lookup(..., wantlist=True)` returns a list, as `query` does; `errors='ignore'` (or `'warn'`) makes a failing lookup return nothing instead of failing the task.
+
 ```yaml
 key: "{{ lookup('file', 'files/id_ed25519.pub') }}"
 loop: "{{ query('fileglob', 'files/conf.d/*.conf') }}"

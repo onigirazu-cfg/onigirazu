@@ -144,7 +144,7 @@ func (m *LineinfileModule) Execute(ctx context.Context, host types.Host, args ma
 		newLines, changed = m.removeLines(lines, line, regexpPattern)
 	} else {
 		// Add or replace line
-		newLines, changed, err = m.ensureLine(lines, line, regexpPattern, insertafter, insertbefore, getBoolArg(args, "firstmatch", false))
+		newLines, changed, err = m.ensureLine(lines, line, regexpPattern, insertafter, insertbefore, getBoolArg(args, "firstmatch", false), getBoolArg(args, "backrefs", false))
 		if err != nil {
 			result.Success = false
 			result.Error = err.Error()
@@ -256,8 +256,9 @@ func (m *LineinfileModule) removeLines(lines []string, line string, pattern *reg
 }
 
 // ensureLine ensures the line exists in the file
-func (m *LineinfileModule) ensureLine(lines []string, line string, pattern *regexp.Regexp, insertafter, insertbefore string, firstmatch bool) ([]string, bool, error) {
-	// Check if line already exists
+func (m *LineinfileModule) ensureLine(lines []string, line string, pattern *regexp.Regexp, insertafter, insertbefore string, firstmatch, backrefs bool) ([]string, bool, error) {
+	// The line regexp matches (the last one, as in Ansible; the first with
+	// firstmatch), or else the line itself
 	lineIndex := -1
 	for i, l := range lines {
 		match := false
@@ -266,21 +267,31 @@ func (m *LineinfileModule) ensureLine(lines []string, line string, pattern *rege
 		} else {
 			match = strings.TrimSpace(l) == strings.TrimSpace(line)
 		}
-
 		if match {
 			lineIndex = i
-			break
+			if firstmatch || pattern == nil {
+				break
+			}
 		}
 	}
 
-	// If line exists and matches, no change needed
 	if lineIndex >= 0 {
-		if strings.TrimSpace(lines[lineIndex]) == strings.TrimSpace(line) {
+		newLine := line
+		if backrefs && pattern != nil {
+			// \1 and \g<name> in line take the groups of the matched line
+			src := lines[lineIndex]
+			newLine = string(pattern.ExpandString(nil, pythonTemplate(line), src, pattern.FindStringSubmatchIndex(src)))
+		}
+		if strings.TrimSpace(lines[lineIndex]) == strings.TrimSpace(newLine) {
 			return lines, false, nil
 		}
-		// Replace the line
-		lines[lineIndex] = line
+		lines[lineIndex] = newLine
 		return lines, true, nil
+	}
+
+	// backrefs: no matching line leaves the file as it is
+	if backrefs && pattern != nil {
+		return lines, false, nil
 	}
 
 	// Line doesn't exist: add it at the insertafter/insertbefore position
@@ -357,4 +368,19 @@ func (m *LineinfileModule) copyFileRemote(exec *executor.CommandExecutor, src, d
 	// Note: executor.Execute will automatically use shell if needed
 	_, err := exec.Execute(cmd)
 	return err
+}
+
+var pyGroupRef = regexp.MustCompile(`\\(\d+|g<(\w+)>)`)
+
+// pythonTemplate turns a Python re replacement (\1, \g<1>, \g<name>) into
+// Go's (${1}, ${name}); a literal $ stays literal
+func pythonTemplate(t string) string {
+	t = strings.ReplaceAll(t, "$", "$$")
+	return pyGroupRef.ReplaceAllStringFunc(t, func(m string) string {
+		sub := pyGroupRef.FindStringSubmatch(m)
+		if sub[2] != "" {
+			return "${" + sub[2] + "}"
+		}
+		return "${" + sub[1] + "}"
+	})
 }

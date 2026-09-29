@@ -1,0 +1,11 @@
+- hosts: all
+  gather_facts: false
+  vars_files: [vars/common.yml]
+  tasks:
+    - debug: {msg: "{{ lookup('file', 'vars/common.yml') | from_yaml | dict2items | length }}"}
+    - debug: {msg: "{{ lookup('template', 'templates/greet.j2') | trim }}"}
+    - debug: {msg: "{{ lookup('pipe', 'echo piped') }}"}
+    - debug: {msg: "{{ lookup('env', 'NO_SUCH_VAR_X') == '' }}"}
+    - debug: {msg: "{{ lookup('lines', 'printf \"a\\nb\\n\"', wantlist=True) }}"}
+    - debug: {msg: "{{ query('fileglob', 'vars/*.yml') | map('basename') | list }}"}
+    - debug: {msg: "{{ lookup('items', [1, 2], wantlist=True) }} {{ lookup('dict', {'k': 'v'}) }}"}

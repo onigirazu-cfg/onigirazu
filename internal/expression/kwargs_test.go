@@ -46,3 +46,22 @@ func TestFilterKeywordArguments(t *testing.T) {
 		}
 	}
 }
+
+func TestLookupKeywordArguments(t *testing.T) {
+	vars := map[string]interface{}{"playbook_dir": t.TempDir()}
+	cases := map[string]string{
+		"lookup('items', [1, 2], wantlist=True)":                  "[1 2]",
+		"lookup('items', [1, 2])":                                 "1,2",
+		"lookup('file', 'no-such-file', errors='ignore') is none": "true",
+		"query('file', 'no-such-file', errors='ignore') | length": "0",
+	}
+	for in, want := range cases {
+		got, err := Eval(in, vars)
+		if err != nil || fmt.Sprint(got) != want {
+			t.Errorf("%s = %v, %v; want %s", in, got, err, want)
+		}
+	}
+	if _, err := Eval("lookup('file', 'no-such-file')", vars); err == nil {
+		t.Error("a missing file must fail without errors='ignore'")
+	}
+}

@@ -32,3 +32,5 @@ the docker-test-lab VM. A case is a plain Ansible playbook for `hosts: all`; wri
   file per item).
 - A template that renders to a Python literal, such as `content: "{{ port }}\n"`, becomes that value
   in Ansible (the number 80, written as `80` without the newline); onigirazu keeps the text.
+- `file: state=touch` on an existing file: Ansible reports changed every run (times move); onigirazu
+  reports ok, so a second run and drift checks stay clean. The case uses `preserve` for both times.

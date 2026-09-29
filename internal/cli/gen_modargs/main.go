@@ -23,6 +23,10 @@ var argReaders = map[string]bool{
 	"requireStringArg": true, "getStringListArg": true, "getFloatArg": true,
 }
 
+// multiKeyReaders read one argument under any of several names:
+// listArg(args, "paths", "path")
+var multiKeyReaders = map[string]bool{"listArg": true}
+
 func main() {
 	dir := "../modules"
 	if len(os.Args) > 1 {
@@ -79,6 +83,12 @@ func collect(dir string) (map[string][]string, error) {
 					if argReaders[fn] && len(x.Args) >= 2 && isIdent(x.Args[0], "args") {
 						if s, ok := stringLit(x.Args[1]); ok {
 							own[s] = true
+						}
+					} else if multiKeyReaders[fn] && len(x.Args) >= 2 && isIdent(x.Args[0], "args") {
+						for _, a := range x.Args[1:] {
+							if s, ok := stringLit(a); ok {
+								own[s] = true
+							}
 						}
 					} else {
 						for _, a := range x.Args {

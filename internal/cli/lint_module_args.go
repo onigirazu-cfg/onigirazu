@@ -32,7 +32,7 @@ var moduleArgs = map[string][]string{
 	"hostname":         {"name"},
 	"include_vars":     {"dir", "file", "name"},
 	"ini_file":         {"allow_no_value", "backup", "create", "dest", "mode", "name", "no_extra_spaces", "option", "path", "section", "state", "value"},
-	"lineinfile":       {"backup", "create", "firstmatch", "insertafter", "insertbefore", "line", "path", "regexp", "state"},
+	"lineinfile":       {"backrefs", "backup", "create", "firstmatch", "insertafter", "insertbefore", "line", "path", "regexp", "state"},
 	"meta":             {"free_form", "name"},
 	"mongodb":          {"database", "login_database", "login_host", "login_password", "login_port", "login_user", "name", "operation", "password", "roles", "state"},
 	"mount":            {"backup", "dump", "fstype", "opts", "passno", "path", "src", "state"},
