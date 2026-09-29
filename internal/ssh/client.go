@@ -57,10 +57,13 @@ func NewClientWithLogger(host types.Host, lg Logger) (*Client, error) {
 // hostKeyCallback checks the host key with the manager, unless the host
 // turns the check off (insecure_ignore_host_key, StrictHostKeyChecking=no)
 func hostKeyCallback(host types.Host, m *HostKeyManager) ssh.HostKeyCallback {
-	if host.InsecureIgnoreHostKey {
-		return ssh.InsecureIgnoreHostKey() // #nosec G106 -- the inventory asked for it for this host
+	insecure := host.InsecureIgnoreHostKey
+	return func(hostname string, remote net.Addr, key ssh.PublicKey) error {
+		if insecure {
+			return nil // the inventory turned the check off for this host
+		}
+		return m.VerifyHostKey(hostname, remote, key)
 	}
-	return m.VerifyHostKey
 }
 
 // NewClientWithHostKeyManager creates a new SSH client with custom host key manager (deprecated, use NewClientWithHostKeyManagerAndLogger)
