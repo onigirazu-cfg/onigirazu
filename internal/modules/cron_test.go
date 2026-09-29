@@ -296,14 +296,6 @@ func TestCronModule_parseCrontab(t *testing.T) {
 	}
 }
 
-func containsString(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
-}
 
 func TestEditCronJobKeepsOtherLines(t *testing.T) {
 	crontab := "MAILTO=ops@example.com\n# nightly report, by hand\n0 2 * * * /usr/local/bin/report\n#Ansible: backup\n0 3 * * * /bin/backup\n"
@@ -329,7 +321,7 @@ func TestEditCronJobKeepsOtherLines(t *testing.T) {
 		t.Errorf("removed job: %q\n%s", action, out)
 	}
 
-	if _, action := editCronJob(crontab, "missing", "", false); action != "" {
+	if _, none := editCronJob(crontab, "missing", "", false); none != "" {
 		t.Error("removing a job that is not there changes nothing")
 	}
 
@@ -339,7 +331,7 @@ func TestEditCronJobKeepsOtherLines(t *testing.T) {
 		t.Errorf("older marker: %q\n%s", action, out)
 	}
 
-	if out, action := editCronJob("", "first", "@reboot /bin/up", true); action != "job_added" || out != "#Ansible: first\n@reboot /bin/up\n" {
-		t.Errorf("empty crontab: %q\n%s", action, out)
+	if first, added := editCronJob("", "first", "@reboot /bin/up", true); added != "job_added" || first != "#Ansible: first\n@reboot /bin/up\n" {
+		t.Errorf("empty crontab: %q\n%s", added, first)
 	}
 }

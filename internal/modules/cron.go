@@ -156,7 +156,7 @@ func editCronJob(crontab, name, line string, present bool) (string, string) {
 	}
 	for i, l := range lines {
 		m := cronMarker.FindStringSubmatch(strings.TrimSpace(l))
-		if m == nil || m[1] != name {
+		if len(m) < 2 || m[1] != name {
 			continue
 		}
 		hasJob := i+1 < len(lines) && !strings.HasPrefix(strings.TrimSpace(lines[i+1]), "#") && strings.TrimSpace(lines[i+1]) != ""
