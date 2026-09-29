@@ -28,6 +28,9 @@ var (
 	mapAttribute = regexp.MustCompile(`\bmap\(\s*attribute\s*=\s*`)
 	// keyword arguments of random/shuffle become "name", value pairs
 	randomKeyword = regexp.MustCompile(`\b(seed|start|step|default|field)\s*=([^=]|$)`)
+	// keyword arguments of sort, combine and items2dict become a marked
+	// name followed by the value (splitKwargs takes them apart)
+	filterKeyword = regexp.MustCompile(`\b(attribute|reverse|case_sensitive|recursive|list_merge|key_name|value_name)\s*=([^=]|$)`)
 	// d.keys() and d.values() are Python methods
 	dictMethod = regexp.MustCompile(`\.(keys|values)\(\)`)
 	// lookup() and query() get the playbook directory as their first argument
@@ -123,7 +126,21 @@ func compile(expression string) (*vm.Program, error) {
 			return Dict2Items(params[0])
 		}),
 		expr.Function("items2dict", func(params ...interface{}) (interface{}, error) {
-			return items2dict(params[0])
+			pos, kw := splitKwargs(params)
+			keyName, valueName := "key", "value"
+			if len(pos) > 1 {
+				keyName = fmt.Sprint(pos[1])
+			}
+			if len(pos) > 2 {
+				valueName = fmt.Sprint(pos[2])
+			}
+			if v, ok := kw["key_name"]; ok {
+				keyName = fmt.Sprint(v)
+			}
+			if v, ok := kw["value_name"]; ok {
+				valueName = fmt.Sprint(v)
+			}
+			return items2dict(pos[0], keyName, valueName)
 		}),
 		expr.Function("bool", func(params ...interface{}) (interface{}, error) {
 			return Truthy(params[0]), nil
@@ -227,6 +244,7 @@ func translateCode(code string) string {
 	})
 	code = mapAttribute.ReplaceAllString(code, "map_attribute(")
 	code = randomKeyword.ReplaceAllString(code, `"$1", $2`)
+	code = filterKeyword.ReplaceAllString(code, `"`+kwPrefix+`$1", $2`)
 	code = dictMethod.ReplaceAllString(code, " | $1()")
 	code = lookupCall.ReplaceAllStringFunc(code, func(m string) string {
 		if strings.HasPrefix(m, "lookup") {
@@ -364,7 +382,7 @@ func dictPairs(value interface{}) ([]map[string]interface{}, error) {
 	return pairs, nil
 }
 
-func items2dict(value interface{}) (map[string]interface{}, error) {
+func items2dict(value interface{}, keyName, valueName string) (map[string]interface{}, error) {
 	items, err := Items(value)
 	if err != nil {
 		return nil, fmt.Errorf("items2dict: %w", err)
@@ -375,7 +393,7 @@ func items2dict(value interface{}) (map[string]interface{}, error) {
 		if !ok {
 			return nil, fmt.Errorf("items2dict needs a list of {key, value}, got %T", item)
 		}
-		out[fmt.Sprint(m["key"])] = m["value"]
+		out[fmt.Sprint(m[keyName])] = m[valueName]
 	}
 	return out, nil
 }

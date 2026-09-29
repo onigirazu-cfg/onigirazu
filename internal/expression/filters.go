@@ -1,9 +1,15 @@
 package expression
 
 import (
+	"crypto/md5"  // #nosec G501 -- the hash filter computes checksums a playbook asks for
+	"crypto/sha1" // #nosec G505 -- the hash filter computes checksums a playbook asks for
+	"crypto/sha256"
+	"crypto/sha512"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"hash"
 	"path"
 	"regexp"
 	"strings"
@@ -20,7 +26,7 @@ import (
 var filterNames = []string{
 	"length", "count", "lower", "upper", "int", "float", "string", "trim", "bool", "first", "last",
 	"dict2items", "items2dict", "to_json", "to_nice_json", "to_yaml", "to_nice_yaml", "from_json",
-	"from_yaml", "unique", "list", "capitalize", "title", "b64encode", "b64decode", "quote", "basename",
+	"from_yaml", "unique", "list", "capitalize", "title", "b64encode", "b64decode", "quote", "basename", "splitext",
 	"dirname", "sort", "sum", "max", "min", "reverse", "flatten", "join", "keys", "values", "abs", "round",
 	"select", "reject", "mandatory", "password_hash", "random", "shuffle",
 }
@@ -37,6 +43,7 @@ func filterFunctions() []expr.Option {
 	}
 	return []expr.Option{
 		expr.DisableBuiltin("map"),
+		expr.DisableBuiltin("sort"),
 		fn("to_json", func(p ...interface{}) (interface{}, error) {
 			out, err := json.Marshal(p[0])
 			return string(out), err
@@ -144,6 +151,43 @@ func filterFunctions() []expr.Option {
 			return "'" + strings.ReplaceAll(str(p[0]), "'", `'"'"'`) + "'", nil
 		}),
 		fn("basename", func(p ...interface{}) (interface{}, error) { return path.Base(str(p[0])), nil }),
+		// hash('sha1'): hex digest, as Ansible's hash filter (default sha1)
+		fn("hash", func(p ...interface{}) (interface{}, error) {
+			alg := "sha1"
+			if len(p) > 1 {
+				alg = strings.ToLower(str(p[1]))
+			}
+			var h hash.Hash
+			switch alg {
+			case "md5":
+				h = md5.New() // #nosec G401 -- a checksum the playbook asked for
+			case "sha1":
+				h = sha1.New() // #nosec G401 -- a checksum the playbook asked for
+			case "sha224":
+				h = sha256.New224()
+			case "sha256":
+				h = sha256.New()
+			case "sha384":
+				h = sha512.New384()
+			case "sha512":
+				h = sha512.New()
+			default:
+				return nil, fmt.Errorf("hash: unsupported algorithm %q (md5, sha1, sha224, sha256, sha384, sha512)", alg)
+			}
+			h.Write([]byte(str(p[0])))
+			return hex.EncodeToString(h.Sum(nil)), nil
+		}),
+		// Python's os.path.splitext: [root, ext]; a leading dot is not an extension
+		fn("splitext", func(p ...interface{}) (interface{}, error) {
+			s := str(p[0])
+			base := s[strings.LastIndex(s, "/")+1:]
+			i := strings.LastIndex(strings.TrimLeft(base, "."), ".")
+			if i < 0 {
+				return []interface{}{s, ""}, nil
+			}
+			cut := len(s) - len(base) + (len(base) - len(strings.TrimLeft(base, "."))) + i
+			return []interface{}{s[:cut], s[cut:]}, nil
+		}),
 		fn("dirname", func(p ...interface{}) (interface{}, error) { return path.Dir(str(p[0])), nil }),
 		fn("ternary", func(p ...interface{}) (interface{}, error) {
 			if len(p) < 3 {
@@ -202,19 +246,8 @@ func filterFunctions() []expr.Option {
 			return jinjaDefined(vars, str(p[1]), p[2]), nil
 		}),
 		fn("jinja_query", jinjaQuery),
-		fn("combine", func(p ...interface{}) (interface{}, error) {
-			out := map[string]interface{}{}
-			for _, v := range p {
-				m, ok := v.(map[string]interface{})
-				if !ok {
-					return nil, fmt.Errorf("combine needs dictionaries, got %T", v)
-				}
-				for k, val := range m {
-					out[k] = val
-				}
-			}
-			return out, nil
-		}),
+		fn("combine", jinjaCombine),
+		fn("sort", jinjaSort),
 		fn("mandatory", func(p ...interface{}) (interface{}, error) {
 			if p[0] == nil {
 				return nil, fmt.Errorf("mandatory variable is not defined")
