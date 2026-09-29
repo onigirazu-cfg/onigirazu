@@ -1,0 +1,11 @@
+- hosts: all
+  gather_facts: false
+  vars_files: [vars/common.yml]
+  tasks:
+    - debug: {msg: "{{ app }} {{ ports }}"}
+    - set_fact: {first_play: done}
+- import_playbook: imported.yml
+- hosts: all
+  gather_facts: false
+  tasks:
+    - debug: {msg: "{{ first_play }} {{ hostvars[inventory_hostname].first_play }}"}

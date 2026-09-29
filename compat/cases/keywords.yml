@@ -1,0 +1,43 @@
+- hosts: all
+  gather_facts: false
+  tasks:
+    - name: environment reaches the command
+      command: printenv MYVAR
+      environment: {MYVAR: set-here}
+      register: e
+      changed_when: false
+    - debug: {msg: "{{ e.stdout }}"}
+    - name: secret
+      command: echo hidden
+      no_log: true
+      register: s
+      changed_when: false
+    - debug: {msg: "{{ s.stdout }}"}
+    - name: once
+      command: echo once
+      run_once: true
+      register: r1
+      changed_when: false
+    - debug: {msg: "{{ r1.stdout }}"}
+    - name: tagged never runs unless asked
+      debug: {msg: "never tag"}
+      tags: [never]
+    - name: failing with ignore
+      command: /bin/false
+      ignore_errors: true
+      register: f
+    - debug: {msg: "{{ f is failed }} {{ f.rc }}"}
+    - block:
+        - command: /bin/false
+          ignore_errors: true
+        - debug: {msg: "block continues"}
+      rescue:
+        - debug: {msg: "not rescued"}
+    - name: failed_when with and
+      command: echo "ok code=2"
+      register: fw
+      failed_when: fw.rc != 0 or 'code=3' in fw.stdout
+      changed_when: "'code=2' in fw.stdout"
+    - debug: {msg: "{{ fw is changed }} {{ fw is failed }}"}
+    - set_fact: {nested: {a: {b: [1, {c: 2}]}}}
+    - debug: {msg: "{{ nested.a.b[1].c }} {{ nested['a']['b'] | length }}"}
