@@ -484,7 +484,7 @@ func (p *EnhancedParser) expandIncludes(ctx context.Context, tasks []types.Task,
 			// vars of the include apply to every included task and win over
 			// the task's own, as Ansible's include params do
 			if len(task.Vars) > 0 {
-				merged := make(map[string]interface{}, len(task.Vars)+len(included[i].Vars))
+				merged := map[string]interface{}{}
 				for k, v := range included[i].Vars {
 					merged[k] = v
 				}
