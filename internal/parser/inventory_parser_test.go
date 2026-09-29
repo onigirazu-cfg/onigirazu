@@ -1376,3 +1376,57 @@ all:
 	assert.Equal(t, "frontend", inv.Groups["monitored"].Hosts["web1"].Vars["role"], "a host in two groups keeps both settings")
 	assert.Equal(t, "admin", inv.Groups["db"].Hosts["db1"].User)
 }
+
+func TestAnsibleHostVarsKeepTheirNames(t *testing.T) {
+	p := NewInventoryParser(&mockLogger{})
+	inv, err := p.parseAnsibleYamlInventory([]byte(`all:
+  hosts:
+    web1:
+      ansible_host: 10.0.0.5
+      ansible_connection: local
+      ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
+      ansible_password: secret
+      ansible_custom: 42
+      app_port: 8080
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(inv.Hosts) != 1 {
+		t.Fatalf("hosts: %v", inv.Hosts)
+	}
+	h := inv.Hosts[0]
+	for key, want := range map[string]interface{}{
+		"ansible_host": "10.0.0.5", "ansible_connection": "local",
+		"ansible_ssh_common_args": "-o StrictHostKeyChecking=no", "ansible_custom": 42, "app_port": 8080,
+	} {
+		if h.Vars[key] != want {
+			t.Errorf("Vars[%s] = %v, want %v", key, h.Vars[key], want)
+		}
+	}
+	if _, ok := h.Vars["ansible_password"]; ok || h.Password != "secret" {
+		t.Errorf("the password is a field, not a variable: %v / %q", h.Vars, h.Password)
+	}
+	if _, ok := h.Vars["connection"]; ok {
+		t.Error("the ansible_ prefix must not be stripped")
+	}
+}
+
+func TestJSONGroupsLinkHostsAndVars(t *testing.T) {
+	p := NewInventoryParser(&mockLogger{})
+	inv, err := p.parseJsonInventory([]byte(`{
+  "hosts": [{"name": "web1", "address": "192.168.1.1", "user": "admin", "vars": {"app_port": 8080}}],
+  "groups": {"web": {"hosts": {"web1": {"port": 2222}}, "vars": {"http_port": 80}}}
+}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	g := inv.Groups["web"]
+	if g.Vars["http_port"] != float64(80) || g.Name != "web" {
+		t.Errorf("group vars = %v, name %q", g.Vars, g.Name)
+	}
+	h := g.Hosts["web1"]
+	if h.Address != "192.168.1.1" || h.User != "admin" || h.Port != 2222 || h.Vars["app_port"] != float64(8080) {
+		t.Errorf("group host = %+v", h)
+	}
+}

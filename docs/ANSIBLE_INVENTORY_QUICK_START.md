@@ -70,10 +70,10 @@ Hosts may be defined under `all.hosts` or directly in any group, at any depth of
 | `ansible_ssh_host_key_checking` | `false` marks the host as "ignore host key", see [host key checking](examples/README_insecure_ignore_host_key.md) |
 | anything else | host or group variable, available in templates |
 
-On a host, any other `ansible_*` variable loses its prefix: `ansible_python_interpreter`
-becomes `python_interpreter`, and `ansible_connection: local` is not recognised (the host
-is reached over SSH). The connection variables above also work as group variables
-(`all.vars`, a group's `vars`, `group_vars/`).
+Every variable keeps its name, as in Ansible (`hostvars[h].ansible_host`); a host with
+`ansible_connection: local` runs on the control machine, and `ansible_ssh_common_args` with
+`-o StrictHostKeyChecking=no` turns the host key check off for that host. The connection
+variables above also work as group variables (`all.vars`, a group's `vars`, `group_vars/`).
 
 Top-level keys outside `all:` are ignored; variables belong on a host, in a group's
 `vars`, in `all.vars`, or in `group_vars/`/`host_vars/`.
@@ -94,8 +94,7 @@ Playbooks use the Ansible layout: a list of plays with `hosts`, `vars` and `task
 ## Limitations
 
 - Host ranges (`web[1:3]`) are not expanded; the name is taken literally.
-- A file with hosts only under `all.hosts` and neither `all.vars` nor a child group fails
-  with `inventory must contain at least one group`. Add a group or `all.vars`.
+- Hosts only under `all.hosts` belong to the `ungrouped` group, as in Ansible.
 
 ## Troubleshooting
 

@@ -778,8 +778,12 @@ func applyGroupConnectionVars(hostCopy, host *types.Host, vars map[string]interf
 	if v, ok := groupVar(vars, "ansible_ssh_common_args", "ansible_ssh_extra_args"); ok && strings.Contains(fmt.Sprint(v), "StrictHostKeyChecking=no") {
 		hostCopy.InsecureIgnoreHostKey = true
 	}
-	if insecure, ok := vars["insecure_ignore_host_key"].(bool); ok && !host.InsecureIgnoreHostKey {
-		hostCopy.InsecureIgnoreHostKey = insecure
+	// true, or "true"/"yes" once rendered or read from INI
+	if v, ok := groupVar(vars, "insecure_ignore_host_key", "onigirazu_insecure_ignore_host_key"); ok && !host.InsecureIgnoreHostKey {
+		switch strings.ToLower(fmt.Sprint(v)) {
+		case "true", "yes", "1":
+			hostCopy.InsecureIgnoreHostKey = true
+		}
 	}
 }
 
