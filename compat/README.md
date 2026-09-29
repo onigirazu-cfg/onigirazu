@@ -26,3 +26,7 @@ the docker-test-lab VM. A case is a plain Ansible playbook for `hosts: all`; wri
 - A debug `msg` that is a whole boolean expression: Ansible keeps the boolean (`true`), onigirazu
   prints text (`True`); compared as equal.
 - Dicts print with sorted keys; Ansible keeps the playbook's order.
+- Presentation, normalized away: Ansible prefixes role tasks with `role : ` and reports
+  include_tasks/include_role as tasks of their own.
+- A loop over `include_tasks` runs each included task over the items in turn (Ansible runs the whole
+  file per item).

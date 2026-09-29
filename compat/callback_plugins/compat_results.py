@@ -17,9 +17,15 @@ class CallbackModule(CallbackBase):
     CALLBACK_TYPE = "stdout"
     CALLBACK_NAME = "compat_results"
 
+    # include_tasks/include_role report a result of their own in Ansible;
+    # onigirazu expands them in place
+    SKIP = {"include_tasks", "include_role", "import_tasks", "import_role", "include_vars_dummy"}
+
     def _emit(self, result, success, skipped=False, ignored=False):
         task = result._task
         res = result._result
+        if task.action.split(".")[-1] in self.SKIP:
+            return
         msg = ""
         if not success:
             msg = res.get("msg", "")
@@ -39,7 +45,8 @@ class CallbackModule(CallbackBase):
             ignored = True
         self._display.display(json.dumps({
             "host": result._host.get_name(),
-            "task": task.get_name(),
+            # onigirazu names role tasks without the "role : " prefix
+            "task": task.name or task.action.split(".")[-1],
             "module": task.action.split(".")[-1],
             "success": success,
             "changed": bool(res.get("changed")) and not skipped,
