@@ -18,7 +18,8 @@ max_concurrency: 10
 
 # Default timeout for tasks (if not specified per-task)
 # Format: 30s, 5m, 1h
-default_timeout: 30s
+# default_timeout limits the whole run (apply --timeout); unset: no limit
+# default_timeout: 30s
 
 # Number of times to retry failed tasks
 retry_attempts: 3

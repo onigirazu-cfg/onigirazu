@@ -165,15 +165,10 @@ release:
     - **NetBSD**: x86_64, i386
 
   footer: |
-    ## 🐳 Docker Images
+    ## Container image
 
-    Multi-architecture Docker images are available:
     ```bash
-    # Docker Hub
-    docker pull onigirazu/onigirazu:{{ .Tag }}
-
-    # GitHub Container Registry
-    docker pull ghcr.io/onigirazu-cfg/onigirazu:{{ .Tag }}
+    docker pull ghcr.io/onigirazu-cfg/onigirazu:{{ .Version }}
     ```
 
     Supported architectures: `linux/amd64`, `linux/arm64`
@@ -230,9 +225,9 @@ release:
     ```
 
     ## 📚 Documentation
-    - [Installation Guide](https://github.com/onigirazu-cfg/onigirazu/blob/main/docs/installation.md)
-    - [Getting Started](https://github.com/onigirazu-cfg/onigirazu/blob/main/docs/getting-started.md)
-    - [Module Reference](https://github.com/onigirazu-cfg/onigirazu/blob/main/docs/modules.md)
+    - [Installation Guide](https://github.com/onigirazu-cfg/onigirazu/blob/main/INSTALLATION.md)
+    - [Getting Started](https://github.com/onigirazu-cfg/onigirazu/blob/main/docs/QUICK_START_CONFIGURATION.md)
+    - [Module Reference](https://github.com/onigirazu-cfg/onigirazu/blob/main/docs/modules/README.md)
 
     ## 🔐 Verification
     All binaries are checksummed. Verify your download:

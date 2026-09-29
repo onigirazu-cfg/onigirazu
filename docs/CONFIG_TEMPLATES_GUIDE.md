@@ -21,27 +21,27 @@ The container image contains no templates.
 
 Only keys that take effect are listed.
 
-| Key | default | minimal | production | docker |
-|-----|---------|---------|------------|--------|
-| `max_concurrency` | 10 | 10 | 5 | 10 |
-| `default_timeout` | 30s | 30s | 2m | 30s |
-| `log_level` | info | info | info | info |
-| `log_format` | text | - | json | json |
-| `output_format` | text | - | json | json |
-| `show_diff` | true | - | true | true |
-| `color_output` | true | - | true | false |
-| `ssh_timeout` | 30s | - | 60s | 30s |
-| `ssh_strict_host_key` | false | - | true | true |
-| `ssh_known_hosts_file` | empty (default) | - | `~/.ssh/known_hosts` | `~/.ssh/known_hosts` |
-| `enable_metrics` | false | - | true (port 9090) | false |
+`onigirazu.default.yml` (installed as `/etc/onigirazu/onigirazu.yml` by the packages) sets
+nothing: every key is commented out, so the built-in defaults apply.
+
+| Key | minimal | production | docker |
+|-----|---------|------------|--------|
+| `max_concurrency` | 10 | 5 | 10 |
+| `log_level` | info | info | info |
+| `log_format` | - | json | json |
+| `output_format` | - | json | json |
+| `show_diff` | - | true | true |
+| `color_output` | - | true | false |
+| `ssh_timeout` | - | 60s | 30s |
+| `ssh_strict_host_key` | - | true | true |
+| `ssh_known_hosts_file` | - | `~/.ssh/known_hosts` | `~/.ssh/known_hosts` |
+| `enable_metrics` | - | true (port 9090) | false |
 
 Things to know before using one:
 
-- `default_timeout` limits the whole `apply` run, not a single task. With the templates a run
-  stops after 30s (2m for production). Raise it, remove it, or pass `apply -t`.
+- `default_timeout` is commented out in every template: it limits the whole `apply` run, not
+  a single task (as `apply -t`).
 - `output_format: json` (production, docker) prints the result as JSON on stdout, as `apply -o json`.
-- `~` is not expanded in `ssh_known_hosts_file`. Use an absolute path, or leave the key out to
-  get `~/.ssh/known_hosts`.
 - `retry_attempts`, `retry_delay`, `allow_shell_commands`, `blocked_commands`, `enable_caching`,
   `vault_*`, `progress_bar` and the other keys listed under "accepted but have no effect" in the
   reference do nothing. Restrict commands and paths with a

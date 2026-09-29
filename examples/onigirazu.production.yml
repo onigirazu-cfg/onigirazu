@@ -11,7 +11,8 @@
 max_concurrency: 5
 
 # Production: generous timeout for critical operations
-default_timeout: 2m
+# default_timeout limits the whole run (apply --timeout); unset: no limit
+# default_timeout: 2m
 
 # Production: retry failed tasks
 retry_attempts: 5
