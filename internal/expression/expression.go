@@ -160,6 +160,12 @@ func compile(expression string) (*vm.Program, error) {
 		expr.Function("jinja_floordiv", func(params ...interface{}) (interface{}, error) {
 			return jinjaFloorDiv(params[0], params[1])
 		}),
+		// % formats a string (Jinja's "%s" % x) or is Python's modulo: the
+		// result has the divisor's sign
+		expr.Function("jinja_mod", func(params ...interface{}) (interface{}, error) {
+			return jinjaMod(params[0], params[1])
+		}, new(func(interface{}, interface{}) interface{})),
+		expr.Operator("%", "jinja_mod"),
 		expr.Function("jinja_index", func(params ...interface{}) (interface{}, error) {
 			return jinjaIndex(params[0], params[1]), nil
 		}),

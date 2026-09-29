@@ -52,6 +52,8 @@ func filterFunctions() []expr.Option {
 		fn("lower", func(p ...interface{}) (interface{}, error) { return strings.ToLower(PyStr(p[0])), nil }),
 		fn("upper", func(p ...interface{}) (interface{}, error) { return strings.ToUpper(PyStr(p[0])), nil }),
 		fn("string", func(p ...interface{}) (interface{}, error) { return PyStr(p[0]), nil }),
+		// "%-5s|" | format(x): Python printf-style formatting
+		fn("format", func(p ...interface{}) (interface{}, error) { return pyFormat(PyStr(p[0]), p[1:]) }),
 		fn("join", func(p ...interface{}) (interface{}, error) {
 			items, err := Items(p[0])
 			if err != nil {
