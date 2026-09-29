@@ -61,7 +61,9 @@ normalize() {
         else . + [$r] end) | .[]' "$1" |
   jq -r '(if .ignored then "ignored" elif .success == false then "failed" elif .skipped then "skipped"
      elif .changed then "changed" else "ok" end) as $st
-    | (.msg // "" | tostring) as $raw | ($raw | try (fromjson | tojson) catch $raw) as $msg
+    | (.msg // "" | tostring) as $raw
+    | ($raw | if . == "True" then "true" elif . == "False" then "false" else . end
+       | try (fromjson | tojson) catch .) as $msg
     | [.task, $st, (if ($st == "failed" or $st == "ignored") and .module != "fail" then "" else $msg end)]
     | join(" | ")'
 }

@@ -23,3 +23,6 @@ the docker-test-lab VM. A case is a plain Ansible playbook for `hosts: all`; wri
 
 - A `when:` that is not a boolean (`when: some_string`): ansible-core 2.19+ fails the task,
   onigirazu treats it as truthy/falsy.
+- A debug `msg` that is a whole boolean expression: Ansible keeps the boolean (`true`), onigirazu
+  prints text (`True`); compared as equal.
+- Dicts print with sorted keys; Ansible keeps the playbook's order.
