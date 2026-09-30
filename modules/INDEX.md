@@ -116,6 +116,9 @@ All 61 built-in modules, alphabetically. `include_role`/`import_role` and `setup
 - **[yum](README.md#yum)** - Manage packages on RedHat/CentOS/Fedora systems using yum
 
 - **[win_ping / win_command / win_shell](README.md#win_ping-win_command-win_shell)** - Windows hosts over WinRM
+- **[win_powershell](README.md#win_powershell)** - PowerShell script with $Ansible.Result and all output streams
+- **[win_regedit](README.md#win_regedit)** - Registry keys and values
+- **[win_file / win_copy / win_service / win_timezone](README.md#win_file-win_copy-win_service-win_timezone)** - Files, services and time zone on Windows
 
 ## By Category
 

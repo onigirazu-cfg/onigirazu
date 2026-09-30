@@ -1869,6 +1869,69 @@ exit code and are skipped in check mode unless `creates`/`removes` decide.
   when: w32time.stdout_lines[0] == "Running"
 ```
 
+### win_powershell
+
+Runs a PowerShell script (any length) with `$Ansible` as in `ansible.windows.win_powershell`:
+`$Ansible.Changed` (default true), `$Ansible.Failed`, `$Ansible.Result`, `$Ansible.CheckMode`.
+Returns `result`, `output` (pipeline objects), `error` (records with `output`, `exception`,
+`fully_qualified_error_id`, `category_info`, `script_stack_trace`), `warning`, `verbose`, `debug`,
+`information`, `host_out` (Write-Host). A terminating error or `$Ansible.Failed` fails the task;
+non-terminating errors are listed only.
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `script` | - | The script (required) |
+| `parameters` | - | Dict passed to the script's `param()` |
+| `error_action` | `continue` | `continue`, `stop` (non-terminating errors fail), `silently_continue` |
+| `chdir`, `creates`, `removes` | - | As in win_shell |
+| `depth` | 2 | Depth of the JSON conversion of results |
+
+In check mode the script runs only when it declares `SupportsShouldProcess`; otherwise it is skipped.
+
+```yaml
+- ansible.windows.win_powershell:
+    script: |
+      $Ansible.Changed = $false
+      $Ansible.Result = @{ configured = [bool](Get-Service WsusService -ErrorAction SilentlyContinue) }
+  register: wsus
+```
+
+### win_regedit
+
+Adds, changes or removes a registry key or value; compares the type and data first and reports changed
+only on a difference. Check mode is supported.
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `path` | - | `HKLM:\...`, `HKCU:\...`, `HKCR:`, `HKU:`, `HKCC:` or `HKEY_...\...` (required) |
+| `name` | - | Value name; `''` is the default value; without it the task is about the key |
+| `data` | - | Value data: numbers (or `0x..`) for dword/qword, a list for multistring, a list of bytes or hex for binary |
+| `type` | `string` | `string`, `expandstring`, `multistring`, `dword`, `qword`, `binary`, `none` |
+| `state` | `present` | `absent` removes the value, or the key with its subkeys (`delete_key: false` keeps it) |
+
+Returns `data_changed`, `data_type_changed`, `old_data`, `old_type`.
+
+```yaml
+- ansible.windows.win_regedit:
+    path: HKLM:\System\CurrentControlSet\Control\Terminal Server
+    name: fDenyTSConnections
+    data: 0
+    type: dword
+```
+
+### win_file, win_copy, win_service, win_timezone
+
+All support check mode.
+
+- `win_file`: `path`, `state` `file` (must exist), `directory`, `touch`, `absent` (recursive).
+- `win_copy`: `dest` and `content`, or `src` (a file on the control machine, uploaded in pieces of
+  128 KiB; `remote_src: true` copies a file on the host). Compares SHA1 first; `force: false` keeps an
+  existing file. A directory `dest` gets the source file name. Returns `checksum`, `size`, `dest`.
+- `win_service`: `name`, `state` (`started`, `stopped`, `restarted`, `paused`), `start_mode` (`auto`,
+  `delayed`, `manual`, `disabled`). Returns `exists`, `state`, `start_mode`, `display_name`.
+- `win_timezone`: `timezone` (a Windows id such as `UTC` or `W. Europe Standard Time`). Returns
+  `previous_timezone`.
+
 ### async_status
 
 Status of a task started with `async` and `poll: 0`. While the job runs: `started: true`,
