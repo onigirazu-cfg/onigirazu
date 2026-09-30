@@ -161,3 +161,5 @@ jobs:
       with:
         fail-on-severity: moderate
         allow-licenses: MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, LicenseRef-scancode-google-patent-license-golang
+        # MPL-2.0 libraries used unmodified, as hashicorp/errwrap, go-multierror and hcl already are
+        allow-dependencies-licenses: pkg:golang/github.com/hashicorp/go-uuid
