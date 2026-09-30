@@ -169,6 +169,15 @@ func (e *Engine) Render(ctx context.Context, templateStr string, variables map[s
 	// Jinja whitespace control: {%- / {{- strip before, -%} / -}} after
 	templateStr = trimBefore.ReplaceAllString(templateStr, "$1")
 	templateStr = trimAfter.ReplaceAllString(templateStr, "$1")
+	// {% raw %}...{% endraw %}: the text inside stays as it is
+	templateStr, raws := extractRaw(templateStr)
+	if len(raws) > 0 {
+		out, err := e.Render(ctx, templateStr, variables)
+		if err != nil {
+			return "", err
+		}
+		return restoreRaw(out, raws), nil
+	}
 
 	templateStr, variables, err := applySets(templateStr, variables, opts.trim)
 	if err != nil {
@@ -226,6 +235,28 @@ func (e *Engine) Render(ctx context.Context, templateStr string, variables map[s
 }
 
 const noValue = "<no value>"
+
+var rawBlock = regexp.MustCompile(`(?s)\{%\s*raw\s*%\}(.*?)\{%\s*endraw\s*%\}`)
+
+// extractRaw swaps raw blocks for placeholders
+func extractRaw(text string) (string, []string) {
+	if !strings.Contains(text, "raw") {
+		return text, nil
+	}
+	var raws []string
+	out := rawBlock.ReplaceAllStringFunc(text, func(block string) string {
+		raws = append(raws, rawBlock.FindStringSubmatch(block)[1])
+		return fmt.Sprintf("\x01%d\x01", len(raws)-1)
+	})
+	return out, raws
+}
+
+func restoreRaw(text string, raws []string) string {
+	for i, r := range raws {
+		text = strings.Replace(text, fmt.Sprintf("\x01%d\x01", i), r, 1)
+	}
+	return text
+}
 
 var (
 	trimBefore = regexp.MustCompile(`\s*(\{[%{])-`)
