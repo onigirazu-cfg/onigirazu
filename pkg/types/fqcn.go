@@ -30,6 +30,12 @@ var collectionModules = map[string]string{
 	"ansible.windows.win_copy":             "win_copy",
 	"ansible.windows.win_service":          "win_service",
 	"community.windows.win_timezone":       "win_timezone",
+	"community.windows.win_firewall_rule":  "win_firewall_rule",
+	"ansible.windows.win_firewall":         "win_firewall",
+	"community.windows.win_firewall":       "win_firewall",
+	"ansible.windows.win_group_membership": "win_group_membership",
+	"ansible.windows.win_feature":          "win_feature",
+	"ansible.windows.win_reboot":           "win_reboot",
 }
 
 // ShortModuleName turns ansible.builtin.copy into copy; other names are

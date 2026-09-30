@@ -1932,6 +1932,25 @@ All support check mode.
 - `win_timezone`: `timezone` (a Windows id such as `UTC` or `W. Europe Standard Time`). Returns
   `previous_timezone`.
 
+### win_firewall_rule, win_firewall, win_group_membership, win_feature, win_reboot
+
+All support check mode.
+
+- `win_firewall_rule`: by `name` (display name): `state`, `enabled`, `action` (allow/block),
+  `direction` (in/out), `protocol`, `localport`, `remoteport`, `localip`, `remoteip` (lists or comma
+  separated), `program`, `service`, `profiles`, `description`, `group` (for a new rule). Only the given
+  properties are compared and set (`changed_properties`). With `group` and no `name`: turns every rule of
+  the group on or off (`enabled`).
+- `win_firewall`: `state` enabled/disabled for `profiles` (default all three), `inbound_action`,
+  `outbound_action` (allow, block, not_configured).
+- `win_group_membership`: `name` (local group), `members` (`DOMAIN\user`, `user`, SIDs; compared by
+  SID), `state` present, absent or pure. Returns `added`, `removed`.
+- `win_feature`: `name` (one or a list), `state`, `include_sub_features`, `include_management_tools`,
+  `source`. Returns `reboot_required`, `feature_result`, `exitcode`.
+- `win_reboot`: `reboot_timeout` (600), `pre_reboot_delay` (2), `post_reboot_delay` (0), `msg`,
+  `test_command` (whoami); waits for a new boot time, then for the test command. Returns `rebooted`,
+  `elapsed`.
+
 ### async_status
 
 Status of a task started with `async` and `poll: 0`. While the job runs: `started: true`,
