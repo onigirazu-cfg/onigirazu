@@ -1951,6 +1951,21 @@ All support check mode.
   `test_command` (whoami); waits for a new boot time, then for the test command. Returns `rebooted`,
   `elapsed`.
 
+### win_scheduled_task, win_chocolatey
+
+Both support check mode.
+
+- `win_scheduled_task`: `name`, `path` (folder, e.g. `\WSUS`), `description`, `actions` (`path`,
+  `arguments`, `working_directory`), `triggers` (`type` daily, weekly, once, boot, logon, registration;
+  `start_boundary`, `days_of_week`, `days_interval`, `weeks_interval`, `user_id`, `enabled`), `username`,
+  `password`, `logon_type`, `run_level` (limited/highest), `enabled`, `state`. The task is compared
+  (actions, triggers, description, principal, enabled) and registered again only when it differs;
+  returns `changed_properties`.
+- `win_chocolatey`: `name` (one or a list; `chocolatey` installs Chocolatey itself), `state` present,
+  latest (upgrade), absent, downgrade, reinstalled; `version`, `source`, `install_args`,
+  `package_params`. Chocolatey is installed first when missing. Returns `results` per package and
+  `reboot_required` (exit codes 1641/3010).
+
 ### async_status
 
 Status of a task started with `async` and `poll: 0`. While the job runs: `started: true`,

@@ -36,6 +36,8 @@ var collectionModules = map[string]string{
 	"ansible.windows.win_group_membership": "win_group_membership",
 	"ansible.windows.win_feature":          "win_feature",
 	"ansible.windows.win_reboot":           "win_reboot",
+	"community.windows.win_scheduled_task": "win_scheduled_task",
+	"chocolatey.chocolatey.win_chocolatey": "win_chocolatey",
 }
 
 // ShortModuleName turns ansible.builtin.copy into copy; other names are
