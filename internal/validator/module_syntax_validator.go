@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/onigirazu-cfg/onigirazu/internal/bridge"
+
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
@@ -43,8 +45,9 @@ func (m *ModuleSyntaxValidator) ValidateTaskModule(task *types.Task, playIndex, 
 		return nil
 	}
 
-	// Check if module exists
-	if !m.validModules[moduleName] {
+	// Check if module exists; modules allowed through the Ansible bridge run
+	// with ansible-core
+	if !m.validModules[moduleName] && !bridge.Allowed(moduleName) {
 		return &ModuleSyntaxError{
 			PlayIndex:  playIndex + 1,
 			TaskIndex:  taskIndex + 1,

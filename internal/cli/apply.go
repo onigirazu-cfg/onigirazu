@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/onigirazu-cfg/onigirazu/internal/bridge"
+
 	"github.com/onigirazu-cfg/onigirazu/internal/expression"
 	"github.com/onigirazu-cfg/onigirazu/internal/secrets"
 
@@ -193,6 +195,7 @@ Examples:
 				return fmt.Errorf("failed to load configuration: %w", err)
 			}
 			parser.SetRoleSearch(cfg.RolesPath, cfg.CollectionsPath)
+			bridge.Configure(cfg.AnsibleBridge)
 			secretResolver := secrets.NewResolver(cfg.Secrets)
 			expression.SecretLookup = secretResolver.Get
 			defer func() { _ = secretResolver.Close() }()

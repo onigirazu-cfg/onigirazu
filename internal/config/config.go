@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/onigirazu-cfg/onigirazu/internal/bridge"
+
 	"github.com/onigirazu-cfg/onigirazu/internal/secrets"
 
 	"gopkg.in/yaml.v3"
@@ -86,6 +88,9 @@ type Config struct {
 	// relative entries start at the config file
 	RolesPath       []string `yaml:"roles_path" json:"roles_path"`
 	CollectionsPath []string `yaml:"collections_path" json:"collections_path"`
+
+	// AnsibleBridge lists the modules that run through ansible-core
+	AnsibleBridge bridge.Config `yaml:"ansible_bridge" json:"ansible_bridge"`
 
 	// ManagedState is where each playbook's managed state lives
 	ManagedState ManagedStateConfig `yaml:"managed_state" json:"managed_state"`
