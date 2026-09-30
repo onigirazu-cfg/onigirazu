@@ -438,6 +438,9 @@ to change. Secrets become variables with an example file. See <a href="docs/IMPO
 </tr>
 </tbody>
 </table>
+<p>Any other Ansible module (a collection module, <code>win_*</code> on WinRM hosts) runs through an installed
+ansible-core when <code>ansible_bridge</code> in <code>onigirazu.yml</code> allows it: see
+<a href="docs/ANSIBLE_BRIDGE.md">docs/ANSIBLE_BRIDGE.md</a>.</p>
 <p>Modules compare the host with the task first and report <code>changed</code> only when they changed
 something (<code>command</code> and <code>shell</code> always do, unless <code>changed_when</code>, <code>creates</code> or <code>removes</code> say
 otherwise). Arguments,
