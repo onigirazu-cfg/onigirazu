@@ -172,6 +172,7 @@ YAML is read as Ansible reads it: unquoted `yes`/`no`/`on`/`off` values are bool
   `onigirazu inventory --list --json` prints what `ansible-inventory --list` prints
 - **Connection variables**: `ansible_host`, `ansible_port`, `ansible_user`,
   `ansible_password`, `ansible_ssh_private_key_file`, `ansible_become_password`,
+  `ansible_connection: winrm` with `ansible_winrm_*` (NTLM, message encryption, https),
   `ansible_ssh_common_args`/`ansible_ssh_extra_args` (`ConnectTimeout`, `ProxyJump`/`-J`,
   `ProxyCommand`, `StrictHostKeyChecking=no`), `ansible_connection` `local`, `docker`, `podman`;
   templated values and `-e` overrides
@@ -396,6 +397,7 @@ to change. Secrets become variables with an example file. See [docs/IMPORT.md](d
 | Containers | `docker_container`, `docker_image`, `docker_compose` (v1 and v2), `docker_host_info`, `podman` |
 | Databases | `mysql_db`, `mysql_user`, `postgresql_db`, `postgresql_user`, `mongodb` |
 | Source control | `git` |
+| Windows (WinRM) | `win_ping`, `win_command`, `win_shell`; facts (`ansible_os_family: Windows`, ...) |
 | Flow and data | `debug`, `assert`, `fail`, `set_fact`, `include_vars`, `setup`/`gather_facts`, `pause`, `ping`, `meta`, `async_status`, `include_role`/`import_role` |
 
 Any other Ansible module (a collection module, `win_*` on WinRM hosts) runs through an installed
