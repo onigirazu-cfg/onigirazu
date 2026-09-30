@@ -121,6 +121,7 @@ All 61 built-in modules, alphabetically. `include_role`/`import_role` and `setup
 - **[win_file / win_copy / win_service / win_timezone](README.md#win_file-win_copy-win_service-win_timezone)** - Files, services and time zone on Windows
 - **[win_firewall_rule / win_firewall / win_group_membership / win_feature / win_reboot](README.md#win_firewall_rule-win_firewall-win_group_membership-win_feature-win_reboot)** - Firewall, groups, features, reboots on Windows
 - **[win_scheduled_task / win_chocolatey](README.md#win_scheduled_task-win_chocolatey)** - Scheduled tasks and Chocolatey packages
+- **[win_optional_feature and the disk modules](README.md#win_optional_feature-and-the-disk-modules)** - Optional features, disks, partitions, volumes
 
 ## By Category
 
