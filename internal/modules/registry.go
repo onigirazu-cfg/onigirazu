@@ -81,6 +81,11 @@ func NewRegistry() *Registry {
 	registry.RegisterModule(NewWinRebootModule())
 	registry.RegisterModule(NewWinScheduledTaskModule())
 	registry.RegisterModule(NewWinChocolateyModule())
+	registry.RegisterModule(NewWinOptionalFeatureModule())
+	registry.RegisterModule(NewWinDiskFactsModule())
+	registry.RegisterModule(NewWinInitializeDiskModule())
+	registry.RegisterModule(NewWinPartitionModule())
+	registry.RegisterModule(NewWinFormatModule())
 	registry.RegisterModule(NewAsyncStatusModule())
 	registry.RegisterModule(NewGetentModule())
 	registry.RegisterModule(NewHostnameModule())
@@ -318,6 +323,7 @@ var checkModeModules = map[string]bool{
 	"hostname": true, "ini_file": true, "pip": true, "ufw": true,
 	"win_regedit": true, "win_powershell": true, "win_file": true, "win_copy": true, "win_service": true, "win_timezone": true,
 	"win_firewall_rule": true, "win_firewall": true, "win_group_membership": true, "win_feature": true, "win_reboot": true, "win_scheduled_task": true, "win_chocolatey": true,
+	"win_optional_feature": true, "win_disk_facts": true, "win_initialize_disk": true, "win_partition": true, "win_format": true,
 }
 
 // dataArgModules take their arguments as data whose types are kept:

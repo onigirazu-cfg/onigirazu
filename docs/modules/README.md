@@ -1966,6 +1966,22 @@ Both support check mode.
   `package_params`. Chocolatey is installed first when missing. Returns `results` per package and
   `reboot_required` (exit codes 1641/3010).
 
+### win_optional_feature and the disk modules
+
+All support check mode. Facts a module returns in `ansible_facts` become host variables.
+
+- `win_optional_feature`: `name` (one or a list), `state`, `include_parent`, `source`; returns
+  `reboot_required`.
+- `win_disk_facts`: `ansible_facts.ansible_disks` (`number`, `size`, `partition_style`, `partition_count`,
+  `bus_type`, `friendly_name`, `partitions`, ...).
+- `win_initialize_disk`: `disk_number`, `uniqueid` or `path`; `style` gpt/mbr; `online`; `force` converts an
+  initialized disk only when it has no partitions.
+- `win_partition`: `drive_letter`, `disk_number`, `partition_number`, `partition_size` (-1 for all free
+  space, bytes, or `10 GiB`/`10 GB`), `state`; resizes when the size differs by more than 1 MiB.
+- `win_format`: `drive_letter`, `path` or `label`; `file_system` (ntfs, refs, exfat, fat32, fat),
+  `new_label`, `allocation_unit_size`, `full`, `force`. A volume with a file system is formatted again
+  only with `force`; without it a different file system is an error and only the label is set.
+
 ### async_status
 
 Status of a task started with `async` and `poll: 0`. While the job runs: `started: true`,

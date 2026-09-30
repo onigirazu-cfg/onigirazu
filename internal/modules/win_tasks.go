@@ -75,7 +75,7 @@ func winScheduledTaskScript(_ context.Context, _ *winrm.Client, args map[string]
 			}
 			triggers = append(triggers, map[string]interface{}{"type": typ,
 				"start_boundary": getStringArg(m, "start_boundary", ""), "days_of_week": days,
-				"days_interval": getStringArg(m, "days_interval", ""), "weeks_interval": getStringArg(m, "weeks_interval", ""),
+				"days_interval": anyArg(m, "days_interval"), "weeks_interval": anyArg(m, "weeks_interval"),
 				"user": getStringArg(m, "user_id", ""), "enabled": enabled})
 		}
 	}

@@ -1389,6 +1389,15 @@ func (e *ExecutionEngine) finishTask(task *types.Task, host *types.Host, result 
 			}
 		}
 	}
+	// facts a module returns (win_disk_facts, bridged *_facts modules)
+	// become host variables, as in Ansible
+	if !real.Failed {
+		if facts, ok := real.Output["ansible_facts"].(map[string]interface{}); ok {
+			for key, value := range facts {
+				e.setHostVar(host.Name, key, value)
+			}
+		}
+	}
 
 	// Notify observers of task completion
 	e.notifyTaskEnd(&result)
