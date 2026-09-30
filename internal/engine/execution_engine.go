@@ -1156,6 +1156,7 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 		Environment:  environment,
 		Diff:         e.showDiff,
 		Capture:      e.adopt,
+		NoLog:        task.NoLog,
 	}
 
 	// async with poll: 0 starts the task in the background; async_status

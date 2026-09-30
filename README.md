@@ -400,6 +400,10 @@ to change. Secrets become variables with an example file. See [docs/IMPORT.md](d
 | Windows (WinRM) | `win_ping`, `win_command`, `win_shell`; facts (`ansible_os_family: Windows`, ...) |
 | Flow and data | `debug`, `assert`, `fail`, `set_fact`, `include_vars`, `setup`/`gather_facts`, `pause`, `ping`, `meta`, `async_status`, `include_role`/`import_role` |
 
+Any other Ansible module (a collection module, `win_*` on WinRM hosts) runs through an installed
+ansible-core when `ansible_bridge` in `onigirazu.yml` allows it: see
+[docs/ANSIBLE_BRIDGE.md](docs/ANSIBLE_BRIDGE.md).
+
 Modules compare the host with the task first and report `changed` only when they changed
 something (`command` and `shell` always do, unless `changed_when`, `creates` or `removes` say
 otherwise). Arguments,

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/onigirazu-cfg/onigirazu/internal/bridge"
 	"github.com/onigirazu-cfg/onigirazu/internal/winrm"
 
 	"github.com/onigirazu-cfg/onigirazu/internal/interfaces"
@@ -195,6 +196,9 @@ func (r *Registry) ExecuteTask(ctx context.Context, task *types.Task, host types
 			Error: winModuleError(task.Module), Timestamp: time.Now()}, nil
 	}
 	if err != nil {
+		if bridge.Allowed(task.Module) {
+			return runBridged(ctx, task, host), nil
+		}
 		return types.TaskResult{}, err
 	}
 
@@ -374,4 +378,18 @@ func resolveDynamicAction(task *types.Task) (*types.Task, error) {
 	}
 	types.CanonicalArgs(resolved.Module, resolved.Args)
 	return &resolved, nil
+}
+
+// runBridged runs a module onigirazu lacks through ansible-core
+func runBridged(ctx context.Context, task *types.Task, host types.Host) types.TaskResult {
+	env := make(map[string]interface{}, len(task.Environment))
+	for k, v := range task.Environment {
+		env[k] = v
+	}
+	return bridge.Run(ctx, bridge.Task{
+		Name: task.Name, Module: task.Module, Args: task.Args,
+		Check: task.CheckMode != nil && *task.CheckMode, Diff: task.Diff,
+		Become: task.Become, BecomeUser: task.BecomeUser, BecomeMethod: task.BecomeMethod,
+		NoLog: task.NoLog, Environment: env,
+	}, host)
 }
