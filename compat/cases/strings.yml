@@ -17,3 +17,6 @@
     - debug: {msg: "{{ '%s=%s' | format('k', 'v') }} {{ 'x' | center(5) }}|{{ '5' | int * 2 }}"}
     - debug: {msg: "{{ ver is version('20.04', '>=') }} {{ ver is version('22.10', '<') }}"}
     - debug: {msg: "{{ '  a  b ' | split | list }} {{ 'a\nb'.splitlines() }}"}
+    - debug: {msg: "{% raw %}{{ not_rendered }} {% if x %}{% endraw %} {{ 1 + 1 }}"}
+    - file: {path: /root/compat, state: directory}
+    - copy: {dest: /root/compat/raw.txt, content: "a {% raw %}{{b}}{% endraw %} c\n"}
