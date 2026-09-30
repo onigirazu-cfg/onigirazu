@@ -218,6 +218,7 @@ formats can be used side by side. Examples: <a href="docs/examples/README.md">do
   <code>onigirazu inventory --list --json</code> prints what <code>ansible-inventory --list</code> prints</li>
 <li><strong>Connection variables</strong>: <code>ansible_host</code>, <code>ansible_port</code>, <code>ansible_user</code>,
   <code>ansible_password</code>, <code>ansible_ssh_private_key_file</code>, <code>ansible_become_password</code>,
+  <code>ansible_connection: winrm</code> with <code>ansible_winrm_*</code> (NTLM, message encryption, https),
   <code>ansible_ssh_common_args</code>/<code>ansible_ssh_extra_args</code> (<code>ConnectTimeout</code>, <code>ProxyJump</code>/<code>-J</code>,
   <code>ProxyCommand</code>, <code>StrictHostKeyChecking=no</code>), <code>ansible_connection</code> <code>local</code>, <code>docker</code>, <code>podman</code>;
   templated values and <code>-e</code> overrides</li>
@@ -431,6 +432,10 @@ to change. Secrets become variables with an example file. See <a href="docs/IMPO
 <tr>
 <td>Source control</td>
 <td><code>git</code></td>
+</tr>
+<tr>
+<td>Windows (WinRM)</td>
+<td><code>win_ping</code>, <code>win_command</code>, <code>win_shell</code>; facts (<code>ansible_os_family: Windows</code>, ...)</td>
 </tr>
 <tr>
 <td>Flow and data</td>
