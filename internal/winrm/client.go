@@ -229,3 +229,41 @@ func For(host types.Host) (*Client, error) {
 	pool[key] = c
 	return c, nil
 }
+
+// uploadChunk is the size of one piece of an upload: WinRM envelopes are
+// limited (MaxEnvelopeSizekb, 500 KiB by default) and base64 grows data by
+// a third
+const uploadChunk = 128 * 1024
+
+// Upload writes data to a temporary file on the host piece by piece and
+// returns its path; the caller moves or removes it
+func (c *Client) Upload(ctx context.Context, data []byte) (string, error) {
+	res, err := c.RunPS(ctx, "$p = [IO.Path]::GetTempFileName(); Write-Output $p")
+	if err != nil {
+		return "", err
+	}
+	if res.ExitCode != 0 {
+		return "", fmt.Errorf("temporary file: %s", strings.TrimSpace(res.Stderr))
+	}
+	path := strings.TrimSpace(res.Stdout)
+	for off := 0; off < len(data) || off == 0; off += uploadChunk {
+		end := off + uploadChunk
+		if end > len(data) {
+			end = len(data)
+		}
+		chunk := base64.StdEncoding.EncodeToString(data[off:end])
+		script := fmt.Sprintf("$b = [Convert]::FromBase64String('%s'); $f = [IO.File]::Open('%s', 'Append'); $f.Write($b, 0, $b.Length); $f.Close()",
+			chunk, strings.ReplaceAll(path, "'", "''"))
+		res, err := c.RunPS(ctx, script)
+		if err != nil {
+			return "", err
+		}
+		if res.ExitCode != 0 {
+			return "", fmt.Errorf("upload: %s", strings.TrimSpace(res.Stderr))
+		}
+		if len(data) == 0 {
+			break
+		}
+	}
+	return path, nil
+}

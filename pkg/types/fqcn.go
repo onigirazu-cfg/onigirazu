@@ -26,6 +26,10 @@ var collectionModules = map[string]string{
 	"ansible.windows.win_shell":            "win_shell",
 	"ansible.windows.win_powershell":       "win_powershell",
 	"ansible.windows.win_regedit":          "win_regedit",
+	"ansible.windows.win_file":             "win_file",
+	"ansible.windows.win_copy":             "win_copy",
+	"ansible.windows.win_service":          "win_service",
+	"community.windows.win_timezone":       "win_timezone",
 }
 
 // ShortModuleName turns ansible.builtin.copy into copy; other names are

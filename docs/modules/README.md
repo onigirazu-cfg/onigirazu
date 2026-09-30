@@ -1919,6 +1919,19 @@ Returns `data_changed`, `data_type_changed`, `old_data`, `old_type`.
     type: dword
 ```
 
+### win_file, win_copy, win_service, win_timezone
+
+All support check mode.
+
+- `win_file`: `path`, `state` `file` (must exist), `directory`, `touch`, `absent` (recursive).
+- `win_copy`: `dest` and `content`, or `src` (a file on the control machine, uploaded in pieces of
+  128 KiB; `remote_src: true` copies a file on the host). Compares SHA1 first; `force: false` keeps an
+  existing file. A directory `dest` gets the source file name. Returns `checksum`, `size`, `dest`.
+- `win_service`: `name`, `state` (`started`, `stopped`, `restarted`, `paused`), `start_mode` (`auto`,
+  `delayed`, `manual`, `disabled`). Returns `exists`, `state`, `start_mode`, `display_name`.
+- `win_timezone`: `timezone` (a Windows id such as `UTC` or `W. Europe Standard Time`). Returns
+  `previous_timezone`.
+
 ### async_status
 
 Status of a task started with `async` and `poll: 0`. While the job runs: `started: true`,
