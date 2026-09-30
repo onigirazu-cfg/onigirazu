@@ -397,7 +397,7 @@ to change. Secrets become variables with an example file. See [docs/IMPORT.md](d
 | Containers | `docker_container`, `docker_image`, `docker_compose` (v1 and v2), `docker_host_info`, `podman` |
 | Databases | `mysql_db`, `mysql_user`, `postgresql_db`, `postgresql_user`, `mongodb` |
 | Source control | `git` |
-| Windows (WinRM) | `win_ping`, `win_command`, `win_shell`; facts (`ansible_os_family: Windows`, ...) |
+| Windows (WinRM) | `win_ping`, `win_command`, `win_shell`, `win_powershell`, `win_regedit`; facts (`ansible_os_family: Windows`, ...) |
 | Flow and data | `debug`, `assert`, `fail`, `set_fact`, `include_vars`, `setup`/`gather_facts`, `pause`, `ping`, `meta`, `async_status`, `include_role`/`import_role` |
 
 Any other Ansible module (a collection module, `win_*` on WinRM hosts) runs through an installed
