@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
@@ -140,4 +141,30 @@ func Host(name, address string, port int) types.Host {
 	return types.Host{Name: name, Address: address, Port: port, User: "admin", Password: "secret",
 		Vars: map[string]interface{}{"ansible_connection": "winrm", "ansible_winrm_transport": "basic",
 			"ansible_winrm_scheme": "http", "ansible_winrm_message_encryption": "never"}}
+}
+
+// PwshHandler runs the PowerShell commands the client sends with a real
+// PowerShell: pwsh is the command line that starts it (such as
+// "pwsh" or "docker run --rm -i mcr.microsoft.com/powershell pwsh")
+func PwshHandler(pwsh string) func(command, stdin string) (string, string, int) {
+	return func(command, stdin string) (string, string, int) {
+		i := strings.LastIndex(command, "-EncodedCommand ")
+		if i < 0 {
+			return "", "not a PowerShell command: " + command, 1
+		}
+		argv := append(strings.Fields(pwsh), "-NoProfile", "-NonInteractive", "-EncodedCommand",
+			strings.TrimSpace(command[i+len("-EncodedCommand "):]))
+		cmd := exec.Command(argv[0], argv[1:]...) // #nosec G204 -- test helper
+		cmd.Stdin = strings.NewReader(stdin)
+		var out, errOut strings.Builder
+		cmd.Stdout, cmd.Stderr = &out, &errOut
+		err := cmd.Run()
+		code := 0
+		if exit, ok := err.(*exec.ExitError); ok {
+			code = exit.ExitCode()
+		} else if err != nil {
+			return "", err.Error(), 1
+		}
+		return out.String(), errOut.String(), code
+	}
 }

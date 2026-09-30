@@ -68,6 +68,12 @@ func NewRegistry() *Registry {
 	registry.RegisterModule(NewWinPingModule())
 	registry.RegisterModule(NewWinCommandModule())
 	registry.RegisterModule(NewWinShellModule())
+	registry.RegisterModule(NewWinPowerShellModule())
+	registry.RegisterModule(NewWinRegeditModule())
+	registry.RegisterModule(NewWinFileModule())
+	registry.RegisterModule(NewWinCopyModule())
+	registry.RegisterModule(NewWinServiceModule())
+	registry.RegisterModule(NewWinTimezoneModule())
 	registry.RegisterModule(NewAsyncStatusModule())
 	registry.RegisterModule(NewGetentModule())
 	registry.RegisterModule(NewHostnameModule())
@@ -303,6 +309,7 @@ var checkModeModules = map[string]bool{
 	"cron": true, "sysctl": true, "get_url": true, "git": true, "systemd": true,
 	"mount": true, "config": true, "replace": true, "timezone": true, "unarchive": true, "apt_repository": true, "apt_key": true, "docker_container": true, "podman": true, "docker_image": true,
 	"hostname": true, "ini_file": true, "pip": true, "ufw": true,
+	"win_regedit": true, "win_powershell": true, "win_file": true, "win_copy": true, "win_service": true, "win_timezone": true,
 }
 
 // dataArgModules take their arguments as data whose types are kept:
