@@ -66,6 +66,7 @@ var moduleArgs = map[string][]string{
 	"win_command":      {"chdir", "cmd", "creates", "data", "executable", "removes", "stdin"},
 	"win_ping":         {"chdir", "cmd", "creates", "data", "executable", "removes", "stdin"},
 	"win_powershell":   {"chdir", "creates", "depth", "error_action", "parameters", "removes", "script"},
+	"win_reboot":       {"msg", "test_command"},
 	"win_regedit":      {"data", "delete_key", "key", "name", "path", "state", "type"},
 	"win_shell":        {"chdir", "cmd", "creates", "data", "executable", "removes", "stdin"},
 	"yum":              {"disablerepo", "enablerepo", "name", "security", "state", "update_cache"},
