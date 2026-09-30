@@ -115,6 +115,8 @@ All 61 built-in modules, alphabetically. `include_role`/`import_role` and `setup
 
 - **[yum](README.md#yum)** - Manage packages on RedHat/CentOS/Fedora systems using yum
 
+- **[win_ping / win_command / win_shell](README.md#win_ping-win_command-win_shell)** - Windows hosts over WinRM
+
 ## By Category
 
 - **Commands**: [command](README.md#command), [shell](README.md#shell), [script](README.md#script)

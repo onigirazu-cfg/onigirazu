@@ -1847,6 +1847,28 @@ A new database is created with a `_init` collection. An existing user is not cha
 
 ## Utility Modules
 
+### win_ping, win_command, win_shell
+
+Windows hosts are reached over WinRM (`ansible_connection: winrm`, see
+[INVENTORY_FORMATS.md](../INVENTORY_FORMATS.md)). Linux modules fail there with a hint; `debug`,
+`set_fact`, `assert`, `fail`, `meta`, `include_vars`, `pause` work as everywhere. `become` is not
+supported on WinRM hosts yet.
+
+- `win_ping`: runs PowerShell; returns `ping` (`data`, default `pong`).
+- `win_command`: a command line (`cmd` or the free form), with `chdir`, `creates`, `removes`, `stdin`.
+- `win_shell`: a PowerShell script of any length (`executable: cmd` runs it through cmd.exe), with
+  `chdir`, `creates`, `removes`, `stdin`.
+
+Both return `rc`, `stdout`, `stderr`, `stdout_lines`, `stderr_lines`, report changed, fail on a non-zero
+exit code and are skipped in check mode unless `creates`/`removes` decide.
+
+```yaml
+- ansible.windows.win_shell: Get-Service W32Time | Select-Object -Expand Status
+  register: w32time
+- win_command: w32tm /resync
+  when: w32time.stdout_lines[0] == "Running"
+```
+
 ### async_status
 
 Status of a task started with `async` and `poll: 0`. While the job runs: `started: true`,

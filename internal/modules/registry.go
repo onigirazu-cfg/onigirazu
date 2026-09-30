@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/onigirazu-cfg/onigirazu/internal/winrm"
+
 	"github.com/onigirazu-cfg/onigirazu/internal/interfaces"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
@@ -62,6 +64,9 @@ func NewRegistry() *Registry {
 	registry.RegisterModule(NewSetupModule("setup"))
 	registry.RegisterModule(NewSetupModule("gather_facts"))
 	registry.RegisterModule(NewSlurpModule())
+	registry.RegisterModule(NewWinPingModule())
+	registry.RegisterModule(NewWinCommandModule())
+	registry.RegisterModule(NewWinShellModule())
 	registry.RegisterModule(NewAsyncStatusModule())
 	registry.RegisterModule(NewGetentModule())
 	registry.RegisterModule(NewHostnameModule())
@@ -183,6 +188,12 @@ func (r *Registry) ExecuteTask(ctx context.Context, task *types.Task, host types
 		task = resolved
 	}
 	module, err := r.GetModule(task.Module)
+	// a built-in Linux module on a Windows host; modules onigirazu lacks
+	// may still go through the bridge
+	if err == nil && winrm.IsWinRM(host) && !windowsSafe[task.Module] && !strings.HasPrefix(task.Module, "win_") {
+		return types.TaskResult{TaskName: task.Name, Host: host.Name, Module: task.Module, Failed: true,
+			Error: winModuleError(task.Module), Timestamp: time.Now()}, nil
+	}
 	if err != nil {
 		return types.TaskResult{}, err
 	}

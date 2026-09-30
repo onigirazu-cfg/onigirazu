@@ -21,6 +21,9 @@ var collectionModules = map[string]string{
 	"community.mysql.mysql_user":           "mysql_user",
 	"community.postgresql.postgresql_db":   "postgresql_db",
 	"community.postgresql.postgresql_user": "postgresql_user",
+	"ansible.windows.win_ping":             "win_ping",
+	"ansible.windows.win_command":          "win_command",
+	"ansible.windows.win_shell":            "win_shell",
 }
 
 // ShortModuleName turns ansible.builtin.copy into copy; other names are

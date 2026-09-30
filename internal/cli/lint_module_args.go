@@ -63,5 +63,8 @@ var moduleArgs = map[string][]string{
 	"uri":              {"body", "body_format", "headers", "method", "password", "return_content", "status_code", "timeout", "url", "user", "validate_certs"},
 	"user":             {"append", "comment", "create_home", "gid", "group", "groups", "home", "move_home", "name", "password", "remove", "shell", "state", "system", "uid"},
 	"wait_for":         {"delay", "host", "path", "port", "search_regex", "state", "timeout"},
+	"win_command":      {"chdir", "cmd", "creates", "data", "executable", "removes", "stdin"},
+	"win_ping":         {"chdir", "cmd", "creates", "data", "executable", "removes", "stdin"},
+	"win_shell":        {"chdir", "cmd", "creates", "data", "executable", "removes", "stdin"},
 	"yum":              {"disablerepo", "enablerepo", "name", "security", "state", "update_cache"},
 }

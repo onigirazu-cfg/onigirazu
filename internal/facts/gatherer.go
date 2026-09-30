@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/onigirazu-cfg/onigirazu/internal/winrm"
+
 	"github.com/onigirazu-cfg/onigirazu/internal/cache"
 	"github.com/onigirazu-cfg/onigirazu/internal/ssh"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
@@ -71,6 +73,14 @@ func (g *Gatherer) Regather(ctx context.Context, host types.Host, factPath strin
 }
 
 func (g *Gatherer) gather(ctx context.Context, host types.Host, factPath string) (*cache.SystemFacts, error) {
+	if winrm.IsWinRM(host) {
+		facts, err := gatherWindows(ctx, host)
+		if err != nil {
+			return nil, err
+		}
+		g.cache.Set(host.Name, facts)
+		return facts, nil
+	}
 	var client commandRunner = localRunner{}
 	if runtime, name, ok := ssh.Container(host); ok {
 		client = containerRunner{runtime: runtime, name: name, user: host.User}
