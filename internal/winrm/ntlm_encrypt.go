@@ -2,6 +2,8 @@ package winrm
 
 import (
 	"bytes"
+	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -82,7 +84,7 @@ func (e *encryptedNTLM) authenticate() error {
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Content-Type", "application/soap+xml;charset=UTF-8")
+	req.Header.Set("Content-Type", soapContentType)
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("NTLM authentication: %w", err)
@@ -97,6 +99,40 @@ func (e *encryptedNTLM) authenticate() error {
 	return nil
 }
 
+// seal turns a SOAP message into the encrypted MIME body and its
+// Content-Type
+func (e *encryptedNTLM) seal(message []byte) ([]byte, string, error) {
+	session := e.ntlm.SecuritySession()
+	if session == nil {
+		return nil, "", errors.New("no NTLM security session")
+	}
+	sealed, signature, err := session.Wrap(message)
+	if err != nil {
+		return nil, "", err
+	}
+	length := make([]byte, 4)
+	binary.LittleEndian.PutUint32(length, uint32(len(signature))) // #nosec G115 -- an NTLM signature is 16 bytes
+	return ntlmhttp.Wrap(bytes.Join([][]byte{length, signature, sealed}, nil), soapContentType)
+}
+
+// unseal returns the SOAP message of an encrypted answer
+func (e *encryptedNTLM) unseal(body []byte, contentType string) ([]byte, error) {
+	data, _, err := ntlmhttp.Unwrap(body, contentType)
+	if err != nil {
+		return nil, err
+	}
+	if len(data) < 4 {
+		return nil, errors.New("encrypted answer too short")
+	}
+	n := int(binary.LittleEndian.Uint32(data[:4]))
+	if n > len(data)-4 {
+		return nil, errors.New("encrypted answer: bad signature length")
+	}
+	return e.ntlm.SecuritySession().Unwrap(data[4+n:], data[4:4+n])
+}
+
+const soapContentType = "application/soap+xml;charset=UTF-8"
+
 // Post sends one sealed SOAP message and returns the unsealed answer
 func (e *encryptedNTLM) Post(_ *winrm.Client, request *soap.SoapMessage) (string, error) {
 	e.mu.Lock()
@@ -107,17 +143,24 @@ func (e *encryptedNTLM) Post(_ *winrm.Client, request *soap.SoapMessage) (string
 				return "", err
 			}
 		}
-		req, err := http.NewRequest(http.MethodPost, e.url, bytes.NewBufferString(request.String())) //nolint:noctx // bounded by the transport's timeouts
+		body, contentType, err := e.seal([]byte(request.String()))
+		if err != nil {
+			e.client = nil
+			return "", err
+		}
+		req, err := http.NewRequest(http.MethodPost, e.url, bytes.NewReader(body)) //nolint:noctx // bounded by the transport's timeouts
 		if err != nil {
 			return "", err
 		}
-		req.Header.Set("Content-Type", "application/soap+xml;charset=UTF-8")
-		resp, err := e.client.Do(req)
+		req.Header.Set("Content-Type", contentType)
+		// the same keep-alive connection as the handshake: NTLM
+		// authenticates connections
+		resp, err := e.httpc.Do(req)
 		if err != nil {
 			e.client = nil // the sealing state is unknown now
 			return "", fmt.Errorf("unknown error %w", err)
 		}
-		body, err := io.ReadAll(resp.Body)
+		answer, err := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
 		if err != nil {
 			e.client = nil
@@ -128,9 +171,17 @@ func (e *encryptedNTLM) Post(_ *winrm.Client, request *soap.SoapMessage) (string
 			e.client = nil
 			continue
 		}
-		if resp.StatusCode != http.StatusOK {
-			return "", fmt.Errorf("http error %d: %s", resp.StatusCode, body)
+		if ct := resp.Header.Get("Content-Type"); strings.HasPrefix(ct, "multipart/encrypted") {
+			// the reply's Content-Type may differ in spelling from the
+			// one Wrap writes; Unwrap compares it exactly
+			if answer, err = e.unseal(answer, contentType); err != nil {
+				e.client = nil
+				return "", fmt.Errorf("decrypting the answer: %w", err)
+			}
 		}
-		return string(body), nil
+		if resp.StatusCode != http.StatusOK {
+			return "", fmt.Errorf("http error %d: %s", resp.StatusCode, answer)
+		}
+		return string(answer), nil
 	}
 }
