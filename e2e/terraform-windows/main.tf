@@ -81,6 +81,8 @@ resource "vsphere_virtual_machine" "vm" {
     # the local administrator e2e, generated for this run only
     "guestinfo.e2e_password"   = var.e2e_password
     "guestinfo.e2e_allow_from" = var.allow_from
+    # an administrator key for OpenSSH
+    "guestinfo.e2e_authorized_key" = var.public_key
   }
 
   network_interface {

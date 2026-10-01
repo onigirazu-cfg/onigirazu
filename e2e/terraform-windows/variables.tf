@@ -44,6 +44,11 @@ variable "e2e_password" {
   sensitive   = true
 }
 
+variable "public_key" {
+  description = "One-time SSH public key for the e2e administrator"
+  type        = string
+}
+
 variable "allow_from" {
   description = "Addresses WinRM accepts (Windows firewall syntax)"
   type        = string

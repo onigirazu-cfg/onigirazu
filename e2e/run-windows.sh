@@ -20,6 +20,7 @@ TF_DIR="$HERE/terraform-windows"
 WORK="$(mktemp -d -t onigirazu-e2e.XXXXXX)"
 BIN="$WORK/onigirazu"
 INVENTORY="$WORK/inventory.yml"
+KEY="$WORK/id_e2e"
 RESULTS="$WORK/results.tsv"
 TFVARS="$WORK/run.tfvars.json"
 touch "$RESULTS"
@@ -72,6 +73,7 @@ log "Building onigirazu"
 umask 077
 PASSWORD="$(head -c 48 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 24)Aa1-"
 [ "${#PASSWORD}" -ge 20 ] || die "could not generate a password"
+ssh-keygen -q -t ed25519 -N '' -C "onigirazu-e2e-$RUN_ID" -f "$KEY"
 
 log "Creating the Windows VM (run $RUN_ID)"
 for try in 1 2 3; do
@@ -80,7 +82,8 @@ for try in 1 2 3; do
   sleep 15
 done
 jq -n --arg run_id "$RUN_ID" --arg run_url "$RUN_URL" --argjson images "$images_json" --arg pw "$PASSWORD" \
-  '{run_id: $run_id, run_url: $run_url, images: $images, e2e_password: $pw}' > "$TFVARS"
+  --arg key "$(cat "$KEY.pub")" \
+  '{run_id: $run_id, run_url: $run_url, images: $images, e2e_password: $pw, public_key: $key}' > "$TFVARS"
 terraform -chdir="$TF_DIR" apply -auto-approve -input=false -var-file="$TFVARS" >/dev/null || die "terraform apply failed"
 hosts_json="$(terraform -chdir="$TF_DIR" output -json hosts)"
 if [ -n "${GITHUB_ACTIONS:-}" ]; then
@@ -88,7 +91,8 @@ if [ -n "${GITHUB_ACTIONS:-}" ]; then
 fi
 
 # windows: NTLM with message encryption over http, as ClanRed connects;
-# https: the same host over the https listener
+# https: the same host over the https listener; ssh: over OpenSSH
+export ONIGIRAZU_SSH_KNOWN_HOSTS_FILE="$WORK/known_hosts"
 {
   echo "all:"
   echo "  vars:"
@@ -103,11 +107,14 @@ fi
   echo "    https:"
   echo "      hosts:"
   jq -r 'to_entries[] | "        \(.key)-https:\n          ansible_host: \(.value)\n          ansible_port: 5986\n          ansible_winrm_scheme: https\n          ansible_winrm_server_cert_validation: ignore"' <<<"$hosts_json"
+  echo "    ssh:"
+  echo "      hosts:"
+  jq -r --arg key "$KEY" 'to_entries[] | "        \(.key)-ssh:\n          ansible_host: \(.value)\n          ansible_connection: ssh\n          ansible_shell_type: powershell\n          ansible_port: 22\n          ansible_ssh_private_key_file: \($key)"' <<<"$hosts_json"
 } > "$INVENTORY"
 
 log "Waiting for WinRM (first boot creates the e2e account)"
 cat > "$WORK/ping.yml" <<'EOF'
-- hosts: all
+- hosts: windows:https
   gather_facts: false
   tasks:
     - win_ping:
@@ -118,7 +125,7 @@ for _ in $(seq 90); do
 done
 "$BIN" apply "$WORK/ping.yml" -i "$INVENTORY" --state "$WORK/ping-state" --no-color >"$WORK/ping.log" 2>&1 ||
   { tail -20 "$WORK/ping.log"; die "no WinRM access as e2e"; }
-echo "WinRM ready (http with NTLM encryption, https)"
+echo "WinRM ready (http with NTLM encryption, https, ssh)"
 
 records() {
   jq -c -R 'split("{\"timestamp\"")[1:][] | ("{\"timestamp\"" + .) | sub("}[^}]*$"; "}") | fromjson?' "$WORK/apply.log"
