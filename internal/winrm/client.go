@@ -135,11 +135,9 @@ func Connect(s Settings) (*Client, error) {
 	encrypt := s.Transport == "ntlm" && (s.Encryption == "always" || (s.Encryption == "auto" && !s.HTTPS))
 	switch {
 	case encrypt:
-		enc, err := winrm.NewEncryption("ntlm")
-		if err != nil {
-			return nil, err
+		params.TransportDecorator = func() winrm.Transporter {
+			return &encryptedNTLM{user: s.User, password: s.Password}
 		}
-		params.TransportDecorator = func() winrm.Transporter { return enc }
 	case s.Transport == "ntlm":
 		params.TransportDecorator = func() winrm.Transporter { return &winrm.ClientNTLM{} }
 	}
