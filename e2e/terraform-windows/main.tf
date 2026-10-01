@@ -1,0 +1,113 @@
+terraform {
+  required_version = ">= 1.6"
+  required_providers {
+    vsphere = {
+      source  = "vmware/vsphere"
+      version = "~> 2.16"
+    }
+  }
+}
+
+provider "vsphere" {
+  vsphere_server       = var.vsphere_server
+  user                 = var.vsphere_user
+  password             = var.vsphere_password
+  allow_unverified_ssl = true
+}
+
+data "vsphere_datacenter" "dc" {
+  name = var.datacenter
+}
+
+data "vsphere_compute_cluster" "cluster" {
+  name          = var.cluster
+  datacenter_id = data.vsphere_datacenter.dc.id
+}
+
+data "vsphere_host" "host" {
+  name          = var.host
+  datacenter_id = data.vsphere_datacenter.dc.id
+}
+
+data "vsphere_datastore" "ds" {
+  name          = var.datastore
+  datacenter_id = data.vsphere_datacenter.dc.id
+}
+
+data "vsphere_network" "net" {
+  name          = var.network
+  datacenter_id = data.vsphere_datacenter.dc.id
+}
+
+# Every content library VM template is backed by an inventory template of the
+# same name. Cloning that one uses the SOAP API; the library deploy endpoint
+# answered 403 with the same privileges.
+data "vsphere_virtual_machine" "template" {
+  for_each      = var.images
+  name          = each.value
+  datacenter_id = data.vsphere_datacenter.dc.id
+}
+
+locals {
+  expires = timeadd(plantimestamp(), "${var.ttl_hours}h")
+}
+
+resource "vsphere_virtual_machine" "vm" {
+  for_each = var.images
+
+  # tmp- prefix and the folder mark these VMs as disposable; the janitor
+  # deletes anything in the folder with this prefix once it is past its TTL
+  name             = "tmp-e2e-onigirazu-${var.run_id}-${each.key}"
+  folder           = var.folder
+  resource_pool_id = data.vsphere_compute_cluster.cluster.resource_pool_id
+  host_system_id   = data.vsphere_host.host.id
+  datastore_id     = data.vsphere_datastore.ds.id
+
+  num_cpus  = var.cpus
+  memory    = var.memory_mb
+  guest_id  = data.vsphere_virtual_machine.template[each.key].guest_id
+  firmware  = data.vsphere_virtual_machine.template[each.key].firmware
+  scsi_type = data.vsphere_virtual_machine.template[each.key].scsi_type
+
+  annotation = join("\n", [
+    "TEMPORARY - onigirazu e2e test VM, deleted automatically.",
+    "Run: ${var.run_url}",
+    "Created: ${plantimestamp()}",
+    "Safe to delete after: ${local.expires}",
+  ])
+
+  extra_config = {
+    # Read once by the image's e2e-access task on first boot: the password of
+    # the local administrator e2e, generated for this run only
+    "guestinfo.e2e_password"   = var.e2e_password
+    "guestinfo.e2e_allow_from" = var.allow_from
+  }
+
+  network_interface {
+    network_id   = data.vsphere_network.net.id
+    adapter_type = "vmxnet3"
+  }
+
+  disk {
+    label            = "disk0"
+    size             = data.vsphere_virtual_machine.template[each.key].disks[0].size
+    thin_provisioned = true
+    eagerly_scrub    = false
+  }
+
+  # no guest customization: the image is not sysprepped and takes DHCP
+  clone {
+    template_uuid = data.vsphere_virtual_machine.template[each.key].id
+    timeout       = 60
+  }
+
+  wait_for_guest_net_timeout = 20
+
+  lifecycle {
+    ignore_changes = [annotation]
+  }
+}
+
+output "hosts" {
+  value = { for k, vm in vsphere_virtual_machine.vm : k => vm.default_ip_address }
+}

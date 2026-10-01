@@ -1,0 +1,14 @@
+- hosts: windows
+  gather_facts: false
+  tasks:
+    - win_powershell:
+        script: |
+          $Ansible.Changed = $false
+          $s = Get-CimInstance Win32_Service -Filter "Name='W32Time'"
+          $Ansible.Result = @{ mode = "$($s.StartMode)"; state = "$($s.State)"; tz = (Get-TimeZone).Id }
+      register: v
+    - assert:
+        that:
+          - v.result.mode == 'Manual'
+          - v.result.state == 'Running'
+          - v.result.tz == 'W. Europe Standard Time'

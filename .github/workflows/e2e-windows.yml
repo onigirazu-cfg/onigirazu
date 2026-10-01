@@ -1,0 +1,92 @@
+name: E2E Windows
+
+# The Windows modules on a disposable Windows VM cloned from the golden image:
+# for pull requests from this repository that touch the WinRM code, the
+# Windows modules or these tests, by hand, and nightly after the image rebuild.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'internal/winrm/**'
+      - 'internal/modules/win_*'
+      - 'internal/modules/windows*'
+      - 'internal/facts/windows*'
+      - 'e2e/run-windows.sh'
+      - 'e2e/cases-windows/**'
+      - 'e2e/terraform-windows/**'
+      - '.github/workflows/e2e-windows.yml'
+  workflow_dispatch:
+    inputs:
+      cases:
+        description: 'Case directories to run, space separated (empty = all)'
+        required: false
+        type: string
+        default: ''
+      keep_vms:
+        description: 'Keep the VM for debugging (the janitor still removes it after 3h)'
+        required: false
+        type: boolean
+        default: false
+  schedule:
+    - cron: '0 6 * * *'   # after the 01:00 image rebuild (Windows takes hours)
+
+permissions:
+  contents: read
+
+jobs:
+  e2e-windows:
+    if: >-
+      github.event_name != 'pull_request' ||
+      (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]')
+    runs-on: [self-hosted, vsphere-e2e]
+    timeout-minutes: 120
+    concurrency:
+      group: e2e-windows-${{ github.ref }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+    env:
+      GOVC_VERSION: v0.56.0
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      # releases.hashicorp.com drops connections now and then: one retry
+      - uses: hashicorp/setup-terraform@v4
+        id: terraform
+        continue-on-error: true
+        with:
+          terraform_wrapper: false
+      - uses: hashicorp/setup-terraform@v4
+        if: steps.terraform.outcome == 'failure'
+        with:
+          terraform_wrapper: false
+
+      - name: Install govc
+        run: |
+          dir="$RUNNER_TEMP/govc-$GOVC_VERSION"
+          if [ ! -x "$dir/govc" ]; then
+            mkdir -p "$dir"
+            curl -fsSL "https://github.com/vmware/govmomi/releases/download/$GOVC_VERSION/govc_Linux_x86_64.tar.gz" | tar -xz -C "$dir" govc
+          fi
+          echo "$dir" >> "$GITHUB_PATH"
+
+      - name: Run Windows e2e
+        env:
+          TF_VAR_vsphere_server: ${{ secrets.VSPHERE_SERVER }}
+          TF_VAR_vsphere_user: ${{ secrets.VSPHERE_USER }}
+          TF_VAR_vsphere_password: ${{ secrets.VSPHERE_PASSWORD }}
+          TF_VAR_datacenter: ${{ secrets.E2E_DATACENTER }}
+          TF_VAR_cluster: ${{ secrets.E2E_CLUSTER }}
+          TF_VAR_host: ${{ secrets.E2E_HOST }}
+          TF_VAR_datastore: ${{ secrets.E2E_DATASTORE }}
+          TF_VAR_network: ${{ secrets.E2E_NETWORK }}
+          TF_VAR_folder: ${{ secrets.E2E_FOLDER }}
+          TF_VAR_library: ${{ secrets.E2E_LIBRARY }}
+          RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          E2E_CASES: ${{ inputs.cases }}
+          KEEP_VMS: ${{ inputs.keep_vms && '1' || '' }}
+        run: e2e/run-windows.sh

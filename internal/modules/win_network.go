@@ -91,7 +91,15 @@ func winFirewallRuleScript(_ context.Context, _ *winrm.Client, args map[string]i
 	return fmt.Sprintf(`$name = %s; $group = %s; $state = %s; $enabled = %s
 $want = [ordered]@{ Action = %s; Direction = %s; Protocol = %s; LocalPort = %s; RemotePort = %s; LocalAddress = %s; RemoteAddress = %s; Program = %s; Service = %s; Profile = %s; Description = %s }
 $r = [ordered]@{ changed = $false }
-function Norm($v) { @($v | ForEach-Object { "$_" } | Where-Object { $_ -ne '' } | ForEach-Object { if ($_ -eq 'any') { 'Any' } else { $_ } } | Sort-Object) -join ',' }
+# Windows keeps 10.0.0.0/8 as 10.0.0.0/255.0.0.0 and a /32 as the bare address
+function Cidr($s) {
+  if ($s -notmatch '^(\d+\.\d+\.\d+\.\d+)/(\d{1,2})$') { return $s }
+  $bits = [int]$Matches[2]
+  if ($bits -eq 32) { return $Matches[1] }
+  $mask = 0..3 | ForEach-Object { 256 - [Math]::Pow(2, 8 - [Math]::Min(8, [Math]::Max(0, $bits - 8 * $_))) }
+  return "$($Matches[1])/$($mask -join '.')"
+}
+function Norm($v) { @($v | ForEach-Object { "$_" } | Where-Object { $_ -ne '' } | ForEach-Object { if ($_ -eq 'any') { 'Any' } else { Cidr $_ } } | Sort-Object) -join ',' }
 if (-not $name) {
   # a group: turn every rule of it on or off
   $rules = @(Get-NetFirewallRule -DisplayGroup $group -ErrorAction SilentlyContinue)

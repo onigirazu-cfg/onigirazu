@@ -1,0 +1,14 @@
+- hosts: windows
+  gather_facts: false
+  tasks:
+    - community.windows.win_firewall_rule:
+        name: onigirazu e2e
+        localport: "8530,8531"
+        remoteip: 10.0.0.0/8
+        action: allow
+        direction: in
+        protocol: tcp
+        profiles: [domain, private]
+        enabled: true
+    - win_firewall_rule: {group: Remote Desktop, enabled: true}
+    - win_firewall: {state: enabled, profiles: [Domain, Private, Public]}

@@ -1,0 +1,11 @@
+- hosts: windows
+  gather_facts: false
+  tasks:
+    - win_powershell:
+        script: |
+          $Ansible.Changed = $false
+          $Ansible.Result = @{ telnet = (Get-WindowsFeature Windows-Server-Backup).Installed
+            smb1 = "$((Get-WindowsOptionalFeature -Online -FeatureName SMB1Protocol).State)" }
+      register: v
+    - assert:
+        that: [v.result.telnet, "v.result.smb1 != 'Enabled'"]

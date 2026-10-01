@@ -1,0 +1,17 @@
+- hosts: windows
+  gather_facts: false
+  tasks:
+    - win_powershell:
+        script: |
+          $Ansible.Changed = $false
+          $r = Get-NetFirewallRule -DisplayName 'onigirazu e2e'
+          $p = $r | Get-NetFirewallPortFilter
+          $Ansible.Result = @{ ports = @($p.LocalPort | Sort-Object); proto = "$($p.Protocol)"; profile = "$($r.Profile)"
+            rdp = @(Get-NetFirewallRule -DisplayGroup 'Remote Desktop' | Where-Object Enabled -ne 'True').Count }
+      register: v
+    - assert:
+        that:
+          - v.result.ports == ['8530', '8531']
+          - v.result.proto == 'TCP'
+          - "'Domain' in v.result.profile and 'Private' in v.result.profile"
+          - v.result.rdp == 0

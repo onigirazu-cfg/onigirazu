@@ -1,0 +1,5 @@
+- hosts: windows
+  gather_facts: false
+  tasks:
+    - win_service: {name: W32Time, start_mode: manual, state: started}
+    - win_timezone: {timezone: "W. Europe Standard Time"}

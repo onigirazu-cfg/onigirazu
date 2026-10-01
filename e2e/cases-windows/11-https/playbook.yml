@@ -1,0 +1,9 @@
+- hosts: https
+  gather_facts: false
+  tasks:
+    - win_ping:
+    - win_shell: $PSVersionTable.PSVersion.Major
+      register: v
+      changed_when: false
+    - assert:
+        that: [v.stdout | trim | int >= 5]
