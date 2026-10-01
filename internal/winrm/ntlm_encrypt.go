@@ -11,7 +11,6 @@ import (
 	"net/http/cookiejar"
 	"regexp"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/bodgit/ntlmssp"
@@ -24,19 +23,14 @@ import (
 // "application/HTTP-SPNEGO-session-encrypted" body pywinrm and Ansible send
 // over http). Unlike the library's own Encryption it never falls back to
 // unencrypted messages, which a server with AllowUnencrypted=false refuses
-// with a bare 401, and it says why authentication failed.
+// with a bare 401, and it says why authentication or a request failed.
 type encryptedNTLM struct {
 	user, password string
-
-	mu       sync.Mutex // NTLM sealing numbers messages: one at a time
-	url      string
-	httpc    *http.Client
-	client   *ntlmhttp.Client
-	ntlm     *ntlmssp.Client
-	endpoint *winrm.Endpoint
+	url            string
+	endpoint       *winrm.Endpoint
 }
 
-// Transport prepares the HTTP client for the endpoint
+// Transport records the endpoint
 func (e *encryptedNTLM) Transport(endpoint *winrm.Endpoint) error {
 	scheme := "http"
 	if endpoint.HTTPS {
@@ -44,17 +38,29 @@ func (e *encryptedNTLM) Transport(endpoint *winrm.Endpoint) error {
 	}
 	e.url = fmt.Sprintf("%s://%s/wsman", scheme, net.JoinHostPort(endpoint.Host, fmt.Sprint(endpoint.Port)))
 	e.endpoint = endpoint
+	return nil
+}
+
+// connection is one TCP connection with its NTLM session. The library sends
+// stdin while it polls for output, so every message gets its own connection
+// and handshake (as the library's own Encryption does): a shared sealed
+// connection would queue a Send behind a Receive that waits for its input.
+type connection struct {
+	httpc *http.Client
+	ntlm  *ntlmssp.Client
+}
+
+func (e *encryptedNTLM) newHTTPClient() *http.Client {
 	jar, _ := cookiejar.New(nil)
-	e.httpc = &http.Client{
+	return &http.Client{
 		Jar: jar,
 		Transport: &http.Transport{
 			Proxy:                 http.ProxyFromEnvironment,
 			DialContext:           (&net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
-			ResponseHeaderTimeout: endpoint.Timeout,
-			MaxIdleConnsPerHost:   1,
+			ResponseHeaderTimeout: e.endpoint.Timeout + 30*time.Second,
+			MaxConnsPerHost:       1,
 		},
 	}
-	return nil
 }
 
 // splitUser reads DOMAIN\user and user@domain
@@ -70,41 +76,43 @@ func splitUser(u string) (user, domain string) {
 
 // authenticate runs the NTLM handshake with an empty message, as pywinrm
 // does, so later messages can be sealed
-func (e *encryptedNTLM) authenticate() error {
+func (e *encryptedNTLM) authenticate() (*connection, error) {
 	user, domain := splitUser(e.user)
 	ntlmClient, err := ntlmssp.NewClient(ntlmssp.SetUserInfo(user, e.password), ntlmssp.SetDomain(domain),
 		ntlmssp.SetVersion(ntlmssp.DefaultVersion()))
 	if err != nil {
-		return err
+		return nil, err
 	}
-	client, err := ntlmhttp.NewClient(e.httpc, ntlmClient, ntlmhttp.Encryption(true))
+	httpc := e.newHTTPClient()
+	client, err := ntlmhttp.NewClient(httpc, ntlmClient, ntlmhttp.Encryption(true))
 	if err != nil {
-		return err
+		return nil, err
 	}
 	req, err := http.NewRequest(http.MethodPost, e.url, nil) //nolint:noctx // bounded by the transport's timeouts
 	if err != nil {
-		return err
+		return nil, err
 	}
 	req.Header.Set("Content-Type", soapContentType)
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("NTLM authentication: %w", err)
+		httpc.CloseIdleConnections()
+		return nil, fmt.Errorf("NTLM authentication: %w", err)
 	}
 	_, _ = io.Copy(io.Discard, resp.Body)
 	_ = resp.Body.Close()
 	if !ntlmClient.Complete() || resp.StatusCode == http.StatusUnauthorized {
-		return fmt.Errorf("NTLM authentication failed: HTTP %d, server offers %q (wrong user or password, or Negotiate off)",
+		httpc.CloseIdleConnections()
+		return nil, fmt.Errorf("NTLM authentication failed: HTTP %d, server offers %q (wrong user or password, or Negotiate off)",
 			resp.StatusCode, strings.Join(resp.Header.Values("WWW-Authenticate"), ", "))
 	}
-	e.client, e.ntlm = client, ntlmClient
-	return nil
+	return &connection{httpc: httpc, ntlm: ntlmClient}, nil
 }
 
 // seal turns a SOAP message into the encrypted MIME body pywinrm sends:
 // OriginalContent carries the length of the plain message (bodgit's own
 // Wrap writes the sealed length, which Windows answers with 400)
-func (e *encryptedNTLM) seal(message []byte) ([]byte, string, error) {
-	session := e.ntlm.SecuritySession()
+func (c *connection) seal(message []byte) ([]byte, string, error) {
+	session := c.ntlm.SecuritySession()
 	if session == nil {
 		return nil, "", errors.New("no NTLM security session")
 	}
@@ -136,7 +144,7 @@ const (
 )
 
 // unseal returns the SOAP message of an encrypted answer
-func (e *encryptedNTLM) unseal(body []byte, contentType string) ([]byte, error) {
+func (c *connection) unseal(body []byte, contentType string) ([]byte, error) {
 	data, _, err := ntlmhttp.Unwrap(body, contentType)
 	if err != nil {
 		return nil, err
@@ -148,65 +156,52 @@ func (e *encryptedNTLM) unseal(body []byte, contentType string) ([]byte, error) 
 	if n > len(data)-4 {
 		return nil, errors.New("encrypted answer: bad signature length")
 	}
-	return e.ntlm.SecuritySession().Unwrap(data[4+n:], data[4:4+n])
+	return c.ntlm.SecuritySession().Unwrap(data[4+n:], data[4:4+n])
 }
 
 const soapContentType = "application/soap+xml;charset=UTF-8"
 
-// Post sends one sealed SOAP message and returns the unsealed answer
+// Post sends one sealed SOAP message on its own authenticated connection
+// and returns the unsealed answer
 func (e *encryptedNTLM) Post(_ *winrm.Client, request *soap.SoapMessage) (string, error) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	for attempt := 0; ; attempt++ {
-		if e.client == nil {
-			if err := e.authenticate(); err != nil {
-				return "", err
-			}
-		}
-		body, contentType, err := e.seal([]byte(request.String()))
-		if err != nil {
-			e.client = nil
-			return "", err
-		}
-		req, err := http.NewRequest(http.MethodPost, e.url, bytes.NewReader(body)) //nolint:noctx // bounded by the transport's timeouts
-		if err != nil {
-			return "", err
-		}
-		req.Header.Set("Content-Type", contentType)
-		// the same keep-alive connection as the handshake: NTLM
-		// authenticates connections
-		resp, err := e.httpc.Do(req)
-		if err != nil {
-			e.client = nil // the sealing state is unknown now
-			return "", fmt.Errorf("unknown error %w", err)
-		}
-		answer, err := io.ReadAll(resp.Body)
-		_ = resp.Body.Close()
-		if err != nil {
-			e.client = nil
-			return "", err
-		}
-		// a new connection lost the NTLM context: authenticate again once
-		if resp.StatusCode == http.StatusUnauthorized && attempt == 0 {
-			e.client = nil
-			continue
-		}
-		if ct := resp.Header.Get("Content-Type"); strings.HasPrefix(ct, "multipart/encrypted") {
-			// the reply's Content-Type may differ in spelling from the
-			// one Wrap writes; Unwrap compares it exactly
-			if answer, err = e.unseal(answer, contentType); err != nil {
-				e.client = nil
-				return "", fmt.Errorf("decrypting the answer: %w", err)
-			}
-		}
-		if resp.StatusCode != http.StatusOK {
-			// the fault's reason first; the body stays for the library,
-			// which looks for "OperationTimeout" in it
-			return "", fmt.Errorf("http error %d: %s (%s, %d bytes sent): %s", resp.StatusCode, faultReason(answer),
-				soapAction(request.String()), len(body), answer)
-		}
-		return string(answer), nil
+	conn, err := e.authenticate()
+	if err != nil {
+		return "", err
 	}
+	defer conn.httpc.CloseIdleConnections()
+	body, contentType, err := conn.seal([]byte(request.String()))
+	if err != nil {
+		return "", err
+	}
+	req, err := http.NewRequest(http.MethodPost, e.url, bytes.NewReader(body)) //nolint:noctx // bounded by the transport's timeouts
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", contentType)
+	// the handshake's keep-alive connection: NTLM authenticates connections
+	resp, err := conn.httpc.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("unknown error %w", err)
+	}
+	answer, err := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if err != nil {
+		return "", err
+	}
+	if ct := resp.Header.Get("Content-Type"); strings.HasPrefix(ct, "multipart/encrypted") {
+		// the reply's Content-Type may differ in spelling from the one we
+		// send; Unwrap compares it exactly
+		if answer, err = conn.unseal(answer, contentType); err != nil {
+			return "", fmt.Errorf("decrypting the answer: %w", err)
+		}
+	}
+	if resp.StatusCode != http.StatusOK {
+		// the fault's reason first; the body stays for the library, which
+		// looks for "OperationTimeout" in it
+		return "", fmt.Errorf("http error %d: %s (%s, %d bytes sent): %s", resp.StatusCode, faultReason(answer),
+			soapAction(request.String()), len(body), answer)
+	}
+	return string(answer), nil
 }
 
 var faultText = regexp.MustCompile(`(?s)<(?:s:Text|f:Message)[^>]*>(.*?)</(?:s:Text|f:Message)>`)
