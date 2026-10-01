@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/cookiejar"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -199,8 +200,27 @@ func (e *encryptedNTLM) Post(_ *winrm.Client, request *soap.SoapMessage) (string
 			}
 		}
 		if resp.StatusCode != http.StatusOK {
-			return "", fmt.Errorf("http error %d: %s", resp.StatusCode, answer)
+			// the fault's reason first; the body stays for the library,
+			// which looks for "OperationTimeout" in it
+			return "", fmt.Errorf("http error %d: %s: %s", resp.StatusCode, faultReason(answer), answer)
 		}
 		return string(answer), nil
 	}
+}
+
+var faultText = regexp.MustCompile(`(?s)<(?:s:Text|f:Message)[^>]*>(.*?)</(?:s:Text|f:Message)>`)
+
+// faultReason is the human text of a WS-Management fault
+func faultReason(body []byte) string {
+	var parts []string
+	for _, m := range faultText.FindAllSubmatch(body, -1) {
+		t := strings.TrimSpace(regexp.MustCompile(`<[^>]+>`).ReplaceAllString(string(m[1]), " "))
+		if t != "" && !strings.Contains(strings.Join(parts, " "), t) {
+			parts = append(parts, t)
+		}
+	}
+	if len(parts) == 0 {
+		return "WS-Management fault"
+	}
+	return strings.Join(parts, " | ")
 }

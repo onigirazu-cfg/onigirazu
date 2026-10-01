@@ -127,7 +127,7 @@ done
   # the task errors say why (refused, 401, encryption)
   jq -R -r 'split("{\"timestamp\"")[1:][] | ("{\"timestamp\"" + .) | sub("}[^}]*$"; "}") | fromjson? |
     select(.fields.type == "task_end" and .fields.success != true) | "\(.fields.host): \(.fields.msg // .message)"' "$WORK/ping.log" |
-    sed -E 's/[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/<ip>/g' | cut -c1-600 | sort -u
+    sed -E 's/[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/<ip>/g' | cut -c1-1500 | sort -u
   die "no WinRM access as e2e"
 }
 echo "WinRM ready (http with NTLM encryption, https, ssh)"

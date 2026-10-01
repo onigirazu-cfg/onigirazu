@@ -67,3 +67,10 @@ func TestMimeBody(t *testing.T) {
 		t.Errorf("Unwrap = %q, %v", got, err)
 	}
 }
+
+func TestFaultReason(t *testing.T) {
+	body := []byte(`<s:Envelope><s:Body><s:Fault><s:Reason><s:Text xml:lang="en-US">The WS-Management service cannot process the request. </s:Text></s:Reason><s:Detail><f:WSManFault Code="1"><f:Message><f:ProviderFault>Access is denied. </f:ProviderFault></f:Message></f:WSManFault></s:Detail></s:Fault></s:Body></s:Envelope>`)
+	if got := faultReason(body); got != "The WS-Management service cannot process the request. | Access is denied." {
+		t.Errorf("faultReason = %q", got)
+	}
+}
