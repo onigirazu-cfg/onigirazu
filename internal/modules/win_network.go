@@ -40,7 +40,7 @@ func NewWinFirewallRuleModule() types.Module {
 	return newWinJSONModule("win_firewall_rule", "Manage Windows Firewall rules", winFirewallRuleScript)
 }
 
-func winFirewallRuleScript(_ context.Context, _ *winrm.Client, args map[string]interface{}) (string, error) {
+func winFirewallRuleScript(_ context.Context, _ winrm.Runner, args map[string]interface{}) (string, error) {
 	name := getStringArg(args, "name", "")
 	group := getStringArg(args, "group", "")
 	if name == "" && group == "" {
@@ -157,7 +157,7 @@ func NewWinFirewallModule() types.Module {
 	return newWinJSONModule("win_firewall", "Turn Windows Firewall profiles on or off", winFirewallScript)
 }
 
-func winFirewallScript(_ context.Context, _ *winrm.Client, args map[string]interface{}) (string, error) {
+func winFirewallScript(_ context.Context, _ winrm.Runner, args map[string]interface{}) (string, error) {
 	state := getStringArg(args, "state", "")
 	if state != "" && state != "enabled" && state != "disabled" {
 		return "", fmt.Errorf("state must be enabled or disabled")
@@ -192,7 +192,7 @@ func NewWinGroupMembershipModule() types.Module {
 	return newWinJSONModule("win_group_membership", "Manage the members of a local Windows group", winGroupMembershipScript)
 }
 
-func winGroupMembershipScript(_ context.Context, _ *winrm.Client, args map[string]interface{}) (string, error) {
+func winGroupMembershipScript(_ context.Context, _ winrm.Runner, args map[string]interface{}) (string, error) {
 	name := getStringArg(args, "name", "")
 	if name == "" {
 		return "", fmt.Errorf("win_group_membership needs name")
@@ -237,7 +237,7 @@ func NewWinFeatureModule() types.Module {
 	return newWinJSONModule("win_feature", "Install or remove Windows Server roles and features", winFeatureScript)
 }
 
-func winFeatureScript(_ context.Context, _ *winrm.Client, args map[string]interface{}) (string, error) {
+func winFeatureScript(_ context.Context, _ winrm.Runner, args map[string]interface{}) (string, error) {
 	if args["name"] == nil {
 		return "", fmt.Errorf("win_feature needs name")
 	}

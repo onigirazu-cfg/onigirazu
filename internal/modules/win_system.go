@@ -20,7 +20,7 @@ type winJSONModule struct {
 	description string
 	// script builds the PowerShell, or fails on bad arguments; c is for
 	// modules that upload first
-	script func(ctx context.Context, c *winrm.Client, args map[string]interface{}) (string, error)
+	script func(ctx context.Context, c winrm.Runner, args map[string]interface{}) (string, error)
 }
 
 func (m *winJSONModule) GetDescription() string { return m.description }
@@ -68,7 +68,7 @@ func (m *winJSONModule) Execute(ctx context.Context, host types.Host, args map[s
 	return res, nil
 }
 
-func newWinJSONModule(name, description string, script func(context.Context, *winrm.Client, map[string]interface{}) (string, error)) *winJSONModule {
+func newWinJSONModule(name, description string, script func(context.Context, winrm.Runner, map[string]interface{}) (string, error)) *winJSONModule {
 	return &winJSONModule{BaseModule: NewBaseModule(name), description: description, script: script}
 }
 
@@ -77,7 +77,7 @@ func NewWinFileModule() types.Module {
 	return newWinJSONModule("win_file", "Create or remove files and directories on a Windows host", winFileScript)
 }
 
-func winFileScript(_ context.Context, _ *winrm.Client, args map[string]interface{}) (string, error) {
+func winFileScript(_ context.Context, _ winrm.Runner, args map[string]interface{}) (string, error) {
 	path := getStringArg(args, "path", getStringArg(args, "dest", ""))
 	if path == "" {
 		return "", fmt.Errorf("win_file needs path")
@@ -115,7 +115,7 @@ func NewWinCopyModule() types.Module {
 	return newWinJSONModule("win_copy", "Copy a file or content to a Windows host", winCopyScript)
 }
 
-func winCopyScript(ctx context.Context, c *winrm.Client, args map[string]interface{}) (string, error) {
+func winCopyScript(ctx context.Context, c winrm.Runner, args map[string]interface{}) (string, error) {
 	dest := getStringArg(args, "dest", "")
 	if dest == "" {
 		return "", fmt.Errorf("win_copy needs dest")
@@ -206,7 +206,7 @@ func NewWinServiceModule() types.Module {
 	return newWinJSONModule("win_service", "Manage Windows services", winServiceScript)
 }
 
-func winServiceScript(_ context.Context, _ *winrm.Client, args map[string]interface{}) (string, error) {
+func winServiceScript(_ context.Context, _ winrm.Runner, args map[string]interface{}) (string, error) {
 	name := getStringArg(args, "name", "")
 	if name == "" {
 		return "", fmt.Errorf("win_service needs name")
@@ -254,7 +254,7 @@ func NewWinTimezoneModule() types.Module {
 	return newWinJSONModule("win_timezone", "Set the time zone of a Windows host", winTimezoneScript)
 }
 
-func winTimezoneScript(_ context.Context, _ *winrm.Client, args map[string]interface{}) (string, error) {
+func winTimezoneScript(_ context.Context, _ winrm.Runner, args map[string]interface{}) (string, error) {
 	tz := getStringArg(args, "timezone", "")
 	if tz == "" {
 		return "", fmt.Errorf("win_timezone needs timezone")

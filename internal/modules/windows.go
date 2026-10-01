@@ -45,7 +45,7 @@ func winEnvPrefix(host types.Host) string {
 	return b.String()
 }
 
-func winClient(host types.Host, args map[string]interface{}) (*winrm.Client, error) {
+func winClient(host types.Host, args map[string]interface{}) (winrm.Runner, error) {
 	if getBoolArg(args, "_become", false) {
 		return nil, fmt.Errorf("become is not supported on WinRM hosts yet")
 	}
@@ -66,7 +66,7 @@ func lines(s string) []interface{} {
 }
 
 // winSkip reports creates/removes that make a command unnecessary
-func winSkip(ctx context.Context, c *winrm.Client, args map[string]interface{}) (bool, string, error) {
+func winSkip(ctx context.Context, c winrm.Runner, args map[string]interface{}) (bool, string, error) {
 	for _, key := range []string{"creates", "removes"} {
 		path := getStringArg(args, key, "")
 		if path == "" {
@@ -213,7 +213,7 @@ func (m *WinCommandModule) Execute(ctx context.Context, host types.Host, args ma
 
 // run runs cmd: win_shell as a PowerShell script (or through executable),
 // win_command as a command line
-func (m *WinCommandModule) run(ctx context.Context, c *winrm.Client, host types.Host, args map[string]interface{}, cmd string) (winrm.Result, error) {
+func (m *WinCommandModule) run(ctx context.Context, c winrm.Runner, host types.Host, args map[string]interface{}, cmd string) (winrm.Result, error) {
 	chdir := getStringArg(args, "chdir", "")
 	stdin := getStringArg(args, "stdin", "")
 	executable := getStringArg(args, "executable", "")

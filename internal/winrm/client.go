@@ -183,10 +183,11 @@ func EncodedCommand(script string) string {
 		base64.StdEncoding.EncodeToString([]byte(enc))
 }
 
+func b64(s string) string { return base64.StdEncoding.EncodeToString([]byte(s)) }
+
 // RunPS runs a PowerShell script
 func (c *Client) RunPS(ctx context.Context, script string) (Result, error) {
-	stdin := base64.StdEncoding.EncodeToString([]byte(script))
-	out, errOut, code, err := c.c.RunWithContextWithString(ctx, EncodedCommand(bootstrap), stdin)
+	out, errOut, code, err := c.c.RunWithContextWithString(ctx, EncodedCommand(bootstrap), b64(script))
 	return Result{Stdout: out, Stderr: cleanCLIXML(errOut), ExitCode: code}, err
 }
 
@@ -210,8 +211,12 @@ var (
 	pool   = map[string]*Client{}
 )
 
-// For returns the client of a host, one per host and settings
-func For(host types.Host) (*Client, error) {
+// For returns how to run commands on a Windows host: its WinRM client (one
+// per host and settings) or, for ansible_shell_type powershell/cmd, SSH
+func For(host types.Host) (Runner, error) {
+	if !IsWinRM(host) && IsWindowsSSH(host) {
+		return &sshRunner{host: host}, nil
+	}
 	s, err := SettingsFor(host)
 	if err != nil {
 		return nil, err
@@ -235,9 +240,14 @@ func For(host types.Host) (*Client, error) {
 // a third
 const uploadChunk = 128 * 1024
 
-// Upload writes data to a temporary file on the host piece by piece and
-// returns its path; the caller moves or removes it
+// Upload writes data to a temporary file on the host
 func (c *Client) Upload(ctx context.Context, data []byte) (string, error) {
+	return upload(ctx, c, data)
+}
+
+// upload writes data to a temporary file on the host piece by piece and
+// returns its path; the caller moves or removes it
+func upload(ctx context.Context, c Runner, data []byte) (string, error) {
 	res, err := c.RunPS(ctx, "$p = [IO.Path]::GetTempFileName(); Write-Output $p")
 	if err != nil {
 		return "", err
