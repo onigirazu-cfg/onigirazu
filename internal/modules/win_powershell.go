@@ -17,7 +17,7 @@ const winResultMarker = "@@ONIGIRAZU-RESULT@@"
 
 // runWinJSON runs a PowerShell script that prints its result as JSON
 // between winResultMarker lines and decodes it
-func runWinJSON(ctx context.Context, c *winrm.Client, script string) (map[string]interface{}, winrm.Result, error) {
+func runWinJSON(ctx context.Context, c winrm.Runner, script string) (map[string]interface{}, winrm.Result, error) {
 	res, err := c.RunPS(ctx, script)
 	if err != nil {
 		return nil, res, err
