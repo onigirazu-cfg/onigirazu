@@ -99,8 +99,9 @@ func (e *encryptedNTLM) authenticate() error {
 	return nil
 }
 
-// seal turns a SOAP message into the encrypted MIME body and its
-// Content-Type
+// seal turns a SOAP message into the encrypted MIME body pywinrm sends:
+// OriginalContent carries the length of the plain message (bodgit's own
+// Wrap writes the sealed length, which Windows answers with 400)
 func (e *encryptedNTLM) seal(message []byte) ([]byte, string, error) {
 	session := e.ntlm.SecuritySession()
 	if session == nil {
@@ -112,8 +113,26 @@ func (e *encryptedNTLM) seal(message []byte) ([]byte, string, error) {
 	}
 	length := make([]byte, 4)
 	binary.LittleEndian.PutUint32(length, uint32(len(signature))) // #nosec G115 -- an NTLM signature is 16 bytes
-	return ntlmhttp.Wrap(bytes.Join([][]byte{length, signature, sealed}, nil), soapContentType)
+	return mimeBody(len(message), bytes.Join([][]byte{length, signature, sealed}, nil)), encryptedContentType, nil
 }
+
+// mimeBody wraps the encrypted payload of a message of plainLength bytes
+func mimeBody(plainLength int, payload []byte) []byte {
+	var b bytes.Buffer
+	b.WriteString(mimeBoundary + "\r\n")
+	b.WriteString("\tContent-Type: application/HTTP-SPNEGO-session-encrypted\r\n")
+	fmt.Fprintf(&b, "\tOriginalContent: type=%s;Length=%d\r\n", soapContentType, plainLength)
+	b.WriteString(mimeBoundary + "\r\n")
+	b.WriteString("\tContent-Type: application/octet-stream\r\n")
+	b.Write(payload)
+	b.WriteString(mimeBoundary + "--\r\n")
+	return b.Bytes()
+}
+
+const (
+	mimeBoundary         = "--Encrypted Boundary"
+	encryptedContentType = `multipart/encrypted;protocol="application/HTTP-SPNEGO-session-encrypted";boundary="Encrypted Boundary"`
+)
 
 // unseal returns the SOAP message of an encrypted answer
 func (e *encryptedNTLM) unseal(body []byte, contentType string) ([]byte, error) {

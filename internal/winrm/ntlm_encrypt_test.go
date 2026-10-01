@@ -1,6 +1,8 @@
 package winrm
 
 import (
+	"bytes"
+
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -8,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	ntlmhttp "github.com/bodgit/ntlmssp/http"
 
 	"github.com/masterzen/winrm"
 	"github.com/masterzen/winrm/soap"
@@ -47,5 +51,19 @@ func TestEncryptedNTLMRefused(t *testing.T) {
 	}
 	if plain != 0 {
 		t.Errorf("%d unencrypted messages sent", plain)
+	}
+}
+
+// the body we send is what Windows (and bodgit's parser) read, with the
+// plain message's length in OriginalContent
+func TestMimeBody(t *testing.T) {
+	payload := []byte("\x10\x00\x00\x00signature-16byt" + "sealed\r\nbytes--")
+	body := mimeBody(1234, payload)
+	if !bytes.Contains(body, []byte("\tOriginalContent: type=application/soap+xml;charset=UTF-8;Length=1234\r\n")) {
+		t.Errorf("body:\n%q", body)
+	}
+	got, _, err := ntlmhttp.Unwrap(body, encryptedContentType)
+	if err != nil || !bytes.Equal(got, payload) {
+		t.Errorf("Unwrap = %q, %v", got, err)
 	}
 }
