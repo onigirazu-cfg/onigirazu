@@ -202,7 +202,8 @@ func (e *encryptedNTLM) Post(_ *winrm.Client, request *soap.SoapMessage) (string
 		if resp.StatusCode != http.StatusOK {
 			// the fault's reason first; the body stays for the library,
 			// which looks for "OperationTimeout" in it
-			return "", fmt.Errorf("http error %d: %s: %s", resp.StatusCode, faultReason(answer), answer)
+			return "", fmt.Errorf("http error %d: %s (%s, %d bytes sent): %s", resp.StatusCode, faultReason(answer),
+				soapAction(request.String()), len(body), answer)
 		}
 		return string(answer), nil
 	}
@@ -219,8 +220,25 @@ func faultReason(body []byte) string {
 			parts = append(parts, t)
 		}
 	}
+	if m := faultCode.FindSubmatch(body); m != nil {
+		parts = append(parts, "code "+string(m[1]))
+	}
 	if len(parts) == 0 {
 		return "WS-Management fault"
 	}
 	return strings.Join(parts, " | ")
+}
+
+var (
+	faultCode = regexp.MustCompile(`WSManFault[^>]*Code="(\d+)"`)
+	soapActRe = regexp.MustCompile(`<a:Action[^>]*>[^<]*/([A-Za-z]+)</a:Action>`)
+)
+
+// soapAction is the last part of a request's WS-Addressing action
+// (Create, Command, Send, Receive, Signal, Delete)
+func soapAction(message string) string {
+	if m := soapActRe.FindStringSubmatch(message); m != nil {
+		return m[1]
+	}
+	return "request"
 }
