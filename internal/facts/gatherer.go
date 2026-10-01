@@ -73,7 +73,7 @@ func (g *Gatherer) Regather(ctx context.Context, host types.Host, factPath strin
 }
 
 func (g *Gatherer) gather(ctx context.Context, host types.Host, factPath string) (*cache.SystemFacts, error) {
-	if winrm.IsWinRM(host) {
+	if winrm.IsWindows(host) {
 		facts, err := gatherWindows(ctx, host)
 		if err != nil {
 			return nil, err

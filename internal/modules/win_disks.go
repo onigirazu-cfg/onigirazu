@@ -16,7 +16,7 @@ func NewWinOptionalFeatureModule() types.Module {
 	return newWinJSONModule("win_optional_feature", "Enable or disable Windows optional features", winOptionalFeatureScript)
 }
 
-func winOptionalFeatureScript(_ context.Context, _ *winrm.Client, args map[string]interface{}) (string, error) {
+func winOptionalFeatureScript(_ context.Context, _ winrm.Runner, args map[string]interface{}) (string, error) {
 	if args["name"] == nil {
 		return "", fmt.Errorf("win_optional_feature needs name")
 	}
@@ -51,7 +51,7 @@ func NewWinDiskFactsModule() types.Module {
 	return newWinJSONModule("win_disk_facts", "Return the disks of a Windows host as ansible_disks", winDiskFactsScript)
 }
 
-func winDiskFactsScript(_ context.Context, _ *winrm.Client, _ map[string]interface{}) (string, error) {
+func winDiskFactsScript(_ context.Context, _ winrm.Runner, _ map[string]interface{}) (string, error) {
 	return `$disks = @(Get-Disk | Sort-Object Number | ForEach-Object {
   $d = $_
   $parts = @(Get-Partition -DiskNumber $d.Number -ErrorAction SilentlyContinue)
@@ -96,7 +96,7 @@ func diskSelector(args map[string]interface{}) (string, error) {
 	return "", fmt.Errorf("give disk_number, uniqueid or path")
 }
 
-func winInitializeDiskScript(_ context.Context, _ *winrm.Client, args map[string]interface{}) (string, error) {
+func winInitializeDiskScript(_ context.Context, _ winrm.Runner, args map[string]interface{}) (string, error) {
 	sel, err := diskSelector(args)
 	if err != nil {
 		return "", err
@@ -144,7 +144,7 @@ func partitionBytes(v interface{}) (int64, error) {
 	return int64(n * mult), nil
 }
 
-func winPartitionScript(_ context.Context, _ *winrm.Client, args map[string]interface{}) (string, error) {
+func winPartitionScript(_ context.Context, _ winrm.Runner, args map[string]interface{}) (string, error) {
 	state := getStringArg(args, "state", "present")
 	if state != "present" && state != "absent" {
 		return "", fmt.Errorf("state must be present or absent")
@@ -194,7 +194,7 @@ func NewWinFormatModule() types.Module {
 	return newWinJSONModule("win_format", "Format a volume", winFormatScript)
 }
 
-func winFormatScript(_ context.Context, _ *winrm.Client, args map[string]interface{}) (string, error) {
+func winFormatScript(_ context.Context, _ winrm.Runner, args map[string]interface{}) (string, error) {
 	letter := strings.TrimSuffix(strings.ToUpper(getStringArg(args, "drive_letter", "")), ":")
 	path := getStringArg(args, "path", "")
 	label := getStringArg(args, "label", "")

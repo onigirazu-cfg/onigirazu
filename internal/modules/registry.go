@@ -209,7 +209,7 @@ func (r *Registry) ExecuteTask(ctx context.Context, task *types.Task, host types
 	module, err := r.GetModule(task.Module)
 	// a built-in Linux module on a Windows host; modules onigirazu lacks
 	// may still go through the bridge
-	if err == nil && winrm.IsWinRM(host) && !windowsSafe[task.Module] && !strings.HasPrefix(task.Module, "win_") {
+	if err == nil && winrm.IsWindows(host) && !windowsSafe[task.Module] && !strings.HasPrefix(task.Module, "win_") {
 		return types.TaskResult{TaskName: task.Name, Host: host.Name, Module: task.Module, Failed: true,
 			Error: winModuleError(task.Module), Timestamp: time.Now()}, nil
 	}

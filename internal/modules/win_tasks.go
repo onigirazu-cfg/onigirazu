@@ -17,7 +17,7 @@ func NewWinScheduledTaskModule() types.Module {
 var taskTriggerTypes = map[string]bool{"daily": true, "weekly": true, "once": true, "time": true,
 	"boot": true, "logon": true, "registration": true}
 
-func winScheduledTaskScript(_ context.Context, _ *winrm.Client, args map[string]interface{}) (string, error) {
+func winScheduledTaskScript(_ context.Context, _ winrm.Runner, args map[string]interface{}) (string, error) {
 	name := getStringArg(args, "name", "")
 	if name == "" {
 		return "", fmt.Errorf("win_scheduled_task needs name")
@@ -173,7 +173,7 @@ func NewWinChocolateyModule() types.Module {
 	return newWinJSONModule("win_chocolatey", "Install, upgrade or remove Chocolatey packages", winChocolateyScript)
 }
 
-func winChocolateyScript(_ context.Context, _ *winrm.Client, args map[string]interface{}) (string, error) {
+func winChocolateyScript(_ context.Context, _ winrm.Runner, args map[string]interface{}) (string, error) {
 	if args["name"] == nil {
 		return "", fmt.Errorf("win_chocolatey needs name")
 	}

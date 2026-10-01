@@ -3,6 +3,8 @@ package winrm
 import (
 	"context"
 	"encoding/base64"
+	"fmt"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -127,4 +129,19 @@ func startFake(t *testing.T, f *winrmtest.Server) *Client {
 		t.Fatal(err)
 	}
 	return c
+}
+
+// the cmd.exe wrapper of the SSH runner is valid PowerShell
+func TestCmdScriptParses(t *testing.T) {
+	pwsh := os.Getenv("ONIGIRAZU_TEST_PWSH")
+	if pwsh == "" {
+		t.Skip("ONIGIRAZU_TEST_PWSH is not set")
+	}
+	c := startFake(t, &winrmtest.Server{Handle: winrmtest.PwshHandler(pwsh)})
+	script := fmt.Sprintf(cmdScript, psString(`set "A=1" && echo %A% 'x'`), psString("in"))
+	res, err := c.RunPS(context.Background(), "$e = $null\n[void][System.Management.Automation.Language.Parser]::ParseInput("+
+		psString(script)+", [ref]$null, [ref]$e)\n$e.Count")
+	if err != nil || strings.TrimSpace(res.Stdout) != "0" {
+		t.Errorf("parse: %+v %v", res, err)
+	}
 }

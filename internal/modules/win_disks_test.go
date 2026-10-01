@@ -20,7 +20,7 @@ func TestPartitionBytes(t *testing.T) {
 }
 
 func TestWinDiskArgs(t *testing.T) {
-	type builder func(context.Context, *winrm.Client, map[string]interface{}) (string, error)
+	type builder func(context.Context, winrm.Runner, map[string]interface{}) (string, error)
 	bad := []struct {
 		b    builder
 		args map[string]interface{}
@@ -52,7 +52,7 @@ func TestWinDiskArgs(t *testing.T) {
 // the wsus_disk role's scripts parse
 func TestWinDiskScriptsParse(t *testing.T) {
 	host := pwshHost(t)
-	type builder func(context.Context, *winrm.Client, map[string]interface{}) (string, error)
+	type builder func(context.Context, winrm.Runner, map[string]interface{}) (string, error)
 	cases := map[string]struct {
 		b    builder
 		args map[string]interface{}

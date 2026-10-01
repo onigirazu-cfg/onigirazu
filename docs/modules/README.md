@@ -1850,7 +1850,9 @@ A new database is created with a `_init` collection. An existing user is not cha
 ### win_ping, win_command, win_shell
 
 Windows hosts are reached over WinRM (`ansible_connection: winrm`, see
-[INVENTORY_FORMATS.md](../INVENTORY_FORMATS.md)). Linux modules fail there with a hint; `debug`,
+[INVENTORY_FORMATS.md](../INVENTORY_FORMATS.md)) or over OpenSSH (`ansible_connection: ssh` with
+`ansible_shell_type: powershell` or `cmd`, as in Ansible; every command runs as a powershell.exe
+command line, whatever the server's default shell). Linux modules fail there with a hint; `debug`,
 `set_fact`, `assert`, `fail`, `meta`, `include_vars`, `pause` work as everywhere. `become` is not
 supported on WinRM hosts yet.
 
