@@ -3,6 +3,7 @@ package winrm
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -143,5 +144,24 @@ func TestCmdScriptParses(t *testing.T) {
 		psString(script)+", [ref]$null, [ref]$e)\n$e.Count")
 	if err != nil || strings.TrimSpace(res.Stdout) != "0" {
 		t.Errorf("parse: %+v %v", res, err)
+	}
+}
+
+func TestRetryShell(t *testing.T) {
+	calls := 0
+	res, err := retryShell(context.Background(), func() (Result, error) {
+		calls++
+		if calls < 2 {
+			return Result{}, errors.New("http error 500: Illegal operation attempted on a registry key that has been marked for deletion.")
+		}
+		return Result{Stdout: "ok"}, nil
+	})
+	if err != nil || res.Stdout != "ok" || calls != 2 {
+		t.Errorf("retryShell = %+v, %v after %d calls", res, err, calls)
+	}
+	calls = 0
+	_, err = retryShell(context.Background(), func() (Result, error) { calls++; return Result{}, errors.New("access denied") })
+	if err == nil || calls != 1 {
+		t.Errorf("other errors are not retried: %d calls", calls)
 	}
 }

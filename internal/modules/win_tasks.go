@@ -147,6 +147,7 @@ if ($state -eq 'absent') {
     if (-not $user) { $want.user = $have.user; $want.logon = $have.logon }
     if (-not $description) { $want.description = $have.description }
     $diff = @($want.Keys | Where-Object { ($want[$_] -join '||') -ne ($have[$_] -join '||') })
+    $r.differences = @($diff | ForEach-Object { "$($_): registered [$($have[$_] -join '; ')] wanted [$($want[$_] -join '; ')]" })
   } else { $diff = @('task') }
   if ($diff) {
     $r.changed = $true; $r.changed_properties = $diff

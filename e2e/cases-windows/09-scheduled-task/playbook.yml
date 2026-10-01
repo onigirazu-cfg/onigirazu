@@ -44,5 +44,5 @@
       check_mode: true
       register: again
     - fail:
-        msg: "registered task differs from its definition: {{ again.changed_properties | default([]) }}"
+        msg: "registered task differs from its definition: {{ again.differences | default(again.changed_properties) }}"
       when: again is changed
