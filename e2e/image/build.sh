@@ -3,8 +3,10 @@
 # preinstalls what the cases need (prepare.sh), seals the VM (seal.sh) and turns
 # it into template e2e-base-<key>-<golden item>-<time> in the e2e folder. run.sh
 # with E2E_BASE=1 clones it while it matches the current golden item; the two
-# newest per key are kept.
-# Environment: as run.sh (TF_VAR_*, optional E2E_IMAGES, RUN_ID, RUN_URL).
+# newest per key are kept. The build VM is cloned with the storage policy
+# E2E_BASE_POLICY, so the base and every VM cloned from it are encrypted.
+# Environment: as run.sh (TF_VAR_*, optional E2E_IMAGES, RUN_ID, RUN_URL);
+# E2E_BASE_POLICY (default: vSphere's built-in "VM Encryption Policy", empty = none).
 # shellcheck disable=SC2154
 set -euo pipefail
 
@@ -17,6 +19,7 @@ TFVARS="$WORK/run.tfvars.json"
 RUN_ID="${RUN_ID:-local-$(date -u +%m%d%H%M)}-img"  # the janitor reads the run id first
 RUN_URL="${RUN_URL:-local run}"
 E2E_IMAGES="${E2E_IMAGES:-u2404=ubuntu-24.04 u2604=ubuntu-26.04}"
+E2E_BASE_POLICY="${E2E_BASE_POLICY-VM Encryption Policy}"
 KEEP=2
 
 log() { printf '\n==> %s\n' "$*"; }
@@ -57,8 +60,8 @@ for try in 1 2 3; do
   sleep 15
 done
 jq -n --arg run_id "$RUN_ID" --arg run_url "$RUN_URL" --argjson images "$images_json" \
-  --arg public_key "$(cat "$KEY.pub")" \
-  '{run_id: $run_id, run_url: $run_url, images: $images, public_key: $public_key}' > "$TFVARS"
+  --arg public_key "$(cat "$KEY.pub")" --arg storage_policy "$E2E_BASE_POLICY" \
+  '{run_id: $run_id, run_url: $run_url, images: $images, public_key: $public_key, storage_policy: $storage_policy}' > "$TFVARS"
 terraform -chdir="$TF_DIR" apply -auto-approve -input=false -var-file="$TFVARS" >/dev/null
 hosts_json="$(terraform -chdir="$TF_DIR" output -json hosts)"
 if [ -n "${GITHUB_ACTIONS:-}" ]; then
@@ -85,6 +88,11 @@ for key in $(jq -r 'keys[]' <<<"$hosts_json"); do
   done
   [ "$(govc vm.info -json "$vm" | jq -r '(.virtualMachines // .VirtualMachines)[0].runtime.powerState')" = poweredOff ] ||
     die "$key: the VM did not power off"
+  # a base that came out in the clear must not replace an encrypted one
+  if [ -n "$E2E_BASE_POLICY" ]; then
+    [ "$(govc vm.info -json "$vm" | jq -r '(.virtualMachines // .VirtualMachines)[0].config.keyId != null')" = true ] ||
+      die "$key: the VM is not encrypted (policy $E2E_BASE_POLICY)"
+  fi
 
   name="e2e-base-$key-$golden-$stamp"
   terraform -chdir="$TF_DIR" state rm "vsphere_virtual_machine.vm[\"$key\"]" >/dev/null

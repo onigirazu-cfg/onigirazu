@@ -19,6 +19,12 @@ variable "library" {
   type        = string
 }
 
+variable "storage_policy" {
+  description = "Storage policy for the VM home and disk, e.g. an encryption policy; empty = as the source"
+  type        = string
+  default     = ""
+}
+
 variable "images" {
   description = "Short OS key => content library item name"
   type        = map(string)
