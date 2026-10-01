@@ -10,8 +10,6 @@
             qw = $k.GetValue('qw'); s = $k.GetValue('s')
             ex = $k.GetValue('ex', $null, 'DoNotExpandEnvironmentNames'); exkind = "$($k.GetValueKind('ex'))"
             m = @($k.GetValue('m')); b = @($k.GetValue('b') | ForEach-Object { [int]$_ })
-            names = @($k.GetValueNames() | Sort-Object)
-            gone = Test-Path HKLM:\Software\OnigirazuE2E\Gone
           }
       register: v
     - assert:
@@ -23,5 +21,3 @@
           - v.result.exkind == 'ExpandString'
           - v.result.m == ['a', 'b', 'c']
           - v.result.b == [0, 255, 16]
-          - "'tmp' not in v.result.names"
-          - not v.result.gone

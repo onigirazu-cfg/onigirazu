@@ -62,6 +62,12 @@ func (m *winJSONModule) Execute(ctx context.Context, host types.Host, args map[s
 		res.Success = true
 		if msg, ok := out["msg"]; ok {
 			res.Output["msg"] = msg
+		} else if props, ok := out["changed_properties"].([]interface{}); ok && res.Changed && len(props) > 0 {
+			names := make([]string, len(props))
+			for i, p := range props {
+				names[i] = fmt.Sprint(p)
+			}
+			res.Output["msg"] = "changed: " + strings.Join(names, ", ")
 		}
 	}
 	res.Duration = time.Since(start)

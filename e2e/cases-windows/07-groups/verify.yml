@@ -5,8 +5,7 @@
         script: |
           $Ansible.Changed = $false
           $Ansible.Result = @{
-            rdp = [bool](Get-LocalGroupMember -Group 'Remote Desktop Users' | Where-Object Name -like '*\e2e-member')
-            backup = [bool](Get-LocalGroupMember -Group 'Backup Operators' | Where-Object Name -like '*\e2e-member') }
+            rdp = [bool](Get-LocalGroupMember -Group 'Remote Desktop Users' | Where-Object Name -like '*\e2e-member') }
       register: v
     - assert:
-        that: [v.result.rdp, not v.result.backup]
+        that: [v.result.rdp]

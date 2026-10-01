@@ -6,5 +6,3 @@
           if (Get-LocalUser -Name e2e-member -ErrorAction SilentlyContinue) { $Ansible.Changed = $false }
           else { New-LocalUser -Name e2e-member -NoPassword | Out-Null }
     - win_group_membership: {name: Remote Desktop Users, members: [e2e-member], state: present}
-    - win_group_membership: {name: Backup Operators, members: [e2e-member], state: present}
-    - win_group_membership: {name: Backup Operators, members: [e2e-member], state: absent}

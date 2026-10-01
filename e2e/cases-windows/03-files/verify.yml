@@ -9,7 +9,6 @@
             big = (Get-Item C:\e2e\files\big.txt).Length
             local = (Get-Content C:\e2e\files\sub\local.txt -Raw).Trim()
             copy = (Get-FileHash C:\e2e\files\copy.txt).Hash -eq (Get-FileHash C:\e2e\files\content.txt).Hash
-            gone = Test-Path C:\e2e\files\gone
           }
       register: v
     - assert:
@@ -18,4 +17,3 @@
           - v.result.big == 320000
           - v.result.local == 'from the control machine'
           - v.result.copy
-          - not v.result.gone

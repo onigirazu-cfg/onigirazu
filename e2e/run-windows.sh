@@ -169,7 +169,7 @@ for c in $cases; do
   [ -f "$dir/NOT_IDEMPOTENT" ] && continue
 
   apply "$dir" playbook.yml
-  changed="$(jq -r 'select(.changed == true) | "\(.host): \(.task)"' "$WORK/events.jsonl")"
+  changed="$(jq -r 'select(.changed == true) | "\(.host): \(.task)\(if (.msg // "") != "" then " (\(.msg))" else "" end)"' "$WORK/events.jsonl")"
   if [ -n "$(failed_tasks)" ]; then record "$c" FAIL "second apply: $(failed_tasks | paste -sd, -)"; apply_errors
   elif [ -n "$changed" ]; then record "$c" FAIL "not idempotent: $(echo "$changed" | paste -sd, -)"
   else record "$c" PASS "idempotent"; fi

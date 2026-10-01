@@ -23,6 +23,7 @@
       register: ps
     - win_command: cmd /c exit 3
       register: rc3
+      changed_when: false
       ignore_errors: true
     - assert:
         that:

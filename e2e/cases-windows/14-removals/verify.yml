@@ -1,0 +1,14 @@
+- hosts: windows
+  gather_facts: false
+  tasks:
+    - win_powershell:
+        script: |
+          $Ansible.Changed = $false
+          $Ansible.Result = @{
+            dir = Test-Path C:\e2e\gone
+            key = Test-Path HKLM:\Software\OnigirazuE2E\Gone
+            value = @((Get-Item HKLM:\Software\OnigirazuE2E).GetValueNames()) -contains 'tmp'
+            member = [bool](Get-LocalGroupMember -Group 'Backup Operators' | Where-Object Name -like '*\e2e-removed') }
+      register: v
+    - assert:
+        that: [not v.result.dir, not v.result.key, not v.result.value, not v.result.member]
