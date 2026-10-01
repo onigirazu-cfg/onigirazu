@@ -123,8 +123,13 @@ for _ in $(seq 90); do
   "$BIN" apply "$WORK/ping.yml" -i "$INVENTORY" --state "$WORK/ping-state" --no-color >"$WORK/ping.log" 2>&1 && break
   sleep 10
 done
-"$BIN" apply "$WORK/ping.yml" -i "$INVENTORY" --state "$WORK/ping-state" --no-color >"$WORK/ping.log" 2>&1 ||
-  { tail -20 "$WORK/ping.log"; die "no WinRM access as e2e"; }
+"$BIN" apply "$WORK/ping.yml" -i "$INVENTORY" --state "$WORK/ping-state" --no-color --log-format json >"$WORK/ping.log" 2>&1 || {
+  # the task errors say why (refused, 401, encryption)
+  jq -R -r 'split("{\"timestamp\"")[1:][] | ("{\"timestamp\"" + .) | sub("}[^}]*$"; "}") | fromjson? |
+    select(.fields.type == "task_end" and .fields.success != true) | "\(.fields.host): \(.fields.msg // .message)"' "$WORK/ping.log" |
+    sed -E 's/[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/<ip>/g' | cut -c1-600 | sort -u
+  die "no WinRM access as e2e"
+}
 echo "WinRM ready (http with NTLM encryption, https, ssh)"
 
 records() {
