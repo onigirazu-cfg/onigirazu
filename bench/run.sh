@@ -184,15 +184,20 @@ PY
 for f in "$OUT"/onigirazu-*-tasks.json; do
   [ -s "$f" ] || continue
   python3 - "$f" >> "$OUT/summary.md" <<'PY' || true
-import json, os, sys
+import datetime, json, os, sys
 d = json.load(open(sys.argv[1]))
-tasks = sorted(d.get("tasks", []), key=lambda t: -t.get("duration", 0))
-total = sum(t.get("duration", 0) for t in tasks) or 1
-print(f"\n#### {os.path.basename(sys.argv[1])[:-5]}: slowest tasks of a noop run\n")
-print("| task | s | share |")
-print("|---|---|---|")
-for t in tasks[:15]:
-    print(f'| {t["name"]} | {t["duration"] / 1e9:.2f} | {100 * t["duration"] / total:.0f}% |')
+# a loop reports no duration of its own: the wall time of a task is the gap
+# to the start of the next one
+at = lambda s: datetime.datetime.fromisoformat(s.rstrip("Z")[:26])
+tasks = [t for t in d.get("tasks", []) if not t["start_time"].startswith("0001")]
+ends = [t["start_time"] for t in tasks[1:]] + [d["end_time"]]
+rows = sorted(((at(e) - at(t["start_time"])).total_seconds(), t["name"], t["total"]) for t, e in zip(tasks, ends))[::-1]
+total = (at(d["end_time"]) - at(d["start_time"])).total_seconds() or 1
+print(f"\n#### {os.path.basename(sys.argv[1])[:-5]}: slowest tasks of a noop run ({total:.1f} s)\n")
+print("| task | items | s | share |")
+print("|---|---|---|---|")
+for s, name, n in rows[:15]:
+    print(f"| {name.replace(' (item 1)', '')} | {n} | {s:.2f} | {100 * s / total:.0f}% |")
 PY
 done
 cat "$OUT/summary.md"
