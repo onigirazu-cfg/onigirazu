@@ -90,8 +90,24 @@ func (m *LineinfileModule) Execute(ctx context.Context, host types.Host, args ma
 		}
 	}
 
-	// Check if file exists on remote host
-	fileExists, err := m.checkFileExists(exec, path)
+	// The capture taken before the task knows whether the file exists and,
+	// for a small text file, its content: no round trips then
+	var fileExists, known, read bool
+	var lines []string
+	if b, ok := captured(args, path); ok {
+		switch b["kind"] {
+		case "absent":
+			known = true
+		case "file":
+			fileExists, known = true, true
+			if content, ok := b["content"].(string); ok {
+				lines, read = splitFileLines(content), true
+			}
+		}
+	}
+	if !known {
+		fileExists, err = m.checkFileExists(exec, path)
+	}
 	if err != nil {
 		result.Success = false
 		result.Error = fmt.Sprintf("failed to check file existence: %v", err)
@@ -118,8 +134,7 @@ func (m *LineinfileModule) Execute(ctx context.Context, host types.Host, args ma
 	}
 
 	// Read existing lines from remote file
-	var lines []string
-	if fileExists {
+	if fileExists && !read {
 		lines, err = m.readRemoteFile(exec, path)
 		if err != nil {
 			result.Success = false
@@ -383,4 +398,13 @@ func pythonTemplate(t string) string {
 		}
 		return "${" + sub[1] + "}"
 	})
+}
+
+// splitFileLines splits a file's text as readRemoteFile does
+func splitFileLines(content string) []string {
+	lines := strings.Split(content, "\n")
+	if len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+	return lines
 }
