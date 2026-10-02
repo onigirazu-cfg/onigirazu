@@ -3,6 +3,7 @@ package ssh
 import (
 	"bufio"
 	"context"
+	_ "embed"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -42,7 +43,23 @@ func (e *ExitStatusError) ExitStatus() int { return e.Status }
 // ~/.ansible/tmp: a task that cleans /tmp neither sees nor removes them, and
 // the directory comes back if something removes it anyway (a command that
 // removed its own output files reports empty output).
-const shellScript = `r="$HOME/.onigirazu/tmp"
+var shellScript = pythonServer() + posixServer
+
+//go:embed shell_server.py
+var shellServerPy []byte
+
+// pythonServer starts the Python version of the server when the host has a
+// usable python3: one process per command instead of seven. The POSIX
+// version below runs otherwise.
+func pythonServer() string {
+	src := base64.StdEncoding.EncodeToString(shellServerPy)
+	return `if command -v python3 >/dev/null 2>&1 && python3 -c 'import subprocess, tempfile' >/dev/null 2>&1; then
+  exec python3 -c "import base64; exec(base64.b64decode('` + src + `'))"
+fi
+`
+}
+
+const posixServer = `r="$HOME/.onigirazu/tmp"
 d=$( (mkdir -p -m 700 "$r" && mktemp -d "$r/sh.XXXXXX") 2>/dev/null || mktemp -d 2>/dev/null) || exit 97
 trap 'rm -rf "$d"' EXIT
 command -v base64 >/dev/null 2>&1 || exit 98

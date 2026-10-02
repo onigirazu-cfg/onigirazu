@@ -13,8 +13,10 @@ import (
 )
 
 // the shell script and its framing, run by a local sh
-func TestRemoteShellProtocol(t *testing.T) {
-	cmd := exec.Command("sh", "-c", shellScript)
+func TestRemoteShellProtocol(t *testing.T) { forEachServer(t, checkRemoteShellProtocol) }
+
+func checkRemoteShellProtocol(t *testing.T, script string) {
+	cmd := exec.Command("sh", "-c", script)
 	stdin, err := cmd.StdinPipe()
 	require.NoError(t, err)
 	out, err := cmd.StdoutPipe()
@@ -66,8 +68,10 @@ func TestExitStatusError(t *testing.T) {
 	assert.Equal(t, 2, es.ExitStatus())
 }
 
-func TestRemoteShellBackgroundChild(t *testing.T) {
-	cmd := exec.Command("sh", "-c", shellScript)
+func TestRemoteShellBackgroundChild(t *testing.T) { forEachServer(t, checkRemoteShellBackgroundChild) }
+
+func checkRemoteShellBackgroundChild(t *testing.T, script string) {
+	cmd := exec.Command("sh", "-c", script)
 	stdin, _ := cmd.StdinPipe()
 	out, _ := cmd.StdoutPipe()
 	require.NoError(t, cmd.Start())
@@ -115,9 +119,11 @@ func TestExecOnClosedClient(t *testing.T) {
 
 // the work files live under ~/.onigirazu/tmp, not in /tmp, and a command
 // that removes them does not break the next one
-func TestRemoteShellWorkDir(t *testing.T) {
+func TestRemoteShellWorkDir(t *testing.T) { forEachServer(t, checkRemoteShellWorkDir) }
+
+func checkRemoteShellWorkDir(t *testing.T, script string) {
 	home := t.TempDir()
-	cmd := exec.Command("sh", "-c", shellScript)
+	cmd := exec.Command("sh", "-c", script)
 	cmd.Env = append(cmd.Environ(), "HOME="+home)
 	stdin, err := cmd.StdinPipe()
 	require.NoError(t, err)
@@ -129,7 +135,7 @@ func TestRemoteShellWorkDir(t *testing.T) {
 	_, err = s.stdout.ReadString('\n')
 	require.NoError(t, err)
 
-	o, _, _, err := s.run("ls \"$HOME/.onigirazu/tmp\" | grep -c '^sh\\.'", false)
+	o, _, _, err := s.run("ls \"$HOME/.onigirazu/tmp\" | grep -cE '^(sh|py)\\.'", false)
 	require.NoError(t, err)
 	assert.Equal(t, "1\n", string(o))
 
@@ -140,4 +146,35 @@ func TestRemoteShellWorkDir(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 0, rc)
 	assert.Equal(t, "after\n", string(o))
+}
+
+// forEachServer runs a check against the POSIX server and, when this
+// machine has python3, the Python one
+func forEachServer(t *testing.T, check func(*testing.T, string)) {
+	t.Run("posix", func(t *testing.T) { check(t, posixServer) })
+	t.Run("python", func(t *testing.T) {
+		if _, err := exec.LookPath("python3"); err != nil {
+			t.Skip("no python3")
+		}
+		check(t, shellScript)
+	})
+}
+
+// the Python server is the one that starts when python3 is there
+func TestShellScriptPrefersPython(t *testing.T) {
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("no python3")
+	}
+	home := t.TempDir()
+	cmd := exec.Command("sh", "-c", shellScript)
+	cmd.Env = append(cmd.Environ(), "HOME="+home)
+	stdin, _ := cmd.StdinPipe()
+	out, _ := cmd.StdoutPipe()
+	require.NoError(t, cmd.Start())
+	defer func() { _ = stdin.Close(); _ = cmd.Wait() }()
+	s := &remoteShell{stdin: stdin, stdout: bufio.NewReader(out)}
+	_, _ = s.stdout.ReadString('\n')
+	o, _, _, err := s.run("ls \"$HOME/.onigirazu/tmp\"", false)
+	require.NoError(t, err)
+	assert.True(t, strings.HasPrefix(string(o), "py."), "work dir %q", o)
 }
