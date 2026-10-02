@@ -111,6 +111,16 @@ type remoteFile struct {
 	SHA256 string
 }
 
+// captured is the registry's capture of the task's target taken just before
+// the task (args["_before"]), when it is about path and complete
+func captured(args map[string]interface{}, path string) (map[string]interface{}, bool) {
+	before, ok := args["_before"].(map[string]interface{})
+	if !ok || before["path"] != path || before["error"] != nil {
+		return nil, false
+	}
+	return before, true
+}
+
 // statRemoteFile reads mode, owner and content hash of path on the host;
 // the registry's capture of the task's target (args["_before"]) answers
 // without a round trip

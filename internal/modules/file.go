@@ -88,7 +88,13 @@ func (m *FileModule) Execute(ctx context.Context, host types.Host, args map[stri
 	case "absent":
 		return m.ensureFileAbsent(exec, path, result, startTime, inCheckMode(args), getBoolArg(args, "_keep_nonempty_dir", false))
 	case "directory":
-		result, err = m.ensureDirectory(exec, path, result, startTime, inCheckMode(args))
+		// the capture already says it is a directory: no round trip
+		if b, ok := captured(args, path); ok && b["kind"] == "directory" {
+			result.Success = true
+			result.Output = map[string]interface{}{"message": fmt.Sprintf("Directory %s already exists", path)}
+		} else {
+			result, err = m.ensureDirectory(exec, path, result, startTime, inCheckMode(args))
+		}
 	case "touch":
 		result, err = m.touchFile(exec, args, path, result, startTime, inCheckMode(args))
 	default:
@@ -248,7 +254,13 @@ func (m *FileModule) applyAttributes(ctx context.Context, host types.Host, args 
 		if err != nil {
 			return fail(fmt.Sprintf("invalid mode %q", mode))
 		}
-		out, err := runOnHost(ctx, host, args, "stat", "-c", "%a", path)
+		var out string
+		// unchanged so far: the mode captured before the task is current
+		if b, ok := captured(args, path); ok && !result.Changed && (b["kind"] == "file" || b["kind"] == "directory") && b["mode"] != nil {
+			out = fmt.Sprint(b["mode"])
+		} else {
+			out, err = runOnHost(ctx, host, args, "stat", "-c", "%a", path)
+		}
 		if err != nil && inCheckMode(args) {
 			out = "" // the path does not exist yet; its mode would be set
 		} else if err != nil {
