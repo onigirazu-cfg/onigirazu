@@ -25,7 +25,6 @@ require (
 	github.com/ChrisTrenkamp/goxpath v0.0.0-20210404020558-97928f7e12b6 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
-	github.com/bodgit/ntlmssp v0.0.0-20240506230425-31973bb52d9b // indirect
 	github.com/bodgit/windows v1.0.1 // indirect
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
@@ -97,6 +96,7 @@ require (
 )
 
 require (
+	github.com/bodgit/ntlmssp v0.0.0-20240506230425-31973bb52d9b
 	github.com/expr-lang/expr v1.17.8
 	github.com/kevinburke/ssh_config v1.6.0
 	github.com/masterzen/winrm v0.0.0-20260407182533-5570be7f80cf
