@@ -103,8 +103,8 @@ for n in $HOSTS; do
     jq -n --arg run_id "$RUN_ID-$tool-$n" --arg run_url "$RUN_URL" --arg tpl "$template" --arg key "$(cat "$KEY.pub")" --argjson n "$n" \
       '{run_id: ($run_id | ascii_downcase | gsub("[^a-z0-9-]"; "") | .[0:24]), run_url: $run_url, public_key: $key,
         images: ([range(1; $n + 1)] | map({key: "h\(.)", value: $tpl}) | from_entries)}' > "$TFVARS"
-    terraform -chdir="$TF_DIR" apply -auto-approve -input=false -state="$TFSTATE" -var-file="$TFVARS" >/dev/null ||
-      die "terraform apply failed"
+    terraform -chdir="$TF_DIR" apply -auto-approve -input=false -no-color -state="$TFSTATE" -var-file="$TFVARS" > "$WORK/tf.log" 2>&1 ||
+      { grep -vE '^\s*$' "$WORK/tf.log" | sed -E 's/[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/<ip>/g' | tail -20; die "terraform apply failed"; }
     hosts_json="$(terraform -chdir="$TF_DIR" output -state="$TFSTATE" -json hosts)"
     if [ -n "${GITHUB_ACTIONS:-}" ]; then for ip in $(jq -r '.[]' <<<"$hosts_json"); do echo "::add-mask::$ip"; done; fi
 
