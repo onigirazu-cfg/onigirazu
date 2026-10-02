@@ -39,17 +39,8 @@ func captureBefore(ctx context.Context, host types.Host, module string, args map
 	case "user", "group":
 		return captureAccount(ctx, host, module, args)
 	}
-	keys, ok := captureModules[module]
-	if !ok {
-		return nil
-	}
-	path := ""
-	for _, k := range keys {
-		if path = getStringArg(args, k, ""); path != "" {
-			break
-		}
-	}
-	if path == "" || strings.Contains(path, "{{") {
+	path := capturePath(module, args)
+	if path == "" {
 		return nil
 	}
 	// one round trip: kind, mode, owner, group, size and, for a file up to
@@ -111,6 +102,34 @@ func parseProbe(path, out string, args map[string]interface{}) map[string]interf
 		}
 	}
 	return withBecome(before, args)
+}
+
+// capturePath is the target of a captured file module, "" for others
+func capturePath(module string, args map[string]interface{}) string {
+	path := ""
+	for _, k := range captureModules[module] {
+		if path = getStringArg(args, k, ""); path != "" {
+			break
+		}
+	}
+	if strings.Contains(path, "{{") {
+		return ""
+	}
+	return path
+}
+
+// captureNative is captureBefore of a file module when the host's command
+// server describes the file without a process; nil otherwise
+func captureNative(ctx context.Context, host types.Host, module string, args map[string]interface{}) map[string]interface{} {
+	path := capturePath(module, args)
+	if path == "" {
+		return nil
+	}
+	out, served, err := probeOnHost(ctx, host, args, path, maxCaptureSize)
+	if !served || err != nil {
+		return nil
+	}
+	return parseProbe(path, out, args)
 }
 
 // withBecome keeps the task's escalation, so the restore can write where the

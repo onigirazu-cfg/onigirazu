@@ -279,12 +279,16 @@ func (r *Registry) ExecuteTask(ctx context.Context, task *types.Task, host types
 
 	// the target file of a file module as it was, for rollback
 	var before map[string]interface{}
+	// in check mode only when asked, or when the host's server describes
+	// the file without a process: the module then asks the host nothing more
 	if !inCheckMode(args) || task.Capture {
 		before = captureBefore(ctx, host, task.Module, args)
-		// the module may use it instead of asking the host again
-		if before != nil && before["error"] == nil {
-			args["_before"] = before
-		}
+	} else {
+		before = captureNative(ctx, host, task.Module, args)
+	}
+	// the module may use it instead of asking the host again
+	if before != nil && before["error"] == nil {
+		args["_before"] = before
 	}
 
 	result, err := executeRecovering(ctx, module, host, args, task)
