@@ -128,6 +128,9 @@ if ($state -eq 'absent') {
       'logon' { $o = @{ AtLogOn = $true }; if ($t.user) { $o.User = $t.user }; $x = New-ScheduledTaskTrigger @o }
       'registration' { $class = Get-CimClass -ClassName MSFT_TaskRegistrationTrigger -Namespace Root/Microsoft/Windows/TaskScheduler; $x = New-CimInstance -CimClass $class -ClientOnly }
     }
+    # the boundary as given, local time like Ansible's: no [datetime] round
+    # trip, which shifts it by the offset of whatever zone a process cached
+    if ($t.start_boundary) { $x.StartBoundary = $t.start_boundary }
     $x.Enabled = [bool]$t.enabled
     $x })
   $service = @('SYSTEM', 'NT AUTHORITY\SYSTEM', 'LOCAL SERVICE', 'NT AUTHORITY\LOCAL SERVICE', 'NETWORK SERVICE', 'NT AUTHORITY\NETWORK SERVICE') -contains "$user".ToUpper()
