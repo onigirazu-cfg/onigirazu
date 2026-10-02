@@ -85,6 +85,8 @@ type remoteShell struct {
 	session *ssh.Session
 	stdin   io.WriteCloser
 	stdout  *bufio.Reader
+	// probe: the server answers "P" requests (the Python one)
+	probe bool
 }
 
 func (s *remoteShell) close() {
@@ -129,10 +131,12 @@ func (c *Client) startShell(user string) (*remoteShell, error) {
 	}
 	s := &remoteShell{session: session, stdin: stdin, stdout: bufio.NewReaderSize(out, 64*1024)}
 	line, err := s.stdout.ReadString('\n')
-	if err != nil || strings.TrimSpace(line) != "ONIGIRAZU-READY" {
+	f := strings.Fields(line)
+	if err != nil || len(f) == 0 || f[0] != "ONIGIRAZU-READY" {
 		s.close()
 		return nil, fmt.Errorf("shell did not start: %q", line)
 	}
+	s.probe = len(f) > 1 && f[1] == "P"
 	return s, nil
 }
 
@@ -146,7 +150,12 @@ func (s *remoteShell) run(command string, combined bool) (stdout, stderr []byte,
 	if combined {
 		mode = "C"
 	}
-	if _, err = io.WriteString(s.stdin, mode+" "+base64.StdEncoding.EncodeToString([]byte(command))+"\n"); err != nil {
+	return s.request(mode, command)
+}
+
+// request sends one request of mode (S, C: a command; P: a probe)
+func (s *remoteShell) request(mode, payload string) (stdout, stderr []byte, rc int, err error) {
+	if _, err = io.WriteString(s.stdin, mode+" "+base64.StdEncoding.EncodeToString([]byte(payload))+"\n"); err != nil {
 		return nil, nil, 0, fmt.Errorf("%w: %v", ErrNotSent, err)
 	}
 	header, err := s.stdout.ReadString('\n')
@@ -180,7 +189,41 @@ func (c *Client) Exec(ctx context.Context, command string, combined bool) ([]byt
 	if err != nil || shell == nil {
 		return c.execSession(ctx, command, combined)
 	}
-	return c.runIn(ctx, "", shell, command, combined)
+	return c.runIn(ctx, "", shell, modeOf(combined), command)
+}
+
+func modeOf(combined bool) string {
+	if combined {
+		return "C"
+	}
+	return "S"
+}
+
+// Probe describes path (kind, mode, owner, group, size and the content up to
+// limit bytes, else its sha256) as user ("" is the login user) without
+// starting a process on the host, in the format of the shell probe of the
+// file modules' capture. served is false when the server cannot (no Python,
+// sudo wants a password): the caller runs the shell probe.
+func (c *Client) Probe(ctx context.Context, user, path string, limit int) (out []byte, served bool, err error) {
+	if err := ctx.Err(); err != nil {
+		return nil, true, err
+	}
+	shell, err := c.takeShell(user)
+	if err != nil || shell == nil {
+		return nil, false, nil
+	}
+	if !shell.probe {
+		c.returnShell(user, shell)
+		return nil, false, nil
+	}
+	o, e, rc, err := c.runIn(ctx, user, shell, "P", strconv.Itoa(limit)+" "+path)
+	if err != nil {
+		return nil, true, err
+	}
+	if rc != 0 {
+		return nil, true, fmt.Errorf("probe %s: %s", path, strings.TrimSpace(string(e)))
+	}
+	return o, true, nil
 }
 
 // ExecAs runs a command as user through a command server started with sudo
@@ -195,12 +238,12 @@ func (c *Client) ExecAs(ctx context.Context, user, command string, combined bool
 	if err != nil || shell == nil {
 		return nil, nil, 0, false, nil
 	}
-	stdout, stderr, rc, err = c.runIn(ctx, user, shell, command, combined)
+	stdout, stderr, rc, err = c.runIn(ctx, user, shell, modeOf(combined), command)
 	return stdout, stderr, rc, true, err
 }
 
 // runIn runs a command on a shell taken from the pool of user
-func (c *Client) runIn(ctx context.Context, user string, shell *remoteShell, command string, combined bool) ([]byte, []byte, int, error) {
+func (c *Client) runIn(ctx context.Context, user string, shell *remoteShell, mode, payload string) ([]byte, []byte, int, error) {
 	type answer struct {
 		out, errOut []byte
 		rc          int
@@ -208,7 +251,7 @@ func (c *Client) runIn(ctx context.Context, user string, shell *remoteShell, com
 	}
 	done := make(chan answer, 1)
 	go func() {
-		o, e, rc, err := shell.run(command, combined)
+		o, e, rc, err := shell.request(mode, payload)
 		done <- answer{o, e, rc, err}
 	}()
 	select {

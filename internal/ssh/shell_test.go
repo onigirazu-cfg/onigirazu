@@ -3,7 +3,9 @@ package ssh
 import (
 	"bufio"
 	"context"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -26,7 +28,7 @@ func checkRemoteShellProtocol(t *testing.T, script string) {
 	s := &remoteShell{stdin: stdin, stdout: bufio.NewReader(out)}
 	ready, err := s.stdout.ReadString('\n')
 	require.NoError(t, err)
-	require.Equal(t, "ONIGIRAZU-READY\n", ready)
+	require.True(t, strings.HasPrefix(ready, "ONIGIRAZU-READY"), "%q", ready)
 
 	o, e, rc, err := s.run("echo out; echo err >&2; exit 3", false)
 	require.NoError(t, err)
@@ -177,4 +179,51 @@ func TestShellScriptPrefersPython(t *testing.T) {
 	o, _, _, err := s.run("ls \"$HOME/.onigirazu/tmp\"", false)
 	require.NoError(t, err)
 	assert.True(t, strings.HasPrefix(string(o), "py."), "work dir %q", o)
+}
+
+// the Python server describes a file without a process, as the shell probe
+// of the capture prints it
+func TestPythonServerProbe(t *testing.T) {
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("no python3")
+	}
+	home := t.TempDir()
+	cmd := exec.Command("sh", "-c", shellScript)
+	cmd.Env = append(cmd.Environ(), "HOME="+home)
+	stdin, _ := cmd.StdinPipe()
+	out, _ := cmd.StdoutPipe()
+	require.NoError(t, cmd.Start())
+	defer func() { _ = stdin.Close(); _ = cmd.Wait() }()
+	s := &remoteShell{stdin: stdin, stdout: bufio.NewReader(out)}
+	ready, _ := s.stdout.ReadString('\n')
+	assert.Equal(t, "ONIGIRAZU-READY P\n", ready)
+
+	p := filepath.Join(home, "f")
+	require.NoError(t, os.WriteFile(p, []byte("v1\n"), 0o640))
+	require.NoError(t, os.Chmod(p, 0o640))
+	o, _, rc, err := s.request("P", "100 "+p)
+	require.NoError(t, err)
+	assert.Equal(t, 0, rc)
+	lines := strings.Split(string(o), "\n")
+	f := strings.Fields(lines[0])
+	require.Len(t, f, 6, "%q", o)
+	assert.Equal(t, []string{"file", "640"}, f[:2])
+	assert.Equal(t, []string{"3", "+"}, f[4:])
+	assert.Equal(t, "C:djEK", lines[1])
+
+	o, _, _, _ = s.request("P", "2 "+p)
+	// over the limit: the sha256 instead of the content
+	f = strings.Fields(string(o))
+	require.Len(t, f, 6, "%q", o)
+	assert.Len(t, f[5], 64, "sha256 %q", o)
+
+	o, _, _, _ = s.request("P", "100 "+filepath.Join(home, "none"))
+	assert.Equal(t, "absent\n", string(o))
+	o, _, _, _ = s.request("P", "100 "+home)
+	assert.True(t, strings.HasPrefix(string(o), "directory "), "%q", o)
+
+	// commands still work after probes
+	o, _, rc, _ = s.run("echo ok", false)
+	assert.Equal(t, "ok\n", string(o))
+	assert.Equal(t, 0, rc)
 }
