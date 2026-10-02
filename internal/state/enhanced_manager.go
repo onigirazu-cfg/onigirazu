@@ -94,10 +94,12 @@ func (m *EnhancedManager) LoadState(ctx context.Context) (*types.State, error) {
 		return nil, fmt.Errorf("error reading state file: %w", err)
 	}
 
-	var state types.State
-	if err := json.Unmarshal(data, &state); err != nil {
+	// SaveState writes gzip; plain JSON of older versions still loads
+	loaded, err := NewCompressionManager(DefaultCompressionConfig()).DecompressState(data)
+	if err != nil {
 		return nil, fmt.Errorf("error parsing state: %w", err)
 	}
+	state := *loaded
 
 	// Initialize maps if nil
 	if state.Variables == nil {
