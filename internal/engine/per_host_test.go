@@ -591,3 +591,20 @@ func TestAsync_TimesOutTheTask(t *testing.T) {
 	assert.Contains(t, res.Error, "did not complete within 1 seconds")
 	assert.True(t, asyncjob.Cleanup(host.Name, jid))
 }
+
+// a task skipped in check mode is not retried: until has nothing to look at
+func TestUntil_SkippedTaskIsNotRetried(t *testing.T) {
+	engine, mockConfig, mockLogger, _, mockRegistry, mockTemplate := createTestEngine()
+	mockConfig.On("GetDryRun").Return(true)
+	mockLogger.On("Retry", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
+	mockTemplate.On("RenderTaskArgs", mock.Anything, mock.Anything, mock.Anything).Return(nil, nil)
+	mockRegistry.On("ExecuteTask", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(types.TaskResult{Success: true, Skipped: true}, nil)
+	task := &types.Task{Name: "probe", Module: "uri", Register: "r", Until: "r.status == 200", Retries: 10, RetryDelay: time.Millisecond}
+	host := twoHosts()[0]
+	play := &types.PlayResult{Success: true}
+	require.NoError(t, engine.executeTaskOnHost(context.Background(), task, &host, map[string]interface{}{}, play))
+	mockRegistry.AssertNumberOfCalls(t, "ExecuteTask", 1)
+	require.Len(t, play.Hosts, 1)
+	assert.False(t, play.Hosts[0].Failed)
+}
