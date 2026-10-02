@@ -2,8 +2,11 @@ package modules
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -79,6 +82,14 @@ func TestCaptureBefore(t *testing.T) {
 	assert.Equal(t, "v1\n", before["content"])
 	assert.Equal(t, "0640", before["mode"])
 	assert.Equal(t, false, before["_become"])
+	assert.Equal(t, sha256Hex("v1\n"), before["sha256"])
+
+	// base64 wraps long content over several lines
+	long := strings.Repeat("0123456789abcdef\n", 40)
+	require.NoError(t, os.WriteFile(p, []byte(long), 0o640))
+	before = captureBefore(context.Background(), host, "copy", map[string]interface{}{"dest": p})
+	assert.Equal(t, long, before["content"])
+	assert.Equal(t, sha256Hex(long), before["sha256"])
 
 	absent := captureBefore(context.Background(), host, "file", map[string]interface{}{"path": filepath.Join(dir, "none")})
 	assert.Equal(t, "absent", absent["kind"])
@@ -104,4 +115,9 @@ func TestDeclaredResources(t *testing.T) {
 	assert.True(t, res[0].Absent)
 	assert.Nil(t, declaredResources("copy", map[string]interface{}{"dest": "/x"}, map[string]interface{}{"error": "x"})[0].Before)
 	assert.Nil(t, declaredResources("debug", map[string]interface{}{"msg": "x"}, nil))
+}
+
+func sha256Hex(s string) string {
+	sum := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(sum[:])
 }
