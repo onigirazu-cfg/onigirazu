@@ -125,3 +125,24 @@ func TestUfwRuleChanged(t *testing.T) {
 	assert.False(t, ufwRuleChanged("Could not delete non-existent rule\nWARN: initcaps\n[Errno 2] iptables: Permission denied\n"))
 	assert.True(t, ufwRuleChanged("WARN: initcaps\nRules updated\nSkipping unsupported IPv6 'limit' rule\n"))
 }
+
+func TestParseAccount(t *testing.T) {
+	a, err := parseAccount("u", "u:x:1001:1001:U Ser:/home/u:/bin/bash\nu\nu sudo docker\n")
+	assert.NoError(t, err)
+	assert.Equal(t, "1001", a.uid)
+	assert.Equal(t, "U Ser", a.comment)
+	assert.Equal(t, "u", a.primary)
+	assert.Equal(t, []string{"sudo", "docker"}, a.groups)
+	a, err = parseAccount("u", "")
+	assert.NoError(t, err)
+	assert.Nil(t, a)
+	_, err = parseAccount("u", "u:x:1001\n")
+	assert.Error(t, err)
+
+	args := map[string]interface{}{"_before": map[string]interface{}{"kind": "user", "name": "u", "account": "x"}}
+	out, ok := capturedAccount(args, "u")
+	assert.True(t, ok)
+	assert.Equal(t, "x", out)
+	_, ok = capturedAccount(args, "v")
+	assert.False(t, ok)
+}

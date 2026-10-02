@@ -226,6 +226,15 @@ func captureAccount(ctx context.Context, host types.Host, module string, args ma
 	if module == "group" {
 		db = "group"
 	}
+	if module == "user" {
+		// the whole account in the same round trip: the module reads it
+		// from here
+		out, err := runShellOnHost(ctx, host, args, accountScript(name))
+		if err != nil {
+			return map[string]interface{}{"kind": module, "name": name, "error": err.Error()}
+		}
+		return withBecome(map[string]interface{}{"kind": module, "name": name, "exists": strings.TrimSpace(out) != "", "account": out}, args)
+	}
 	_, err := runOnHost(ctx, host, args, "getent", db, name)
 	return withBecome(map[string]interface{}{"kind": module, "name": name, "exists": err == nil}, args)
 }
