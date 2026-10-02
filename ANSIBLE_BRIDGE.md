@@ -30,3 +30,21 @@ ansible-playbook are task failures with Ansible's message.
 
 Collections the bridged modules need are installed the Ansible way (`ansible-galaxy collection
 install`), and connections such as WinRM need their Python packages (`pywinrm`).
+
+## Checking bridged tasks before the run
+
+`onigirazu lint` checks the arguments of bridged tasks against the module's spec from
+`ansible-doc -j`: unknown names (with the closest known one), missing required arguments, and literal
+values outside the module's choices; templated values are left to run time. Specs are cached per
+ansible-core version in the user cache directory (`onigirazu/ansible-doc/`), so later runs need no
+ansible-doc. `apply`, `validate` and `lint` read `ansible_bridge` from `onigirazu.yml` the same way.
+
+```text
+$ onigirazu lint site.yml
+  ✗ [module-args] [web → add host key] module known_hosts has no argument "nme" (did you mean "name"?)
+  ✗ [module-args] [web → add host key] module known_hosts: state is gone, not one of [absent present]
+```
+
+`onigirazu doc MODULE` shows the arguments of a built-in module, or of any module ansible-doc knows,
+with types, defaults, choices and aliases, and says whether it is allowed through the bridge.
+
