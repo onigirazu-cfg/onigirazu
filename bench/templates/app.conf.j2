@@ -1,0 +1,7 @@
+# {{ ansible_managed | default('managed') }}
+[app]
+host = {{ inventory_hostname }}
+workers = {{ bench_workers }}
+{% for i in range(bench_lines | int) %}
+option_{{ i }} = {{ (i * 7) % 13 }}
+{% endfor %}

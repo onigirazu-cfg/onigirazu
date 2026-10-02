@@ -1,0 +1,143 @@
+# Benchmark workload: the same playbook for ansible-playbook and onigirazu.
+# Ansible needs community.general, ansible.posix, community.docker,
+# community.mysql and community.postgresql. Every task converges, so the
+# second run changes nothing.
+- name: Benchmark
+  hosts: all
+  become: true
+  vars:
+    bench_root: /opt/bench
+    bench_files: 200       # copy/file/lineinfile volume per host
+    bench_users: 20
+    bench_lines: 100
+    bench_workers: 4
+  tasks:
+    # --- facts and data --------------------------------------------------
+    - ansible.builtin.ping:
+    - ansible.builtin.set_fact:
+        bench_items: "{{ range(bench_files | int) | list }}"
+    - ansible.builtin.assert:
+        that: [ansible_os_family == "Debian"]
+    - ansible.builtin.getent: {database: passwd, key: root}
+
+    # --- packages --------------------------------------------------------
+    - ansible.builtin.apt:
+        name: [python3-pymysql, python3-psycopg2, python3-docker, jq, tree, unzip]
+        state: present
+        update_cache: true
+        cache_valid_time: 86400
+    - ansible.builtin.package: {name: rsync, state: present}
+
+    # --- files -----------------------------------------------------------
+    - ansible.builtin.file: {path: "{{ bench_root }}/{{ item }}", state: directory, mode: "0755"}
+      loop: [conf, data, bin, archive, repo, src, many]
+    - ansible.builtin.copy: {src: files/static.txt, dest: "{{ bench_root }}/data/static.txt", mode: "0644"}
+    - ansible.builtin.copy: {src: files/hello.sh, dest: "{{ bench_root }}/bin/hello.sh", mode: "0755"}
+    - ansible.builtin.copy:
+        dest: "{{ bench_root }}/many/f{{ item }}.txt"
+        content: "file {{ item }} on {{ inventory_hostname }}\n"
+        mode: "0640"
+      loop: "{{ bench_items }}"
+    - ansible.builtin.file: {path: "{{ bench_root }}/many/link{{ item }}", src: "{{ bench_root }}/many/f{{ item }}.txt", state: link}
+      loop: "{{ range(20) | list }}"
+    - ansible.builtin.template: {src: templates/app.conf.j2, dest: "{{ bench_root }}/conf/app.conf", mode: "0644"}
+    - ansible.builtin.lineinfile:
+        path: "{{ bench_root }}/conf/lines.conf"
+        line: "key{{ item }} = value{{ item }}"
+        regexp: "^key{{ item }} ="
+        create: true
+        mode: "0644"
+      loop: "{{ range(bench_lines | int) | list }}"
+    - ansible.builtin.blockinfile:
+        path: "{{ bench_root }}/conf/block.conf"
+        create: true
+        mode: "0644"
+        block: |
+          managed_a = 1
+          managed_b = 2
+    - ansible.builtin.copy: {dest: "{{ bench_root }}/conf/replace.conf", content: "listen = 127.0.0.1\n", force: false, mode: "0644"}
+    - ansible.builtin.replace: {path: "{{ bench_root }}/conf/replace.conf", regexp: '^listen = .*$', replace: 'listen = 0.0.0.0'}
+    - community.general.ini_file: {path: "{{ bench_root }}/conf/app.ini", section: main, option: "opt{{ item }}", value: "{{ item }}", mode: "0644"}
+      loop: "{{ range(20) | list }}"
+    - ansible.builtin.stat: {path: "{{ bench_root }}/conf/app.conf"}
+      register: conf_stat
+    - ansible.builtin.find: {paths: "{{ bench_root }}/many", patterns: "*.txt"}
+      register: found
+    - ansible.builtin.assert:
+        that: [conf_stat.stat.exists, found.matched == bench_files | int]
+    - ansible.builtin.slurp: {src: "{{ bench_root }}/data/static.txt"}
+      register: slurped
+    - ansible.builtin.fetch: {src: "{{ bench_root }}/conf/app.conf", dest: "fetched/{{ inventory_hostname }}/", flat: true}
+
+    # --- archives, downloads, git ------------------------------------------
+    - community.general.archive: {path: "{{ bench_root }}/conf", dest: "{{ bench_root }}/archive/conf.tar.gz", format: gz}
+    - ansible.builtin.unarchive: {src: "{{ bench_root }}/archive/conf.tar.gz", dest: "{{ bench_root }}/src", remote_src: true, creates: "{{ bench_root }}/src/conf"}
+    - ansible.builtin.get_url: {url: "file://{{ bench_root }}/data/static.txt", dest: "{{ bench_root }}/data/downloaded.txt", mode: "0644"}
+    - ansible.builtin.shell: |
+        set -e
+        [ -d {{ bench_root }}/repo/origin.git ] && exit 0
+        git init -q --bare {{ bench_root }}/repo/origin.git
+        tmp=$(mktemp -d); cd "$tmp"; git init -q; git config user.email b@b; git config user.name b
+        echo one > README; git add README; git commit -qm one; git push -q {{ bench_root }}/repo/origin.git HEAD:main
+        echo created
+      register: repo_init
+      changed_when: "'created' in repo_init.stdout"
+    - ansible.builtin.git: {repo: "{{ bench_root }}/repo/origin.git", dest: "{{ bench_root }}/repo/checkout", version: main}
+
+    # --- users, groups, keys, cron, sysctl -----------------------------------
+    - ansible.builtin.group: {name: bench, state: present}
+    - ansible.builtin.user: {name: "bench{{ item }}", groups: [bench], shell: /bin/bash, create_home: true}
+      loop: "{{ range(bench_users | int) | list }}"
+    - ansible.posix.authorized_key:
+        user: bench0
+        key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl bench"
+    - ansible.builtin.cron: {name: "bench job {{ item }}", minute: "{{ item }}", job: "/bin/true", user: bench0}
+      loop: "{{ range(10) | list }}"
+    - ansible.posix.sysctl: {name: vm.swappiness, value: "10", sysctl_set: true}
+    - ansible.posix.mount: {path: /mnt/bench, src: tmpfs, fstype: tmpfs, opts: size=16m, state: mounted}
+    - community.general.timezone: {name: UTC}
+
+    # --- commands, scripts, services, firewall -------------------------------------
+    - ansible.builtin.command: {cmd: uptime}
+      changed_when: false
+    - ansible.builtin.command: {cmd: "{{ bench_root }}/bin/hello.sh"}
+      changed_when: false
+    - ansible.builtin.script: {cmd: files/hello.sh}
+      changed_when: false
+    - ansible.builtin.service: {name: cron, state: started, enabled: true}
+    - ansible.builtin.systemd: {name: ssh, state: started, enabled: true}
+    - community.general.ufw: {rule: allow, port: "22", proto: tcp}
+    - community.general.ufw: {rule: allow, port: "8080", proto: tcp}
+    - community.general.ufw: {state: enabled}
+    - ansible.builtin.wait_for: {port: 22, timeout: 10}
+
+    # --- containers ----------------------------------------------------------
+    - community.docker.docker_host_info:
+    - community.docker.docker_image: {name: "alpine:3.20", source: local}
+    - community.docker.docker_container:
+        name: bench-web
+        image: "alpine:3.20"
+        command: [sh, -c, "mkdir -p /www && echo ok > /www/index.html && httpd -f -p 8080 -h /www"]
+        ports: ["8080:8080"]
+        state: started
+        restart_policy: unless-stopped
+    - ansible.builtin.uri: {url: "http://127.0.0.1:8080/", return_content: true}
+      register: web
+      until: web.status == 200
+      retries: 10
+      delay: 1
+
+    # --- databases -------------------------------------------------------------
+    - ansible.builtin.service: {name: mariadb, state: started}
+    - community.mysql.mysql_db: {name: bench, state: present, login_unix_socket: /run/mysqld/mysqld.sock}
+    - community.mysql.mysql_user:
+        name: bench
+        host: localhost
+        password: bench-not-secret
+        priv: "bench.*:ALL"
+        login_unix_socket: /run/mysqld/mysqld.sock
+    - ansible.builtin.service: {name: postgresql, state: started}
+    - community.postgresql.postgresql_db: {name: bench}
+      become_user: postgres
+    - community.postgresql.postgresql_user: {name: bench, db: bench}
+      become_user: postgres
