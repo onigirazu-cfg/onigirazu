@@ -144,7 +144,18 @@ EOF
       measure onigirazu "$n" second "${cmd[@]}"
       measure onigirazu "$n" check "${cmd[@]}" --check
       # where the time goes: one more noop run with per-task durations
-      "${cmd[@]}" -o json 2>/dev/null | sed -n '/^{/,$p' > "$OUT/onigirazu-$n-tasks.json" || true
+      "${cmd[@]}" -o json 2>/dev/null > "$WORK/tasks.out" || true
+      # the report follows the progress bar on stdout
+      python3 - "$WORK/tasks.out" > "$OUT/onigirazu-$n-tasks.json" <<'PY' || true
+import json, re, sys
+data = open(sys.argv[1], errors="replace").read()
+for m in re.finditer(r'\{\s*"execution_id"', data):
+    try:
+        print(json.dumps(json.JSONDecoder().raw_decode(data[m.start():])[0]))
+        break
+    except ValueError:
+        pass
+PY
       rm -f "$WORK/known_hosts"
     fi
     log "$tool on $n host(s): destroying VMs"
