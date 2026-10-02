@@ -140,5 +140,5 @@
     - ansible.builtin.service: {name: postgresql, state: started}
     - community.postgresql.postgresql_db: {name: bench}
       become_user: postgres
-    - community.postgresql.postgresql_user: {name: bench, db: bench}
+    - community.postgresql.postgresql_user: {name: bench}
       become_user: postgres
