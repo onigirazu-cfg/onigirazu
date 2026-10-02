@@ -50,9 +50,15 @@ func (m *UfwModule) Execute(ctx context.Context, host types.Host, args map[strin
 	check := inCheckMode(args)
 	var commands []string
 
-	status, err := runShellOnHost(ctx, host, args, "ufw status verbose")
-	if err != nil {
-		return fail(fmt.Sprintf("ufw status failed: %v", err))
+	// the status only for policy, logging and state: a rule alone is one
+	// ufw call
+	status := ""
+	if getStringArg(args, "policy", getStringArg(args, "default", "")) != "" || getStringArg(args, "logging", "") != "" || getStringArg(args, "state", "") != "" {
+		out, err := runShellOnHost(ctx, host, args, "ufw status verbose")
+		if err != nil {
+			return fail(fmt.Sprintf("ufw status failed: %v", err))
+		}
+		status = out
 	}
 	active := strings.Contains(status, "Status: active")
 
@@ -80,7 +86,6 @@ func (m *UfwModule) Execute(ctx context.Context, host types.Host, args map[strin
 	ruleChanged := false
 	if rule := getStringArg(args, "rule", ""); rule != "" {
 		cmd := ufwRuleCommand(rule, args)
-		before, _ := runShellOnHost(ctx, host, args, "ufw show added")
 		if check {
 			out, err := runShellOnHost(ctx, host, args, "ufw --dry-run "+cmd)
 			if err != nil {
@@ -88,11 +93,11 @@ func (m *UfwModule) Execute(ctx context.Context, host types.Host, args map[strin
 			}
 			ruleChanged = !strings.Contains(out, "Skipping")
 		} else {
-			if out, err := runShellOnHost(ctx, host, args, "ufw "+cmd); err != nil {
+			out, err := runShellOnHost(ctx, host, args, "ufw "+cmd)
+			if err != nil {
 				return fail(fmt.Sprintf("ufw %s: %v %s", cmd, err, out))
 			}
-			after, _ := runShellOnHost(ctx, host, args, "ufw show added")
-			ruleChanged = before != after
+			ruleChanged = ufwRuleChanged(out)
 		}
 		result.Output["rule"] = "ufw " + cmd
 	}
@@ -125,6 +130,19 @@ func (m *UfwModule) Execute(ctx context.Context, host types.Host, args map[strin
 	}
 	result.Duration = time.Since(start)
 	return result, nil
+}
+
+// ufwRuleChanged reads what ufw said about a rule: "Rule added", "Rule
+// updated", "Rule deleted", "Rule inserted", "Rules updated" are a change;
+// "Skipping adding existing rule", "Could not delete non-existent rule" and
+// warnings are not
+func ufwRuleChanged(out string) bool {
+	for _, line := range strings.Split(out, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "Rule") {
+			return true
+		}
+	}
+	return false
 }
 
 // ufwRuleCommand is the ufw rule in its full syntax
