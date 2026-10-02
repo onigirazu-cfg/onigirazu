@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -143,12 +144,66 @@ const (
 	encryptedContentType = `multipart/encrypted;protocol="application/HTTP-SPNEGO-session-encrypted";boundary="Encrypted Boundary"`
 )
 
-// unseal returns the SOAP message of an encrypted answer
-func (c *connection) unseal(body []byte, contentType string) ([]byte, error) {
-	data, _, err := ntlmhttp.Unwrap(body, contentType)
-	if err != nil {
-		return nil, err
+// unseal returns the SOAP message of an encrypted answer. The body is cut
+// at the exact MIME markers, never parsed line by line: sealed bytes may
+// contain anything, including lines that look like headers.
+func (c *connection) unseal(body []byte, _ string) ([]byte, error) {
+	var message []byte
+	for _, part := range splitEncrypted(body) {
+		plain, err := c.unsealPart(part)
+		if err != nil {
+			return nil, err
+		}
+		message = append(message, plain...)
 	}
+	if message == nil {
+		return nil, errors.New("encrypted answer without parts")
+	}
+	return message, nil
+}
+
+// encryptedPart is the header and the payload of one encrypted MIME part
+type encryptedPart struct {
+	header, payload []byte
+}
+
+// splitEncrypted cuts a body into its encrypted parts: a header block
+// ("\tContent-Type: ...", "\tOriginalContent: ...;Length=N") then the
+// "\tContent-Type: application/octet-stream" block with the sealed bytes
+func splitEncrypted(body []byte) []encryptedPart {
+	body = bytes.TrimSuffix(body, []byte(mimeBoundary+"--\r\n"))
+	sep := []byte(mimeBoundary + "\r\n")
+	octet := []byte("\tContent-Type: application/octet-stream\r\n")
+	var parts []encryptedPart
+	rest := body
+	for {
+		i := bytes.Index(rest, sep)
+		if i < 0 {
+			return parts
+		}
+		rest = rest[i+len(sep):]
+		// the header ends where the octet-stream block starts
+		j := bytes.Index(rest, sep)
+		if j < 0 || !bytes.HasPrefix(rest[j+len(sep):], octet) {
+			return parts
+		}
+		header := rest[:j]
+		rest = rest[j+len(sep)+len(octet):]
+		// the payload runs to the next part's header block, or to the end
+		next := bytes.Index(rest, []byte(mimeBoundary+"\r\n\tContent-Type: application/HTTP-SPNEGO-session-encrypted"))
+		if next < 0 {
+			parts = append(parts, encryptedPart{header, rest})
+			return parts
+		}
+		parts = append(parts, encryptedPart{header, rest[:next]})
+		rest = rest[next:]
+	}
+}
+
+var plainLength = regexp.MustCompile(`Length=(\d+)`)
+
+func (c *connection) unsealPart(p encryptedPart) ([]byte, error) {
+	data := p.payload
 	if len(data) < 4 {
 		return nil, errors.New("encrypted answer too short")
 	}
@@ -156,7 +211,16 @@ func (c *connection) unseal(body []byte, contentType string) ([]byte, error) {
 	if n > len(data)-4 {
 		return nil, errors.New("encrypted answer: bad signature length")
 	}
-	return c.ntlm.SecuritySession().Unwrap(data[4+n:], data[4:4+n])
+	plain, err := c.ntlm.SecuritySession().Unwrap(data[4+n:], data[4:4+n])
+	if err != nil {
+		return nil, err
+	}
+	if m := plainLength.FindSubmatch(p.header); m != nil {
+		if want, _ := strconv.Atoi(string(m[1])); want != len(plain) {
+			return nil, fmt.Errorf("encrypted answer: %d bytes, OriginalContent says %d", len(plain), want)
+		}
+	}
+	return plain, nil
 }
 
 const soapContentType = "application/soap+xml;charset=UTF-8"

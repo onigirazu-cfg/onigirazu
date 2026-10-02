@@ -80,3 +80,24 @@ func TestSoapAction(t *testing.T) {
 		t.Errorf("soapAction = %q", got)
 	}
 }
+
+// sealed bytes may hold anything: lines that look like headers, CRLFs,
+// pieces of the markers; the parts come back exactly
+func TestSplitEncrypted(t *testing.T) {
+	tricky := []byte("\x10\x00\x00\x00sig\r\n\tX-Fake: header\r\n--Encrypted Bound\n\tContent-Type: nope\r\nend")
+	other := []byte("\x10\x00\x00\x00second part \r\n\r\n")
+	one := mimeBody(77, tricky)
+	two := append(bytes.TrimSuffix(mimeBody(5, tricky), []byte(mimeBoundary+"--\r\n")), mimeBody(9, other)...)
+	parts := splitEncrypted(one)
+	if len(parts) != 1 || !bytes.Equal(parts[0].payload, tricky) || !bytes.Contains(parts[0].header, []byte("Length=77")) {
+		t.Fatalf("one part: %q", parts)
+	}
+	parts = splitEncrypted(two)
+	if len(parts) != 2 || !bytes.Equal(parts[0].payload, tricky) || !bytes.Equal(parts[1].payload, other) ||
+		!bytes.Contains(parts[1].header, []byte("Length=9")) {
+		t.Fatalf("two parts: %q", parts)
+	}
+	if len(splitEncrypted([]byte("garbage"))) != 0 {
+		t.Error("garbage has no parts")
+	}
+}
