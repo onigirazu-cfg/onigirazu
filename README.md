@@ -424,7 +424,8 @@ return values and examples: [docs/modules/README.md](docs/modules/README.md). Ne
 | `import HOST...` | Write a playbook from running hosts |
 | `run PATTERN ...` | Ad-hoc commands |
 | `validate PLAYBOOK` | Parse the playbook and check every module name, roles included |
-| `lint`, `fmt` | Best-practice checks; YAML formatting |
+| `lint`, `fmt` | Best-practice checks (arguments of bridged modules against ansible-doc too); YAML formatting |
+| `doc MODULE` | A module's arguments: built in, or through the Ansible bridge |
 | `graph PLAYBOOK` | Plays, tasks, handlers and variables as ASCII, DOT or Mermaid |
 | `inventory` | `--list`, `--host`, `--graph`, `--json` (as `ansible-inventory`) |
 | `galaxy install -r FILE` | Install roles and collections from a requirements file |

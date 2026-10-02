@@ -6,6 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/onigirazu-cfg/onigirazu/internal/bridge"
+	"github.com/onigirazu-cfg/onigirazu/internal/config"
+
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -180,6 +183,11 @@ func lintFile(filename string, enabledRules, disabledRules map[string]bool) *Lin
 		}
 	}
 
+	// onigirazu.yml next to the playbook: modules through the Ansible bridge
+	if cfg, err := config.LoadConfigWithDiscovery(configPath, filepath.Dir(filename)); err == nil {
+		bridge.Configure(cfg.AnsibleBridge)
+	}
+
 	// Parse as playbook
 	var playbook types.Playbook
 	if err := yaml.Unmarshal(data, &playbook); err != nil {
@@ -302,6 +310,10 @@ func checkTaskListModules(tasks []types.Task, playName, filename string, knownMo
 
 		// Check if module is known
 		validArgs, known := knownModules[task.Module]
+		if !known && bridge.Allowed(task.Module) {
+			checkBridgedArgs(task, playName, taskName, filename, result)
+			continue
+		}
 		if !known {
 			result.addInfo("module-args", fmt.Sprintf("Unknown module '%s' - cannot validate arguments", task.Module), filename, 0, playName, taskName)
 			continue
@@ -731,4 +743,22 @@ func isValidRange(rangeStr string) bool {
 		}
 	}
 	return true
+}
+
+// checkBridgedArgs checks a task that runs through the Ansible bridge
+// against its module's spec from ansible-doc
+func checkBridgedArgs(task types.Task, playName, taskName, filename string, result *LintResult) {
+	spec, err := bridge.SpecFor(task.Module)
+	if err != nil {
+		result.addInfo("module-args", fmt.Sprintf("%s runs through Ansible; arguments not checked: %v", task.Module, err),
+			filename, 0, playName, taskName)
+		return
+	}
+	for _, p := range spec.CheckArgs(task.Args) {
+		if p.Error {
+			result.addError("module-args", p.Message, filename, 0, playName, taskName)
+		} else {
+			result.addWarning("module-args", p.Message, filename, 0, playName, taskName)
+		}
+	}
 }
