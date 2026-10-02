@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -58,7 +59,8 @@ func (m *FindModule) Execute(ctx context.Context, host types.Host, args map[stri
 		patterns = []string{"*"}
 	}
 	recurse := getBoolArg(args, "recurse", false)
-	fileType := getStringArg(args, "type", "")
+	// Ansible calls it file_type
+	fileType := getStringArg(args, "file_type", getStringArg(args, "type", ""))
 	limit := getIntArg(args, "limit", 0)
 
 	// Initialize executor for remote execution
@@ -107,10 +109,20 @@ func (m *FindModule) findFiles(exec *executor.CommandExecutor, paths, patterns [
 	for i, p := range patterns {
 		names[i] = "-name '" + escapeSingleQuotes(p) + "'"
 	}
-	cmd := fmt.Sprintf("find %s %s-type %s \\( %s \\) -print0 2>/dev/null | tr '\\0' '\\n' | head -n %d",
-		strings.Join(quoted, " "), depth, m.getTypeFlag(fileType), strings.Join(names, " -o "), m.getLimitValue(limit))
+	// one command for the list and the stats, a line per file: "type size
+	// mode mtime path"; GNU find prints them itself, elsewhere one stat runs
+	// for the whole list
+	typeFlag := "-type " + m.getTypeFlag(fileType) + " "
+	if fileType == "any" {
+		typeFlag = ""
+	}
+	sel := fmt.Sprintf("%s %s%s\\( %s \\)", strings.Join(quoted, " "), depth, typeFlag, strings.Join(names, " -o "))
+	cmd := fmt.Sprintf(`if find /dev/null -maxdepth 0 -printf '' 2>/dev/null; then
+  find %s -printf '%%y %%s %%m %%T@ %%p\n' 2>/dev/null | head -n %d
+else
+  find %s -print 2>/dev/null | head -n %d | tr '\n' '\0' | xargs -0 stat -f '%%p %%z %%Lp %%m %%N' 2>/dev/null || true
+fi`, sel, m.getLimitValue(limit), sel, m.getLimitValue(limit))
 
-	// Execute find command
 	output, err := exec.Execute(cmd)
 	if err != nil {
 		// If path doesn't exist, return empty list
@@ -119,73 +131,58 @@ func (m *FindModule) findFiles(exec *executor.CommandExecutor, paths, patterns [
 		}
 		return nil, fmt.Errorf("find command failed: %v", err)
 	}
-
-	// Parse output lines
-	lines := strings.Split(strings.TrimSpace(output), "\n")
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-
-		// Get file stats
-		if fileInfo, err := getFileStats(exec, line); err == nil {
-			files = append(files, fileInfo)
-		} else {
-			// Silently skip files where we can't get stats
-			_ = err
+	for _, rec := range strings.Split(output, "\n") {
+		if info, ok := parseFindRecord(rec); ok {
+			files = append(files, info)
 		}
 	}
-
 	return files, nil
 }
 
-// getFileStats retrieves stats for a single file
-func getFileStats(exec *executor.CommandExecutor, filePath string) (map[string]interface{}, error) {
-	fileInfo := make(map[string]interface{})
-	fileInfo["path"] = filePath
-
-	// Extract filename
-	fileInfo["name"] = filepath.Base(filePath)
-
-	// Get file size and type using stat command
-	cmd := fmt.Sprintf(`if [ -e '%s' ]; then if [ -d '%s' ]; then TYPE=directory; elif [ -L '%s' ]; then TYPE=link; elif [ -f '%s' ]; then TYPE=file; else TYPE=other; fi; SIZE=$(stat -c %%s '%s' 2>/dev/null || stat -f %%z '%s' 2>/dev/null); MODE=$(stat -c %%a '%s' 2>/dev/null || stat -f %%A '%s' 2>/dev/null); MTIME=$(stat -c %%Y '%s' 2>/dev/null || stat -f %%m '%s' 2>/dev/null); echo "type=$TYPE|size=$SIZE|mode=$MODE|mtime=$MTIME"; fi`,
-		filePath, filePath, filePath, filePath, filePath, filePath, filePath, filePath, filePath, filePath)
-
-	output, err := exec.Execute(cmd)
-	if err != nil {
-		return fileInfo, err
+// parseFindRecord reads "type size mode mtime path" into Ansible's fields;
+// the type is a find -printf %y letter or a BSD stat %p octal st_mode
+func parseFindRecord(rec string) (map[string]interface{}, bool) {
+	f := strings.SplitN(rec, " ", 5)
+	if len(f) != 5 || f[4] == "" {
+		return nil, false
 	}
-
-	output = strings.TrimSpace(output)
-	if output == "" {
-		return fileInfo, nil
-	}
-
-	// Parse stats output
-	pairs := strings.Split(output, "|")
-	for _, pair := range pairs {
-		kv := strings.SplitN(pair, "=", 2)
-		if len(kv) == 2 {
-			switch kv[0] {
-			case "type":
-				fileInfo["type"] = kv[1]
-				fileInfo["isdir"] = kv[1] == "directory"
-				fileInfo["isfile"] = kv[1] == "file"
-				fileInfo["islink"] = kv[1] == "link"
-			case "size":
-				if sizeStr := strings.TrimSpace(kv[1]); sizeStr != "" {
-					fileInfo["size"] = sizeStr
-				}
-			case "mode":
-				fileInfo["mode"] = strings.TrimSpace(kv[1])
-			case "mtime":
-				fileInfo["mtime"] = strings.TrimSpace(kv[1])
+	kind := "other"
+	switch f[0] {
+	case "d":
+		kind = "directory"
+	case "f":
+		kind = "file"
+	case "l":
+		kind = "link"
+	default:
+		if st, err := strconv.ParseUint(f[0], 8, 32); err == nil {
+			switch st >> 12 {
+			case 0o04:
+				kind = "directory"
+			case 0o10:
+				kind = "file"
+			case 0o12:
+				kind = "link"
 			}
 		}
 	}
-
-	return fileInfo, nil
+	path := f[4]
+	mode := f[2]
+	for len(mode) < 4 {
+		mode = "0" + mode
+	}
+	info := map[string]interface{}{
+		"path": path, "name": filepath.Base(path), "type": kind,
+		"isdir": kind == "directory", "isreg": kind == "file", "isfile": kind == "file", "islnk": kind == "link", "islink": kind == "link",
+		"mode": mode,
+	}
+	if size, err := strconv.ParseInt(f[1], 10, 64); err == nil {
+		info["size"] = size
+	}
+	if mtime, err := strconv.ParseFloat(f[3], 64); err == nil {
+		info["mtime"] = mtime
+	}
+	return info, true
 }
 
 // getTypeFlag returns the find -type flag value
@@ -236,8 +233,12 @@ func (m *FindModule) Validate(args map[string]interface{}) error {
 	}
 
 	// type is optional
-	if fileType, ok := args["type"].(string); ok {
-		validTypes := []string{"file", "directory", "link", "socket", "pipe", "block", "char", ""}
+	fileType, ok := args["file_type"].(string)
+	if !ok {
+		fileType, ok = args["type"].(string)
+	}
+	if ok {
+		validTypes := []string{"any", "file", "directory", "link", "socket", "pipe", "block", "char", ""}
 		validType := false
 		for _, t := range validTypes {
 			if fileType == t {
@@ -246,7 +247,7 @@ func (m *FindModule) Validate(args map[string]interface{}) error {
 			}
 		}
 		if !validType {
-			return fmt.Errorf("invalid type '%s': must be one of file, directory, link, socket, pipe, block, char", fileType)
+			return fmt.Errorf("invalid type '%s': must be one of any, file, directory, link, socket, pipe, block, char", fileType)
 		}
 	}
 

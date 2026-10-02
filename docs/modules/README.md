@@ -327,7 +327,7 @@ List the entries of a directory on the host that match a glob pattern and a type
 |-----------|------|---------|-------------|
 | `path` | string/list | `.` | Directories to search: a list or comma separated; `paths` and `name` are aliases |
 | `pattern` | string/list | `*` | Globs for file names, a list or comma separated (`*.log,*.gz`); `patterns` is an alias |
-| `type` | string | `file` | `file`, `directory`, `link`, `socket`, `pipe`, `block` or `char` |
+| `file_type` | string | `file` | `any`, `file`, `directory`, `link`, `socket`, `pipe`, `block` or `char`; `type` is an alias |
 | `recurse` | boolean | `false` | Search subdirectories too; otherwise only the directory's own entries |
 | `limit` | integer | `0` | Maximum number of entries (0 = no limit) |
 
@@ -342,12 +342,14 @@ A missing directory returns an empty list.
       "path": "/var/log/syslog",
       "name": "syslog",
       "type": "file",
+      "isreg": true,
       "isfile": true,
       "isdir": false,
+      "islnk": false,
       "islink": false,
-      "size": "1024576",
-      "mode": "644",
-      "mtime": "1696086600"
+      "size": 1024576,
+      "mode": "0644",
+      "mtime": 1696086600.25
     }
   ],
   "file_count": 1,
@@ -355,9 +357,8 @@ A missing directory returns an empty list.
 }
 ```
 
-- `type` of an entry is `file`, `directory`, `link` or `other`; a link to a directory reports `directory`.
-- `size` and `mtime` (Unix seconds) are strings: use `| int` to compare them.
-- `mode` has no leading zero (`644`).
+- `type` of an entry is `file`, `directory`, `link` or `other`.
+- As in Ansible: `size` is an integer, `mtime` Unix seconds as a float, `mode` an octal string (`0644`).
 
 #### Examples
 

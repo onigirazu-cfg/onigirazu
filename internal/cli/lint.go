@@ -388,8 +388,12 @@ func checkTaskListModules(tasks []types.Task, playName, filename string, knownMo
 
 		case "find":
 			// find module doesn't require specific args (uses defaults), but warn if both path and pattern are missing
-			if _, hasPath := task.Args["path"]; !hasPath {
-				if _, hasPattern := task.Args["pattern"]; !hasPattern {
+			_, hasPath := task.Args["path"]
+			_, hasPaths := task.Args["paths"]
+			if !hasPath && !hasPaths {
+				_, hasPattern := task.Args["pattern"]
+				_, hasPatterns := task.Args["patterns"]
+				if !hasPattern && !hasPatterns {
 					result.addInfo("module-args", "find module with no 'path' or 'pattern' will search current directory with '*' pattern", filename, 0, playName, taskName)
 				}
 			}

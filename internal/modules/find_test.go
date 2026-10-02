@@ -2,6 +2,8 @@ package modules
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
@@ -266,4 +268,46 @@ func TestFindModuleExecute(t *testing.T) {
 			t.Errorf("expected failed result for invalid type")
 		}
 	})
+}
+
+// one command lists and stats the files; names with spaces and quotes too
+func TestFindModuleStats(t *testing.T) {
+	dir := t.TempDir()
+	for _, n := range []string{"a.txt", "b c.txt", "it's.txt", "skip.log"} {
+		if err := os.WriteFile(filepath.Join(dir, n), []byte("12345"), 0o640); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Mkdir(filepath.Join(dir, "d.txt"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	host := types.Host{Name: "localhost", Address: "127.0.0.1"}
+	result, err := NewFindModule().Execute(context.Background(), host, map[string]interface{}{"paths": dir, "patterns": "*.txt"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	files, _ := result.Output["files"].([]map[string]interface{})
+	byName := map[string]map[string]interface{}{}
+	for _, f := range files {
+		byName[f["name"].(string)] = f
+	}
+	if len(byName) != 3 || byName["b c.txt"] == nil || byName["it's.txt"] == nil {
+		t.Fatalf("files %v", files)
+	}
+	a := byName["a.txt"]
+	if a["size"] != int64(5) || a["mode"] != "0640" || a["isreg"] != true || a["path"] != filepath.Join(dir, "a.txt") {
+		t.Errorf("a.txt %v", a)
+	}
+	if _, ok := a["mtime"].(float64); !ok {
+		t.Errorf("mtime %v", a["mtime"])
+	}
+
+	result, _ = NewFindModule().Execute(context.Background(), host, map[string]interface{}{"paths": dir, "patterns": "*.txt", "file_type": "directory"})
+	if result.Output["matched"] != 1 {
+		t.Errorf("directories %v", result.Output["files"])
+	}
+	result, _ = NewFindModule().Execute(context.Background(), host, map[string]interface{}{"paths": dir, "patterns": "*.none"})
+	if result.Output["matched"] != 0 || !result.Success {
+		t.Errorf("no match %v", result)
+	}
 }
