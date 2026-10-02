@@ -94,6 +94,7 @@ across your infrastructure with a focus on simplicity and reliability.`,
 	rootCmd.AddCommand(healthcheckCmd)
 	rootCmd.AddCommand(auditCmd)
 	rootCmd.AddCommand(newPluginCmd())
+	rootCmd.AddCommand(newDocCmd())
 
 	// Three-mode execution system commands
 	rootCmd.AddCommand(NewShowExecutionCommand())
