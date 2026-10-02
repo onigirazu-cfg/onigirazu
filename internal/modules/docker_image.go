@@ -67,11 +67,7 @@ func (m *DockerImageModule) Execute(ctx context.Context, host types.Host, args m
 	}
 
 	tag, _ := args["tag"].(string)
-	if tag == "" {
-		tag = "latest"
-	}
-
-	fullName := fmt.Sprintf("%s:%s", name, tag)
+	fullName := imageRef(name, tag)
 	exists, _, err := m.imageExists(ctx, exec, fullName)
 	if err != nil {
 		result.Success = false
@@ -102,6 +98,12 @@ func (m *DockerImageModule) Execute(ctx context.Context, host types.Host, args m
 
 	switch state {
 	case "present":
+		// source: local takes what the host has and never pulls
+		if !exists && getStringArg(args, "source", "") == "local" {
+			result.Success = false
+			result.Error = fmt.Sprintf("image %s is not on the host (source: local)", fullName)
+			return result, fmt.Errorf("%s", result.Error)
+		}
 		if !exists {
 			if err := m.pullImage(ctx, exec, fullName, args); err != nil {
 				result.Success = false
@@ -246,7 +248,7 @@ func (m *DockerImageModule) buildImage(ctx context.Context, exec *executor.Comma
 		cmdParts = append(cmdParts, "--pull")
 	}
 
-	fullName := fmt.Sprintf("%s:%s", name, tag)
+	fullName := imageRef(name, tag)
 	cmdParts = append(cmdParts, "-t", fullName, path)
 
 	cmd := shellJoin(cmdParts...)
@@ -261,4 +263,21 @@ func (m *DockerImageModule) buildImage(ctx context.Context, exec *executor.Comma
 // Validate validates docker_image module arguments
 func (m *DockerImageModule) Validate(args map[string]interface{}) error {
 	return requireStringArg(args, "name")
+}
+
+// imageRef is name with tag, as Ansible's docker_image takes them: a name
+// that carries a tag or digest (alpine:3.20, repo@sha256:...) is used as it
+// is; otherwise the tag, latest by default
+func imageRef(name, tag string) string {
+	last := name[strings.LastIndex(name, "/")+1:]
+	if strings.Contains(last, "@") || (tag == "" && strings.Contains(last, ":")) {
+		return name
+	}
+	if repo, _, hasTag := strings.Cut(last, ":"); hasTag {
+		name = name[:len(name)-len(last)] + repo
+	}
+	if tag == "" {
+		tag = "latest"
+	}
+	return name + ":" + tag
 }

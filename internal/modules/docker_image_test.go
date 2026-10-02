@@ -137,3 +137,19 @@ func TestDockerImageModule_GetDescription(t *testing.T) {
 	module := NewDockerImageModule()
 	assert.Equal(t, "Manage Docker images", module.GetDescription())
 }
+
+func TestImageRef(t *testing.T) {
+	for _, c := range []struct{ name, tag, want string }{
+		{"alpine", "", "alpine:latest"},
+		{"alpine", "3.20", "alpine:3.20"},
+		{"alpine:3.20", "", "alpine:3.20"},
+		{"alpine:3.19", "3.20", "alpine:3.20"},
+		{"registry.local:5000/team/app", "", "registry.local:5000/team/app:latest"},
+		{"registry.local:5000/team/app:1.2", "", "registry.local:5000/team/app:1.2"},
+		{"app@sha256:abc", "", "app@sha256:abc"},
+	} {
+		if got := imageRef(c.name, c.tag); got != c.want {
+			t.Errorf("imageRef(%q, %q) = %q, want %q", c.name, c.tag, got, c.want)
+		}
+	}
+}
