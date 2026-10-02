@@ -48,7 +48,7 @@ var moduleArgs = map[string][]string{
 	"postgresql_user":  {"createdb", "db", "login_host", "login_password", "login_port", "login_user", "name", "password", "priv", "state", "superuser"},
 	"reboot":           {"msg", "post_reboot_delay", "pre_reboot_delay", "reboot_command", "reboot_timeout", "test_boot"},
 	"replace":          {"backup", "dest", "name", "path", "regexp", "replace"},
-	"script":           {"args", "script"},
+	"script":           {"args", "cmd", "script"},
 	"service":          {"enabled", "name", "state"},
 	"set_fact":         {},
 	"shell":            {"chdir", "cmd", "command", "creates", "environment", "executable", "removes", "shell"},
