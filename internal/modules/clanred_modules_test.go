@@ -115,3 +115,13 @@ func TestParseGetent(t *testing.T) {
 	hosts := parseGetent("127.0.0.1       localhost ip6-localhost\n", "hosts", "")
 	assert.Equal(t, []interface{}{"localhost", "ip6-localhost"}, hosts["127.0.0.1"])
 }
+
+func TestUfwRuleChanged(t *testing.T) {
+	assert.True(t, ufwRuleChanged("Rule added\nRule added (v6)\n"))
+	assert.True(t, ufwRuleChanged("Rules updated\nRules updated (v6)\n"))
+	assert.True(t, ufwRuleChanged("Skipping adding existing rule\nRule added (v6)\n"))
+	assert.False(t, ufwRuleChanged("Skipping adding existing rule\nSkipping adding existing rule (v6)\n"))
+	assert.False(t, ufwRuleChanged("Could not delete non-existent rule\nCould not delete non-existent rule (v6)\n"))
+	assert.False(t, ufwRuleChanged("Could not delete non-existent rule\nWARN: initcaps\n[Errno 2] iptables: Permission denied\n"))
+	assert.True(t, ufwRuleChanged("WARN: initcaps\nRules updated\nSkipping unsupported IPv6 'limit' rule\n"))
+}
