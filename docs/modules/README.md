@@ -1583,8 +1583,9 @@ Pull, build or remove Docker images.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `name` | string | - | Image name without tag (required) |
-| `tag` | string | `latest` | Image tag |
+| `name` | string | - | Image name (required); may carry a tag or digest (`alpine:3.20`, `app@sha256:...`) |
+| `tag` | string | `latest` | Image tag, when the name has none (it replaces a tag in the name) |
+| `source` | string | - | `local`: use the image the host has, never pull (a missing image fails) |
 | `state` | string | `present` | `present` (pull when missing), `absent` or `build` |
 | `force` | boolean | `false` | `present`: pull again; `absent`: remove with `-f` |
 | `platform` | string | - | Platform for the pull |

@@ -20,7 +20,7 @@ var moduleArgs = map[string][]string{
 	"docker_compose":   {"build", "detach", "env_files", "file", "files", "force_recreate", "nocache", "profiles", "project_dir", "project_name", "project_src", "pull", "recreate", "remove_orphans", "remove_volumes", "services", "state", "wait", "wait_timeout"},
 	"docker_container": {"command", "cpus", "env", "force", "image", "memory", "name", "networks", "ports", "restart_policy", "state", "volumes"},
 	"docker_host_info": {"containers", "containers_all", "containers_filters"},
-	"docker_image":     {"build_args", "dockerfile", "force", "name", "nocache", "path", "platform", "pull", "state", "tag"},
+	"docker_image":     {"build_args", "dockerfile", "force", "name", "nocache", "path", "platform", "pull", "source", "state", "tag"},
 	"fail":             {"msg"},
 	"fetch":            {"dest", "fail_on_missing", "flat", "src", "validate"},
 	"file":             {"access_time", "content", "dest", "force", "group", "mode", "modification_time", "name", "owner", "path", "recurse", "src", "state"},
