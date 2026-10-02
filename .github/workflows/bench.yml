@@ -1,0 +1,97 @@
+name: Bench
+
+# Load test against ansible-playbook on disposable vSphere VMs (bench/run.sh).
+# By hand (it holds up to max(hosts) VMs at a time); a pull request that
+# changes the benchmark runs it on one host.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'bench/**'
+      - '.github/workflows/bench.yml'
+  workflow_dispatch:
+    inputs:
+      hosts:
+        description: 'Host counts, space separated'
+        required: false
+        type: string
+        default: '1 5 10'
+      vars:
+        description: 'Extra vars for both tools, JSON (volume: bench_files, bench_users, bench_lines)'
+        required: false
+        type: string
+        default: '{}'
+
+permissions:
+  contents: read
+
+jobs:
+  bench:
+    if: >-
+      github.event_name != 'pull_request' ||
+      (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]')
+    runs-on: [self-hosted, vsphere-e2e]
+    timeout-minutes: 300
+    env:
+      GOVC_VERSION: v0.56.0
+      ANSIBLE_CORE: '2.21.4'
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_wrapper: false
+
+      - name: Install govc
+        run: |
+          dir="$RUNNER_TEMP/govc-$GOVC_VERSION"
+          if [ ! -x "$dir/govc" ]; then
+            mkdir -p "$dir"
+            curl -fsSL "https://github.com/vmware/govmomi/releases/download/$GOVC_VERSION/govc_Linux_x86_64.tar.gz" | tar -xz -C "$dir" govc
+          fi
+          echo "$dir" >> "$GITHUB_PATH"
+
+      - name: Install ansible-core and the collections
+        run: |
+          set -e
+          python3 -m venv "$RUNNER_TEMP/ansible"
+          "$RUNNER_TEMP/ansible/bin/pip" install -q "ansible-core==$ANSIBLE_CORE"
+          export ANSIBLE_COLLECTIONS_PATH="$RUNNER_TEMP/collections"
+          for try in 1 2 3; do
+            "$RUNNER_TEMP/ansible/bin/ansible-galaxy" collection install -p "$ANSIBLE_COLLECTIONS_PATH" \
+              community.general ansible.posix community.docker community.mysql community.postgresql >/dev/null && break
+            [ "$try" = 3 ] && exit 1
+            sleep 15
+          done
+          echo "ANSIBLE_COLLECTIONS_PATH=$ANSIBLE_COLLECTIONS_PATH" >> "$GITHUB_ENV"
+          echo "ANSIBLE_PLAYBOOK=$RUNNER_TEMP/ansible/bin/ansible-playbook" >> "$GITHUB_ENV"
+
+      - name: Run the benchmark
+        env:
+          TF_VAR_vsphere_server: ${{ secrets.VSPHERE_SERVER }}
+          TF_VAR_vsphere_user: ${{ secrets.VSPHERE_USER }}
+          TF_VAR_vsphere_password: ${{ secrets.VSPHERE_PASSWORD }}
+          TF_VAR_datacenter: ${{ secrets.E2E_DATACENTER }}
+          TF_VAR_cluster: ${{ secrets.E2E_CLUSTER }}
+          TF_VAR_host: ${{ secrets.E2E_HOST }}
+          TF_VAR_datastore: ${{ secrets.E2E_DATASTORE }}
+          TF_VAR_network: ${{ secrets.E2E_NETWORK }}
+          TF_VAR_folder: ${{ secrets.E2E_FOLDER }}
+          TF_VAR_library: ${{ secrets.E2E_LIBRARY }}
+          RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          BENCH_HOSTS: ${{ inputs.hosts || '1' }}
+          BENCH_VARS: ${{ inputs.vars || '{}' }}
+          BENCH_OUT: ${{ runner.temp }}/bench-results
+        run: bench/run.sh
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: bench-results
+          path: ${{ runner.temp }}/bench-results
