@@ -1,0 +1,48 @@
+- hosts: windows
+  gather_facts: false
+  tasks:
+    - win_file: {path: C:\e2e\logs, state: directory}
+    - community.windows.win_scheduled_task:
+        name: onigirazu e2e
+        path: \OnigirazuE2E
+        description: Write the date
+        actions:
+          - path: powershell.exe
+            arguments: >-
+              -NoProfile -Command "Get-Date | Out-File 'C:\e2e\logs\task-$(Get-Date -Format yyyy-MM-dd).log'"
+        triggers:
+          - type: daily
+            start_boundary: "2026-01-01T02:00:00"
+          - type: weekly
+            days_of_week: sunday,wednesday
+            start_boundary: "2026-01-01T03:30:00"
+          - type: registration
+        username: SYSTEM
+        run_level: highest
+        state: present
+        enabled: true
+    - name: same task again, check mode
+      community.windows.win_scheduled_task:
+        name: onigirazu e2e
+        path: \OnigirazuE2E
+        description: Write the date
+        actions:
+          - path: powershell.exe
+            arguments: >-
+              -NoProfile -Command "Get-Date | Out-File 'C:\e2e\logs\task-$(Get-Date -Format yyyy-MM-dd).log'"
+        triggers:
+          - type: daily
+            start_boundary: "2026-01-01T02:00:00"
+          - type: weekly
+            days_of_week: sunday,wednesday
+            start_boundary: "2026-01-01T03:30:00"
+          - type: registration
+        username: SYSTEM
+        run_level: highest
+        state: present
+        enabled: true
+      check_mode: true
+      register: again
+    - fail:
+        msg: "registered task differs from its definition: {{ again.differences | default(again.changed_properties) }}"
+      when: again is changed

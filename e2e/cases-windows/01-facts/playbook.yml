@@ -1,0 +1,8 @@
+- hosts: windows
+  tasks:
+    - assert:
+        that:
+          - ansible_os_family == "Windows"
+          - "'2025' in ansible_distribution"
+          - ansible_memtotal_mb > 1000
+          - ansible_hostname | length > 0

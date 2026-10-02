@@ -1,0 +1,23 @@
+- hosts: windows
+  gather_facts: false
+  tasks:
+    - win_powershell:
+        script: |
+          $Ansible.Changed = $false
+          $k = Get-Item HKLM:\Software\OnigirazuE2E
+          $Ansible.Result = @{
+            dw = [uint32]::Parse(([BitConverter]::ToUInt32([BitConverter]::GetBytes($k.GetValue('dw')), 0)).ToString())
+            qw = $k.GetValue('qw'); s = $k.GetValue('s')
+            ex = $k.GetValue('ex', $null, 'DoNotExpandEnvironmentNames'); exkind = "$($k.GetValueKind('ex'))"
+            m = @($k.GetValue('m')); b = @($k.GetValue('b') | ForEach-Object { [int]$_ })
+          }
+      register: v
+    - assert:
+        that:
+          - v.result.dw == 4294967295
+          - v.result.qw == 42
+          - v.result.s == 'plain text'
+          - v.result.ex == '%SystemRoot%\x'
+          - v.result.exkind == 'ExpandString'
+          - v.result.m == ['a', 'b', 'c']
+          - v.result.b == [0, 255, 16]

@@ -1,0 +1,6 @@
+- hosts: windows
+  gather_facts: false
+  tasks:
+    - win_feature: {name: Windows-Server-Backup, state: present}
+      register: f
+    - win_optional_feature: {name: SMB1Protocol, state: absent}

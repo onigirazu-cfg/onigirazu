@@ -18,6 +18,9 @@ while IFS= read -r f; do
   case "$f" in
     *.md | docs/* | examples/* | scripts/* | e2e/image/* | compat/* | docker/* | docker-compose*.yml | Makefile | LICENSE* | \
       .goreleaser.yml | .golangci.yml | .gitignore | *_test.go | testdata/* | */testdata/*) ;;
+    # Windows code and its own e2e (e2e-windows.yml) need no Linux case
+    internal/winrm/* | internal/modules/win_*.go | internal/modules/windows*.go | internal/facts/windows*.go | \
+      e2e/run-windows.sh | e2e/cases-windows/* | e2e/terraform-windows/*) ;;
     .github/workflows/e2e.yml) all=1 ;;
     .github/*) ;;
     e2e/cases/*)

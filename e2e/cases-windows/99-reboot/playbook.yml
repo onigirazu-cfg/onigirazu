@@ -1,0 +1,16 @@
+- hosts: windows
+  gather_facts: false
+  tasks:
+    - win_powershell:
+        script: |
+          $Ansible.Changed = $false
+          $Ansible.Result = (Get-CimInstance Win32_OperatingSystem).LastBootUpTime.ToUniversalTime().ToString('o')
+      register: before
+    - win_reboot: {reboot_timeout: 900}
+    - win_powershell:
+        script: |
+          $Ansible.Changed = $false
+          $Ansible.Result = (Get-CimInstance Win32_OperatingSystem).LastBootUpTime.ToUniversalTime().ToString('o')
+      register: after
+    - assert:
+        that: [before.result != after.result]

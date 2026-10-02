@@ -1,0 +1,8 @@
+- hosts: windows
+  gather_facts: false
+  tasks:
+    - win_command: choco list --limit-output
+      register: l
+      changed_when: false
+    - assert:
+        that: ["l.stdout is search('7zip.portable')"]

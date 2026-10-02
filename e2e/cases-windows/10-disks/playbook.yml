@@ -1,0 +1,9 @@
+- hosts: windows
+  gather_facts: false
+  tasks:
+    - community.windows.win_disk_facts:
+    - assert:
+        that:
+          - ansible_disks | length >= 1
+          - ansible_disks[0].partition_style in ['GPT', 'MBR']
+          - ansible_disks[0].partition_count > 0

@@ -1,0 +1,19 @@
+- hosts: windows
+  gather_facts: false
+  tasks:
+    - win_powershell:
+        script: |
+          $Ansible.Changed = $false
+          $Ansible.Result = @{
+            content = [IO.File]::ReadAllText('C:\e2e\files\content.txt')
+            big = (Get-Item C:\e2e\files\big.txt).Length
+            local = (Get-Content C:\e2e\files\sub\local.txt -Raw).Trim()
+            copy = (Get-FileHash C:\e2e\files\copy.txt).Hash -eq (Get-FileHash C:\e2e\files\content.txt).Hash
+          }
+      register: v
+    - assert:
+        that:
+          - v.result.content == "line one\r\nline two\r\n"
+          - v.result.big == 320000
+          - v.result.local == 'from the control machine'
+          - v.result.copy

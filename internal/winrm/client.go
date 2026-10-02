@@ -135,11 +135,9 @@ func Connect(s Settings) (*Client, error) {
 	encrypt := s.Transport == "ntlm" && (s.Encryption == "always" || (s.Encryption == "auto" && !s.HTTPS))
 	switch {
 	case encrypt:
-		enc, err := winrm.NewEncryption("ntlm")
-		if err != nil {
-			return nil, err
+		params.TransportDecorator = func() winrm.Transporter {
+			return &encryptedNTLM{user: s.User, password: s.Password}
 		}
-		params.TransportDecorator = func() winrm.Transporter { return enc }
 	case s.Transport == "ntlm":
 		params.TransportDecorator = func() winrm.Transporter { return &winrm.ClientNTLM{} }
 	}
@@ -158,14 +156,36 @@ type Result struct {
 
 // RunCmd runs a command line with cmd.exe semantics
 func (c *Client) RunCmd(ctx context.Context, command string) (Result, error) {
-	out, errOut, code, err := c.c.RunCmdWithContext(ctx, command)
-	return Result{Stdout: out, Stderr: errOut, ExitCode: code}, err
+	return retryShell(ctx, func() (Result, error) {
+		out, errOut, code, err := c.c.RunCmdWithContext(ctx, command)
+		return Result{Stdout: out, Stderr: errOut, ExitCode: code}, err
+	})
+}
+
+// retryShell runs again when WinRM could not create the shell because
+// Windows was unloading the user's profile of an earlier session ("Illegal
+// operation attempted on a registry key that has been marked for
+// deletion"): nothing ran, and a moment later it works
+func retryShell(ctx context.Context, run func() (Result, error)) (Result, error) {
+	for attempt := 1; ; attempt++ {
+		res, err := run()
+		if err == nil || attempt == 5 || !strings.Contains(err.Error(), "marked for deletion") {
+			return res, err
+		}
+		select {
+		case <-ctx.Done():
+			return res, err
+		case <-time.After(time.Duration(attempt) * 2 * time.Second):
+		}
+	}
 }
 
 // RunCmdInput runs a command line with stdin
 func (c *Client) RunCmdInput(ctx context.Context, command, stdin string) (Result, error) {
-	out, errOut, code, err := c.c.RunWithContextWithString(ctx, command, stdin)
-	return Result{Stdout: out, Stderr: errOut, ExitCode: code}, err
+	return retryShell(ctx, func() (Result, error) {
+		out, errOut, code, err := c.c.RunWithContextWithString(ctx, command, stdin)
+		return Result{Stdout: out, Stderr: errOut, ExitCode: code}, err
+	})
 }
 
 // bootstrap reads a base64 UTF-8 script from stdin and runs it, so scripts
@@ -187,8 +207,10 @@ func b64(s string) string { return base64.StdEncoding.EncodeToString([]byte(s)) 
 
 // RunPS runs a PowerShell script
 func (c *Client) RunPS(ctx context.Context, script string) (Result, error) {
-	out, errOut, code, err := c.c.RunWithContextWithString(ctx, EncodedCommand(bootstrap), b64(script))
-	return Result{Stdout: out, Stderr: cleanCLIXML(errOut), ExitCode: code}, err
+	return retryShell(ctx, func() (Result, error) {
+		out, errOut, code, err := c.c.RunWithContextWithString(ctx, EncodedCommand(bootstrap), b64(script))
+		return Result{Stdout: out, Stderr: cleanCLIXML(errOut), ExitCode: code}, err
+	})
 }
 
 // cleanCLIXML turns PowerShell's #< CLIXML error stream into plain text

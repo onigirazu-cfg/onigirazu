@@ -1,0 +1,16 @@
+- hosts: ssh
+  tasks:
+    - win_ping:
+    - assert:
+        that: [ansible_os_family == "Windows"]
+    - win_command: cmd /c echo over ssh&& echo %OS%
+      register: c
+      changed_when: false
+    - win_shell: (Get-Service sshd).Status
+      register: s
+      changed_when: false
+    - win_copy: {dest: C:\e2e\ssh\copied.txt, content: "{{ 'x' * 200000 }}"}
+    - assert:
+        that:
+          - c.stdout_lines == ['over ssh', 'Windows_NT']
+          - s.stdout | trim == 'Running'

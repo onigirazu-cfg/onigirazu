@@ -1,0 +1,17 @@
+- hosts: windows
+  gather_facts: false
+  tasks:
+    - win_powershell:
+        script: |
+          $Ansible.Changed = $false
+          $Ansible.Result = @{ size = (Get-Item C:\e2e\ssh\copied.txt).Length
+            basic = (Get-Item WSMan:\localhost\Service\Auth\Basic).Value
+            unencrypted = (Get-Item WSMan:\localhost\Service\AllowUnencrypted).Value
+            password = @(Select-String -Path C:\ProgramData\ssh\sshd_config -Pattern '^\s*PasswordAuthentication\s+(\S+)' | ForEach-Object { $_.Matches[0].Groups[1].Value }) }
+      register: v
+    - assert:
+        that:
+          - v.result.size == 200000
+          - v.result.unencrypted == 'false'
+          - v.result.basic == 'false'
+          - v.result.password == ['no']

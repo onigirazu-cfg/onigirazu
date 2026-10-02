@@ -1,0 +1,8 @@
+- hosts: windows
+  gather_facts: false
+  tasks:
+    - win_file: {path: C:\e2e\files\sub, state: directory}
+    - win_copy: {dest: C:\e2e\files\content.txt, content: "line one\r\nline two\r\n"}
+    - win_copy: {dest: C:\e2e\files\big.txt, content: "{{ '0123456789abcdef' * 20000 }}"}
+    - win_copy: {src: local.txt, dest: C:\e2e\files\sub\}
+    - win_copy: {src: C:\e2e\files\content.txt, dest: C:\e2e\files\copy.txt, remote_src: true}

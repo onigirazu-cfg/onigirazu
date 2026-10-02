@@ -1,0 +1,17 @@
+- hosts: windows
+  gather_facts: false
+  tasks:
+    - win_powershell:
+        script: |
+          $Ansible.Changed = $false
+          $t = Get-ScheduledTask -TaskPath '\OnigirazuE2E\' -TaskName 'onigirazu e2e'
+          $Ansible.Result = @{ triggers = @($t.Triggers | ForEach-Object { $_.CimClass.CimClassName }); user = $t.Principal.UserId
+            level = "$($t.Principal.RunLevel)"; action = $t.Actions[0].Execute }
+      register: v
+    - assert:
+        that:
+          - v.result.triggers | length == 3
+          - "'MSFT_TaskRegistrationTrigger' in v.result.triggers"
+          - v.result.user == 'SYSTEM'
+          - v.result.level == 'Highest'
+          - v.result.action == 'powershell.exe'
