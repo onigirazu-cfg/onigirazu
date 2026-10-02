@@ -58,6 +58,23 @@ func runShellOnHost(ctx context.Context, host types.Host, args map[string]interf
 	return exec.Execute("sh -c " + shellQuote(script))
 }
 
+// probeOnHost describes path through the host's command server without a
+// process; served is false when the host cannot, and the caller runs the
+// shell probe
+func probeOnHost(ctx context.Context, host types.Host, args map[string]interface{}, path string, limit int) (string, bool, error) {
+	exec, err := executor.NewCommandExecutor(host)
+	if err != nil {
+		return "", false, nil
+	}
+	defer exec.Close()
+	if become, ok := args["_become"].(bool); ok && become {
+		becomeUser, _ := args["_become_user"].(string)
+		becomeMethod, _ := args["_become_method"].(string)
+		exec.SetBecome(true, becomeUser, becomeMethod)
+	}
+	return exec.Probe(ctx, path, limit)
+}
+
 // ensureOwnership sets owner and/or group of path on host when they differ from the
 // current ones. It reports whether anything was changed. Become settings from args apply.
 func ensureOwnership(ctx context.Context, host types.Host, args map[string]interface{}, path, owner, group string) (bool, error) {

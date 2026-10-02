@@ -54,8 +54,20 @@ func captureBefore(ctx context.Context, host types.Host, module string, args map
 	}
 	// one round trip: kind, mode, owner, group, size and, for a file up to
 	// maxCaptureSize, its content (the sha256 is taken here), else its sha256
+	out, served, err := probeOnHost(ctx, host, args, path, maxCaptureSize)
+	if !served {
+		out, err = shellProbe(ctx, host, args, path)
+	}
+	if err != nil {
+		return map[string]interface{}{"path": path, "error": err.Error()}
+	}
+	return parseProbe(path, out, args)
+}
+
+// shellProbe prints what the server's probe prints, with shell tools
+func shellProbe(ctx context.Context, host types.Host, args map[string]interface{}, path string) (string, error) {
 	q := shellQuote(path)
-	out, err := runShellOnHost(ctx, host, args, fmt.Sprintf(
+	return runShellOnHost(ctx, host, args, fmt.Sprintf(
 		`p=%s; if [ -L "$p" ]; then k=link; elif [ -d "$p" ]; then k=directory; elif [ -f "$p" ]; then k=file; elif [ -e "$p" ]; then k=other; else echo absent; exit 0; fi
 s=$(stat -c '%%a %%U %%G %%s' "$p" 2>/dev/null || stat -f '%%Lp %%Su %%Sg %%z' "$p")
 if [ "$k" = file ]; then
@@ -63,9 +75,11 @@ if [ "$k" = file ]; then
   if [ "$4" -le %d ]; then echo "$k $s +"; printf 'C:'; base64 < "$p"; else
   h=$( (sha256sum "$p" 2>/dev/null || shasum -a 256 "$p") | cut -d' ' -f1); echo "$k $s $h"; fi
 else echo "$k $s -"; fi`, q, maxCaptureSize))
-	if err != nil {
-		return map[string]interface{}{"path": path, "error": err.Error()}
-	}
+}
+
+// parseProbe reads the probe's answer: "absent", or "kind mode owner group
+// size sha256|+|-" and for "+" a "C:" line with the content in base64
+func parseProbe(path, out string, args map[string]interface{}) map[string]interface{} {
 	lines := strings.SplitN(strings.TrimSpace(out), "\n", 2)
 	f := strings.Fields(lines[0])
 	before := map[string]interface{}{"path": path}

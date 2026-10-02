@@ -329,6 +329,27 @@ func (e *CommandExecutor) execOnce(ctx context.Context, command string, combined
 	return e.sshClient.Exec(ctx, e.wrapWithBecome(command), combined)
 }
 
+// Probe describes path through the host's command server without a
+// process (see ssh.Client.Probe), as the become user when become is sudo
+// without a password; served is false when that is not possible
+func (e *CommandExecutor) Probe(ctx context.Context, path string, limit int) (string, bool, error) {
+	if e.sshClient == nil {
+		return "", false, nil
+	}
+	user := ""
+	if e.become {
+		if e.becomeMethod != "sudo" || e.becomePassword != "" {
+			return "", false, nil
+		}
+		user = e.becomeUser
+	}
+	out, served, err := e.sshClient.Probe(ctx, user, path, limit)
+	if errors.Is(err, sshpkg.ErrNotSent) {
+		return "", false, nil // the shell probe reconnects
+	}
+	return string(out), served, err
+}
+
 // executeLocal executes a command locally
 func (e *CommandExecutor) executeLocal(command string, args ...string) (string, error) {
 	// Separate arguments are passed as argv, exactly as the remote path quotes them
