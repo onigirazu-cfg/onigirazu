@@ -204,7 +204,8 @@ Copy a script from the control machine to the host, run it with `bash` and remov
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `script` | string | - | Path of the local script, relative to the working directory (required) |
+| `script` | string | - | Path of the local script, relative to the working directory |
+| `cmd` | string | - | Instead of `script`: the path and its arguments, as in Ansible (`cmd: files/setup.sh --fast`) |
 | `args` | string | - | Arguments, passed to the host's shell |
 
 Returns `stdout`, `rc` and `args` (`stderr` too when the host is local).
