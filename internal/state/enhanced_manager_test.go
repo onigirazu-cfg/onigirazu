@@ -3,6 +3,7 @@ package state
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -398,5 +399,26 @@ func TestEnhancedManager_SaveStateWithAutoSave(t *testing.T) {
 
 	if info.Size() == 0 {
 		t.Errorf("State file is empty")
+	}
+}
+
+// apply saves the state file twice, last through the file backend, which
+// writes gzip over the compression threshold: the next run must load it
+func TestEnhancedManager_LoadsGzipState(t *testing.T) {
+	tmpFile := t.TempDir() + "/test.state"
+	saved := &types.State{Variables: map[string]interface{}{"k": "v", "big": strings.Repeat("x", 200*1024)}, Checksums: map[string]string{}}
+	data, err := NewCompressionManager(nil).CompressState(saved)
+	if err != nil || data[0] != 0x1f {
+		t.Fatalf("not gzip: %v", err)
+	}
+	if err := os.WriteFile(tmpFile, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := NewEnhancedManager(tmpFile, nil).LoadState(context.Background())
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if loaded.Variables["k"] != "v" {
+		t.Errorf("variables %v", loaded.Variables["k"])
 	}
 }
