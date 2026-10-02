@@ -219,17 +219,17 @@ func (e *CommandExecutor) Execute(command string, args ...string) (string, error
 func (e *CommandExecutor) execute(command string, args ...string) (string, error) {
 	fullCommand := e.withEnvironment(commandLine(command, args))
 
-	// Wrap with become if enabled
-	fullCommand = e.wrapWithBecome(fullCommand)
-
 	if e.sshClient != nil {
-		// Execute on remote host via SSH
+		// Execute on remote host via SSH; exec adds become
 		out, err := e.executeSSHWithContext(context.Background(), fullCommand)
 		if err != nil {
 			return out, fmt.Errorf("command failed: %w", err)
 		}
 		return out, nil
-	} else if e.container != "" {
+	}
+	// Wrap with become if enabled
+	fullCommand = e.wrapWithBecome(fullCommand)
+	if e.container != "" {
 		out, err := e.containerCmd(context.Background(), fullCommand).CombinedOutput()
 		if err != nil {
 			return string(out), fmt.Errorf("command failed: %w", err)
@@ -253,13 +253,13 @@ func (e *CommandExecutor) ExecuteWithContext(ctx context.Context, command string
 func (e *CommandExecutor) executeWithContext(ctx context.Context, command string, args ...string) (string, error) {
 	fullCommand := e.withEnvironment(commandLine(command, args))
 
+	if e.sshClient != nil {
+		// Execute on remote host via SSH with context support; exec adds become
+		return e.executeSSHWithContext(ctx, fullCommand)
+	}
 	// Wrap with become if enabled
 	fullCommand = e.wrapWithBecome(fullCommand)
-
-	if e.sshClient != nil {
-		// Execute on remote host via SSH with context support
-		return e.executeSSHWithContext(ctx, fullCommand)
-	} else if e.container != "" {
+	if e.container != "" {
 		output, err := e.containerCmd(ctx, fullCommand).CombinedOutput()
 		return string(output), err
 	} else if e.become || e.env != "" {
@@ -300,10 +300,11 @@ func (e *CommandExecutor) executeSSHWithContext(ctx context.Context, command str
 	return string(out), nil
 }
 
-// exec runs a command through the connection's shell; a command that never
-// reached a host whose connection died is sent again on a new connection
+// exec runs a command (become not applied yet) through the connection's
+// shell; a command that never reached a host whose connection died is sent
+// again on a new connection
 func (e *CommandExecutor) exec(ctx context.Context, command string, combined bool) ([]byte, []byte, int, error) {
-	out, errOut, rc, err := e.sshClient.Exec(ctx, command, combined)
+	out, errOut, rc, err := e.execOnce(ctx, command, combined)
 	if err == nil || !e.usePool || !errors.Is(err, sshpkg.ErrNotSent) {
 		return out, errOut, rc, err
 	}
@@ -312,7 +313,20 @@ func (e *CommandExecutor) exec(ctx context.Context, command string, combined boo
 		return nil, nil, 0, fmt.Errorf("%w (reconnect: %v)", err, rerr)
 	}
 	e.sshClient = fresh
-	return fresh.Exec(ctx, command, combined)
+	return e.execOnce(ctx, command, combined)
+}
+
+// execOnce sends a become command to a command server started with sudo
+// once per connection when it can (sudo without a password), else wraps it
+// in sudo/su/doas
+func (e *CommandExecutor) execOnce(ctx context.Context, command string, combined bool) ([]byte, []byte, int, error) {
+	if e.become && e.becomeMethod == "sudo" && e.becomePassword == "" {
+		out, errOut, rc, served, err := e.sshClient.ExecAs(ctx, e.becomeUser, command, combined)
+		if served {
+			return out, errOut, rc, err
+		}
+	}
+	return e.sshClient.Exec(ctx, e.wrapWithBecome(command), combined)
 }
 
 // executeLocal executes a command locally

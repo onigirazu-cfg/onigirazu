@@ -60,6 +60,7 @@ fi
 }
 
 const posixServer = `r="$HOME/.onigirazu/tmp"
+[ -O "$HOME" ] || r=/nonexistent/.onigirazu
 d=$( (mkdir -p -m 700 "$r" && mktemp -d "$r/sh.XXXXXX") 2>/dev/null || mktemp -d 2>/dev/null) || exit 97
 trap 'rm -rf "$d"' EXIT
 command -v base64 >/dev/null 2>&1 || exit 98
@@ -100,7 +101,7 @@ type shellPool struct {
 	disabled bool // the host cannot run the shell: use a session per command
 }
 
-func (c *Client) startShell() (*remoteShell, error) {
+func (c *Client) startShell(user string) (*remoteShell, error) {
 	session, err := c.client.NewSession()
 	if err != nil {
 		return nil, err
@@ -115,7 +116,14 @@ func (c *Client) startShell() (*remoteShell, error) {
 		_ = session.Close()
 		return nil, err
 	}
-	if err := session.Start("sh -c " + quote(shellScript)); err != nil {
+	command := "sh -c " + quote(shellScript)
+	if user != "" {
+		// sudo once for the server instead of once per command; -n: a
+		// password prompt fails the start, and become falls back to sudo
+		// per command
+		command = "sudo -n -u " + quote(user) + " " + command
+	}
+	if err := session.Start(command); err != nil {
 		_ = session.Close()
 		return nil, err
 	}
@@ -168,10 +176,31 @@ func (c *Client) Exec(ctx context.Context, command string, combined bool) ([]byt
 	if err := ctx.Err(); err != nil {
 		return nil, nil, 0, err
 	}
-	shell, err := c.takeShell()
+	shell, err := c.takeShell("")
 	if err != nil || shell == nil {
 		return c.execSession(ctx, command, combined)
 	}
+	return c.runIn(ctx, "", shell, command, combined)
+}
+
+// ExecAs runs a command as user through a command server started with sudo
+// -n once per connection. served is false when the host cannot run one
+// (sudo wants a password, requiretty, ...): the caller wraps the command in
+// sudo and uses Exec.
+func (c *Client) ExecAs(ctx context.Context, user, command string, combined bool) (stdout, stderr []byte, rc int, served bool, err error) {
+	if err := ctx.Err(); err != nil {
+		return nil, nil, 0, true, err
+	}
+	shell, err := c.takeShell(user)
+	if err != nil || shell == nil {
+		return nil, nil, 0, false, nil
+	}
+	stdout, stderr, rc, err = c.runIn(ctx, user, shell, command, combined)
+	return stdout, stderr, rc, true, err
+}
+
+// runIn runs a command on a shell taken from the pool of user
+func (c *Client) runIn(ctx context.Context, user string, shell *remoteShell, command string, combined bool) ([]byte, []byte, int, error) {
 	type answer struct {
 		out, errOut []byte
 		rc          int
@@ -191,7 +220,7 @@ func (c *Client) Exec(ctx context.Context, command string, combined bool) ([]byt
 			}
 			return nil, nil, 0, a.err
 		}
-		c.returnShell(shell)
+		c.returnShell(user, shell)
 		return a.out, a.errOut, a.rc, nil
 	case <-ctx.Done():
 		// the command may still run: the shell is not reused
@@ -200,49 +229,79 @@ func (c *Client) Exec(ctx context.Context, command string, combined bool) ([]byt
 	}
 }
 
-func (c *Client) takeShell() (*remoteShell, error) {
-	c.shells.mu.Lock()
-	if c.shells.disabled {
-		c.shells.mu.Unlock()
+// pool is the shell pool of user ("" is the login user)
+func (c *Client) pool(user string) *shellPool {
+	if user == "" {
+		return &c.shells
+	}
+	c.asMu.Lock()
+	defer c.asMu.Unlock()
+	if c.asShells == nil {
+		c.asShells = map[string]*shellPool{}
+	}
+	p, ok := c.asShells[user]
+	if !ok {
+		p = &shellPool{}
+		c.asShells[user] = p
+	}
+	return p
+}
+
+func (c *Client) takeShell(user string) (*remoteShell, error) {
+	p := c.pool(user)
+	p.mu.Lock()
+	if p.disabled {
+		p.mu.Unlock()
 		return nil, nil
 	}
-	if n := len(c.shells.idle); n > 0 {
-		s := c.shells.idle[n-1]
-		c.shells.idle = c.shells.idle[:n-1]
-		c.shells.mu.Unlock()
+	if n := len(p.idle); n > 0 {
+		s := p.idle[n-1]
+		p.idle = p.idle[:n-1]
+		p.mu.Unlock()
 		return s, nil
 	}
-	c.shells.mu.Unlock()
-	s, err := c.startShell()
+	p.mu.Unlock()
+	s, err := c.startShell(user)
 	if err != nil {
 		var exitErr *ssh.ExitError
-		if errors.As(err, &exitErr) || strings.Contains(err.Error(), "shell did not start") {
-			c.shells.mu.Lock()
-			c.shells.disabled = true
-			c.shells.mu.Unlock()
+		// a server as another user that does not start (sudo wants a
+		// password) is not tried again on this connection
+		if user != "" || errors.As(err, &exitErr) || strings.Contains(err.Error(), "shell did not start") {
+			p.mu.Lock()
+			p.disabled = true
+			p.mu.Unlock()
 		}
 		return nil, err
 	}
 	return s, nil
 }
 
-func (c *Client) returnShell(s *remoteShell) {
-	c.shells.mu.Lock()
-	defer c.shells.mu.Unlock()
-	if len(c.shells.idle) < 8 {
-		c.shells.idle = append(c.shells.idle, s)
+func (c *Client) returnShell(user string, s *remoteShell) {
+	p := c.pool(user)
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if len(p.idle) < 8 {
+		p.idle = append(p.idle, s)
 		return
 	}
 	go s.close()
 }
 
 func (c *Client) closeShells() {
-	c.shells.mu.Lock()
-	idle := c.shells.idle
-	c.shells.idle = nil
-	c.shells.mu.Unlock()
-	for _, s := range idle {
-		s.close()
+	pools := []*shellPool{&c.shells}
+	c.asMu.Lock()
+	for _, p := range c.asShells {
+		pools = append(pools, p)
+	}
+	c.asMu.Unlock()
+	for _, p := range pools {
+		p.mu.Lock()
+		idle := p.idle
+		p.idle = nil
+		p.mu.Unlock()
+		for _, s := range idle {
+			s.close()
+		}
 	}
 }
 

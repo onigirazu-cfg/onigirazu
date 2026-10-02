@@ -9,10 +9,14 @@ from base64 import b64decode
 
 root = os.path.expanduser("~/.onigirazu/tmp")
 try:
+    # never in the home of another user (sudo may keep HOME): that user's
+    # own server could not use the directory afterwards
+    if os.stat(os.path.expanduser("~")).st_uid != os.geteuid():
+        raise OSError("home of another user")
     os.makedirs(root, mode=0o700, exist_ok=True)
     work = tempfile.mkdtemp(prefix="py.", dir=root)
 except OSError:
-    work = tempfile.mkdtemp()
+    work = tempfile.mkdtemp(prefix="onigirazu.")
 inp, out = sys.stdin.buffer, sys.stdout.buffer
 
 
