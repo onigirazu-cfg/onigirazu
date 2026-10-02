@@ -144,7 +144,7 @@ EOF
       measure onigirazu "$n" second "${cmd[@]}"
       measure onigirazu "$n" check "${cmd[@]}" --check
       # where the time goes: one more noop run with per-task durations
-      "${cmd[@]}" -o json 2>/dev/null > "$WORK/tasks.out" || true
+      (cd "$HERE" && "${cmd[@]}" -o json 2>/dev/null > "$WORK/tasks.out") || true
       # the report follows the progress bar on stdout
       python3 - "$WORK/tasks.out" > "$OUT/onigirazu-$n-tasks.json" <<'PY' || true
 import json, re, sys
