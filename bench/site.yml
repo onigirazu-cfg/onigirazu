@@ -117,7 +117,8 @@
     - community.docker.docker_container:
         name: bench-web
         image: "alpine:3.20"
-        command: [sh, -c, "mkdir -p /www && echo ok > /www/index.html && httpd -f -p 8080 -h /www"]
+        # alpine's busybox has nc but no httpd
+        command: [sh, -c, "while true; do printf 'HTTP/1.1 200 OK\\r\\nContent-Length: 3\\r\\nConnection: close\\r\\n\\r\\nok\\n' | nc -l -p 8080; done"]
         ports: ["8080:8080"]
         state: started
         restart_policy: unless-stopped
