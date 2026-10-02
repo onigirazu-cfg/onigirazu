@@ -53,9 +53,21 @@ func (m *ScriptModule) Execute(ctx context.Context, host types.Host, args map[st
 		}
 	}
 
+	// cmd (or a free form with a path and arguments), as in Ansible:
+	// the first word is the script, the rest its arguments
+	if scriptPath == "" {
+		if cmd, ok := args["cmd"].(string); ok {
+			path, rest, _ := strings.Cut(strings.TrimSpace(cmd), " ")
+			scriptPath = path
+			if _, has := args["args"]; !has && strings.TrimSpace(rest) != "" {
+				args["args"] = strings.TrimSpace(rest)
+			}
+		}
+	}
+
 	if scriptPath == "" {
 		result.Success = false
-		result.Error = "'script' parameter is required"
+		result.Error = "'script' (or 'cmd') parameter is required"
 		result.Duration = time.Since(startTime)
 		return result, nil
 	}
@@ -189,8 +201,10 @@ func (m *ScriptModule) Validate(args map[string]interface{}) error {
 	}
 
 	// Check that script parameter is provided
-	if _, exists := args["script"]; !exists {
-		return fmt.Errorf("script module requires 'script' parameter")
+	_, hasScript := args["script"]
+	_, hasCmd := args["cmd"]
+	if !hasScript && !hasCmd {
+		return fmt.Errorf("script module requires 'script' or 'cmd'")
 	}
 
 	return nil
