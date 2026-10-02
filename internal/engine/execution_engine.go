@@ -1178,6 +1178,11 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 		}
 		cancelRun()
 
+		// a skipped task (check mode the module does not support) has
+		// nothing to retry, as in Ansible
+		if result.Skipped && err == nil {
+			break
+		}
 		// Ansible records how many attempts an until loop took
 		if task.Until != "" && err == nil {
 			if result.Output == nil {
