@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -35,6 +36,10 @@ type Client struct {
 	host   types.Host
 	logger Logger
 	shells shellPool
+	// asShells: command servers started once with sudo -n -u <user>, so
+	// become commands skip a sudo each
+	asMu     sync.Mutex
+	asShells map[string]*shellPool
 	// closed: Close was called (the run stops); commands still running
 	// then fail with ErrClosed instead of a bare EOF
 	closed atomic.Bool

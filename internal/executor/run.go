@@ -18,10 +18,11 @@ type RunResult struct {
 // become) and keeps stdout, stderr and the exit code apart. A non-zero exit
 // is not an error; the error is for a command that could not be run.
 func (e *CommandExecutor) Run(ctx context.Context, commandLine string) (RunResult, error) {
-	full := e.wrapWithBecome(e.withEnvironment(commandLine))
+	full := e.withEnvironment(commandLine)
 	var stdout, stderr bytes.Buffer
 
 	if e.sshClient == nil {
+		full = e.wrapWithBecome(full)
 		// #nosec G204 -- modules run the commands they manage
 		cmd := exec.CommandContext(ctx, "sh", "-c", full)
 		if e.container != "" {
