@@ -3,7 +3,9 @@ package modules
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"strings"
 	"unicode/utf8"
@@ -50,17 +52,16 @@ func captureBefore(ctx context.Context, host types.Host, module string, args map
 	if path == "" || strings.Contains(path, "{{") {
 		return nil
 	}
-	// one round trip: kind, mode, owner, group, size, sha256 and, for a file
-	// up to maxCaptureSize, its content
+	// one round trip: kind, mode, owner, group, size and, for a file up to
+	// maxCaptureSize, its content (the sha256 is taken here), else its sha256
 	q := shellQuote(path)
 	out, err := runShellOnHost(ctx, host, args, fmt.Sprintf(
 		`p=%s; if [ -L "$p" ]; then k=link; elif [ -d "$p" ]; then k=directory; elif [ -f "$p" ]; then k=file; elif [ -e "$p" ]; then k=other; else echo absent; exit 0; fi
-s=$( (stat -c '%%a %%U %%G %%s' "$p" 2>/dev/null || stat -f '%%Lp %%Su %%Sg %%z' "$p") )
+s=$(stat -c '%%a %%U %%G %%s' "$p" 2>/dev/null || stat -f '%%Lp %%Su %%Sg %%z' "$p")
 if [ "$k" = file ]; then
-  h=$( (sha256sum "$p" 2>/dev/null || shasum -a 256 "$p") | cut -d' ' -f1)
-  echo "$k $s $h"
   set -- $s
-  if [ "$4" -le %d ]; then printf 'C:'; base64 < "$p" | tr -d '\n'; echo; fi
+  if [ "$4" -le %d ]; then echo "$k $s +"; printf 'C:'; base64 < "$p"; else
+  h=$( (sha256sum "$p" 2>/dev/null || shasum -a 256 "$p") | cut -d' ' -f1); echo "$k $s $h"; fi
 else echo "$k $s -"; fi`, q, maxCaptureSize))
 	if err != nil {
 		return map[string]interface{}{"path": path, "error": err.Error()}
@@ -80,14 +81,19 @@ else echo "$k $s -"; fi`, q, maxCaptureSize))
 		mode = "0" + mode
 	}
 	before["kind"], before["mode"], before["owner"], before["group"] = f[0], mode, f[2], f[3]
-	if f[5] != "-" {
+	if f[5] != "-" && f[5] != "+" {
 		before["sha256"] = f[5]
 	}
-	if len(lines) == 2 {
-		if encoded, ok := strings.CutPrefix(strings.TrimSpace(lines[1]), "C:"); ok {
-			if data, err := base64.StdEncoding.DecodeString(encoded); err == nil && utf8.Valid(data) && bytes.IndexByte(data, 0) < 0 {
-				before["content"] = string(data)
-			}
+	if len(lines) == 2 && f[5] == "+" {
+		encoded, ok := strings.CutPrefix(strings.Join(strings.Fields(lines[1]), ""), "C:")
+		data, err := base64.StdEncoding.DecodeString(encoded)
+		if !ok || err != nil {
+			return map[string]interface{}{"path": path, "error": fmt.Sprintf("unexpected content of %s", path)}
+		}
+		sum := sha256.Sum256(data)
+		before["sha256"] = hex.EncodeToString(sum[:])
+		if utf8.Valid(data) && bytes.IndexByte(data, 0) < 0 {
+			before["content"] = string(data)
 		}
 	}
 	return withBecome(before, args)
