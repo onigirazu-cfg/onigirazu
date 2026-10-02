@@ -72,7 +72,7 @@ done
 measure() {
   local tool="$1" hosts="$2" phase="$3"; shift 3
   local logf="$OUT/$tool-$hosts-$phase.log"
-  python3 - "$@" > "$WORK/m.json" 2> "$logf" <<'PY'
+  (cd "$HERE" && python3 - "$@" > "$WORK/m.json" 2> "$logf") <<'PY'
 import json, resource, subprocess, sys, time
 t = time.time()
 rc = subprocess.call(sys.argv[1:], stdout=sys.stderr, stderr=sys.stderr)
@@ -82,11 +82,11 @@ print(json.dumps({"seconds": round(time.time() - t, 2), "user": round(r.ru_utime
 PY
   local changed failed
   if [ "$tool" = ansible ]; then
-    changed="$(grep -oE 'changed=[0-9]+' "$logf" | awk -F= '{s+=$2} END {print s+0}')"
-    failed="$(grep -oE '(failed|unreachable)=[0-9]+' "$logf" | awk -F= '{s+=$2} END {print s+0}')"
+    changed="$( (grep -oE 'changed=[0-9]+' "$logf" || true) | awk -F= '{s+=$2} END {print s+0}')"
+    failed="$( (grep -oE '(failed|unreachable)=[0-9]+' "$logf" || true) | awk -F= '{s+=$2} END {print s+0}')"
   else
-    changed="$(grep -oE 'CHANGED:[0-9]+' "$logf" | awk -F: '{s+=$2} END {print s+0}')"
-    failed="$(grep -oE 'FAILED:[0-9]+' "$logf" | awk -F: '{s+=$2} END {print s+0}')"
+    changed="$( (grep -oE 'CHANGED:[0-9]+' "$logf" || true) | awk -F: '{s+=$2} END {print s+0}')"
+    failed="$( (grep -oE 'FAILED:[0-9]+' "$logf" || true) | awk -F: '{s+=$2} END {print s+0}')"
   fi
   jq -r --arg t "$tool" --arg h "$hosts" --arg p "$phase" --arg c "$changed" --arg f "$failed" \
     '[$t, $h, $p, .seconds, .user, .sys, .rss, $c, $f, .rc] | @tsv' "$WORK/m.json" | tee -a "$RESULTS"
@@ -132,17 +132,17 @@ pipelining = True
 ssh_args = -o ControlMaster=auto -o ControlPersist=120s -o UserKnownHostsFile=/dev/null
 EOF
       export ANSIBLE_CONFIG="$WORK/ansible.cfg"
-      run() { (cd "$HERE" && "$ANSIBLE" -i "$inv" site.yml -e "$VARS" "$@"); }
-      measure ansible "$n" converge run
-      measure ansible "$n" second run
-      measure ansible "$n" check run --check
+      cmd=("$ANSIBLE" -i "$inv" site.yml -e "$VARS")
+      measure ansible "$n" converge "${cmd[@]}"
+      measure ansible "$n" second "${cmd[@]}"
+      measure ansible "$n" check "${cmd[@]}" --check
       unset ANSIBLE_CONFIG
     else
       export ONIGIRAZU_SSH_KNOWN_HOSTS_FILE="$WORK/known_hosts" ONIGIRAZU_MAX_CONCURRENCY="$n"
-      run() { (cd "$HERE" && "$BIN" apply site.yml -i "$inv" -e "$VARS" --state "$WORK/state-$n" --no-color "$@"); }
-      measure onigirazu "$n" converge run
-      measure onigirazu "$n" second run
-      measure onigirazu "$n" check run --check
+      cmd=("$BIN" apply site.yml -i "$inv" -e "$VARS" --state "$WORK/state-$n" --no-color)
+      measure onigirazu "$n" converge "${cmd[@]}"
+      measure onigirazu "$n" second "${cmd[@]}"
+      measure onigirazu "$n" check "${cmd[@]}" --check
       rm -f "$WORK/known_hosts"
     fi
     log "$tool on $n host(s): destroying VMs"
