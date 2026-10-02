@@ -143,6 +143,19 @@ EOF
       measure onigirazu "$n" converge "${cmd[@]}"
       measure onigirazu "$n" second "${cmd[@]}"
       measure onigirazu "$n" check "${cmd[@]}" --check
+      # where the time goes: one more noop run with per-task durations
+      (cd "$HERE" && "${cmd[@]}" -o json 2>/dev/null > "$WORK/tasks.out") || true
+      # the report follows the progress bar on stdout
+      python3 - "$WORK/tasks.out" > "$OUT/onigirazu-$n-tasks.json" <<'PY' || true
+import json, re, sys
+data = open(sys.argv[1], errors="replace").read()
+for m in re.finditer(r'\{\s*"execution_id"', data):
+    try:
+        print(json.dumps(json.JSONDecoder().raw_decode(data[m.start():])[0]))
+        break
+    except ValueError:
+        pass
+PY
       rm -f "$WORK/known_hosts"
     fi
     log "$tool on $n host(s): destroying VMs"
@@ -168,6 +181,25 @@ for h in hosts:
         print(f'| {h} | {p} | {o["seconds"]} | {a["seconds"]} | {ratio:.1f}x | {cpu(o):.1f} | {cpu(a):.1f} | '
               f'{o["peak_rss_mb"]} | {a["peak_rss_mb"]} | {o["changed"]}/{a["changed"]} | {o["failed"]}/{a["failed"]} |')
 PY
+for f in "$OUT"/onigirazu-*-tasks.json; do
+  [ -s "$f" ] || continue
+  python3 - "$f" >> "$OUT/summary.md" <<'PY' || true
+import datetime, json, os, sys
+d = json.load(open(sys.argv[1]))
+# a loop reports no duration of its own: the wall time of a task is the gap
+# to the start of the next one
+at = lambda s: datetime.datetime.fromisoformat(s.rstrip("Z")[:26])
+tasks = [t for t in d.get("tasks", []) if not t["start_time"].startswith("0001")]
+ends = [t["start_time"] for t in tasks[1:]] + [d["end_time"]]
+rows = sorted(((at(e) - at(t["start_time"])).total_seconds(), t["name"], t["total"]) for t, e in zip(tasks, ends))[::-1]
+total = (at(d["end_time"]) - at(d["start_time"])).total_seconds() or 1
+print(f"\n#### {os.path.basename(sys.argv[1])[:-5]}: slowest tasks of a noop run ({total:.1f} s)\n")
+print("| task | items | s | share |")
+print("|---|---|---|---|")
+for s, name, n in rows[:15]:
+    print(f"| {name.replace(' (item 1)', '')} | {n} | {s:.2f} | {100 * s / total:.0f}% |")
+PY
+done
 cat "$OUT/summary.md"
 [ -n "${GITHUB_STEP_SUMMARY:-}" ] && cat "$OUT/summary.md" >> "$GITHUB_STEP_SUMMARY"
 # a failed task or a second run that changed something makes the numbers moot
