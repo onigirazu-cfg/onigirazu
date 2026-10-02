@@ -39,6 +39,11 @@ data "vsphere_network" "net" {
   datacenter_id = data.vsphere_datacenter.dc.id
 }
 
+data "vsphere_storage_policy" "policy" {
+  count = var.storage_policy == "" ? 0 : 1
+  name  = var.storage_policy
+}
+
 # Every content library VM template is backed by an inventory template of the
 # same name. Cloning that one uses the SOAP API; the library deploy endpoint
 # answered 403 with the same privileges.
@@ -62,6 +67,8 @@ resource "vsphere_virtual_machine" "vm" {
   resource_pool_id = data.vsphere_compute_cluster.cluster.resource_pool_id
   host_system_id   = data.vsphere_host.host.id
   datastore_id     = data.vsphere_datastore.ds.id
+  # unset for a clone of an encrypted base: it stays encrypted like its source
+  storage_policy_id = one(data.vsphere_storage_policy.policy[*].id)
 
   num_cpus  = var.cpus
   memory    = var.memory_mb
@@ -87,10 +94,11 @@ resource "vsphere_virtual_machine" "vm" {
   }
 
   disk {
-    label            = "disk0"
-    size             = data.vsphere_virtual_machine.template[each.key].disks[0].size
-    thin_provisioned = true
-    eagerly_scrub    = false
+    label             = "disk0"
+    size              = data.vsphere_virtual_machine.template[each.key].disks[0].size
+    thin_provisioned  = true
+    eagerly_scrub     = false
+    storage_policy_id = one(data.vsphere_storage_policy.policy[*].id)
   }
 
   clone {

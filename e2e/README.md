@@ -19,6 +19,9 @@ Runs every case in `cases/` on disposable vSphere VMs cloned from the current
   `[latest]` image, preinstalls what the cases install (`image/prepare.sh`: packages,
   Docker and the container images), seals it like the golden image (`image/seal.sh`)
   and keeps it as `e2e-base-<os>-<golden item>-<time>` in the e2e folder (two per OS).
+  The base is encrypted: the build VM is cloned with the storage policy `E2E_BASE_POLICY`
+  (default `VM Encryption Policy`, empty = none), and its clones stay encrypted. The e2e
+  role needs `Cryptographer.Encrypt` to build it and `Cryptographer.Clone` to clone it.
   Pull requests and manual runs clone the base of the current golden item when there
   is one (`E2E_BASE=1`), otherwise the golden image; the nightly run always tests the
   golden images. A new install in a case's `setup.sh` belongs in `prepare.sh` too.
