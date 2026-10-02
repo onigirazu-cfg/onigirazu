@@ -263,6 +263,10 @@ func (m *DockerContainerModule) createContainer(ctx context.Context, exec *execu
 
 	if networks, ok := args["networks"].([]interface{}); ok {
 		for _, net := range networks {
+			// Ansible lists networks as {name: ...}
+			if m, ok := net.(map[string]interface{}); ok {
+				net = m["name"]
+			}
 			cmdParts = append(cmdParts, "--network", fmt.Sprintf("%v", net))
 		}
 	}
@@ -279,12 +283,22 @@ func (m *DockerContainerModule) createContainer(ctx context.Context, exec *execu
 
 	cmdParts = append(cmdParts, image)
 	// the command is split into words like a shell would, then each is quoted
-	if command, ok := args["command"].(string); ok && command != "" {
-		words, err := splitCommandLine(command)
-		if err != nil {
-			return fmt.Errorf("invalid command: %w", err)
+	switch command := args["command"].(type) {
+	case string:
+		if command != "" {
+			words, err := splitCommandLine(command)
+			if err != nil {
+				return fmt.Errorf("invalid command: %w", err)
+			}
+			cmdParts = append(cmdParts, words...)
 		}
-		cmdParts = append(cmdParts, words...)
+	case []interface{}:
+		// a list is the argv as it is, as in Ansible
+		for _, w := range command {
+			cmdParts = append(cmdParts, fmt.Sprint(w))
+		}
+	case []string:
+		cmdParts = append(cmdParts, command...)
 	}
 
 	cmd := shellJoin(cmdParts...)

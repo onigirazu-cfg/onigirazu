@@ -1532,11 +1532,11 @@ Manage Docker containers with the docker CLI on the host.
 | `name` | string | - | Container name (required) |
 | `image` | string | - | Image (required to create the container) |
 | `state` | string | `started` | `present`, `started`, `stopped`, `restarted` or `absent` |
-| `command` | string | - | Command, split like a shell would |
+| `command` | string or list | - | Command: a string is split like a shell would, a list is the argv as it is |
 | `ports` | list | - | Port mappings (e.g. `"8080:80"`) |
 | `volumes` | list | - | Volume mounts |
 | `env` | dict | - | Environment variables |
-| `networks` | list | - | Network names |
+| `networks` | list | - | Network names, or `{name: ...}` as in Ansible |
 | `restart_policy` | string | - | Restart policy |
 | `cpus` | number | - | CPU limit (e.g. `1.5`) |
 | `memory` | string | - | Memory limit (`512m`, `1g` or bytes) |
