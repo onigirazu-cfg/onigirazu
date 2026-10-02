@@ -143,6 +143,8 @@ EOF
       measure onigirazu "$n" converge "${cmd[@]}"
       measure onigirazu "$n" second "${cmd[@]}"
       measure onigirazu "$n" check "${cmd[@]}" --check
+      # where the time goes: one more noop run with per-task durations
+      "${cmd[@]}" -o json 2>/dev/null | sed -n '/^{/,$p' > "$OUT/onigirazu-$n-tasks.json" || true
       rm -f "$WORK/known_hosts"
     fi
     log "$tool on $n host(s): destroying VMs"
@@ -168,6 +170,20 @@ for h in hosts:
         print(f'| {h} | {p} | {o["seconds"]} | {a["seconds"]} | {ratio:.1f}x | {cpu(o):.1f} | {cpu(a):.1f} | '
               f'{o["peak_rss_mb"]} | {a["peak_rss_mb"]} | {o["changed"]}/{a["changed"]} | {o["failed"]}/{a["failed"]} |')
 PY
+for f in "$OUT"/onigirazu-*-tasks.json; do
+  [ -s "$f" ] || continue
+  python3 - "$f" >> "$OUT/summary.md" <<'PY' || true
+import json, os, sys
+d = json.load(open(sys.argv[1]))
+tasks = sorted(d.get("tasks", []), key=lambda t: -t.get("duration", 0))
+total = sum(t.get("duration", 0) for t in tasks) or 1
+print(f"\n#### {os.path.basename(sys.argv[1])[:-5]}: slowest tasks of a noop run\n")
+print("| task | s | share |")
+print("|---|---|---|")
+for t in tasks[:15]:
+    print(f'| {t["name"]} | {t["duration"] / 1e9:.2f} | {100 * t["duration"] / total:.0f}% |')
+PY
+done
 cat "$OUT/summary.md"
 [ -n "${GITHUB_STEP_SUMMARY:-}" ] && cat "$OUT/summary.md" >> "$GITHUB_STEP_SUMMARY"
 # a failed task or a second run that changed something makes the numbers moot
