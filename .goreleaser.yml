@@ -59,16 +59,49 @@ builds:
     flags:
       - -trimpath
     mod_timestamp: '{{ .CommitTimestamp }}'
-  # the "onigirazu test" command plugin (Molecule scenarios), shipped next to onigirazu
+  # the "onigirazu test" command plugin (Molecule scenarios), shipped next to
+  # onigirazu: every archive must hold the same binaries, so it is built for
+  # exactly the platforms onigirazu is
   - id: onigirazu-test
     main: ./cmd/onigirazu-test
     binary: onigirazu-test
     env:
       - CGO_ENABLED=0
-    goos: [linux, darwin, windows]
-    goarch: [amd64, arm64]
+    goos:
+      - linux
+      - windows
+      - darwin
+      - freebsd
+      - openbsd
+      - netbsd
+    goarch:
+      - amd64
+      - arm64
+      - arm
+      - "386"
+    goarm:
+      - "6"
+      - "7"
     ignore:
+      # Windows: only amd64 and 386
       - goos: windows
+        goarch: arm64
+      - goos: windows
+        goarch: arm
+      # FreeBSD: only amd64 and 386
+      - goos: freebsd
+        goarch: arm
+      - goos: freebsd
+        goarch: arm64
+      # OpenBSD: only amd64 and 386
+      - goos: openbsd
+        goarch: arm
+      - goos: openbsd
+        goarch: arm64
+      # NetBSD: only amd64 and 386
+      - goos: netbsd
+        goarch: arm
+      - goos: netbsd
         goarch: arm64
     ldflags:
       - -s -w
