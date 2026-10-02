@@ -38,25 +38,45 @@ type account struct {
 }
 
 func readAccount(ctx context.Context, host types.Host, args map[string]interface{}, name string) (*account, error) {
-	out, err := runOnHost(ctx, host, args, "getent", "passwd", name)
-	if err != nil {
+	out, ok := capturedAccount(args, name)
+	if !ok {
+		var err error
+		if out, err = runShellOnHost(ctx, host, args, accountScript(name)); err != nil {
+			return nil, fmt.Errorf("reading user %s: %w", name, err)
+		}
+	}
+	return parseAccount(name, out)
+}
+
+// accountScript prints the passwd entry, the primary group and all groups
+// of a user, one line each; nothing for a missing user
+func accountScript(name string) string {
+	q := shellQuote(name)
+	return fmt.Sprintf("e=$(getent passwd %s) || exit 0; printf '%%s\\n' \"$e\"; id -gn %s && id -Gn %s", q, q, q)
+}
+
+// capturedAccount is the accountScript output the capture took before the
+// task (args["_before"])
+func capturedAccount(args map[string]interface{}, name string) (string, bool) {
+	before, ok := args["_before"].(map[string]interface{})
+	if !ok || before["kind"] != "user" || before["name"] != name {
+		return "", false
+	}
+	out, ok := before["account"].(string)
+	return out, ok
+}
+
+func parseAccount(name, out string) (*account, error) {
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	if len(lines) == 0 || lines[0] == "" {
 		return nil, nil // no such user
 	}
-	f := strings.Split(strings.TrimSpace(out), ":")
-	if len(f) < 7 {
-		return nil, fmt.Errorf("unexpected passwd entry for %s: %q", name, out)
+	f := strings.Split(lines[0], ":")
+	if len(f) < 7 || len(lines) < 3 {
+		return nil, fmt.Errorf("unexpected account of %s: %q", name, out)
 	}
-	a := &account{uid: f[2], gid: f[3], comment: f[4], home: f[5], shell: f[6]}
-	primary, err := runOnHost(ctx, host, args, "id", "-gn", name)
-	if err != nil {
-		return nil, fmt.Errorf("id -gn %s: %w", name, err)
-	}
-	a.primary = strings.TrimSpace(primary)
-	all, err := runOnHost(ctx, host, args, "id", "-Gn", name)
-	if err != nil {
-		return nil, fmt.Errorf("id -Gn %s: %w", name, err)
-	}
-	for _, g := range strings.Fields(all) {
+	a := &account{uid: f[2], gid: f[3], comment: f[4], home: f[5], shell: f[6], primary: strings.TrimSpace(lines[1])}
+	for _, g := range strings.Fields(lines[2]) {
 		if g != a.primary {
 			a.groups = append(a.groups, g)
 		}
