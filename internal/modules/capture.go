@@ -179,20 +179,9 @@ func capturePackages(ctx context.Context, host types.Host, args map[string]inter
 	if len(names) == 0 {
 		return nil
 	}
-	// one round trip for all of them: the installed ones, one per line
-	quoted := make([]string, len(names))
-	for i, n := range names {
-		quoted[i] = shellQuote(n)
-	}
-	out, err := runShellOnHost(ctx, host, args, fmt.Sprintf(
-		`for n in %s; do (dpkg-query -W -f='${Status}' "$n" 2>/dev/null | grep -q 'install ok installed' || rpm -q "$n" >/dev/null 2>&1) && echo "$n"; done; true`,
-		strings.Join(quoted, " ")))
+	present, err := queryInstalled(ctx, host, args, names)
 	if err != nil {
 		return map[string]interface{}{"error": err.Error()}
-	}
-	present := map[string]bool{}
-	for _, line := range strings.Split(out, "\n") {
-		present[strings.TrimSpace(line)] = true
 	}
 	var installed []interface{}
 	for _, n := range names {
@@ -207,6 +196,58 @@ func capturePackages(ctx context.Context, host types.Host, args map[string]inter
 	return withBecome(map[string]interface{}{
 		"kind": "packages", "names": all, "installed": installed, "state": getStringArg(args, "state", "present"),
 	}, args)
+}
+
+// queryInstalled asks the host in one round trip which of the packages are
+// installed (dpkg, rpm or pacman)
+func queryInstalled(ctx context.Context, host types.Host, args map[string]interface{}, names []string) (map[string]bool, error) {
+	quoted := make([]string, len(names))
+	for i, n := range names {
+		quoted[i] = shellQuote(n)
+	}
+	out, err := runShellOnHost(ctx, host, args, fmt.Sprintf(
+		`if command -v dpkg-query >/dev/null 2>&1; then q() { dpkg-query -W -f='${Status}' "$1" 2>/dev/null | grep -q 'install ok installed'; }; `+
+			`elif command -v rpm >/dev/null 2>&1; then q() { rpm -q "$1" >/dev/null 2>&1; }; `+
+			`elif command -v pacman >/dev/null 2>&1; then q() { pacman -Q "$1" >/dev/null 2>&1; }; `+
+			`else q() { false; }; fi; for n in %s; do q "$n" && echo "$n"; done; true`,
+		strings.Join(quoted, " ")))
+	if err != nil {
+		return nil, err
+	}
+	present := map[string]bool{}
+	for _, line := range strings.Split(out, "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			present[line] = true
+		}
+	}
+	return present, nil
+}
+
+// installedPackages reports which of the packages are installed: from the
+// capture taken before the task when it covers them all, else in one query
+func installedPackages(ctx context.Context, host types.Host, args map[string]interface{}, names []string) (map[string]bool, error) {
+	if before, ok := args["_before"].(map[string]interface{}); ok && before["kind"] == "packages" {
+		captured := map[string]bool{}
+		if list, ok := before["names"].([]interface{}); ok {
+			for _, n := range list {
+				captured[fmt.Sprint(n)] = true
+			}
+		}
+		all := true
+		for _, n := range names {
+			all = all && captured[n]
+		}
+		if all {
+			present := map[string]bool{}
+			if list, ok := before["installed"].([]interface{}); ok {
+				for _, n := range list {
+					present[fmt.Sprint(n)] = true
+				}
+			}
+			return present, nil
+		}
+	}
+	return queryInstalled(ctx, host, args, names)
 }
 
 // captureService records whether a service was running and enabled
