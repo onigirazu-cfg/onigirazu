@@ -853,7 +853,7 @@ Create a tar or zip archive on the host with `tar`/`zip`.
 | `exclude_path` | string/list | - | Patterns to exclude, relative to `/` (a leading `/` is removed) |
 | `remove` | boolean | `false` | Remove the sources after archiving |
 
-Paths are stored relative to `/`. The task is `ok` when `dest` exists and no source is newer; it fails when nothing matches `path`. Returns `dest` and `format`.
+As in Ansible, entries are stored relative to the common parent of the paths (`/opt/app/conf` becomes `conf/...`). The task is `ok` when `dest` exists and no source is newer; it fails when nothing matches `path`. Returns `dest` and `format`.
 
 #### Example
 
