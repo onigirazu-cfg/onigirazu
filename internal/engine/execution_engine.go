@@ -71,8 +71,11 @@ type ExecutionEngine struct {
 	hostSlots chan struct{}
 	// hostsVersion changes with playHosts, batchHosts and failedHosts (under
 	// mutex); the magic variables built from them are cached by it
-	hostsVersion      uint64
-	magic             magicLists
+	hostsVersion uint64
+	magic        magicLists
+	// inventoryView: the inventory's hosts and groups for hostvars and
+	// groups, read once per playbook run (nothing changes them during it)
+	inventoryView     inventorySnapshot
 	logger            interfaces.Logger
 	stateManager      interfaces.StateManager
 	inventoryMgr      interfaces.InventoryManager
@@ -328,6 +331,7 @@ func (e *ExecutionEngine) ExecutePlaybook(ctx context.Context, playbook *types.P
 	e.mutex.Lock()
 	e.failedHosts = nil
 	e.hostsVersion++
+	e.inventoryView.reset()
 	e.rolloutApplied = nil
 	e.rolloutReports = nil
 	e.taskKeys = nil
