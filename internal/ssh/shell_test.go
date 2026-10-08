@@ -228,6 +228,13 @@ func TestPythonServerProbe(t *testing.T) {
 	assert.Equal(t, 0, rc)
 }
 
+func TestServerScriptNoPython(t *testing.T) {
+	t.Setenv("ONIGIRAZU_NO_PYTHON", "1")
+	assert.Equal(t, posixServer, serverScript())
+	t.Setenv("ONIGIRAZU_NO_PYTHON", "")
+	assert.Equal(t, shellScript, serverScript())
+}
+
 // the work directory may have spaces and glob characters in its path
 func TestPosixServerOddHome(t *testing.T) {
 	home := filepath.Join(t.TempDir(), "a b*c")
@@ -255,4 +262,32 @@ func TestPosixServerOddHome(t *testing.T) {
 	o, _, _, err = s.run("echo after", false)
 	require.NoError(t, err)
 	assert.Equal(t, "after\n", string(o))
+}
+
+// several probes in one request
+func TestPythonServerProbeMany(t *testing.T) {
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("no python3")
+	}
+	home := t.TempDir()
+	cmd := exec.Command("sh", "-c", shellScript)
+	cmd.Env = append(cmd.Environ(), "HOME="+home)
+	stdin, _ := cmd.StdinPipe()
+	out, _ := cmd.StdoutPipe()
+	require.NoError(t, cmd.Start())
+	defer func() { _ = stdin.Close(); _ = cmd.Wait() }()
+	s := &remoteShell{stdin: stdin, stdout: bufio.NewReader(out)}
+	_, _ = s.stdout.ReadString('\n')
+	p := filepath.Join(home, "f")
+	require.NoError(t, os.WriteFile(p, []byte("v1\n"), 0o600))
+	o, _, rc, err := s.request("Q", "100\n"+p+"\n"+filepath.Join(home, "none")+"\n"+home)
+	require.NoError(t, err)
+	assert.Equal(t, 0, rc)
+	records := strings.Split(string(o), "\x1e\n")
+	require.Len(t, records, 4, "%q", o)
+	assert.True(t, strings.HasPrefix(records[0], "file 600 "), records[0])
+	assert.Contains(t, records[0], "\nC:djEK")
+	assert.Equal(t, "absent\n", records[1])
+	assert.True(t, strings.HasPrefix(records[2], "directory "), records[2])
+	assert.Equal(t, "", records[3])
 }

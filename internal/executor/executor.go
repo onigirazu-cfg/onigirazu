@@ -366,6 +366,25 @@ func (e *CommandExecutor) Probe(ctx context.Context, path string, limit int) (st
 	return string(out), served, err
 }
 
+// ProbeMany is Probe for several paths in one round trip
+func (e *CommandExecutor) ProbeMany(ctx context.Context, paths []string, limit int) (string, bool, error) {
+	if e.sshClient == nil {
+		return "", false, nil
+	}
+	user := ""
+	if e.become {
+		if e.becomeMethod != "sudo" || e.becomePassword != "" {
+			return "", false, nil
+		}
+		user = e.becomeUser
+	}
+	out, served, err := e.sshClient.ProbeMany(ctx, user, paths, limit)
+	if errors.Is(err, sshpkg.ErrNotSent) {
+		return "", false, nil
+	}
+	return string(out), served, err
+}
+
 // executeLocal executes a command locally
 func (e *CommandExecutor) executeLocal(command string, args ...string) (string, error) {
 	// Separate arguments are passed as argv, exactly as the remote path quotes them

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -44,6 +45,16 @@ func (e *ExitStatusError) ExitStatus() int { return e.Status }
 // the directory comes back if something removes it anyway (a command that
 // removed its own output files reports empty output).
 var shellScript = pythonServer() + posixServer
+
+// serverScript is the command server to start: ONIGIRAZU_NO_PYTHON=1 keeps
+// to the POSIX one even where python3 is there (to compare, or for a host
+// whose python3 misbehaves)
+func serverScript() string {
+	if os.Getenv("ONIGIRAZU_NO_PYTHON") == "1" {
+		return posixServer
+	}
+	return shellScript
+}
 
 //go:embed shell_server.py
 var shellServerPy []byte
@@ -128,7 +139,7 @@ func (c *Client) startShell(user string) (*remoteShell, error) {
 		_ = session.Close()
 		return nil, err
 	}
-	command := "sh -c " + quote(shellScript)
+	command := "sh -c " + quote(serverScript())
 	agent := c.agentFor(user)
 	if agent != "" {
 		command = agent
@@ -216,6 +227,30 @@ func modeOf(combined bool) string {
 		return "C"
 	}
 	return "S"
+}
+
+// ProbeMany is Probe for several paths in one request: the records come in
+// the order of paths, each followed by "\x1e\n"
+func (c *Client) ProbeMany(ctx context.Context, user string, paths []string, limit int) (out []byte, served bool, err error) {
+	if err := ctx.Err(); err != nil {
+		return nil, true, err
+	}
+	shell, err := c.takeShell(user)
+	if err != nil || shell == nil {
+		return nil, false, nil
+	}
+	if !shell.probe {
+		c.returnShell(user, shell)
+		return nil, false, nil
+	}
+	o, e, rc, err := c.runIn(ctx, user, shell, "Q", strconv.Itoa(limit)+"\n"+strings.Join(paths, "\n"))
+	if err != nil {
+		return nil, true, err
+	}
+	if rc != 0 {
+		return nil, true, fmt.Errorf("probe: %s", strings.TrimSpace(string(e)))
+	}
+	return o, true, nil
 }
 
 // Probe describes path (kind, mode, owner, group, size and the content up to
