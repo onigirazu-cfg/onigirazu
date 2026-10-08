@@ -4,6 +4,7 @@ package cli
 
 // moduleArgs are the arguments each built-in module reads
 var moduleArgs = map[string][]string{
+	"add_host":         {"group", "groupname", "groups", "host", "hostname", "key", "name", "parents"},
 	"apt":              {"autoclean", "autoremove", "cache_valid_time", "name", "state", "update_cache", "upgrade"},
 	"apt_key":          {"data", "file", "id", "keyring", "keyserver", "state", "url"},
 	"apt_repository":   {"filename", "repo", "state", "update_cache"},
@@ -30,6 +31,7 @@ var moduleArgs = map[string][]string{
 	"getent":           {"database", "fail_key", "key", "split"},
 	"git":              {"depth", "dest", "force", "repo", "update", "version"},
 	"group":            {"gid", "name", "state", "system"},
+	"group_by":         {"group", "groupname", "groups", "host", "hostname", "key", "name", "parents"},
 	"hostname":         {"name"},
 	"include_vars":     {"dir", "file", "name"},
 	"ini_file":         {"allow_no_value", "backup", "create", "dest", "mode", "name", "no_extra_spaces", "option", "path", "section", "state", "value"},

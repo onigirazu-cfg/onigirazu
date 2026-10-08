@@ -41,6 +41,8 @@ func NewRegistry() *Registry {
 	registry.RegisterModule(NewGitModule())
 	registry.RegisterModule(NewDebugModule())
 	registry.RegisterModule(NewSetFactModule())
+	registry.RegisterModule(NewAddHostModule())
+	registry.RegisterModule(NewGroupByModule())
 	registry.RegisterModule(NewStatModule())
 	registry.RegisterModule(NewFindModule())
 	registry.RegisterModule(NewLineinfileModule())
@@ -319,7 +321,7 @@ func (r *Registry) ExecuteTask(ctx context.Context, task *types.Task, host types
 // before changing anything. Every other module is skipped in check mode.
 var checkModeModules = map[string]bool{
 	// read only
-	"ping": true, "debug": true, "set_fact": true, "stat": true, "find": true,
+	"ping": true, "debug": true, "set_fact": true, "stat": true, "find": true, "add_host": true, "group_by": true,
 	"fail": true, "wait_for": true, "assert": true, "include_vars": true,
 	"slurp": true, "docker_host_info": true, "setup": true, "gather_facts": true, "getent": true, "async_status": true,
 	// compare, then change
@@ -335,7 +337,7 @@ var checkModeModules = map[string]bool{
 
 // dataArgModules take their arguments as data whose types are kept:
 // set_fact stores them, config writes them into JSON/YAML/TOML files
-var dataArgModules = map[string]bool{"set_fact": true, "config": true, "debug": true, "assert": true, "include_vars": true}
+var dataArgModules = map[string]bool{"add_host": true, "set_fact": true, "config": true, "debug": true, "assert": true, "include_vars": true}
 
 // normalizeArgs turns top-level YAML numbers into strings: modules read
 // text arguments as strings (cron "minute: 0" became "*") and numeric ones
