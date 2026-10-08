@@ -104,6 +104,9 @@ func (m *ServiceModuleFixed) PreCheckState(ctx context.Context, host types.Host,
 			// Service doesn't exist or error - treat as not enabled
 			isEnabled = false
 		}
+	} else if running, enabled, ok := capturedService(args, name); ok {
+		// the capture before the task asked systemctl already
+		isRunning, isEnabled = running, enabled
 	} else {
 		// Check if service is running (fast: ~50ms via systemctl)
 		_, runErr := runOnHost(ctx, host, args, "systemctl", "is-active", name)
@@ -776,4 +779,23 @@ func (m *ServiceModuleFixed) failResult(result types.TaskResult, message string)
 	result.Error = message
 	result.Duration = time.Since(result.Timestamp)
 	return result, nil
+}
+
+// capturedService reads the capture of a systemd unit (args["_before"]) as
+// systemctl is-active / is-enabled would answer by their exit status
+func capturedService(args map[string]interface{}, name string) (running, enabled, ok bool) {
+	before, isMap := args["_before"].(map[string]interface{})
+	if !isMap || before["kind"] != "service" || before["name"] != name || before["error"] != nil {
+		return false, false, false
+	}
+	active, _ := before["active"].(string)
+	state, _ := before["enabled"].(string)
+	if active == "" || state == "" || active == "unknown" {
+		return false, false, false
+	}
+	switch state {
+	case "enabled", "enabled-runtime", "alias", "static", "indirect", "generated", "transient":
+		enabled = true
+	}
+	return active == "active" || active == "reloading", enabled, true
 }

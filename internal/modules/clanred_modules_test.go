@@ -146,3 +146,34 @@ func TestParseAccount(t *testing.T) {
 	_, ok = capturedAccount(args, "v")
 	assert.False(t, ok)
 }
+
+func TestCapturedService(t *testing.T) {
+	cap := func(active, enabled string) map[string]interface{} {
+		return map[string]interface{}{"_before": map[string]interface{}{"kind": "service", "name": "cron", "active": active, "enabled": enabled}}
+	}
+	running, enabled, ok := capturedService(cap("active", "enabled"), "cron")
+	assert.True(t, ok)
+	assert.True(t, running)
+	assert.True(t, enabled)
+	running, enabled, ok = capturedService(cap("inactive", "static"), "cron")
+	assert.True(t, ok)
+	assert.False(t, running)
+	assert.True(t, enabled)
+	_, enabled, _ = capturedService(cap("failed", "disabled"), "cron")
+	assert.False(t, enabled)
+	_, _, ok = capturedService(cap("active", "enabled"), "ssh")
+	assert.False(t, ok, "another unit")
+	_, _, ok = capturedService(cap("unknown", "unknown"), "cron")
+	assert.False(t, ok, "systemctl did not answer")
+}
+
+func TestCapturedAccountExists(t *testing.T) {
+	args := map[string]interface{}{"_before": map[string]interface{}{"kind": "group", "name": "bench", "exists": true}}
+	exists, known := capturedAccountExists(args, "group", "bench")
+	assert.True(t, known)
+	assert.True(t, exists)
+	_, known = capturedAccountExists(args, "user", "bench")
+	assert.False(t, known)
+	_, known = capturedAccountExists(args, "group", "other")
+	assert.False(t, known)
+}
