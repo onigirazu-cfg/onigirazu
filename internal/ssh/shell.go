@@ -104,8 +104,9 @@ type remoteShell struct {
 	session *ssh.Session
 	stdin   io.WriteCloser
 	stdout  *bufio.Reader
-	// probe: the server answers "P" requests (the Python one)
-	probe bool
+	// probe, write: the server answers "P"/"Q" and "W" requests (the
+	// Python one and the agent)
+	probe, write bool
 }
 
 func (s *remoteShell) close() {
@@ -164,7 +165,10 @@ func (c *Client) startShell(user string) (*remoteShell, error) {
 		}
 		return nil, fmt.Errorf("shell did not start: %q", line)
 	}
-	s.probe = len(f) > 1 && f[1] == "P"
+	for _, flag := range f[1:] {
+		s.probe = s.probe || flag == "P"
+		s.write = s.write || flag == "W"
+	}
 	return s, nil
 }
 
@@ -225,6 +229,33 @@ func modeOf(combined bool) string {
 		return "C"
 	}
 	return "S"
+}
+
+// Write writes data to path on the host as user through the command server,
+// without a process: in a file next to it moved over it, missing parent
+// directories made. mode is octal or "-" (keep, 0644 for a new file),
+// owner and group a name, an id or "-" (keep). served is false when the
+// server cannot (the sh one): the caller writes with commands.
+func (c *Client) Write(ctx context.Context, user, path string, data []byte, mode, owner, group string) (served bool, err error) {
+	if err := ctx.Err(); err != nil {
+		return true, err
+	}
+	shell, err := c.takeShell(user)
+	if err != nil || shell == nil {
+		return false, nil
+	}
+	if !shell.write || strings.ContainsAny(path, "\n\x00") {
+		c.returnShell(user, shell)
+		return false, nil
+	}
+	_, e, rc, err := c.runIn(ctx, user, shell, "W", mode+" "+owner+" "+group+"\n"+path+"\n"+string(data))
+	if err != nil {
+		return true, err
+	}
+	if rc != 0 {
+		return true, fmt.Errorf("write %s: %s", path, strings.TrimSpace(string(e)))
+	}
+	return true, nil
 }
 
 // ProbeMany is Probe for several paths in one request: the records come in

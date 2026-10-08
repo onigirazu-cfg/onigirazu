@@ -196,7 +196,7 @@ func TestPythonServerProbe(t *testing.T) {
 	defer func() { _ = stdin.Close(); _ = cmd.Wait() }()
 	s := &remoteShell{stdin: stdin, stdout: bufio.NewReader(out)}
 	ready, _ := s.stdout.ReadString('\n')
-	assert.Equal(t, "ONIGIRAZU-READY P\n", ready)
+	assert.Equal(t, "ONIGIRAZU-READY P W\n", ready)
 
 	p := filepath.Join(home, "f")
 	require.NoError(t, os.WriteFile(p, []byte("v1\n"), 0o640))
@@ -290,4 +290,35 @@ func TestPythonServerProbeMany(t *testing.T) {
 	assert.Equal(t, "absent\n", records[1])
 	assert.True(t, strings.HasPrefix(records[2], "directory "), records[2])
 	assert.Equal(t, "", records[3])
+}
+
+// the Python server writes a file itself
+func TestPythonServerWrite(t *testing.T) {
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("no python3")
+	}
+	home := t.TempDir()
+	cmd := exec.Command("sh", "-c", shellScript)
+	cmd.Env = append(cmd.Environ(), "HOME="+home)
+	stdin, _ := cmd.StdinPipe()
+	out, _ := cmd.StdoutPipe()
+	require.NoError(t, cmd.Start())
+	defer func() { _ = stdin.Close(); _ = cmd.Wait() }()
+	s := &remoteShell{stdin: stdin, stdout: bufio.NewReader(out)}
+	ready, _ := s.stdout.ReadString('\n')
+	require.Contains(t, ready, " W")
+	p := filepath.Join(home, "a", "b", "f")
+	_, e, rc, err := s.request("W", "0600 - -\n"+p+"\nv1\n")
+	require.NoError(t, err)
+	require.Equal(t, 0, rc, string(e))
+	b, _ := os.ReadFile(p)
+	assert.Equal(t, "v1\n", string(b))
+	st, _ := os.Stat(p)
+	assert.Equal(t, os.FileMode(0o600), st.Mode().Perm())
+	_, _, rc, _ = s.request("W", "- - -\n"+p+"\nv2\n")
+	assert.Equal(t, 0, rc)
+	st, _ = os.Stat(p)
+	assert.Equal(t, os.FileMode(0o600), st.Mode().Perm(), "mode kept")
+	entries, _ := os.ReadDir(filepath.Dir(p))
+	assert.Len(t, entries, 1, "no temporary file left")
 }

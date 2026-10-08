@@ -366,6 +366,26 @@ func (e *CommandExecutor) Probe(ctx context.Context, path string, limit int) (st
 	return string(out), served, err
 }
 
+// WriteFile writes data to path through the command server without a
+// process (see ssh.Client.Write); served is false when that is not possible
+func (e *CommandExecutor) WriteFile(ctx context.Context, path string, data []byte, mode, owner, group string) (bool, error) {
+	if e.sshClient == nil {
+		return false, nil
+	}
+	user := ""
+	if e.become {
+		if e.becomeMethod != "sudo" || e.becomePassword != "" {
+			return false, nil
+		}
+		user = e.becomeUser
+	}
+	served, err := e.sshClient.Write(ctx, user, path, data, mode, owner, group)
+	if errors.Is(err, sshpkg.ErrNotSent) {
+		return false, nil
+	}
+	return served, err
+}
+
 // ProbeMany is Probe for several paths in one round trip
 func (e *CommandExecutor) ProbeMany(ctx context.Context, paths []string, limit int) (string, bool, error) {
 	if e.sshClient == nil {

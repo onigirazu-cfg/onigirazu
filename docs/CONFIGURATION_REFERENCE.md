@@ -70,7 +70,8 @@ same as `apply --check`: no task changes anything.
 ### Command server on SSH hosts (`remote_server`)
 
 onigirazu runs commands on an SSH host through one long-lived command server per connection (and one started with
-`sudo` for become). `remote_server` picks it:
+`sudo` for become). The agent and the Python server also read and write the files of file tasks themselves; the
+`sh` server runs commands for that. `remote_server` picks it:
 
 | Value | Server |
 |-------|--------|

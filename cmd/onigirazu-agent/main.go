@@ -62,7 +62,7 @@ func workDir() (string, error) {
 func serve(in io.Reader, out io.Writer, work string) error {
 	r := bufio.NewReaderSize(in, 64*1024)
 	w := bufio.NewWriterSize(out, 64*1024)
-	if _, err := w.WriteString("ONIGIRAZU-READY P\n"); err != nil {
+	if _, err := w.WriteString("ONIGIRAZU-READY P W\n"); err != nil {
 		return err
 	}
 	if err := w.Flush(); err != nil {
@@ -87,6 +87,10 @@ func serve(in io.Reader, out io.Writer, work string) error {
 		case mode == "P":
 			limit, path, _ := strings.Cut(string(payload), " ")
 			so, se, rc = probeAnswer(ids, limit, path)
+		case mode == "W":
+			if werr := writeFile(payload); werr != nil {
+				se, rc = []byte(werr.Error()+"\n"), 1
+			}
 		case mode == "Q":
 			limit, paths, _ := strings.Cut(string(payload), "\n")
 			var b bytes.Buffer
@@ -264,4 +268,115 @@ func probe(ids *names, limit int, path string) ([]byte, error) {
 		return nil, err
 	}
 	return []byte(head + " " + hex.EncodeToString(h.Sum(nil)) + "\n"), nil
+}
+
+// writeFile handles "MODE OWNER GROUP\npath\ncontent": MODE octal or "-"
+// (keep, 0644 for a new file), OWNER/GROUP a name, an id or "-" (keep). The
+// content goes to a file next to the target and is moved over it, as
+// install(1) does; missing parent directories are made.
+func writeFile(request []byte) error {
+	head, rest, _ := bytes.Cut(request, []byte("\n"))
+	path, data, ok := bytes.Cut(rest, []byte("\n"))
+	f := strings.Fields(string(head))
+	if !ok || len(f) != 3 || len(path) == 0 {
+		return errors.New("bad write request")
+	}
+	target := string(path)
+	dir := filepath.Dir(target)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	st, statErr := os.Stat(target)
+	mode := fs.FileMode(0o644)
+	uid, gid := -1, -1
+	if statErr == nil {
+		mode = st.Mode().Perm() | st.Mode()&(fs.ModeSetuid|fs.ModeSetgid|fs.ModeSticky)
+		if sys, isStat := st.Sys().(*syscall.Stat_t); isStat {
+			uid, gid = int(sys.Uid), int(sys.Gid)
+		}
+	}
+	if f[0] != "-" {
+		m, err := strconv.ParseUint(f[0], 8, 32)
+		if err != nil {
+			return fmt.Errorf("bad mode %q", f[0])
+		}
+		mode = fs.FileMode(m & 0o777)
+		if m&0o4000 != 0 {
+			mode |= fs.ModeSetuid
+		}
+		if m&0o2000 != 0 {
+			mode |= fs.ModeSetgid
+		}
+		if m&0o1000 != 0 {
+			mode |= fs.ModeSticky
+		}
+	}
+	if f[1] != "-" {
+		id, err := lookupID(f[1], func(n string) (string, error) {
+			u, err := user.Lookup(n)
+			if err != nil {
+				return "", err
+			}
+			return u.Uid, nil
+		})
+		if err != nil {
+			return err
+		}
+		uid = id
+	}
+	if f[2] != "-" {
+		id, err := lookupID(f[2], func(n string) (string, error) {
+			g, err := user.LookupGroup(n)
+			if err != nil {
+				return "", err
+			}
+			return g.Gid, nil
+		})
+		if err != nil {
+			return err
+		}
+		gid = id
+	}
+	tmp, err := os.CreateTemp(dir, ".onigirazu-")
+	if err != nil {
+		return err
+	}
+	ok = false
+	defer func() {
+		if !ok {
+			_ = os.Remove(tmp.Name())
+		}
+	}()
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmp.Name(), mode); err != nil {
+		return err
+	}
+	if uid != -1 || gid != -1 {
+		if err := os.Chown(tmp.Name(), uid, gid); err != nil {
+			return err
+		}
+	}
+	if err := os.Rename(tmp.Name(), target); err != nil {
+		return err
+	}
+	ok = true
+	return nil
+}
+
+// lookupID is a numeric id as it is, else the id of the name
+func lookupID(s string, lookup func(string) (string, error)) (int, error) {
+	if n, err := strconv.Atoi(s); err == nil {
+		return n, nil
+	}
+	id, err := lookup(s)
+	if err != nil {
+		return 0, err
+	}
+	return strconv.Atoi(id)
 }

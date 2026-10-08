@@ -46,7 +46,7 @@ func start(t *testing.T) *client {
 	go func() { _ = serve(inR, outW, work); outW.Close() }()
 	t.Cleanup(func() { inW.Close() })
 	c := &client{w: inW, r: bufio.NewReader(outR)}
-	if ready, _ := c.r.ReadString('\n'); ready != "ONIGIRAZU-READY P\n" {
+	if ready, _ := c.r.ReadString('\n'); ready != "ONIGIRAZU-READY P W\n" {
 		t.Fatalf("ready %q", ready)
 	}
 	return c
@@ -113,5 +113,37 @@ func TestProbeSpecialBits(t *testing.T) {
 	rec, err := probe(ids, 10, dir)
 	if err != nil || !strings.HasPrefix(string(rec), "directory 1777 ") {
 		t.Errorf("sticky directory: %q %v", rec, err)
+	}
+}
+
+func TestWrite(t *testing.T) {
+	c := start(t)
+	dir := t.TempDir()
+	p := filepath.Join(dir, "sub", "deeper", "f")
+	if _, e, rc := c.do(t, "W", "0640 - -\n"+p+"\nv1\n"); rc != 0 {
+		t.Fatalf("new file: rc %d %s", rc, e)
+	}
+	if b, _ := os.ReadFile(p); string(b) != "v1\n" {
+		t.Errorf("content %q", b)
+	}
+	if st, _ := os.Stat(p); st.Mode().Perm() != 0o640 {
+		t.Errorf("mode %v", st.Mode())
+	}
+	// "-" keeps the mode of the file it replaces
+	if _, e, rc := c.do(t, "W", "- - -\n"+p+"\nv2 with\nlines\x00and bytes\n"); rc != 0 {
+		t.Fatalf("overwrite: rc %d %s", rc, e)
+	}
+	if b, _ := os.ReadFile(p); string(b) != "v2 with\nlines\x00and bytes\n" {
+		t.Errorf("content %q", b)
+	}
+	if st, _ := os.Stat(p); st.Mode().Perm() != 0o640 {
+		t.Errorf("mode not kept: %v", st.Mode())
+	}
+	entries, _ := os.ReadDir(filepath.Dir(p))
+	if len(entries) != 1 {
+		t.Errorf("left behind: %v", entries)
+	}
+	if _, _, rc := c.do(t, "W", "0644 no-such-user-x -\n"+p+"\nx"); rc == 0 {
+		t.Error("an unknown owner is an error")
 	}
 }
