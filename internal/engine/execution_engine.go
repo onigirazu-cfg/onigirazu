@@ -2728,7 +2728,7 @@ func (e *ExecutionEngine) prefetchLoop(ctx context.Context, task *types.Task, ho
 	base := e.hostVariables(host, variables)
 	paths := make([]string, 0, len(items))
 	for i, item := range items {
-		vars := make(map[string]interface{}, len(base)+2)
+		vars := make(map[string]interface{}, len(base))
 		for k, v := range base {
 			vars[k] = v
 		}
