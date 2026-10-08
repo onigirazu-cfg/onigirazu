@@ -59,8 +59,21 @@ cleanup() {
   local rc=$?
   if [ -z "${KEEP_VMS:-}" ] && [ -f "$TF_DIR/terraform.tfstate" ]; then
     log "Destroying VMs"
+    # throwaway VMs: power them off hard first; terraform would wait for a
+    # clean guest shutdown (over a minute with the databases running)
+    local vm n=0 t0=$SECONDS
+    # the folder path may have spaces: one VM per line
+    while IFS= read -r vm; do
+      [ -n "$vm" ] || continue
+      govc vm.power -off -force "$vm" >/dev/null 2>&1 &
+      n=$((n + 1))
+    done < <(govc find "/$TF_VAR_datacenter/vm/$TF_VAR_folder" -type m -name "tmp-e2e-onigirazu-$RUN_ID-*" 2>/dev/null)
+    wait
+    echo "powered off $n VM(s) in $((SECONDS - t0)) s"
+    t0=$SECONDS
     terraform -chdir="$TF_DIR" destroy -auto-approve -input=false -var-file="$TFVARS" >/dev/null ||
       echo "destroy failed; the janitor will remove the VMs"
+    echo "destroyed in $((SECONDS - t0)) s"
   fi
   if [ -n "${KEEP_VMS:-}" ] && [ -f "$KEY" ]; then
     # Kept VMs are only reachable with this run's key; it stays on the runner
@@ -162,6 +175,14 @@ host_ip() { jq -r --arg h "$1" '.[$h]' <<<"$hosts_json"; }
 # Every remote call is bounded: one stuck case must not hold the whole run
 on_host() { local ip; ip="$(host_ip "$1")"; shift; timeout 600 ssh "${SSH_OPTS[@]}" "e2e@$ip" "$@"; }
 
+# where the creation time went: vCenter events of each VM (clone,
+# customization, power on), oldest first
+while IFS= read -r vm; do
+  [ -n "$vm" ] || continue
+  echo "events of ${vm##*/}:"
+  govc events -n 30 "$vm" 2>/dev/null | cat |
+    sed -E 's/[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/<ip>/g' | tail -12 || true
+done < <(govc find "/$TF_VAR_datacenter/vm/$TF_VAR_folder" -type m -name "tmp-e2e-onigirazu-$RUN_ID-*" 2>/dev/null)
 log "Waiting for SSH"
 for h in $(jq -r 'keys[]' <<<"$hosts_json"); do
   for _ in $(seq 60); do on_host "$h" true 2>/dev/null && break; sleep 5; done
