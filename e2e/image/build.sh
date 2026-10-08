@@ -91,6 +91,8 @@ for key in $(jq -r 'keys[]' <<<"$hosts_json"); do
   govc vm.change -vm "$vm" -e guestinfo.e2e_authorized_key= \
     -annotation "onigirazu e2e base template: $golden with the packages the e2e cases install. Built by $RUN_URL. Replaced by the next build; e2e/image/build.sh."
   govc object.rename "$vm" "$name"
+  # e2e VMs are linked clones of this snapshot: a delta disk, no full copy
+  govc snapshot.create -vm "$FOLDER/$name" -m=false -q=false base >/dev/null
   # a powered-off VM clones as well; a template cannot be started by mistake
   if govc vm.markastemplate "$FOLDER/$name"; then
     echo "$key: template $name"
@@ -101,7 +103,8 @@ for key in $(jq -r 'keys[]' <<<"$hosts_json"); do
   # keep the newest $KEEP of this key
   govc find "$FOLDER" -type m -name "e2e-base-$key-*" | sort | head -n -"$KEEP" | while read -r old; do
     echo "$key: removing $old"
-    govc vm.destroy "$old"
+    # a running e2e may still have linked clones of it: the next build retries
+    govc vm.destroy "$old" || echo "$key: $old not removed (linked clones still running?)"
   done
 done
 log "Done"
