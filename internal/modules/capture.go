@@ -206,10 +206,11 @@ func queryInstalled(ctx context.Context, host types.Host, args map[string]interf
 		quoted[i] = shellQuote(n)
 	}
 	out, err := runShellOnHost(ctx, host, args, fmt.Sprintf(
-		`if command -v dpkg-query >/dev/null 2>&1; then q() { dpkg-query -W -f='${Status}' "$1" 2>/dev/null | grep -q 'install ok installed'; }; `+
-			`elif command -v rpm >/dev/null 2>&1; then q() { rpm -q "$1" >/dev/null 2>&1; }; `+
-			`elif command -v pacman >/dev/null 2>&1; then q() { pacman -Q "$1" >/dev/null 2>&1; }; `+
-			`else q() { false; }; fi; for n in %s; do q "$n" && echo "$n"; done; true`,
+		// names are single words (shellQuote); set -f keeps them from globbing
+		`set -f; if command -v dpkg-query >/dev/null 2>&1; then q() { dpkg-query -W -f='${Status}' $1 2>/dev/null | grep -q 'install ok installed'; }; `+
+			`elif command -v rpm >/dev/null 2>&1; then q() { rpm -q $1 >/dev/null 2>&1; }; `+
+			`elif command -v pacman >/dev/null 2>&1; then q() { pacman -Q $1 >/dev/null 2>&1; }; `+
+			`else q() { false; }; fi; for n in %s; do q $n && echo $n; done; true`,
 		strings.Join(quoted, " ")))
 	if err != nil {
 		return nil, err
