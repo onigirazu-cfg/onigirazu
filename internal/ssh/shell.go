@@ -395,3 +395,30 @@ func (b *safeBuffer) Bytes() []byte {
 	defer b.mu.Unlock()
 	return append([]byte(nil), b.buf...)
 }
+
+// Prewarm starts a command server for user ("" is the login user) in the
+// background, once per connection, and puts it in the pool
+func (c *Client) Prewarm(user string) {
+	if _, started := c.prewarmed.LoadOrStore(user, true); started {
+		return
+	}
+	go func() {
+		p := c.pool(user)
+		p.mu.Lock()
+		skip := p.disabled || len(p.idle) > 0
+		p.mu.Unlock()
+		if skip || c.closed.Load() {
+			return
+		}
+		s, err := c.startShell(user)
+		if err != nil {
+			if user != "" {
+				p.mu.Lock()
+				p.disabled = true // as takeShell: no second try with sudo
+				p.mu.Unlock()
+			}
+			return
+		}
+		c.returnShell(user, s)
+	}()
+}

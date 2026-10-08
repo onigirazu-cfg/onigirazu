@@ -10,6 +10,7 @@ import (
 	"time"
 
 	sshpkg "github.com/onigirazu-cfg/onigirazu/internal/ssh"
+	"github.com/onigirazu-cfg/onigirazu/internal/winrm"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
@@ -69,8 +70,23 @@ func NewCommandExecutor(host types.Host) (*CommandExecutor, error) {
 		executor.SetBecome(true, host.BecomeUser, host.BecomeMethod)
 	}
 	executor.setEnvironment(host.Environment)
+	executor.prewarm()
 
 	return executor, nil
+}
+
+// prewarm starts the connection's command servers in the background, the
+// become one too: the first command then does not wait for them one after
+// the other (each start is an SSH session, sudo another)
+func (e *CommandExecutor) prewarm() {
+	// a Windows host over SSH has no sh to start a server with
+	if e.sshClient == nil || winrm.IsWindows(e.host) {
+		return
+	}
+	e.sshClient.Prewarm("")
+	if e.become && e.becomeMethod == "sudo" && e.becomePassword == "" {
+		e.sshClient.Prewarm(e.becomeUser)
+	}
 }
 
 // NewCommandExecutorWithoutPool creates a new command executor without using connection pool
