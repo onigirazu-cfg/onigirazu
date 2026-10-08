@@ -83,6 +83,20 @@ try:
             out.write(b"ONIGIRAZU 255 0 0\n")
             out.flush()
             continue
+        if mode == b"Q":
+            # several probes in one answer: "limit\npath\npath...", each
+            # record followed by "\x1e\n"
+            limit, _, paths = command.partition(b"\n")
+            parts = []
+            for path in paths.split(b"\n"):
+                try:
+                    parts.append(probe(limit + b" " + path))
+                except Exception as err:
+                    parts.append(b"error " + str(err).encode() + b"\n")
+            so = b"\x1e\n".join(parts) + b"\x1e\n"
+            out.write(b"ONIGIRAZU 0 %d 0\n" % len(so) + so)
+            out.flush()
+            continue
         if mode == b"P":
             try:
                 so, se, rc = probe(command), b"", 0

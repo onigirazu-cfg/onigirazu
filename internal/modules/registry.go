@@ -292,6 +292,9 @@ func (r *Registry) ExecuteTask(ctx context.Context, task *types.Task, host types
 	}
 
 	result, err := executeRecovering(ctx, module, host, args, task)
+	if result.Changed || err != nil {
+		invalidateLoopProbes(ctx)
+	}
 	if result.Changed && before != nil && before["error"] == nil {
 		result.Before = before
 	}
