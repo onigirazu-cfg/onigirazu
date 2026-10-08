@@ -18,6 +18,7 @@ import (
 var windowsSafe = map[string]bool{
 	"debug": true, "set_fact": true, "assert": true, "fail": true, "meta": true, "include_vars": true,
 	"pause": true, "async_status": true, "setup": true, "gather_facts": true,
+	"add_host": true, "group_by": true,
 }
 
 // winModuleError explains a Linux module on a Windows host

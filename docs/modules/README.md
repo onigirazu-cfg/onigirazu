@@ -110,7 +110,7 @@ Module-specific alternatives are listed with each module.
 ### Check Mode
 
 With `--check` only these modules run, reporting what they would change and changing nothing:
-ping, debug, set_fact, stat, find, fail, wait_for, assert, include_vars, slurp, getent, setup, gather_facts, docker_host_info, async_status,
+ping, debug, set_fact, add_host, group_by, stat, find, fail, wait_for, assert, include_vars, slurp, getent, setup, gather_facts, docker_host_info, async_status,
 file, copy, template, lineinfile, blockinfile, replace, ini_file, config, apt, yum, package, pip, apt_repository, apt_key,
 service, systemd, user, group, cron, sysctl, mount, timezone, hostname, get_url, git, unarchive, ufw,
 docker_container, docker_image, podman.
@@ -2046,6 +2046,43 @@ One of them is required; `msg` wins when both are given. An undefined `var` prin
     msg: "Current user is {{ ansible_user_id }}"
 ```
 
+### add_host
+
+Add a host to the in-memory inventory for the rest of the run: later plays can target it and its groups, and it
+is in `hostvars` and `groups`. Runs once per task (once per loop item), whatever the play's hosts, as in Ansible.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `name` | string | - | Host name (required; `hostname`, `host` are aliases); `host:port` sets the port |
+| `groups` | string/list | - | Groups to add it to (created when missing); `group`, `groupname` are aliases |
+| any other | any | - | Host variables, connection ones included (`ansible_host`, `ansible_port`, `ansible_user`, `ansible_ssh_private_key_file`, ...) |
+
+A host the inventory has gets the variables and the groups. The result is `add_host: {host_name, groups, host_vars}`.
+
+```yaml
+- name: The new VM
+  add_host:
+    name: "{{ vm.name }}"
+    groups: new_vms
+    ansible_host: "{{ vm.ip }}"
+    ansible_user: ubuntu
+```
+
+### group_by
+
+Put the host into a group named by `key` for the rest of the run (created when missing; spaces become `_`).
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `key` | string | - | Group name (required) |
+| `parents` | string/list | `all` | Parent groups of a new group |
+
+```yaml
+- group_by:
+    key: "os_{{ ansible_distribution | lower }}"
+    parents: linux
+```
+
 ### set_fact
 
 Set variables for the current host for the rest of the run. Every argument becomes a variable; types are kept. `cacheable` is accepted and ignored.
@@ -2276,4 +2313,4 @@ Fail the task with a message.
 - **Version control**: git
 - **Containers**: docker_container, docker_image, docker_compose, podman, docker_host_info
 - **Databases**: mysql_db, mysql_user, postgresql_db, postgresql_user, mongodb
-- **Playbook control**: ping, debug, set_fact, assert, fail, pause, wait_for, include_vars, include_role, import_role, setup, gather_facts, getent, meta
+- **Playbook control**: ping, debug, set_fact, add_host, group_by, assert, fail, pause, wait_for, include_vars, include_role, import_role, setup, gather_facts, getent, meta

@@ -891,8 +891,10 @@ func (e *ExecutionEngine) executeTask(ctx context.Context, task *types.Task, hos
 		}
 	}
 
-	// run_once: the first host runs it, the others get its registered result
-	if task.RunOnce && len(hosts) > 1 {
+	// run_once: the first host runs it, the others get its registered result;
+	// add_host runs once per task (per loop item) whatever the hosts, as in
+	// Ansible
+	if (task.RunOnce || types.ShortModuleName(task.Module) == "add_host") && len(hosts) > 1 {
 		if err := e.executeTask(ctx, runOnceTask(task), hosts[:1], variables, playResult); err != nil {
 			return err
 		}
@@ -1407,6 +1409,9 @@ func (e *ExecutionEngine) finishTask(task *types.Task, host *types.Host, result 
 			e.setHostVar(host.Name, prefix+"_failed_task", failedTask)
 			e.setHostVar(host.Name, prefix+"_failed_result", failedResult)
 		}
+	}
+	if !real.Failed {
+		e.applyInventoryChange(task, host, real)
 	}
 	if (task.Module == "set_fact" || task.Module == "include_vars" || task.Module == "getent") && !real.Failed {
 		if facts, ok := real.Output["onigirazu_facts"].(map[string]interface{}); ok {
