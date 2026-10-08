@@ -62,3 +62,6 @@ Repository secrets: `VSPHERE_SERVER`, `VSPHERE_USER`, `VSPHERE_PASSWORD`,
 `E2E_DATACENTER`, `E2E_CLUSTER`, `E2E_HOST`, `E2E_DATASTORE`, `E2E_NETWORK`,
 `E2E_FOLDER`, `E2E_LIBRARY`. Secrets rather than variables: Actions logs of a
 public repository are public.
+
+When a run fails, the log shows each VM's power state, guest state, guest IP, boot time and last vCenter
+events, and the console screenshots are uploaded as the `e2e-diag-<shard>` artifact (7 days).
