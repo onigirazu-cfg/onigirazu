@@ -69,6 +69,12 @@ same as `apply --check`: no task changes anything.
 On a host with `python3`, onigirazu runs its command server in Python; without it, a POSIX `sh` server
 (needs `sh`, `base64`, `stat`). `ONIGIRAZU_NO_PYTHON=1` uses the `sh` server everywhere.
 
+`ONIGIRAZU_AGENT=1` (experimental) uses `onigirazu-agent` instead, a Go binary with the same protocol that needs
+neither: it is uploaded once per version to `~/.onigirazu/bin` on the host and started there (with `sudo` for
+become). Release builds carry it for Linux amd64, arm64, arm and 386; for other platforms put
+`onigirazu-agent-<os>-<arch>` next to `onigirazu` or in `ONIGIRAZU_AGENT_DIR`. Where it cannot run (noexec home, a
+become user without access to it), the Python or `sh` server is used.
+
 ## Keys that are accepted but have no effect
 
 These keys are parsed but nothing reads them; a file that sets one gets a warning:

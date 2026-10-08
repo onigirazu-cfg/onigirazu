@@ -26,6 +26,11 @@ on:
         required: false
         type: boolean
         default: true
+      agent:
+        description: 'onigirazu uploads and uses onigirazu-agent on the hosts (ONIGIRAZU_AGENT=1)'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -93,6 +98,7 @@ jobs:
           BENCH_HOSTS: ${{ inputs.hosts || '1' }}
           BENCH_VARS: ${{ inputs.vars || '{}' }}
           ONIGIRAZU_NO_PYTHON: ${{ inputs.python == false && '1' || '' }}
+          ONIGIRAZU_AGENT: ${{ inputs.agent && '1' || '' }}
           BENCH_OUT: ${{ runner.temp }}/bench-results
         run: bench/run.sh
 
