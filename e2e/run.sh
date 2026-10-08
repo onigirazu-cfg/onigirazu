@@ -62,10 +62,12 @@ cleanup() {
     # throwaway VMs: power them off hard first; terraform would wait for a
     # clean guest shutdown (over a minute with the databases running)
     local vm n=0 t0=$SECONDS
-    for vm in $(govc find "/$TF_VAR_datacenter/vm/$TF_VAR_folder" -type m -name "tmp-e2e-onigirazu-$RUN_ID-*" 2>/dev/null); do
+    # the folder path may have spaces: one VM per line
+    while IFS= read -r vm; do
+      [ -n "$vm" ] || continue
       govc vm.power -off -force "$vm" >/dev/null 2>&1 &
       n=$((n + 1))
-    done
+    done < <(govc find "/$TF_VAR_datacenter/vm/$TF_VAR_folder" -type m -name "tmp-e2e-onigirazu-$RUN_ID-*" 2>/dev/null)
     wait
     echo "powered off $n VM(s) in $((SECONDS - t0)) s"
     t0=$SECONDS
@@ -174,11 +176,12 @@ on_host() { local ip; ip="$(host_ip "$1")"; shift; timeout 600 ssh "${SSH_OPTS[@
 
 # where the creation time went: vCenter events of each VM (clone,
 # customization, power on), oldest first
-for vm in $(govc find "/$TF_VAR_datacenter/vm/$TF_VAR_folder" -type m -name "tmp-e2e-onigirazu-$RUN_ID-*" 2>/dev/null); do
+while IFS= read -r vm; do
+  [ -n "$vm" ] || continue
   echo "events of ${vm##*/}:"
-  govc events -n 30 "$vm" 2>/dev/null | grep -iE "clon|custom|powered on|deploy|reconfigured|created" |
+  govc events -n 30 "$vm" 2>/dev/null | cat |
     sed -E 's/[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/<ip>/g' | tail -12 || true
-done
+done < <(govc find "/$TF_VAR_datacenter/vm/$TF_VAR_folder" -type m -name "tmp-e2e-onigirazu-$RUN_ID-*" 2>/dev/null)
 log "Waiting for SSH"
 for h in $(jq -r 'keys[]' <<<"$hosts_json"); do
   for _ in $(seq 60); do on_host "$h" true 2>/dev/null && break; sleep 5; done
