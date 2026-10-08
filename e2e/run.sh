@@ -59,6 +59,13 @@ cleanup() {
   local rc=$?
   if [ -z "${KEEP_VMS:-}" ] && [ -f "$TF_DIR/terraform.tfstate" ]; then
     log "Destroying VMs"
+    # throwaway VMs: power them off hard first; terraform would wait for a
+    # clean guest shutdown (over a minute with the databases running)
+    local vm
+    for vm in $(govc find "/$TF_VAR_datacenter/vm/$TF_VAR_folder" -type m -name "tmp-e2e-onigirazu-$RUN_ID-*" 2>/dev/null); do
+      govc vm.power -off -force "$vm" >/dev/null 2>&1 &
+    done
+    wait
     terraform -chdir="$TF_DIR" destroy -auto-approve -input=false -var-file="$TFVARS" >/dev/null ||
       echo "destroy failed; the janitor will remove the VMs"
   fi
