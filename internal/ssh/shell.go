@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -46,11 +45,10 @@ func (e *ExitStatusError) ExitStatus() int { return e.Status }
 // removed its own output files reports empty output).
 var shellScript = pythonServer() + posixServer
 
-// serverScript is the command server to start: ONIGIRAZU_NO_PYTHON=1 keeps
-// to the POSIX one even where python3 is there (to compare, or for a host
-// whose python3 misbehaves)
+// serverScript is the script server to start: the Python one where python3
+// is there, unless remote_server is sh (or ONIGIRAZU_NO_PYTHON=1)
 func serverScript() string {
-	if os.Getenv("ONIGIRAZU_NO_PYTHON") == "1" {
+	if serverMode() == "sh" {
 		return posixServer
 	}
 	return shellScript
@@ -140,6 +138,10 @@ func (c *Client) startShell(user string) (*remoteShell, error) {
 		return nil, err
 	}
 	command := "sh -c " + quote(serverScript())
+	agent := c.agentFor(user)
+	if agent != "" {
+		command = agent
+	}
 	if user != "" {
 		// sudo once for the server instead of once per command; -n: a
 		// password prompt fails the start, and become falls back to sudo
@@ -155,6 +157,11 @@ func (c *Client) startShell(user string) (*remoteShell, error) {
 	f := strings.Fields(line)
 	if err != nil || len(f) == 0 || f[0] != "ONIGIRAZU-READY" {
 		s.close()
+		if agent != "" {
+			// e.g. the become user cannot reach the login user's home
+			c.agentFailed(user)
+			return c.startShell(user)
+		}
 		return nil, fmt.Errorf("shell did not start: %q", line)
 	}
 	s.probe = len(f) > 1 && f[1] == "P"

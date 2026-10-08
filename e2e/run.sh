@@ -112,7 +112,8 @@ diagnose_permissions() {
 
 # --- build onigirazu and a one-time key ---------------------------------------
 log "Building onigirazu"
-(cd "$ROOT" && go build -o "$BIN" ./cmd/onigirazu)
+# with the agents built in, as a release has them (remote_server auto)
+(cd "$ROOT" && go generate ./internal/agentbin && go build -o "$BIN" ./cmd/onigirazu)
 ssh-keygen -q -t ed25519 -N '' -C "onigirazu-e2e-$RUN_ID" -f "$KEY"
 
 # --- create the VMs ------------------------------------------------------------

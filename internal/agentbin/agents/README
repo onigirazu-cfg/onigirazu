@@ -1,0 +1,1 @@
+onigirazu-agent binaries for embedding: written by go generate ./internal/agentbin (the release does it).
