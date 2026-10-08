@@ -71,7 +71,7 @@ func (e *ExecutionEngine) withMagicVariables(variables map[string]interface{}) m
 			base[k] = v
 		}
 	}
-	out := make(map[string]interface{}, len(base)+2)
+	out := make(map[string]interface{}, len(base))
 	for k, v := range base {
 		out[k] = v
 	}
