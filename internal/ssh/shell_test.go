@@ -227,3 +227,10 @@ func TestPythonServerProbe(t *testing.T) {
 	assert.Equal(t, "ok\n", string(o))
 	assert.Equal(t, 0, rc)
 }
+
+func TestServerScriptNoPython(t *testing.T) {
+	t.Setenv("ONIGIRAZU_NO_PYTHON", "1")
+	assert.Equal(t, posixServer, serverScript())
+	t.Setenv("ONIGIRAZU_NO_PYTHON", "")
+	assert.Equal(t, shellScript, serverScript())
+}

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -44,6 +45,16 @@ func (e *ExitStatusError) ExitStatus() int { return e.Status }
 // the directory comes back if something removes it anyway (a command that
 // removed its own output files reports empty output).
 var shellScript = pythonServer() + posixServer
+
+// serverScript is the command server to start: ONIGIRAZU_NO_PYTHON=1 keeps
+// to the POSIX one even where python3 is there (to compare, or for a host
+// whose python3 misbehaves)
+func serverScript() string {
+	if os.Getenv("ONIGIRAZU_NO_PYTHON") == "1" {
+		return posixServer
+	}
+	return shellScript
+}
 
 //go:embed shell_server.py
 var shellServerPy []byte
@@ -118,7 +129,7 @@ func (c *Client) startShell(user string) (*remoteShell, error) {
 		_ = session.Close()
 		return nil, err
 	}
-	command := "sh -c " + quote(shellScript)
+	command := "sh -c " + quote(serverScript())
 	if user != "" {
 		// sudo once for the server instead of once per command; -n: a
 		// password prompt fails the start, and become falls back to sudo
