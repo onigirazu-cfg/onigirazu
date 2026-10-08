@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -187,7 +188,7 @@ func (m *LineinfileModule) Execute(ctx context.Context, host types.Host, args ma
 			}
 			result.Output["backup_file"] = backupPath
 		}
-		if err := m.writeRemoteFile(exec, path, newLines); err != nil {
+		if err := m.writeRemoteFile(exec, args, path, newLines, !fileExists); err != nil {
 			result.Success = false
 			result.Error = fmt.Sprintf("failed to write file: %v", err)
 			result.Duration = time.Since(startTime)
@@ -204,6 +205,10 @@ func (m *LineinfileModule) Execute(ctx context.Context, host types.Host, args ma
 	}
 	result.Output["msg"] = fmt.Sprintf("line %s in file %s", state, path)
 
+	// mode, owner and group, as for every file module in Ansible
+	if fileExists || changed {
+		return applyFileArgs(ctx, host, args, path, result, startTime)
+	}
 	return result, nil
 }
 
@@ -353,8 +358,10 @@ func (m *LineinfileModule) readRemoteFile(exec *executor.CommandExecutor, path s
 	return lines, nil
 }
 
-// writeRemoteFile writes lines to a file on the remote host
-func (m *LineinfileModule) writeRemoteFile(exec *executor.CommandExecutor, path string, lines []string) error {
+// writeRemoteFile writes lines to a file on the remote host: a new one with
+// its parent directories (as create does in Ansible) and the mode asked for
+// (0644 by default), set in the same command
+func (m *LineinfileModule) writeRemoteFile(exec *executor.CommandExecutor, args map[string]interface{}, path string, lines []string, isNew bool) error {
 	escapedPath := strings.ReplaceAll(path, "'", "'\\''")
 
 	// Join lines with newline
@@ -368,6 +375,16 @@ func (m *LineinfileModule) writeRemoteFile(exec *executor.CommandExecutor, path 
 
 	// Write content to file using printf
 	cmd := fmt.Sprintf("printf '%%s' '%s' > '%s'", escapedContent, escapedPath)
+	mode := getStringArg(args, "mode", "")
+	if want, err := strconv.ParseUint(mode, 8, 32); mode != "" && err == nil {
+		cmd += fmt.Sprintf(" && chmod %04o '%s'", want, escapedPath)
+		args["_mode_set"] = path
+	} else if isNew {
+		cmd += fmt.Sprintf(" && chmod 0644 '%s'", escapedPath)
+	}
+	if isNew {
+		cmd = fmt.Sprintf("mkdir -p \"$(dirname '%s')\" && umask 077 && ", escapedPath) + cmd
+	}
 
 	// Note: executor.Execute will automatically use shell if needed
 	_, err := exec.Execute(cmd)
