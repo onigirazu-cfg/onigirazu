@@ -190,7 +190,7 @@ func (m *BlockinfileModule) Execute(ctx context.Context, host types.Host, args m
 			}
 			result.Output["backup"] = backupPath
 		}
-		if err := writeHostFile(ctx, host, args, filePath, []byte(newContent), 0); err != nil {
+		if err := writeHostFile(ctx, host, args, filePath, []byte(newContent), argMode(args, filePath)); err != nil {
 			result.Success = false
 			result.Error = err.Error()
 			result.Duration = time.Since(startTime)
@@ -203,6 +203,9 @@ func (m *BlockinfileModule) Execute(ctx context.Context, host types.Host, args m
 	result.Output["msg"] = fmt.Sprintf("Block %s", state)
 
 	result.Duration = time.Since(startTime)
+	if fileExists || result.Changed {
+		return applyFileArgs(ctx, host, args, filePath, result, startTime)
+	}
 	return result, nil
 }
 

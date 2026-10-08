@@ -40,6 +40,7 @@ type Client struct {
 	// become commands skip a sudo each
 	asMu     sync.Mutex
 	asShells map[string]*shellPool
+	agent    agentState
 	// prewarmed: the users whose command server Prewarm started
 	prewarmed sync.Map
 	// closed: Close was called (the run stops); commands still running

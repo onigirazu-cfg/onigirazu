@@ -46,6 +46,7 @@ Environment variables only change the defaults; a key in `onigirazu.yml` wins ov
 | `color_output` | `ONIGIRAZU_COLOR_OUTPUT` | `true` | Colored output. `--no-color` overrides it. |
 | `ssh_strict_host_key` | `ONIGIRAZU_SSH_STRICT_HOST_KEY` | `false` | Reject hosts whose key is not in the known_hosts file. |
 | `ssh_known_hosts_file` | `ONIGIRAZU_SSH_KNOWN_HOSTS_FILE` | `~/.ssh/known_hosts` | known_hosts file for host key checks. |
+| `remote_server` | `ONIGIRAZU_REMOTE_SERVER` | `auto` | Command server on SSH hosts: `auto`, `python` or `sh` (see below). |
 | `enable_metrics` | `ONIGIRAZU_ENABLE_METRICS` | `false` | Start a Prometheus endpoint during `apply` (`/metrics`, `/health`, `/summary`). |
 | `metrics_listen_address` | `ONIGIRAZU_METRICS_LISTEN_ADDRESS` | `127.0.0.1` | Listen address of the metrics server. |
 | `metrics_port` | `ONIGIRAZU_METRICS_PORT` | `9090` | Port of the metrics server. |
@@ -66,8 +67,24 @@ Durations are written as `30s`, `5m`, `1h`.
 `check_mode: true` and `dry_run: true` (or their `ONIGIRAZU_*` variables) are the
 same as `apply --check`: no task changes anything.
 
-On a host with `python3`, onigirazu runs its command server in Python; without it, a POSIX `sh` server
-(needs `sh`, `base64`, `stat`). `ONIGIRAZU_NO_PYTHON=1` uses the `sh` server everywhere.
+### Command server on SSH hosts (`remote_server`)
+
+onigirazu runs commands on an SSH host through one long-lived command server per connection (and one started with
+`sudo` for become). The agent and the Python server also read and write the files of file tasks themselves; the
+`sh` server runs commands for that. `remote_server` picks it:
+
+| Value | Server |
+|-------|--------|
+| `auto` (default) | `onigirazu-agent`, else Python, else `sh` |
+| `python` | Python (needs `python3`), else `sh` |
+| `sh` | POSIX `sh` (needs `sh`, `base64`, `stat`) |
+
+`onigirazu-agent` is a small Go binary. On the first connection to a host it is uploaded to
+`~/.onigirazu/bin/onigirazu-agent-<hash>` and reused until the version changes. Release builds carry it for Linux
+amd64, arm64, arm and 386; for other platforms put `onigirazu-agent-<os>-<arch>` next to `onigirazu` or in
+`ONIGIRAZU_AGENT_DIR`. Each fallback is automatic: no binary for the platform, a `noexec` home, or a become user
+without access to the login user's home falls to Python, a host without `python3` to `sh`.
+`ONIGIRAZU_NO_PYTHON=1` is the same as `remote_server: sh`.
 
 ## Keys that are accepted but have no effect
 

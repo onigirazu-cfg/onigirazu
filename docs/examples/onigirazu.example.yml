@@ -76,6 +76,9 @@ ssh_strict_host_key: false
 # Path to SSH known_hosts file (empty = use ~/.ssh/known_hosts)
 ssh_known_hosts_file: ""
 
+# Command server on SSH hosts: auto (onigirazu-agent, else Python, else sh), python, sh
+remote_server: auto
+
 # ============================================================================
 # 🆕 Global Default for insecure_ignore_host_key
 # ============================================================================

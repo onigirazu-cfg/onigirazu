@@ -197,6 +197,15 @@ func inlineInstallScript(tmp, path, owner string, data []byte, mode os.FileMode)
 // created; the owner of an existing file is kept.
 func installRemoteFile(ctx context.Context, host types.Host, args map[string]interface{}, client *sshpkg.Client,
 	path string, data []byte, mode os.FileMode, existing remoteFile) error {
+	// the command server writes it itself: no upload, no install(1)
+	if client != nil {
+		if served, err := writeOnHost(ctx, host, args, path, data, fmt.Sprintf("%04o", mode.Perm())); served {
+			if err != nil {
+				return fmt.Errorf("failed to write %s: %w", path, err)
+			}
+			return nil
+		}
+	}
 	tmp := remoteTempName(".onigirazu-", filepath.Base(path))
 	// a container gets the file through its runtime; a local host has no SSH
 	// client: the temporary file is written directly
@@ -237,6 +246,18 @@ func installRemoteFile(ctx context.Context, host types.Host, args map[string]int
 // readHostFile returns the content of path on the host (with become), and
 // whether it exists. Content travels base64-encoded, so any bytes survive.
 func readHostFile(ctx context.Context, host types.Host, args map[string]interface{}, path string) ([]byte, bool, error) {
+	// the capture before the task has it already (text up to the capture
+	// limit): no round trip
+	if b, ok := captured(args, path); ok {
+		switch b["kind"] {
+		case "absent":
+			return nil, false, nil
+		case "file":
+			if content, has := b["content"].(string); has {
+				return []byte(content), true, nil
+			}
+		}
+	}
 	q := shellQuote(path)
 	out, err := runShellOnHost(ctx, host, args, fmt.Sprintf(
 		"if [ -e %s ]; then printf 'present:'; base64 < %s | tr -d '\\n'; else printf absent; fi", q, q))
@@ -262,6 +283,16 @@ func readHostFile(ctx context.Context, host types.Host, args map[string]interfac
 // temporary file and install(1). mode 0 keeps the mode of an existing file
 // (0644 for a new one); the owner of an existing file is kept.
 func writeHostFile(ctx context.Context, host types.Host, args map[string]interface{}, path string, data []byte, mode os.FileMode) error {
+	m := "-"
+	if mode != 0 {
+		m = fmt.Sprintf("%04o", mode.Perm())
+	}
+	if served, err := writeOnHost(ctx, host, args, path, data, m); served {
+		if err != nil {
+			return fmt.Errorf("failed to write %s: %w", path, err)
+		}
+		return nil
+	}
 	q := shellQuote(path)
 	script := fmt.Sprintf(`set -e
 p=%s
@@ -309,4 +340,43 @@ func remoteTempName(prefix, base string) string {
 		name += "-" + base
 	}
 	return name
+}
+
+// applyFileArgs applies mode, owner and group as the file module does, for
+// the modules that edit a file (lineinfile, blockinfile, replace)
+func applyFileArgs(ctx context.Context, host types.Host, args map[string]interface{}, path string, result types.TaskResult, start time.Time) (types.TaskResult, error) {
+	if getStringArg(args, "mode", "") == "" && getStringArg(args, "owner", "") == "" && getStringArg(args, "group", "") == "" {
+		return result, nil
+	}
+	return (&FileModule{}).applyAttributes(ctx, host, args, path, result, start)
+}
+
+// argMode is the mode argument for writeHostFile (0: keep or 0644); a mode
+// given is marked as set, so applyFileArgs does not read it back
+func argMode(args map[string]interface{}, path string) os.FileMode {
+	mode := getStringArg(args, "mode", "")
+	want, err := strconv.ParseUint(mode, 8, 32)
+	if mode == "" || err != nil {
+		return 0
+	}
+	args["_mode_set"] = path
+	return os.FileMode(want)
+}
+
+// writeOnHost writes data to path through the host's command server (with
+// the task's escalation), without a process; served is false when the server
+// cannot, and the caller writes with commands. mode is octal or "-" (keep,
+// 0644 for a new file); the owner and group of an existing file are kept.
+func writeOnHost(ctx context.Context, host types.Host, args map[string]interface{}, path string, data []byte, mode string) (bool, error) {
+	exec, err := executor.NewCommandExecutor(host)
+	if err != nil {
+		return false, nil
+	}
+	defer exec.Close()
+	if become, ok := args["_become"].(bool); ok && become {
+		becomeUser, _ := args["_become_user"].(string)
+		becomeMethod, _ := args["_become_method"].(string)
+		exec.SetBecome(true, becomeUser, becomeMethod)
+	}
+	return exec.WriteFile(ctx, path, data, mode, "-", "-")
 }
