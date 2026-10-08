@@ -224,6 +224,7 @@ for h in hosts:
         print(f'| {h} | {p} | {o["seconds"]} | {a["seconds"]} | {ratio:.1f}x | {cpu(o):.1f} | {cpu(a):.1f} | '
               f'{o["peak_rss_mb"]} | {a["peak_rss_mb"]} | {o["changed"]}/{a["changed"]} | {o["failed"]}/{a["failed"]} |')
 PY
+[ "${ONIGIRAZU_NO_PYTHON:-}" = 1 ] && printf '\nonigirazu ran with ONIGIRAZU_NO_PYTHON=1: the POSIX command server, no python3 on the hosts.\n' >> "$OUT/summary.md"
 for f in "$OUT"/onigirazu-*-tasks.json; do
   [ -s "$f" ] || continue
   python3 - "$f" >> "$OUT/summary.md" <<'PY' || true

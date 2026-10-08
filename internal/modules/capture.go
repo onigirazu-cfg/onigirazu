@@ -250,3 +250,14 @@ func captureAccount(ctx context.Context, host types.Host, module string, args ma
 	_, err := runOnHost(ctx, host, args, "getent", db, name)
 	return withBecome(map[string]interface{}{"kind": module, "name": name, "exists": err == nil}, args)
 }
+
+// capturedAccountExists is whether the account (user or group) existed when the
+// capture before the task looked; known is false without that capture
+func capturedAccountExists(args map[string]interface{}, kind, name string) (exists, known bool) {
+	before, ok := args["_before"].(map[string]interface{})
+	if !ok || before["kind"] != kind || before["name"] != name || before["error"] != nil {
+		return false, false
+	}
+	exists, known = before["exists"].(bool)
+	return exists, known
+}

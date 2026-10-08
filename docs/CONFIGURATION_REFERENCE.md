@@ -66,6 +66,9 @@ Durations are written as `30s`, `5m`, `1h`.
 `check_mode: true` and `dry_run: true` (or their `ONIGIRAZU_*` variables) are the
 same as `apply --check`: no task changes anything.
 
+On a host with `python3`, onigirazu runs its command server in Python; without it, a POSIX `sh` server
+(needs `sh`, `base64`, `stat`). `ONIGIRAZU_NO_PYTHON=1` uses the `sh` server everywhere.
+
 ## Keys that are accepted but have no effect
 
 These keys are parsed but nothing reads them; a file that sets one gets a warning:
