@@ -18,15 +18,14 @@ var loopItemSuffix = regexp.MustCompile(` \(item \d+\)$`)
 func FromPlaybookResult(result *types.PlaybookResult, playbookPath, playbookName string,
 	start time.Time, duration time.Duration) *ExecutionResult {
 	exec := &ExecutionResult{
-		ExecutionID:    fmt.Sprintf("exec-%d", start.UnixNano()),
-		Timestamp:      start,
-		PlaybookPath:   playbookPath,
-		PlaybookName:   playbookName,
-		StartTime:      start,
-		EndTime:        start.Add(duration),
-		Duration:       duration,
-		HostResults:    make(map[string]*HostResult),
-		PlaybookResult: result,
+		ExecutionID:  fmt.Sprintf("exec-%d", start.UnixNano()),
+		Timestamp:    start,
+		PlaybookPath: playbookPath,
+		PlaybookName: playbookName,
+		StartTime:    start,
+		EndTime:      start.Add(duration),
+		Duration:     duration,
+		HostResults:  make(map[string]*HostResult),
 	}
 
 	// Tasks are matched across hosts by their key; without one, by their

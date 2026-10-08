@@ -1364,7 +1364,6 @@ func recordAuditResults(recorder *audit.Recorder, result *types.PlaybookResult, 
 // totals, and every task with its result per host
 func writeRunResult(w io.Writer, format string, result *types.PlaybookResult, playbookPath string, start time.Time) {
 	record := execution.FromPlaybookResult(result, playbookPath, filepath.Base(playbookPath), start, result.Duration)
-	record.PlaybookResult = nil // the per-task view above carries the same data
 	var data []byte
 	var err error
 	data, err = json.MarshalIndent(record, "", "  ")

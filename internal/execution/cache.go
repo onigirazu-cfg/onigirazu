@@ -40,24 +40,23 @@ type TaskResult struct {
 
 // ExecutionResult stores complete execution data
 type ExecutionResult struct {
-	ExecutionID    string                 `json:"execution_id"`
-	Timestamp      time.Time              `json:"timestamp"`
-	PlaybookPath   string                 `json:"playbook_path"`
-	PlaybookName   string                 `json:"playbook_name"`
-	TotalHosts     int                    `json:"total_hosts"`
-	Tasks          []TaskResult           `json:"tasks"`
-	Status         string                 `json:"status"` // success, partial_success, failed
-	TotalSuccess   int                    `json:"total_success"`
-	TotalFailed    int                    `json:"total_failed"`
-	TotalChanged   int                    `json:"total_changed"`
-	TotalSkipped   int                    `json:"total_skipped"`
-	TotalIgnored   int                    `json:"total_ignored,omitempty"`
-	Duration       time.Duration          `json:"duration"`
-	StartTime      time.Time              `json:"start_time"`
-	EndTime        time.Time              `json:"end_time"`
-	HostResults    map[string]*HostResult `json:"host_results,omitempty"`
-	PlaybookResult interface{}            `json:"playbook_result,omitempty"` // Complete playbook result
-	CacheFile      string                 `json:"-"`
+	ExecutionID  string                 `json:"execution_id"`
+	Timestamp    time.Time              `json:"timestamp"`
+	PlaybookPath string                 `json:"playbook_path"`
+	PlaybookName string                 `json:"playbook_name"`
+	TotalHosts   int                    `json:"total_hosts"`
+	Tasks        []TaskResult           `json:"tasks"`
+	Status       string                 `json:"status"` // success, partial_success, failed
+	TotalSuccess int                    `json:"total_success"`
+	TotalFailed  int                    `json:"total_failed"`
+	TotalChanged int                    `json:"total_changed"`
+	TotalSkipped int                    `json:"total_skipped"`
+	TotalIgnored int                    `json:"total_ignored,omitempty"`
+	Duration     time.Duration          `json:"duration"`
+	StartTime    time.Time              `json:"start_time"`
+	EndTime      time.Time              `json:"end_time"`
+	HostResults  map[string]*HostResult `json:"host_results,omitempty"`
+	CacheFile    string                 `json:"-"`
 }
 
 // CacheManager handles execution result storage and retrieval
