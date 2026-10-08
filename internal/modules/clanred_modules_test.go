@@ -190,3 +190,17 @@ func TestCapturedUnit(t *testing.T) {
 	_, _, ok = capturedUnit(args, "cron")
 	assert.False(t, ok, "no systemctl answer")
 }
+
+// a file module reads its file from the capture before the task
+func TestReadHostFileFromCapture(t *testing.T) {
+	host := types.Host{Name: "nohost", Address: "192.0.2.1"} // never reached
+	args := map[string]interface{}{"_before": map[string]interface{}{"path": "/etc/x.ini", "kind": "file", "content": "[a]\nb = 1\n"}}
+	data, exists, err := readHostFile(context.Background(), host, args, "/etc/x.ini")
+	assert.NoError(t, err)
+	assert.True(t, exists)
+	assert.Equal(t, "[a]\nb = 1\n", string(data))
+	args["_before"] = map[string]interface{}{"path": "/etc/y.ini", "kind": "absent"}
+	_, exists, err = readHostFile(context.Background(), host, args, "/etc/y.ini")
+	assert.NoError(t, err)
+	assert.False(t, exists)
+}
