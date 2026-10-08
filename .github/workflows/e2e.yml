@@ -60,10 +60,12 @@ jobs:
             [ -n "$cases" ] || { echo "no e2e case needed"; echo "shards=[]" >> "$GITHUB_OUTPUT"; exit 0; }
             [ "$cases" = all ] && cases=""
           fi
-          # seconds of the chosen cases (unknown: 10 s) -> shards of ~300 s
+          # seconds of the chosen cases (unknown: 10 s) -> shards of ~150 s:
+          # creating a shard's VMs takes ~2 min whatever it runs, so more
+          # shards in parallel finish sooner
           list="${cases:-$(ls e2e/cases)}"
           secs="$(for c in $list; do awk -F'\t' -v c="$c" '$1 == c { print $2; f = 1 } END { if (!f) print 10 }' e2e/case-seconds.tsv; done | awk '{ s += $1 } END { print s + 0 }')"
-          n=$(( (secs + 299) / 300 )); [ "$n" -ge 1 ] || n=1; [ "$n" -le 4 ] || n=4
+          n=$(( (secs + 149) / 150 )); [ "$n" -ge 1 ] || n=1; [ "$n" -le 4 ] || n=4
           echo "cases: ${cases:-all} (${secs}s) on $n shard(s)"
           echo "cases=$cases" >> "$GITHUB_OUTPUT"
           echo "shards=[$(seq 1 "$n" | paste -sd, -)]" >> "$GITHUB_OUTPUT"

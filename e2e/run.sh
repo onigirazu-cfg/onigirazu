@@ -61,13 +61,17 @@ cleanup() {
     log "Destroying VMs"
     # throwaway VMs: power them off hard first; terraform would wait for a
     # clean guest shutdown (over a minute with the databases running)
-    local vm
+    local vm n=0 t0=$SECONDS
     for vm in $(govc find "/$TF_VAR_datacenter/vm/$TF_VAR_folder" -type m -name "tmp-e2e-onigirazu-$RUN_ID-*" 2>/dev/null); do
       govc vm.power -off -force "$vm" >/dev/null 2>&1 &
+      n=$((n + 1))
     done
     wait
+    echo "powered off $n VM(s) in $((SECONDS - t0)) s"
+    t0=$SECONDS
     terraform -chdir="$TF_DIR" destroy -auto-approve -input=false -var-file="$TFVARS" >/dev/null ||
       echo "destroy failed; the janitor will remove the VMs"
+    echo "destroyed in $((SECONDS - t0)) s"
   fi
   if [ -n "${KEEP_VMS:-}" ] && [ -f "$KEY" ]; then
     # Kept VMs are only reachable with this run's key; it stays on the runner
