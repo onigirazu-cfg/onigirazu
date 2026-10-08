@@ -4,6 +4,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/onigirazu-cfg/onigirazu/internal/cache"
 )
@@ -125,6 +126,32 @@ func (e *ExecutionEngine) addMagicVars(vars map[string]interface{}) {
 	if e.limit != "" {
 		vars["ansible_limit"] = e.limit
 	}
+	all, batch := e.playHostLists()
+	vars["ansible_play_hosts_all"] = all
+	vars["ansible_play_batch"] = batch
+	vars["ansible_play_hosts"] = batch
+	vars["play_hosts"] = batch // the old name, still set by Ansible
+}
+
+// magicLists caches the play host lists of the magic variables: built for
+// every host of every task they made each task quadratic in the hosts
+type magicLists struct {
+	mu         sync.Mutex
+	version    uint64
+	valid      bool
+	all, batch []interface{}
+}
+
+// playHostLists are ansible_play_hosts_all and ansible_play_batch, built
+// again only when the hosts changed (the caller holds e.mutex for reading).
+// The lists are shared: nothing changes them in place.
+func (e *ExecutionEngine) playHostLists() (all, batch []interface{}) {
+	m := &e.magic
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.valid && m.version == e.hostsVersion {
+		return m.all, m.batch
+	}
 	list := func(names []string, skipFailed bool) []interface{} {
 		out := make([]interface{}, 0, len(names))
 		for _, n := range names {
@@ -135,14 +162,13 @@ func (e *ExecutionEngine) addMagicVars(vars map[string]interface{}) {
 		}
 		return out
 	}
-	batch := e.batchHosts
-	if len(batch) == 0 {
-		batch = e.playHosts
+	names := e.batchHosts
+	if len(names) == 0 {
+		names = e.playHosts
 	}
-	vars["ansible_play_hosts_all"] = list(e.playHosts, false)
-	vars["ansible_play_batch"] = list(batch, true)
-	vars["ansible_play_hosts"] = list(batch, true)
-	vars["play_hosts"] = list(batch, true) // the old name, still set by Ansible
+	m.all, m.batch = list(e.playHosts, false), list(names, true)
+	m.version, m.valid = e.hostsVersion, true
+	return m.all, m.batch
 }
 
 // SetCheckMode tells the run it is a check (ansible_check_mode)

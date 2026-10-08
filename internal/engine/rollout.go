@@ -323,12 +323,14 @@ func (e *ExecutionEngine) rollbackBatch(ctx context.Context, play *types.Play, b
 		e.mutex.Lock()
 		failed := e.failedHosts
 		e.failedHosts = nil
+		e.hostsVersion++
 		e.mutex.Unlock()
 		leave := e.enterPlay(play)
 		bad := e.runHealthChecks(rctx, play.HealthCheck, batch, e.rolloutVars, result)
 		leave()
 		e.mutex.Lock()
 		e.failedHosts = failed
+		e.hostsVersion++
 		e.mutex.Unlock()
 		ok := len(bad) == 0
 		report.HealthyAfterRollback = &ok
