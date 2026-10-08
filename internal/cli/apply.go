@@ -263,6 +263,9 @@ Examples:
 
 			// Initialize logger - redirect to TUI if in interactive mode
 			log := logger.NewEnhanced(cfg.LogLevel, logger.LogFormat(cfg.LogFormat), logWriter)
+			if noColor {
+				log.SetColors(false)
+			}
 			for _, w := range cfg.Warnings {
 				log.Warn("%s", w)
 			}
