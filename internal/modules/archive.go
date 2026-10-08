@@ -88,6 +88,13 @@ func (m *ArchiveModule) Execute(ctx context.Context, host types.Host, args map[s
 		}
 		create = fmt.Sprintf(`tar -c%sf "$dest" %s -C %s %s`, flag, strings.Join(excludes, " "), shellQuote(root), strings.Join(rels, " "))
 	}
+	// one file (no glob) with a compression format: Ansible compresses the
+	// file itself, it makes no tarball
+	if compressor, ok := map[string]string{"gz": "gzip", "bz2": "bzip2", "xz": "xz"}[format]; ok &&
+		len(paths) == 1 && !strings.ContainsAny(paths[0], "*?[") {
+		create = fmt.Sprintf(`if [ -f %s ] && [ ! -L %s ]; then %s -c < %s > "$dest"; else %s; fi`,
+			srcs[0], srcs[0], compressor, srcs[0], create)
+	}
 	remove := ""
 	if removeSources {
 		remove = "rm -rf " + strings.Join(srcs, " ")
