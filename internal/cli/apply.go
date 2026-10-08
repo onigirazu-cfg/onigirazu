@@ -1189,8 +1189,12 @@ Examples:
 				log.Info("Check mode: state file and snapshot left untouched")
 			} else {
 				log.Info("Saving state to: %s", cfg.StateFile)
-				if err := stateManager.SaveState(saveCtx, currentState); err != nil {
-					log.Warn("Failed to save final state (manager): %v", err)
+				// a file backend writes the same file (with its backups):
+				// writing it twice cost a full serialization of the run
+				if stateBackend.GetPath() != cfg.StateFile {
+					if err := stateManager.SaveState(saveCtx, currentState); err != nil {
+						log.Warn("Failed to save final state (manager): %v", err)
+					}
 				}
 
 				// Also save to backend
