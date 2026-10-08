@@ -7,6 +7,7 @@ out="import-$HOST"
   (sed -n '/^## Check/,/^## [^C]/p' "$out/IMPORT_REPORT.md" | grep '^- ' || tail -3 log) | head -6 | cut -c1-200 | paste -sd';' -
   exit 1; }
 grep -q "nothing to change" log
+echo "note: $(grep '^Time:' log)"
 grep -rq "File /etc/onigirazu-import.conf" "$out/roles"
 grep -rq "User e2eimport" "$out/roles"
 test -f "$out/IMPORT_REPORT.md"

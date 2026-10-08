@@ -44,7 +44,8 @@ Runs every case in `cases/` on disposable vSphere VMs cloned from the current
 - `setup.sh` — optional; runs on each VM as root before the first apply;
 - `verify.sh` — runs on each VM as root after the apply and must exit 0;
 - `verify-local.sh` — optional; runs on the runner in the case directory with `HOST` set
-  (for results that land on the control machine, e.g. fetch);
+  (for results that land on the control machine, e.g. fetch); its `note: ...` lines are
+  shown in the log when it passes;
 - `EXPECT_FAIL` — optional; the apply must fail (no verify, no second apply);
 - `NOT_IDEMPOTENT` — optional; skips the second apply that must change nothing.
 - `EXPECTED_FAILED_TASKS` — optional; names of tasks that fail on purpose (handled by
