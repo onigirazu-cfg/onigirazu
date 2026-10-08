@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -46,11 +45,10 @@ func (e *ExitStatusError) ExitStatus() int { return e.Status }
 // removed its own output files reports empty output).
 var shellScript = pythonServer() + posixServer
 
-// serverScript is the command server to start: ONIGIRAZU_NO_PYTHON=1 keeps
-// to the POSIX one even where python3 is there (to compare, or for a host
-// whose python3 misbehaves)
+// serverScript is the script server to start: the Python one where python3
+// is there, unless remote_server is sh (or ONIGIRAZU_NO_PYTHON=1)
 func serverScript() string {
-	if os.Getenv("ONIGIRAZU_NO_PYTHON") == "1" {
+	if serverMode() == "sh" {
 		return posixServer
 	}
 	return shellScript

@@ -21,16 +21,12 @@ on:
         required: false
         type: string
         default: '{}'
-      python:
-        description: 'onigirazu may use python3 on the hosts (off: the POSIX command server only)'
+      server:
+        description: 'remote_server for onigirazu: auto (agent, Python, sh), python or sh'
         required: false
-        type: boolean
-        default: true
-      agent:
-        description: 'onigirazu uploads and uses onigirazu-agent on the hosts (ONIGIRAZU_AGENT=1)'
-        required: false
-        type: boolean
-        default: false
+        type: choice
+        options: [auto, python, sh]
+        default: auto
 
 permissions:
   contents: read
@@ -97,8 +93,7 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           BENCH_HOSTS: ${{ inputs.hosts || '1' }}
           BENCH_VARS: ${{ inputs.vars || '{}' }}
-          ONIGIRAZU_NO_PYTHON: ${{ inputs.python == false && '1' || '' }}
-          ONIGIRAZU_AGENT: ${{ inputs.agent && '1' || '' }}
+          ONIGIRAZU_REMOTE_SERVER: ${{ inputs.server || 'auto' }}
           BENCH_OUT: ${{ runner.temp }}/bench-results
         run: bench/run.sh
 

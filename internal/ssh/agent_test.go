@@ -18,3 +18,25 @@ func TestPlatform(t *testing.T) {
 		}
 	}
 }
+
+func TestServerMode(t *testing.T) {
+	t.Setenv("ONIGIRAZU_NO_PYTHON", "")
+	defer SetRemoteServer("")
+	SetRemoteServer("")
+	if serverMode() != "auto" || !agentEnabled() {
+		t.Errorf("default: %s", serverMode())
+	}
+	SetRemoteServer("python")
+	if agentEnabled() || serverScript() != shellScript {
+		t.Error("python: no agent, the Python script")
+	}
+	SetRemoteServer("sh")
+	if agentEnabled() || serverScript() != posixServer {
+		t.Error("sh: the POSIX script")
+	}
+	SetRemoteServer("auto")
+	t.Setenv("ONIGIRAZU_NO_PYTHON", "1")
+	if serverMode() != "sh" {
+		t.Error("ONIGIRAZU_NO_PYTHON=1 is sh")
+	}
+}

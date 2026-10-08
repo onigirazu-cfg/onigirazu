@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/onigirazu-cfg/onigirazu/internal/agentbin"
@@ -17,9 +18,9 @@ import (
 
 // The agent (cmd/onigirazu-agent) is the command server as a Go binary:
 // the same protocol, probes in-process, no python3 needed. With
-// ONIGIRAZU_AGENT=1 a connection uploads the agent for the host's OS and
-// architecture once per version to ~/.onigirazu/bin and starts it instead of
-// the shell script. Any trouble (no binary for the platform, noexec home,
+// remote_server auto (the default) a connection uploads the agent for the
+// host's OS and architecture once per version to ~/.onigirazu/bin and starts
+// it instead of the shell script. Any trouble (no binary for the platform, noexec home,
 // sudo user without access) falls back to the Python or sh server.
 
 // agentState is the agent of one connection
@@ -30,7 +31,25 @@ type agentState struct {
 	off  map[string]bool // users the agent did not start for
 }
 
-func agentEnabled() bool { return os.Getenv("ONIGIRAZU_AGENT") == "1" }
+// remoteServer is the remote_server setting: auto (agent, Python, sh),
+// python (Python, sh) or sh
+var remoteServer atomic.Value
+
+// SetRemoteServer sets the command server mode (remote_server)
+func SetRemoteServer(mode string) { remoteServer.Store(mode) }
+
+// serverMode is remote_server; ONIGIRAZU_NO_PYTHON=1 still means sh
+func serverMode() string {
+	if os.Getenv("ONIGIRAZU_NO_PYTHON") == "1" {
+		return "sh"
+	}
+	if mode, _ := remoteServer.Load().(string); mode != "" {
+		return mode
+	}
+	return "auto"
+}
+
+func agentEnabled() bool { return serverMode() == "auto" }
 
 // agentFor is the agent command for user ("" when the script server is used)
 func (c *Client) agentFor(user string) string {

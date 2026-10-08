@@ -1,6 +1,6 @@
 // onigirazu-agent is onigirazu's command server on a managed host: the
 // protocol of the shell and Python servers (internal/ssh), with probes done
-// in-process. onigirazu uploads it once per version (ONIGIRAZU_AGENT=1) and
+// in-process. onigirazu uploads it once per version (remote_server auto) and
 // starts it as "onigirazu-agent serve" over SSH, with sudo for become.
 package main
 
