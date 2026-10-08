@@ -2313,7 +2313,16 @@ func (e *ExecutionEngine) getHostVar(host, key string) interface{} {
 func (e *ExecutionEngine) hostVariables(host *types.Host, variables map[string]interface{}) map[string]interface{} {
 	e.mutex.RLock()
 	defer e.mutex.RUnlock()
-	vars := e.mergeVariables(variables, e.variables, host.Vars)
+	facts, hasFacts := e.hostFactsOf(host.Name)
+	hostVars := e.hostVars[host.Name]
+	// one map, filled in order of precedence: it is built for every task
+	// and loop item, and merging step by step copied it four times
+	vars := make(map[string]interface{}, len(variables)+len(e.variables)+len(host.Vars)+len(facts)+len(hostVars)+len(e.extraVars)+12)
+	for _, m := range []map[string]interface{}{variables, e.variables, host.Vars} {
+		for k, v := range m {
+			vars[k] = v
+		}
+	}
 	// always defined, facts or not
 	vars["inventory_hostname"] = host.Name
 	e.addMagicVars(vars)
@@ -2323,10 +2332,18 @@ func (e *ExecutionEngine) hostVariables(host *types.Host, variables map[string]i
 	if _, ok := vars["onigirazu_host"]; !ok {
 		vars["onigirazu_host"] = host.Address
 	}
-	if facts, exists := e.hostFactsOf(host.Name); exists {
-		vars = e.mergeVariables(vars, map[string]interface{}{"onigirazu_facts": facts}, facts)
+	if hasFacts {
+		vars["onigirazu_facts"] = facts
+		for k, v := range facts {
+			vars[k] = v
+		}
 	}
-	return e.mergeVariables(vars, e.hostVars[host.Name], e.extraVars)
+	for _, m := range []map[string]interface{}{hostVars, e.extraVars} {
+		for k, v := range m {
+			vars[k] = v
+		}
+	}
+	return vars
 }
 
 func splitLines(text string) []interface{} {
