@@ -1610,6 +1610,8 @@ func (e *ExecutionEngine) gatherFacts(ctx context.Context, hosts []types.Host) e
 		wg.Add(1)
 		e.executionPool.Submit(func() {
 			defer wg.Done()
+			ctx, release := e.hostSlot(ctx)
+			defer release()
 			// Gather system facts using the facts gatherer (with caching)
 			systemFacts, err := e.factsGatherer.GatherFacts(ctx, host)
 			if err != nil {
