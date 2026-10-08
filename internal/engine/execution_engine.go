@@ -69,6 +69,10 @@ type ExecutionEngine struct {
 	config interfaces.Config
 	// hostSlots bounds the hosts worked on at once (max_concurrency)
 	hostSlots chan struct{}
+	// hostsVersion changes with playHosts, batchHosts and failedHosts (under
+	// mutex); the magic variables built from them are cached by it
+	hostsVersion uint64
+	magic        magicLists
 	// inventoryView: the inventory's hosts and groups for hostvars and
 	// groups, read once per playbook run (nothing changes them during it)
 	inventoryView     inventorySnapshot
@@ -326,6 +330,7 @@ func (e *ExecutionEngine) ExecutePlaybook(ctx context.Context, playbook *types.P
 	e.logger.Info("Starting playbook execution: %s", playbook.Name)
 	e.mutex.Lock()
 	e.failedHosts = nil
+	e.hostsVersion++
 	e.inventoryView.reset()
 	e.rolloutApplied = nil
 	e.rolloutReports = nil
@@ -540,6 +545,7 @@ func (e *ExecutionEngine) executePlay(ctx context.Context, play *types.Play) (*t
 		e.targetedHosts[h.Name] = true
 		e.playHosts = append(e.playHosts, h.Name)
 	}
+	e.hostsVersion++
 	e.playsTargeted++
 	e.mutex.Unlock()
 	batches, canary, err := e.rolloutBatches(play, len(hosts))
@@ -591,6 +597,7 @@ func (e *ExecutionEngine) executePlayOn(ctx context.Context, play *types.Play, h
 	for i, h := range hosts {
 		e.batchHosts[i] = h.Name
 	}
+	e.hostsVersion++
 	e.mutex.Unlock()
 
 	if len(hosts) == 0 {
