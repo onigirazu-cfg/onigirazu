@@ -119,6 +119,12 @@ for n in $HOSTS; do
       done
     done
     rm -rf "$HERE/fetched"
+    # fresh package lists before the timed runs: the base image may come
+    # with none, and cache_valid_time would then skip the update
+    for ip in $(jq -r '.[]' <<<"$hosts_json"); do
+      ssh -i "$KEY" -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR "e2e@$ip" \
+        'sudo -n apt-get -o DPkg::Lock::Timeout=300 update -qq >/dev/null' || die "apt-get update failed on a VM"
+    done
 
     if [ "$tool" = ansible ]; then
       cat > "$WORK/ansible.cfg" <<EOF
