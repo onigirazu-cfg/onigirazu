@@ -204,3 +204,15 @@ func TestReadHostFileFromCapture(t *testing.T) {
 	assert.NoError(t, err)
 	assert.False(t, exists)
 }
+
+// ownership a capture confirms needs no stat on the host
+func TestEnsureOwnershipFromCapture(t *testing.T) {
+	host := types.Host{Name: "nohost", Address: "192.0.2.1"} // never reached
+	args := map[string]interface{}{"_before": map[string]interface{}{"path": "/etc/x", "kind": "file", "owner": "root", "group": "adm"}}
+	changed, err := ensureOwnership(context.Background(), host, args, "/etc/x", "root", "adm")
+	assert.NoError(t, err)
+	assert.False(t, changed)
+	changed, err = ensureOwnership(context.Background(), host, args, "/etc/x", "", "adm")
+	assert.NoError(t, err)
+	assert.False(t, changed)
+}
