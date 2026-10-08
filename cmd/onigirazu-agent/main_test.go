@@ -103,3 +103,15 @@ func TestBadPayload(t *testing.T) {
 		t.Errorf("answer %q", head)
 	}
 }
+
+func TestProbeSpecialBits(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Chmod(dir, 0o777|os.ModeSticky); err != nil {
+		t.Fatal(err)
+	}
+	ids := &names{users: map[uint32]string{}, groups: map[uint32]string{}}
+	rec, err := probe(ids, 10, dir)
+	if err != nil || !strings.HasPrefix(string(rec), "directory 1777 ") {
+		t.Errorf("sticky directory: %q %v", rec, err)
+	}
+}

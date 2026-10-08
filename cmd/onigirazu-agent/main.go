@@ -231,11 +231,17 @@ func probe(ids *names, limit int, path string) ([]byte, error) {
 	case m.IsRegular():
 		kind = "file"
 	}
-	sys, _ := st.Sys().(*syscall.Stat_t)
+	// the permission bits with setuid, setgid and sticky, as stat %a prints
+	m := st.Mode()
+	perm := uint32(m.Perm())
+	for bit, v := range map[fs.FileMode]uint32{fs.ModeSetuid: 0o4000, fs.ModeSetgid: 0o2000, fs.ModeSticky: 0o1000} {
+		if m&bit != 0 {
+			perm |= v
+		}
+	}
 	var uid, gid uint32
-	perm := uint32(st.Mode().Perm())
-	if sys != nil {
-		uid, gid, perm = sys.Uid, sys.Gid, uint32(sys.Mode)&0o7777
+	if sys, ok := st.Sys().(*syscall.Stat_t); ok {
+		uid, gid = sys.Uid, sys.Gid
 	}
 	head := fmt.Sprintf("%s %o %s %s %d", kind, perm, ids.user(uid), ids.group(gid), st.Size())
 	if kind != "file" {
