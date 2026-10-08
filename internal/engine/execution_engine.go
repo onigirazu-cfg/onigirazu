@@ -1541,10 +1541,8 @@ func (e *ExecutionEngine) initializeExecution() {
 		HostStats: make(map[string]*HostStats),
 	}
 
-	// Load state
-	if _, err := e.stateManager.LoadState(context.Background()); err != nil {
-		e.logger.Warn("Failed to load state: %v", err)
-	}
+	// the previous state is not read: nothing in a run uses it, and it holds
+	// the previous run's results (a full decompress and parse)
 }
 
 // getPlayHosts gets target hosts for a play
