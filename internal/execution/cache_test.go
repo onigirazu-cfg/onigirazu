@@ -2,6 +2,7 @@ package execution
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -215,4 +216,40 @@ func TestExecutionResult_Structure(t *testing.T) {
 	assert.Equal(t, "success", result.Status)
 	assert.Equal(t, 2, result.TotalHosts)
 	assert.Equal(t, 2, result.TotalSuccess)
+}
+
+// Save keeps the newest keepExecutions runs
+func TestCacheManager_Prune(t *testing.T) {
+	dir := t.TempDir()
+	cm, err := NewCacheManagerWithPath(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-time.Hour)
+	for i := 0; i < keepExecutions+5; i++ {
+		p := filepath.Join(dir, fmt.Sprintf("exec-old-%d.json", i))
+		if err := os.WriteFile(p, []byte("{}"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		_ = os.Chtimes(p, old, old.Add(time.Duration(i)*time.Second))
+	}
+	if err := cm.Save(&ExecutionResult{ExecutionID: "exec-new"}); err != nil {
+		t.Fatal(err)
+	}
+	entries, _ := os.ReadDir(dir)
+	runs := 0
+	for _, e := range entries {
+		if e.Name() != "current.json" {
+			runs++
+		}
+	}
+	if runs != keepExecutions {
+		t.Errorf("%d runs kept, want %d", runs, keepExecutions)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "exec-new.json")); err != nil {
+		t.Errorf("newest run removed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "exec-old-0.json")); err == nil {
+		t.Errorf("oldest run kept")
+	}
 }

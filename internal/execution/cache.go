@@ -98,7 +98,8 @@ func (cm *CacheManager) Save(result *ExecutionResult) error {
 	filename := filepath.Join(cm.cacheDir, result.ExecutionID+".json")
 	result.CacheFile = filename
 
-	data, err := json.MarshalIndent(result, "", "  ")
+	// compact: one buffer instead of two for a large run
+	data, err := json.Marshal(result)
 	if err != nil {
 		return fmt.Errorf("failed to marshal execution result: %w", err)
 	}
@@ -114,8 +115,40 @@ func (cm *CacheManager) Save(result *ExecutionResult) error {
 		// Non-critical error
 		fmt.Fprintf(os.Stderr, "Warning: failed to update current.json: %v\n", err)
 	}
-
+	cm.prune(keepExecutions)
 	return nil
+}
+
+// keepExecutions is how many runs show-execution keeps; older ones are
+// removed when a run is saved
+const keepExecutions = 50
+
+// prune removes all but the newest keep execution files
+func (cm *CacheManager) prune(keep int) {
+	entries, err := os.ReadDir(cm.cacheDir)
+	if err != nil {
+		return
+	}
+	type run struct {
+		path string
+		mod  time.Time
+	}
+	var runs []run
+	for _, entry := range entries {
+		if entry.IsDir() || entry.Name() == "current.json" || filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+		if info, err := entry.Info(); err == nil {
+			runs = append(runs, run{filepath.Join(cm.cacheDir, entry.Name()), info.ModTime()})
+		}
+	}
+	if len(runs) <= keep {
+		return
+	}
+	sort.Slice(runs, func(i, j int) bool { return runs[i].mod.After(runs[j].mod) })
+	for _, r := range runs[keep:] {
+		_ = os.Remove(r.path)
+	}
 }
 
 // LoadLatest loads the most recent execution result
