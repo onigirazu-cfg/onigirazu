@@ -177,3 +177,16 @@ func TestCapturedAccountExists(t *testing.T) {
 	_, known = capturedAccountExists(args, "group", "other")
 	assert.False(t, known)
 }
+
+func TestCapturedUnit(t *testing.T) {
+	args := map[string]interface{}{"_before": map[string]interface{}{"kind": "service", "name": "cron", "active": "active", "enabled": "enabled"}}
+	active, enabled, ok := capturedUnit(args, "cron")
+	assert.True(t, ok)
+	assert.Equal(t, "active", active)
+	assert.Equal(t, "enabled", enabled)
+	_, _, ok = capturedUnit(args, "ssh")
+	assert.False(t, ok)
+	args["_before"] = map[string]interface{}{"kind": "service", "name": "cron", "active": "unknown", "enabled": "unknown"}
+	_, _, ok = capturedUnit(args, "cron")
+	assert.False(t, ok, "no systemctl answer")
+}
