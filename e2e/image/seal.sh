@@ -14,8 +14,22 @@ rm -f /etc/ssh/ssh_host_*
 truncate -s 0 /etc/machine-id
 rm -f /var/lib/dbus/machine-id && ln -sf /etc/machine-id /var/lib/dbus/machine-id
 systemctl stop netbird >/dev/null 2>&1 && rm -rf /var/lib/netbird/* || true
-# guest customization of the build VM wrote its own netplan file; clones get theirs
+# guest customization of the build VM wrote its own netplan file; clones get
+# their address by DHCP from the image's own config, on any interface, with
+# the MAC as client id (26.04's installer config has another name and went
+# with the rest)
 find /etc/netplan -name '*.yaml' ! -name 00-installer-config.yaml -delete
+cat > /etc/netplan/01-e2e-dhcp.yaml <<'NETPLAN'
+network:
+  version: 2
+  ethernets:
+    e2e-all:
+      match:
+        name: "en*"
+      dhcp4: true
+      dhcp-identifier: mac
+NETPLAN
+chmod 600 /etc/netplan/01-e2e-dhcp.yaml
 cloud-init clean --logs --seed >/dev/null 2>&1 || true
 apt-get clean
 rm -rf /tmp/* /var/tmp/*
