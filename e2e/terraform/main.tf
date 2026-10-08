@@ -97,9 +97,10 @@ resource "vsphere_virtual_machine" "vm" {
 
   clone {
     template_uuid = data.vsphere_virtual_machine.template[each.key].id
-    # short-lived VMs: a delta disk on the template's snapshot instead of a
-    # full copy (e2e/image/build.sh makes the snapshot)
-    linked_clone = true
+    # short-lived VMs: a delta disk on the base template's snapshot instead
+    # of a full copy (e2e/image/build.sh makes it); a golden image (nightly
+    # run) has no snapshot and is cloned in full
+    linked_clone = startswith(each.value, "e2e-base-")
   }
 
   wait_for_guest_net_timeout = 10

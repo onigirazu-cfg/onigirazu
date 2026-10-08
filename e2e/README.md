@@ -11,14 +11,17 @@ Runs every case in `cases/` on disposable vSphere VMs cloned from the current
   packaging and unit tests need none; `internal/modules/<name>.go` needs the cases
   using module `<name>` (all when no case uses it); a changed case needs itself;
   anything else needs all.
-- Shards: one per ~5 minutes of cases, at most four (`E2E_SHARD=i/n`), each on its
+- Shards: one per ~150 s of cases, at most four (`E2E_SHARD=i/n`), each on its
   own VMs, balanced by `case-seconds.tsv` (longest case first onto the least loaded
-  shard). Add a new slow case there.
+  shard; times measured in a run). Add a new slow case there.
 - Base templates: `image/build.sh` (workflow `E2E base image`: nightly at 03:30 UTC,
   on changes to `image/`, `images.sh`, `setup-lib.sh`, and by hand) clones each golden
   `[latest]` image, preinstalls what the cases install (`image/prepare.sh`: packages,
   Docker and the container images), seals it like the golden image (`image/seal.sh`)
-  and keeps it as `e2e-base-<os>-<golden item>-<time>` in the e2e folder (two per OS).
+  and keeps it as `e2e-base-<os>-<golden item>-<time>` in the e2e folder (two per OS),
+  a template with a snapshot `base`: test VMs are linked clones of it (a delta disk,
+  ~50 s for a pair). The golden images (nightly run) are cloned in full. The vCenter
+  role needs `VirtualMachine.State.CreateSnapshot` for the snapshot.
   Pull requests and manual runs clone the base of the current golden item when there
   is one (`E2E_BASE=1`), otherwise the golden image; the nightly run always tests the
   golden images. A new install in a case's `setup.sh` belongs in `prepare.sh` too.
@@ -28,7 +31,11 @@ Runs every case in `cases/` on disposable vSphere VMs cloned from the current
   folder, covering cancelled runs. `purge_vms` removes all of them at once;
   VMs of runs still in progress are kept.
 - Access: each run generates an SSH key and passes it as
-  `guestinfo.e2e_authorized_key`; the image creates user `e2e` on first boot.
+  `guestinfo.e2e_authorized_key`, the host name as `guestinfo.e2e_hostname`; the
+  image's first-boot unit creates user `e2e` and sets the name (no guest
+  customization). The base images bring their own DHCP netplan.
+- Cleanup powers the run's VMs off hard before `terraform destroy` (no clean guest
+  shutdown to wait for).
 
 ## A case
 
