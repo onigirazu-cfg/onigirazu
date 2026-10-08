@@ -227,3 +227,32 @@ func TestPythonServerProbe(t *testing.T) {
 	assert.Equal(t, "ok\n", string(o))
 	assert.Equal(t, 0, rc)
 }
+
+// the work directory may have spaces and glob characters in its path
+func TestPosixServerOddHome(t *testing.T) {
+	home := filepath.Join(t.TempDir(), "a b*c")
+	require.NoError(t, os.MkdirAll(home, 0o700))
+	cmd := exec.Command("sh", "-c", posixServer)
+	cmd.Env = append(cmd.Environ(), "HOME="+home)
+	stdin, _ := cmd.StdinPipe()
+	out, _ := cmd.StdoutPipe()
+	require.NoError(t, cmd.Start())
+	defer func() { _ = stdin.Close(); _ = cmd.Wait() }()
+	s := &remoteShell{stdin: stdin, stdout: bufio.NewReader(out)}
+	_, _ = s.stdout.ReadString('\n')
+	for i := 0; i < 70; i++ { // past a batch of removals
+		o, e, rc, err := s.run("printf out; printf errr >&2; exit 4", false)
+		require.NoError(t, err)
+		assert.Equal(t, "out", string(o))
+		assert.Equal(t, "errr", string(e))
+		assert.Equal(t, 4, rc)
+	}
+	// a command that removes its own output files
+	o, e, rc, err := s.run("rm -rf \"$HOME/.onigirazu\"; echo gone", false)
+	require.NoError(t, err)
+	assert.Equal(t, 0, rc)
+	assert.Empty(t, string(o)+string(e))
+	o, _, _, err = s.run("echo after", false)
+	require.NoError(t, err)
+	assert.Equal(t, "after\n", string(o))
+}
