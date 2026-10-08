@@ -43,6 +43,10 @@ func captureBefore(ctx context.Context, host types.Host, module string, args map
 	if path == "" {
 		return nil
 	}
+	// taken for the whole loop already
+	if out, ok := loopProbe(ctx, path); ok {
+		return parseProbe(path, out, args)
+	}
 	// one round trip: kind, mode, owner, group, size and, for a file up to
 	// maxCaptureSize, its content (the sha256 is taken here), else its sha256
 	out, served, err := probeOnHost(ctx, host, args, path, maxCaptureSize)
@@ -57,16 +61,21 @@ func captureBefore(ctx context.Context, host types.Host, module string, args map
 
 // shellProbe prints what the server's probe prints, with shell tools
 func shellProbe(ctx context.Context, host types.Host, args map[string]interface{}, path string) (string, error) {
-	q := shellQuote(path)
-	return runShellOnHost(ctx, host, args, fmt.Sprintf(
-		`p=%s; if [ -L "$p" ]; then k=link; elif [ -d "$p" ]; then k=directory; elif [ -f "$p" ]; then k=file; elif [ -e "$p" ]; then k=other; else echo absent; exit 0; fi
+	return runShellOnHost(ctx, host, args, shellProbeFunc+"probe "+shellQuote(path))
+}
+
+// shellProbeFunc defines probe PATH: what the server's probe prints, with
+// shell tools
+var shellProbeFunc = fmt.Sprintf(`probe() {
+p=$1; if [ -L "$p" ]; then k=link; elif [ -d "$p" ]; then k=directory; elif [ -f "$p" ]; then k=file; elif [ -e "$p" ]; then k=other; else echo absent; return 0; fi
 s=$(stat -c '%%a %%U %%G %%s' "$p" 2>/dev/null || stat -f '%%Lp %%Su %%Sg %%z' "$p")
 if [ "$k" = file ]; then
   set -- $s
   if [ "$4" -le %d ]; then echo "$k $s +"; printf 'C:'; base64 < "$p"; else
   h=$( (sha256sum "$p" 2>/dev/null || shasum -a 256 "$p") | cut -d' ' -f1); echo "$k $s $h"; fi
-else echo "$k $s -"; fi`, q, maxCaptureSize))
+else echo "$k $s -"; fi
 }
+`, maxCaptureSize)
 
 // parseProbe reads the probe's answer: "absent", or "kind mode owner group
 // size sha256|+|-" and for "+" a "C:" line with the content in base64
@@ -124,6 +133,9 @@ func captureNative(ctx context.Context, host types.Host, module string, args map
 	path := capturePath(module, args)
 	if path == "" {
 		return nil
+	}
+	if out, ok := loopProbe(ctx, path); ok {
+		return parseProbe(path, out, args)
 	}
 	out, served, err := probeOnHost(ctx, host, args, path, maxCaptureSize)
 	if !served || err != nil {

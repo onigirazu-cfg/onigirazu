@@ -234,3 +234,60 @@ func TestServerScriptNoPython(t *testing.T) {
 	t.Setenv("ONIGIRAZU_NO_PYTHON", "")
 	assert.Equal(t, shellScript, serverScript())
 }
+
+// the work directory may have spaces and glob characters in its path
+func TestPosixServerOddHome(t *testing.T) {
+	home := filepath.Join(t.TempDir(), "a b*c")
+	require.NoError(t, os.MkdirAll(home, 0o700))
+	cmd := exec.Command("sh", "-c", posixServer)
+	cmd.Env = append(cmd.Environ(), "HOME="+home)
+	stdin, _ := cmd.StdinPipe()
+	out, _ := cmd.StdoutPipe()
+	require.NoError(t, cmd.Start())
+	defer func() { _ = stdin.Close(); _ = cmd.Wait() }()
+	s := &remoteShell{stdin: stdin, stdout: bufio.NewReader(out)}
+	_, _ = s.stdout.ReadString('\n')
+	for i := 0; i < 70; i++ { // past a batch of removals
+		o, e, rc, err := s.run("printf out; printf errr >&2; exit 4", false)
+		require.NoError(t, err)
+		assert.Equal(t, "out", string(o))
+		assert.Equal(t, "errr", string(e))
+		assert.Equal(t, 4, rc)
+	}
+	// a command that removes its own output files
+	o, e, rc, err := s.run("rm -rf \"$HOME/.onigirazu\"; echo gone", false)
+	require.NoError(t, err)
+	assert.Equal(t, 0, rc)
+	assert.Empty(t, string(o)+string(e))
+	o, _, _, err = s.run("echo after", false)
+	require.NoError(t, err)
+	assert.Equal(t, "after\n", string(o))
+}
+
+// several probes in one request
+func TestPythonServerProbeMany(t *testing.T) {
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("no python3")
+	}
+	home := t.TempDir()
+	cmd := exec.Command("sh", "-c", shellScript)
+	cmd.Env = append(cmd.Environ(), "HOME="+home)
+	stdin, _ := cmd.StdinPipe()
+	out, _ := cmd.StdoutPipe()
+	require.NoError(t, cmd.Start())
+	defer func() { _ = stdin.Close(); _ = cmd.Wait() }()
+	s := &remoteShell{stdin: stdin, stdout: bufio.NewReader(out)}
+	_, _ = s.stdout.ReadString('\n')
+	p := filepath.Join(home, "f")
+	require.NoError(t, os.WriteFile(p, []byte("v1\n"), 0o600))
+	o, _, rc, err := s.request("Q", "100\n"+p+"\n"+filepath.Join(home, "none")+"\n"+home)
+	require.NoError(t, err)
+	assert.Equal(t, 0, rc)
+	records := strings.Split(string(o), "\x1e\n")
+	require.Len(t, records, 4, "%q", o)
+	assert.True(t, strings.HasPrefix(records[0], "file 600 "), records[0])
+	assert.Contains(t, records[0], "\nC:djEK")
+	assert.Equal(t, "absent\n", records[1])
+	assert.True(t, strings.HasPrefix(records[2], "directory "), records[2])
+	assert.Equal(t, "", records[3])
+}

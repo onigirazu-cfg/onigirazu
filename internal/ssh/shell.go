@@ -81,13 +81,23 @@ while IFS= read -r l; do
   [ -d "$d" ] || mkdir -p -m 700 "$d"
   n=$((n+1)); o="$d/o$n"; e="$d/e$n"
   m=${l%% *}; l=${l#* }
-  printf '%s' "$l" | base64 -d > "$d/c" 2>/dev/null || { printf 'ONIGIRAZU 255 0 0\n'; continue; }
+  base64 -d > "$d/c" 2>/dev/null <<EOF || { printf 'ONIGIRAZU 255 0 0\n'; continue; }
+$l
+EOF
   if [ "$m" = C ]; then sh "$d/c" </dev/null >"$o" 2>&1; rc=$?; : >"$e"
   else sh "$d/c" </dev/null >"$o" 2>"$e"; rc=$?; fi
-  so=$(wc -c <"$o" 2>/dev/null) || so=0; se=$(wc -c <"$e" 2>/dev/null) || se=0
+  # one wc for both sizes: "N o", "M e", "T total" (the path may have
+  # spaces: stderr's size is the total less stdout's); a command that
+  # removed its own output file gets the slow way
+  if [ -f "$o" ] && [ -f "$e" ]; then
+    set -f; set -- $(wc -c "$o" "$e"); set +f; so=$1; eval "se=\$(( \${$(($# - 1))} - so ))"
+  else
+    so=$(wc -c <"$o" 2>/dev/null) || so=0; se=$(wc -c <"$e" 2>/dev/null) || se=0
+  fi
   printf 'ONIGIRAZU %d %d %d\n' "$rc" $((so)) $((se))
   cat "$o" "$e" 2>/dev/null
-  rm -f "$o" "$e"
+  # the outputs of finished commands go in batches, not one rm each
+  [ $((n % 64)) -ne 0 ] || rm -f "$d"/o* "$d"/e*
 done
 `
 
@@ -208,6 +218,30 @@ func modeOf(combined bool) string {
 		return "C"
 	}
 	return "S"
+}
+
+// ProbeMany is Probe for several paths in one request: the records come in
+// the order of paths, each followed by "\x1e\n"
+func (c *Client) ProbeMany(ctx context.Context, user string, paths []string, limit int) (out []byte, served bool, err error) {
+	if err := ctx.Err(); err != nil {
+		return nil, true, err
+	}
+	shell, err := c.takeShell(user)
+	if err != nil || shell == nil {
+		return nil, false, nil
+	}
+	if !shell.probe {
+		c.returnShell(user, shell)
+		return nil, false, nil
+	}
+	o, e, rc, err := c.runIn(ctx, user, shell, "Q", strconv.Itoa(limit)+"\n"+strings.Join(paths, "\n"))
+	if err != nil {
+		return nil, true, err
+	}
+	if rc != 0 {
+		return nil, true, fmt.Errorf("probe: %s", strings.TrimSpace(string(e)))
+	}
+	return o, true, nil
 }
 
 // Probe describes path (kind, mode, owner, group, size and the content up to
@@ -405,4 +439,31 @@ func (b *safeBuffer) Bytes() []byte {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return append([]byte(nil), b.buf...)
+}
+
+// Prewarm starts a command server for user ("" is the login user) in the
+// background, once per connection, and puts it in the pool
+func (c *Client) Prewarm(user string) {
+	if _, started := c.prewarmed.LoadOrStore(user, true); started {
+		return
+	}
+	go func() {
+		p := c.pool(user)
+		p.mu.Lock()
+		skip := p.disabled || len(p.idle) > 0
+		p.mu.Unlock()
+		if skip || c.closed.Load() {
+			return
+		}
+		s, err := c.startShell(user)
+		if err != nil {
+			if user != "" {
+				p.mu.Lock()
+				p.disabled = true // as takeShell: no second try with sudo
+				p.mu.Unlock()
+			}
+			return
+		}
+		c.returnShell(user, s)
+	}()
 }
