@@ -129,6 +129,10 @@ func (c *Client) startShell(user string) (*remoteShell, error) {
 		return nil, err
 	}
 	command := "sh -c " + quote(shellScript)
+	agent := c.agentFor(user)
+	if agent != "" {
+		command = agent
+	}
 	if user != "" {
 		// sudo once for the server instead of once per command; -n: a
 		// password prompt fails the start, and become falls back to sudo
@@ -144,6 +148,11 @@ func (c *Client) startShell(user string) (*remoteShell, error) {
 	f := strings.Fields(line)
 	if err != nil || len(f) == 0 || f[0] != "ONIGIRAZU-READY" {
 		s.close()
+		if agent != "" {
+			// e.g. the become user cannot reach the login user's home
+			c.agentFailed(user)
+			return c.startShell(user)
+		}
 		return nil, fmt.Errorf("shell did not start: %q", line)
 	}
 	s.probe = len(f) > 1 && f[1] == "P"
