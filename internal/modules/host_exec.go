@@ -178,9 +178,22 @@ func statRemoteFile(ctx context.Context, host types.Host, args map[string]interf
 	return remoteFile{Exists: true, Mode: os.FileMode(mode), Owner: lines[1], Group: lines[2], SHA256: lines[3]}, nil
 }
 
+// maxInlineFile: files up to this size go to the host inside a command
+// (base64, under Linux's 128 KiB limit of one argument) instead of SFTP
+const maxInlineFile = 48 << 10
+
+// inlineInstallScript writes data to tmp from the command line and installs
+// it at path
+func inlineInstallScript(tmp, path, owner string, data []byte, mode os.FileMode) string {
+	qt := shellQuote(tmp)
+	return fmt.Sprintf("umask 077; printf '%%s' %s | base64 -d > %s && install -D %s-m %04o %s %s; rc=$?; rm -f %s; exit $rc",
+		base64.StdEncoding.EncodeToString(data), qt, owner, mode.Perm(), qt, shellQuote(path), qt)
+}
+
 // installRemoteFile writes data to path on the host: it uploads to a private
-// temporary file over SFTP and moves it into place with install(1), so with
-// become it can write where the SSH user cannot. Parent directories are
+// temporary file (over SFTP, or inside the command when small) and moves it
+// into place with install(1), so with become it can write where the SSH
+// user cannot. Parent directories are
 // created; the owner of an existing file is kept.
 func installRemoteFile(ctx context.Context, host types.Host, args map[string]interface{}, client *sshpkg.Client,
 	path string, data []byte, mode os.FileMode, existing remoteFile) error {
@@ -195,14 +208,24 @@ func installRemoteFile(ctx context.Context, host types.Host, args map[string]int
 		if err := os.WriteFile(tmp, data, 0600); err != nil {
 			return fmt.Errorf("failed to write %s: %w", tmp, err)
 		}
-	} else if err := client.WriteFile(tmp, data, 0600); err != nil {
-		return fmt.Errorf("failed to upload %s: %w", path, err)
+	} else if len(data) > maxInlineFile {
+		if err := client.WriteFile(tmp, data, 0600); err != nil {
+			return fmt.Errorf("failed to upload %s: %w", path, err)
+		}
 	}
 	owner := ""
 	if existing.Exists {
 		owner = fmt.Sprintf("-o %s -g %s ", shellQuote(existing.Owner), shellQuote(existing.Group))
 	}
 	qt := shellQuote(tmp)
+	if client != nil && len(data) <= maxInlineFile {
+		// a small file travels in the command itself: no SFTP session
+		_, err := runShellOnHost(ctx, host, args, inlineInstallScript(tmp, path, owner, data, mode))
+		if err != nil {
+			return fmt.Errorf("failed to write %s: %w", path, err)
+		}
+		return nil
+	}
 	_, err := runShellOnHost(ctx, host, args, fmt.Sprintf("install -D %s-m %04o %s %s; rc=$?; rm -f %s; exit $rc",
 		owner, mode.Perm(), qt, shellQuote(path), qt))
 	if err != nil {
