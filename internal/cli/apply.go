@@ -402,8 +402,6 @@ Examples:
 			// Also keep the enhanced manager for compatibility with execution engine
 			stateManager := state.NewEnhancedManager(cfg.StateFile, log)
 
-			// the engine loads the existing state when the run starts
-
 			// Create execution pool with signal handler's context for graceful shutdown support
 			executionPool := execution.NewPoolWithContext(ctx, cfg.MaxConcurrency, log)
 			progressTracker := progress.NewTracker()
