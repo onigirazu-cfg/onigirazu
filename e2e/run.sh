@@ -172,6 +172,13 @@ host_ip() { jq -r --arg h "$1" '.[$h]' <<<"$hosts_json"; }
 # Every remote call is bounded: one stuck case must not hold the whole run
 on_host() { local ip; ip="$(host_ip "$1")"; shift; timeout 600 ssh "${SSH_OPTS[@]}" "e2e@$ip" "$@"; }
 
+# where the creation time went: vCenter events of each VM (clone,
+# customization, power on), oldest first
+for vm in $(govc find "/$TF_VAR_datacenter/vm/$TF_VAR_folder" -type m -name "tmp-e2e-onigirazu-$RUN_ID-*" 2>/dev/null); do
+  echo "events of ${vm##*/}:"
+  govc events -n 30 "$vm" 2>/dev/null | grep -iE "clon|custom|powered on|deploy|reconfigured|created" |
+    sed -E 's/[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/<ip>/g' | tail -12 || true
+done
 log "Waiting for SSH"
 for h in $(jq -r 'keys[]' <<<"$hosts_json"); do
   for _ in $(seq 60); do on_host "$h" true 2>/dev/null && break; sleep 5; done
