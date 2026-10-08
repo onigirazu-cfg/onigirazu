@@ -3,6 +3,7 @@ package modules
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -383,7 +384,7 @@ func (m *LineinfileModule) writeRemoteFile(exec *executor.CommandExecutor, args 
 		cmd += fmt.Sprintf(" && chmod 0644 '%s'", escapedPath)
 	}
 	if isNew {
-		cmd = fmt.Sprintf("mkdir -p \"$(dirname '%s')\" && umask 077 && ", escapedPath) + cmd
+		cmd = "mkdir -p " + shellQuote(filepath.Dir(path)) + " && umask 077 && " + cmd
 	}
 
 	// Note: executor.Execute will automatically use shell if needed
