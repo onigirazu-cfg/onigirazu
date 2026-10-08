@@ -1592,24 +1592,30 @@ func (e *ExecutionEngine) SetLimit(pattern string) {
 func (e *ExecutionEngine) gatherFacts(ctx context.Context, hosts []types.Host) error {
 	e.logger.Debug("Gathering facts from %d hosts", len(hosts))
 
-	// Gather facts from each host
+	// on all hosts at once, as the tasks run: one after another, 10 hosts
+	// took ten times as long as one
+	var wg sync.WaitGroup
 	for _, host := range hosts {
-		// Gather system facts using the facts gatherer (with caching)
-		systemFacts, err := e.factsGatherer.GatherFacts(ctx, host)
-		if err != nil {
-			e.logger.Warn("Failed to gather facts from %s: %v", host.Name, err)
-			// Continue with basic facts on error
-			e.setFacts(host.Name, map[string]interface{}{
-				"onigirazu_hostname": host.Name,
-				"onigirazu_host":     host.Address,
-				"onigirazu_port":     host.Port,
-				"onigirazu_user":     host.User,
-			})
-			continue
-		}
-
-		e.setFacts(host.Name, hostFacts(host, systemFacts))
+		wg.Add(1)
+		e.executionPool.Submit(func() {
+			defer wg.Done()
+			// Gather system facts using the facts gatherer (with caching)
+			systemFacts, err := e.factsGatherer.GatherFacts(ctx, host)
+			if err != nil {
+				e.logger.Warn("Failed to gather facts from %s: %v", host.Name, err)
+				// Continue with basic facts on error
+				e.setFacts(host.Name, map[string]interface{}{
+					"onigirazu_hostname": host.Name,
+					"onigirazu_host":     host.Address,
+					"onigirazu_port":     host.Port,
+					"onigirazu_user":     host.User,
+				})
+				return
+			}
+			e.setFacts(host.Name, hostFacts(host, systemFacts))
+		})
 	}
+	wg.Wait()
 
 	// Log cache statistics
 	stats := e.factsGatherer.GetCacheStats()
