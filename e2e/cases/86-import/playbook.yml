@@ -4,5 +4,7 @@
   tasks:
     - name: config file
       copy: {dest: /etc/onigirazu-import.conf, content: "imported=1\n", mode: "0640"}
+    - name: changed conffile (owned by adduser)
+      lineinfile: {path: /etc/adduser.conf, line: "# onigirazu import e2e"}
     - name: account
       user: {name: e2eimport, uid: 4321, shell: /bin/sh}
