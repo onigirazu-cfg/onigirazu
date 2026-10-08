@@ -119,10 +119,11 @@ for n in $HOSTS; do
       done
     done
     rm -rf "$HERE/fetched"
-    # where apt looks, for a failed package install
-    for ip in $(jq -r '.[]' <<<"$hosts_json" | head -1); do
+    # fresh package lists before the timed runs: the base image may come
+    # with none, and cache_valid_time would then skip the update
+    for ip in $(jq -r '.[]' <<<"$hosts_json"); do
       ssh -i "$KEY" -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR "e2e@$ip" \
-        'grep -rhv "^#" /etc/apt/sources.list /etc/apt/sources.list.d/ 2>/dev/null | grep -v "^$" | sed -E "s/[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/<ip>/g"; ls -la --time-style=+%F_%T /var/lib/apt/lists/ | head -12; apt-cache policy python3-pymysql | head -4' || true
+        'sudo -n apt-get -o DPkg::Lock::Timeout=300 update -qq >/dev/null' || die "apt-get update failed on a VM"
     done
 
     if [ "$tool" = ansible ]; then
