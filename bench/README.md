@@ -13,3 +13,12 @@ must change nothing, and check mode; wall time, CPU time and peak memory of the 
   parallelism. Each tool gets its own fresh VMs; the order alternates between host counts.
 - The workload uses about 40 modules (files, templates, packages, users, cron, sysctl, mount, services,
   ufw, git, archives, downloads, docker, MariaDB, PostgreSQL), the same playbook for both tools.
+
+## State checks
+
+After the converge and the second run of each tool, [goss](https://github.com/goss-org/goss)
+(pinned version and checksum in `run.sh`) validates every host against `goss.py`'s description of the
+state `site.yml` leaves: files with their modes and contents, packages, users, cron, sysctl, mount,
+services, ufw, the container and its HTTP answer, the databases. Any failed check fails the bench; the
+summary lists the checks per tool, host count and run.
+

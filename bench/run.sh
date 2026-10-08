@@ -29,6 +29,11 @@ ANSIBLE="${ANSIBLE_PLAYBOOK:-ansible-playbook}"
 mkdir -p "$OUT"
 RESULTS="$OUT/results.tsv"
 printf 'tool\thosts\tphase\tseconds\tcpu_user\tcpu_sys\tpeak_rss_mb\tchanged\tfailed\trc\n' > "$RESULTS"
+GOSS_RESULTS="$OUT/goss.tsv"
+printf 'tool\thosts\tphase\thost\tchecks\tfailed\n' > "$GOSS_RESULTS"
+# goss checks the state the playbook leaves on every host after each run
+GOSS_VERSION=0.4.10
+GOSS_SHA256=26e365428946294bcec0c61d867bb3c8349f39feb3d0e6f59084e98632785cc7
 
 log() { printf '\n==> %s\n' "$*"; }
 die() { echo "error: $*" >&2; exit 1; }
@@ -59,6 +64,12 @@ E2E_IMAGES="u2404=ubuntu-24.04" E2E_BASE=1
 resolve_images || exit 1
 template="$(jq -r '.u2404' <<<"$images_json")"
 
+log "Fetching goss $GOSS_VERSION"
+curl -fsSL -o "$WORK/goss.tgz" "https://github.com/goss-org/goss/releases/download/v$GOSS_VERSION/goss_${GOSS_VERSION}_linux_x86_64.tar.gz"
+echo "$GOSS_SHA256  $WORK/goss.tgz" | sha256sum -c --quiet - || die "goss checksum mismatch"
+tar xzf "$WORK/goss.tgz" -C "$WORK" goss
+python3 "$HERE/goss.py" "$VARS" > "$WORK/goss.json"
+
 log "Building onigirazu"
 (cd "$ROOT" && go build -o "$BIN" ./cmd/onigirazu)
 ssh-keygen -q -t ed25519 -N '' -C "onigirazu-bench-$RUN_ID" -f "$KEY"
@@ -66,6 +77,24 @@ for try in 1 2 3; do
   terraform -chdir="$TF_DIR" init -input=false >/dev/null && break
   [ "$try" = 3 ] && exit 1; sleep 15
 done
+
+# goss_check TOOL HOSTS PHASE: validates every host; a failed check is
+# shown and fails the bench at the end
+goss_check() {
+  local tool="$1" n="$2" phase="$3" ip name out
+  while read -r name ip; do
+    out="$(ssh -i "$KEY" -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR "e2e@$ip" \
+      'sudo -n /tmp/goss -g /tmp/goss.json validate --format tap --no-color' 2>&1)" || true
+    local total failed
+    total="$( (grep -cE '^(ok|not ok) ' <<<"$out") || true)"
+    failed="$( (grep -cE '^not ok ' <<<"$out") || true)"
+    printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$tool" "$n" "$phase" "$name" "$total" "$failed" >> "$GOSS_RESULTS"
+    if [ "$total" = 0 ] || [ "$failed" != 0 ]; then
+      echo "goss: $tool $phase on $name: $failed of $total checks failed"
+      (grep -E '^not ok ' <<<"$out" || tail -5 <<<"$out") | head -20
+    fi
+  done < <(jq -r 'to_entries[] | "\(.key) \(.value)"' <<<"$hosts_json")
+}
 
 # measure TOOL HOSTS PHASE command...: wall/CPU/peak memory of the command
 # and its children; the log is kept for the counts
@@ -119,6 +148,10 @@ for n in $HOSTS; do
       done
     done
     rm -rf "$HERE/fetched"
+    for ip in $(jq -r '.[]' <<<"$hosts_json"); do
+      scp -q -i "$KEY" -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+        "$WORK/goss" "$WORK/goss.json" "e2e@$ip:/tmp/" || die "cannot copy goss to a VM"
+    done
     # fresh package lists before the timed runs: the base image may come
     # with none, and cache_valid_time would then skip the update
     for ip in $(jq -r '.[]' <<<"$hosts_json"); do
@@ -140,14 +173,18 @@ EOF
       export ANSIBLE_CONFIG="$WORK/ansible.cfg"
       cmd=("$ANSIBLE" -i "$inv" site.yml -e "$VARS")
       measure ansible "$n" converge "${cmd[@]}"
+      goss_check ansible "$n" converge
       measure ansible "$n" second "${cmd[@]}"
+      goss_check ansible "$n" second
       measure ansible "$n" check "${cmd[@]}" --check
       unset ANSIBLE_CONFIG
     else
       export ONIGIRAZU_SSH_KNOWN_HOSTS_FILE="$WORK/known_hosts" ONIGIRAZU_MAX_CONCURRENCY="$n"
       cmd=("$BIN" apply site.yml -i "$inv" -e "$VARS" --state "$WORK/state-$n" --no-color)
       measure onigirazu "$n" converge "${cmd[@]}"
+      goss_check onigirazu "$n" converge
       measure onigirazu "$n" second "${cmd[@]}"
+      goss_check onigirazu "$n" second
       measure onigirazu "$n" check "${cmd[@]}" --check
       # where the time goes: one more noop run with per-task durations
       (cd "$HERE" && "${cmd[@]}" -o json 2>/dev/null > "$WORK/tasks.out") || true
@@ -206,7 +243,22 @@ for s, name, n in rows[:15]:
     print(f"| {name.replace(' (item 1)', '')} | {n} | {s:.2f} | {100 * s / total:.0f}% |")
 PY
 done
+python3 - "$GOSS_RESULTS" >> "$OUT/summary.md" <<'PY'
+import csv, sys
+rows = list(csv.DictReader(open(sys.argv[1]), delimiter="\t"))
+if rows:
+    print("\n#### State checks (goss): every host after each run\n")
+    print("| tool | hosts | phase | hosts passed | checks per host | failed checks |")
+    print("|---|---|---|---|---|---|")
+    groups = {}
+    for r in rows:
+        groups.setdefault((r["tool"], int(r["hosts"]), r["phase"]), []).append(r)
+    for (tool, n, phase), rs in sorted(groups.items(), key=lambda x: (x[0][1], x[0][0], x[0][2])):
+        ok = sum(1 for r in rs if r["failed"] == "0" and r["checks"] != "0")
+        print(f'| {tool} | {n} | {phase} | {ok}/{len(rs)} | {max(int(r["checks"]) for r in rs)} | {sum(int(r["failed"]) for r in rs)} |')
+PY
 cat "$OUT/summary.md"
 [ -n "${GITHUB_STEP_SUMMARY:-}" ] && cat "$OUT/summary.md" >> "$GITHUB_STEP_SUMMARY"
 # a failed task or a second run that changed something makes the numbers moot
 awk -F'\t' 'NR > 1 && ($9 > 0 || $10 != 0 || ($3 == "second" && $8 > 0)) {bad = 1; print "not clean: " $0} END {exit bad}' "$RESULTS"
+awk -F'\t' 'NR > 1 && ($5 == 0 || $6 != 0) {bad = 1; print "state check failed: " $0} END {exit bad}' "$GOSS_RESULTS"
