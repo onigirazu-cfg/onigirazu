@@ -77,8 +77,10 @@ resource "vsphere_virtual_machine" "vm" {
   ])
 
   extra_config = {
-    # Read once by the image's e2e-access unit on first boot
+    # Read once by the image's e2e-access unit on first boot: the test user's
+    # key and the host name (no guest customization: it costs a reboot)
     "guestinfo.e2e_authorized_key" = var.public_key
+    "guestinfo.e2e_hostname"       = "e2e-${each.key}"
   }
 
   network_interface {
@@ -95,16 +97,6 @@ resource "vsphere_virtual_machine" "vm" {
 
   clone {
     template_uuid = data.vsphere_virtual_machine.template[each.key].id
-
-    customize {
-      timeout = 20
-      linux_options {
-        host_name = "e2e-${each.key}"
-        domain    = "e2e.invalid"
-      }
-      # DHCP
-      network_interface {}
-    }
   }
 
   wait_for_guest_net_timeout = 10

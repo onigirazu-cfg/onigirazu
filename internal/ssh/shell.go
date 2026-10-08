@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -46,11 +45,10 @@ func (e *ExitStatusError) ExitStatus() int { return e.Status }
 // removed its own output files reports empty output).
 var shellScript = pythonServer() + posixServer
 
-// serverScript is the command server to start: ONIGIRAZU_NO_PYTHON=1 keeps
-// to the POSIX one even where python3 is there (to compare, or for a host
-// whose python3 misbehaves)
+// serverScript is the script server to start: the Python one where python3
+// is there, unless remote_server is sh (or ONIGIRAZU_NO_PYTHON=1)
 func serverScript() string {
-	if os.Getenv("ONIGIRAZU_NO_PYTHON") == "1" {
+	if serverMode() == "sh" {
 		return posixServer
 	}
 	return shellScript
@@ -106,8 +104,9 @@ type remoteShell struct {
 	session *ssh.Session
 	stdin   io.WriteCloser
 	stdout  *bufio.Reader
-	// probe: the server answers "P" requests (the Python one)
-	probe bool
+	// probe, write: the server answers "P"/"Q" and "W" requests (the
+	// Python one and the agent)
+	probe, write bool
 }
 
 func (s *remoteShell) close() {
@@ -140,6 +139,10 @@ func (c *Client) startShell(user string) (*remoteShell, error) {
 		return nil, err
 	}
 	command := "sh -c " + quote(serverScript())
+	agent := c.agentFor(user)
+	if agent != "" {
+		command = agent
+	}
 	if user != "" {
 		// sudo once for the server instead of once per command; -n: a
 		// password prompt fails the start, and become falls back to sudo
@@ -155,9 +158,17 @@ func (c *Client) startShell(user string) (*remoteShell, error) {
 	f := strings.Fields(line)
 	if err != nil || len(f) == 0 || f[0] != "ONIGIRAZU-READY" {
 		s.close()
+		if agent != "" {
+			// e.g. the become user cannot reach the login user's home
+			c.agentFailed(user)
+			return c.startShell(user)
+		}
 		return nil, fmt.Errorf("shell did not start: %q", line)
 	}
-	s.probe = len(f) > 1 && f[1] == "P"
+	for _, flag := range f[1:] {
+		s.probe = s.probe || flag == "P"
+		s.write = s.write || flag == "W"
+	}
 	return s, nil
 }
 
@@ -218,6 +229,33 @@ func modeOf(combined bool) string {
 		return "C"
 	}
 	return "S"
+}
+
+// Write writes data to path on the host as user through the command server,
+// without a process: in a file next to it moved over it, missing parent
+// directories made. mode is octal or "-" (keep, 0644 for a new file),
+// owner and group a name, an id or "-" (keep). served is false when the
+// server cannot (the sh one): the caller writes with commands.
+func (c *Client) Write(ctx context.Context, user, path string, data []byte, mode, owner, group string) (served bool, err error) {
+	if err := ctx.Err(); err != nil {
+		return true, err
+	}
+	shell, err := c.takeShell(user)
+	if err != nil || shell == nil {
+		return false, nil
+	}
+	if !shell.write || strings.ContainsAny(path, "\n\x00") {
+		c.returnShell(user, shell)
+		return false, nil
+	}
+	_, e, rc, err := c.runIn(ctx, user, shell, "W", mode+" "+owner+" "+group+"\n"+path+"\n"+string(data))
+	if err != nil {
+		return true, err
+	}
+	if rc != 0 {
+		return true, fmt.Errorf("write %s: %s", path, strings.TrimSpace(string(e)))
+	}
+	return true, nil
 }
 
 // ProbeMany is Probe for several paths in one request: the records come in
