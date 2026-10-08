@@ -9,6 +9,7 @@ out="import-$HOST"
 grep -q "nothing to change" log
 # a changed conffile is taken too
 grep -rqF "onigirazu import e2e" "$out" || { echo "changed conffile /etc/adduser.conf not imported"; exit 1; }
+echo "note: $(grep '^Time:' log)"
 grep -rq "File /etc/onigirazu-import.conf" "$out/roles"
 grep -rq "User e2eimport" "$out/roles"
 test -f "$out/IMPORT_REPORT.md"
