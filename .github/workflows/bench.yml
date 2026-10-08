@@ -21,6 +21,11 @@ on:
         required: false
         type: string
         default: '{}'
+      python:
+        description: 'onigirazu may use python3 on the hosts (off: the POSIX command server only)'
+        required: false
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -87,6 +92,7 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           BENCH_HOSTS: ${{ inputs.hosts || '1' }}
           BENCH_VARS: ${{ inputs.vars || '{}' }}
+          ONIGIRAZU_NO_PYTHON: ${{ inputs.python == false && '1' || '' }}
           BENCH_OUT: ${{ runner.temp }}/bench-results
         run: bench/run.sh
 
