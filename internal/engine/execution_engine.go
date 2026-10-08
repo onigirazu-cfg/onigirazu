@@ -20,6 +20,7 @@ import (
 	"github.com/onigirazu-cfg/onigirazu/internal/facts"
 	"github.com/onigirazu-cfg/onigirazu/internal/interfaces"
 	"github.com/onigirazu-cfg/onigirazu/internal/metrics"
+	"github.com/onigirazu-cfg/onigirazu/internal/modules"
 	"github.com/onigirazu-cfg/onigirazu/internal/parser"
 	"github.com/onigirazu-cfg/onigirazu/internal/plugins"
 	"github.com/onigirazu-cfg/onigirazu/internal/security"
@@ -1485,6 +1486,8 @@ func (e *ExecutionEngine) runLoopOnHost(ctx context.Context, task *types.Task, h
 		indexVar = "item_index"
 	}
 
+	ctx = modules.WithLoopProbes(ctx, e.prefetchLoop(ctx, task, host, variables, items, itemVar, indexVar))
+
 	results := make([]interface{}, 0, len(items))
 	changed, failed := false, false
 	register := func() {
@@ -2699,4 +2702,42 @@ func (e *ExecutionEngine) hostSlot(ctx context.Context) (context.Context, func()
 		return ctx, func() {}
 	}
 	return context.WithValue(ctx, hostSlotKey{}, true), func() { <-e.hostSlots }
+}
+
+// prefetchLoop captures the targets of all items of a file module's loop on
+// host in one round trip (see modules.LoopProbes); nil when it does not apply
+func (e *ExecutionEngine) prefetchLoop(ctx context.Context, task *types.Task, host *types.Host,
+	variables map[string]interface{}, items []interface{}, itemVar, indexVar string) *modules.LoopProbes {
+	keys := modules.CapturePathKeys(task.Module)
+	if len(keys) == 0 || len(items) < 2 || task.DelegateTo != "" || strings.Contains(task.BecomeUser, "{{") {
+		return nil
+	}
+	arg := ""
+	for _, k := range keys {
+		if v, ok := task.Args[k].(string); ok && v != "" {
+			arg = v
+			break
+		}
+	}
+	if arg == "" {
+		return nil
+	}
+	e.mutex.RLock()
+	become := effectiveBecome(task, e.playBecome)
+	e.mutex.RUnlock()
+	base := e.hostVariables(host, variables)
+	paths := make([]string, 0, len(items))
+	for i, item := range items {
+		vars := make(map[string]interface{}, len(base)+2)
+		for k, v := range base {
+			vars[k] = v
+		}
+		vars[itemVar], vars[indexVar] = item, i
+		// an item whose path does not render here probes for itself
+		if path, err := e.templateEngine.Render(ctx, arg, vars); err == nil {
+			paths = append(paths, path)
+		}
+	}
+	return modules.PrefetchLoop(ctx, *host, &types.Task{Module: task.Module, Become: become.Become,
+		BecomeUser: become.User, BecomeMethod: become.Method}, paths)
 }
