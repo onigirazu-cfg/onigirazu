@@ -546,7 +546,10 @@ Ensure a line is present in a file, or remove matching lines.
 | `firstmatch` | boolean | `false` | Use the first matching line for `regexp`, `insertafter`/`insertbefore` instead of the last |
 | `backrefs` | boolean | `false` | `line` takes the groups of the `regexp` match (`\1`, `\g<name>`); with no match the file is left as it is |
 | `backup` | boolean | `false` | Keep the old file as `<path>.<unixtime>.backup` |
-| `create` | boolean | `false` | Create the file if it is missing (otherwise a missing file fails) |
+| `create` | boolean | `false` | Create the file (and its missing parent directories) if it is missing; otherwise a missing file fails |
+| `mode` | string | - | File mode, e.g. `"0644"` (a new file is `0644` without it) |
+| `owner` | string | - | File owner (name or uid) |
+| `group` | string | - | File group (name or gid) |
 
 A new line goes to the end of the file when there is no `insertafter`/`insertbefore` or it matches nothing, as in Ansible. An invalid pattern fails the task.
 
@@ -583,6 +586,9 @@ Insert, update or remove a block of text between marker lines.
 | `firstmatch` | boolean | `false` | Use the first matching line for `insertafter`/`insertbefore` instead of the last |
 | `state` | string | `present` | `present` or `absent` |
 | `backup` | boolean | `false` | Keep the old file as `<path>.bak` |
+| `mode` | string | - | File mode, e.g. `"0644"` (a new file is `0644` without it) |
+| `owner` | string | - | File owner (name or uid) |
+| `group` | string | - | File group (name or gid) |
 
 A new block goes to the end of the file when there is no `insertafter`/`insertbefore` or it matches nothing, as in Ansible; an existing block is updated in place. An invalid pattern fails the task. Returns `path`, `state`, `msg` and `backup`.
 
@@ -609,6 +615,9 @@ Replace every match of a regular expression in a file (Go RE2 syntax, multiline 
 | `regexp` | string | - | Regular expression (required) |
 | `replace` | string | `""` | Replacement; `\1` and `\g<name>` refer to groups |
 | `backup` | boolean | `false` | Keep the old file as `<path>.<YYYYMMDDhhmmss>~` |
+| `mode` | string | - | File mode, e.g. `"0644"` (a new file is `0644` without it) |
+| `owner` | string | - | File owner (name or uid) |
+| `group` | string | - | File group (name or gid) |
 
 Returns `msg` (number of replacements) and `backup_file`.
 

@@ -310,3 +310,24 @@ func remoteTempName(prefix, base string) string {
 	}
 	return name
 }
+
+// applyFileArgs applies mode, owner and group as the file module does, for
+// the modules that edit a file (lineinfile, blockinfile, replace)
+func applyFileArgs(ctx context.Context, host types.Host, args map[string]interface{}, path string, result types.TaskResult, start time.Time) (types.TaskResult, error) {
+	if getStringArg(args, "mode", "") == "" && getStringArg(args, "owner", "") == "" && getStringArg(args, "group", "") == "" {
+		return result, nil
+	}
+	return (&FileModule{}).applyAttributes(ctx, host, args, path, result, start)
+}
+
+// argMode is the mode argument for writeHostFile (0: keep or 0644); a mode
+// given is marked as set, so applyFileArgs does not read it back
+func argMode(args map[string]interface{}, path string) os.FileMode {
+	mode := getStringArg(args, "mode", "")
+	want, err := strconv.ParseUint(mode, 8, 32)
+	if mode == "" || err != nil {
+		return 0
+	}
+	args["_mode_set"] = path
+	return os.FileMode(want)
+}

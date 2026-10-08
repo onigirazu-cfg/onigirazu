@@ -67,13 +67,13 @@ func (m *ReplaceModule) Execute(ctx context.Context, host types.Host, args map[s
 	result.Output["msg"] = fmt.Sprintf("%d replacements made", count)
 	if after == before {
 		result.Duration = time.Since(start)
-		return result, nil
+		return applyFileArgs(ctx, host, args, path, result, start)
 	}
 	result.Changed = true
 	addDiff(args, &result, path, diffText(data, true), diffText([]byte(after), true))
 	if inCheckMode(args) {
 		result.Duration = time.Since(start)
-		return result, nil
+		return applyFileArgs(ctx, host, args, path, result, start)
 	}
 	if getBoolArg(args, "backup", false) {
 		backup := fmt.Sprintf("%s.%s~", path, time.Now().Format("20060102150405"))
@@ -82,11 +82,11 @@ func (m *ReplaceModule) Execute(ctx context.Context, host types.Host, args map[s
 		}
 		result.Output["backup_file"] = backup
 	}
-	if err := writeHostFile(ctx, host, args, path, []byte(after), 0); err != nil {
+	if err := writeHostFile(ctx, host, args, path, []byte(after), argMode(args, path)); err != nil {
 		return fail(err.Error())
 	}
 	result.Duration = time.Since(start)
-	return result, nil
+	return applyFileArgs(ctx, host, args, path, result, start)
 }
 
 func (m *ReplaceModule) Validate(args map[string]interface{}) error {
