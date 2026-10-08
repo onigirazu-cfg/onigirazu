@@ -246,6 +246,18 @@ func installRemoteFile(ctx context.Context, host types.Host, args map[string]int
 // readHostFile returns the content of path on the host (with become), and
 // whether it exists. Content travels base64-encoded, so any bytes survive.
 func readHostFile(ctx context.Context, host types.Host, args map[string]interface{}, path string) ([]byte, bool, error) {
+	// the capture before the task has it already (text up to the capture
+	// limit): no round trip
+	if b, ok := captured(args, path); ok {
+		switch b["kind"] {
+		case "absent":
+			return nil, false, nil
+		case "file":
+			if content, has := b["content"].(string); has {
+				return []byte(content), true, nil
+			}
+		}
+	}
 	q := shellQuote(path)
 	out, err := runShellOnHost(ctx, host, args, fmt.Sprintf(
 		"if [ -e %s ]; then printf 'present:'; base64 < %s | tr -d '\\n'; else printf absent; fi", q, q))
