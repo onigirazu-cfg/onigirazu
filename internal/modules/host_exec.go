@@ -81,6 +81,12 @@ func ensureOwnership(ctx context.Context, host types.Host, args map[string]inter
 	if owner == "" && group == "" {
 		return false, nil
 	}
+	// the capture before the task has the owner and group of a path that
+	// was there (writes keep them): when the names match, nothing to ask
+	if b, ok := captured(args, path); ok && (b["kind"] == "file" || b["kind"] == "directory") &&
+		(owner == "" || owner == b["owner"]) && (group == "" || group == b["group"]) {
+		return false, nil
+	}
 
 	qPath := shellQuote(path)
 	// GNU stat first, BSD stat as a fallback
