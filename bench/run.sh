@@ -184,6 +184,8 @@ EOF
       export ONIGIRAZU_SSH_KNOWN_HOSTS_FILE="$WORK/known_hosts" ONIGIRAZU_MAX_CONCURRENCY="$n"
       cmd=("$BIN" apply site.yml -i "$inv" -e "$VARS" --state "$WORK/state-$n" --no-color)
       measure onigirazu "$n" converge "${cmd[@]}"
+      # the run's record (per-task wall times): where the converge's time goes
+      cp "$HOME/.onigirazu/cache/executions/current.json" "$OUT/onigirazu-$n-converge.json" 2>/dev/null || true
       goss_check onigirazu "$n" converge
       measure onigirazu "$n" second "${cmd[@]}"
       goss_check onigirazu "$n" second
@@ -227,7 +229,7 @@ for h in hosts:
               f'{o["peak_rss_mb"]} | {a["peak_rss_mb"]} | {o["changed"]}/{a["changed"]} | {o["failed"]}/{a["failed"]} |')
 PY
 printf '\nonigirazu ran with remote_server %s.\n' "${ONIGIRAZU_REMOTE_SERVER:-auto}" >> "$OUT/summary.md"
-for f in "$OUT"/onigirazu-*-tasks.json; do
+for f in "$OUT"/onigirazu-*-converge.json "$OUT"/onigirazu-*-tasks.json; do
   [ -s "$f" ] || continue
   python3 - "$f" >> "$OUT/summary.md" <<'PY' || true
 import datetime, json, os, sys
@@ -239,7 +241,8 @@ tasks = [t for t in d.get("tasks", []) if not t["start_time"].startswith("0001")
 ends = [t["start_time"] for t in tasks[1:]] + [d["end_time"]]
 rows = sorted(((at(e) - at(t["start_time"])).total_seconds(), t["name"], t["total"]) for t, e in zip(tasks, ends))[::-1]
 total = (at(d["end_time"]) - at(d["start_time"])).total_seconds() or 1
-print(f"\n#### {os.path.basename(sys.argv[1])[:-5]}: slowest tasks of a noop run ({total:.1f} s)\n")
+kind = "the converge" if sys.argv[1].endswith("-converge.json") else "a noop run"
+print(f"\n#### {os.path.basename(sys.argv[1])[:-5]}: slowest tasks of {kind} ({total:.1f} s)\n")
 print("| task | items | s | share |")
 print("|---|---|---|---|")
 for s, name, n in rows[:15]:
