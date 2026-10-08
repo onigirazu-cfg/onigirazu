@@ -65,7 +65,9 @@ type ExecutionEngine struct {
 	playsTargeted int
 	playsTotal    int
 
-	config            interfaces.Config
+	config interfaces.Config
+	// hostSlots bounds the hosts worked on at once (max_concurrency)
+	hostSlots         chan struct{}
 	logger            interfaces.Logger
 	stateManager      interfaces.StateManager
 	inventoryMgr      interfaces.InventoryManager
@@ -205,7 +207,12 @@ func NewExecutionEngine(
 	// Create default tag filter (no filtering)
 	defaultFilter, _ := tagfilter.New("", "")
 
+	var hostSlots chan struct{}
+	if config != nil && config.GetMaxConcurrency() > 0 {
+		hostSlots = make(chan struct{}, config.GetMaxConcurrency())
+	}
 	return &ExecutionEngine{
+		hostSlots:         hostSlots,
 		config:            config,
 		logger:            logger,
 		stateManager:      stateManager,
@@ -951,6 +958,8 @@ func (e *ExecutionEngine) executeTaskParallel(ctx context.Context, task *types.T
 		// Submit to execution pool
 		e.executionPool.Submit(func() {
 			defer wg.Done()
+			ctx, release := e.hostSlot(ctx)
+			defer release()
 			defer slots.acquire()()
 
 			if err := e.executeTaskOnHost(ctx, task, &host, variables, playResult); err != nil {
@@ -1441,6 +1450,8 @@ func (e *ExecutionEngine) executeTaskWithLoop(ctx context.Context, task *types.T
 		wg.Add(1)
 		e.executionPool.Submit(func() {
 			defer wg.Done()
+			ctx, release := e.hostSlot(ctx)
+			defer release()
 			defer slots.acquire()()
 			if err := e.runLoopOnHost(ctx, task, host, variables, playResult); err != nil {
 				mutex.Lock()
@@ -2390,7 +2401,7 @@ func (e *ExecutionEngine) executeBlock(ctx context.Context, block *types.Task, h
 	// inside the block a failure goes to rescue; the host leaves the run
 	// only when the block as a whole failed on it
 	ctx = context.WithValue(ctx, inBlockKey{}, true)
-	runOnHost := func(host types.Host) error {
+	runOnHost := func(ctx context.Context, host types.Host) error {
 		one := []types.Host{host}
 		err := e.executeTaskList(ctx, body, one, variables, playResult)
 		if err != nil && len(rescue) > 0 {
@@ -2407,7 +2418,7 @@ func (e *ExecutionEngine) executeBlock(ctx context.Context, block *types.Task, h
 
 	var failed failures
 	if len(hosts) == 1 {
-		if err := runOnHost(hosts[0]); err != nil {
+		if err := runOnHost(ctx, hosts[0]); err != nil {
 			failed.add(hosts[0].Name, err)
 		}
 		return failed.err()
@@ -2419,7 +2430,9 @@ func (e *ExecutionEngine) executeBlock(ctx context.Context, block *types.Task, h
 		wg.Add(1)
 		e.executionPool.Submit(func() {
 			defer wg.Done()
-			if err := runOnHost(host); err != nil {
+			ctx, release := e.hostSlot(ctx)
+			defer release()
+			if err := runOnHost(ctx, host); err != nil {
 				mutex.Lock()
 				failed.add(host.Name, err)
 				mutex.Unlock()
@@ -2649,4 +2662,22 @@ func extendedLoopVars(items []interface{}, i int) map[string]interface{} {
 		v["nextitem"] = items[next]
 	}
 	return v
+}
+
+// hostSlotKey marks a context whose host already holds a slot
+type hostSlotKey struct{}
+
+// hostSlot takes one of the max_concurrency slots for work on one host.
+// Work nested in it (a block's tasks, a loop) runs in the slot its host
+// already holds, so it cannot wait on itself.
+func (e *ExecutionEngine) hostSlot(ctx context.Context) (context.Context, func()) {
+	if e.hostSlots == nil || ctx.Value(hostSlotKey{}) != nil {
+		return ctx, func() {}
+	}
+	select {
+	case e.hostSlots <- struct{}{}:
+	case <-ctx.Done():
+		return ctx, func() {}
+	}
+	return context.WithValue(ctx, hostSlotKey{}, true), func() { <-e.hostSlots }
 }
