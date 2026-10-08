@@ -68,7 +68,10 @@ type ExecutionEngine struct {
 
 	config interfaces.Config
 	// hostSlots bounds the hosts worked on at once (max_concurrency)
-	hostSlots         chan struct{}
+	hostSlots chan struct{}
+	// inventoryView: the inventory's hosts and groups for hostvars and
+	// groups, read once per playbook run (nothing changes them during it)
+	inventoryView     inventorySnapshot
 	logger            interfaces.Logger
 	stateManager      interfaces.StateManager
 	inventoryMgr      interfaces.InventoryManager
@@ -323,6 +326,7 @@ func (e *ExecutionEngine) ExecutePlaybook(ctx context.Context, playbook *types.P
 	e.logger.Info("Starting playbook execution: %s", playbook.Name)
 	e.mutex.Lock()
 	e.failedHosts = nil
+	e.inventoryView.reset()
 	e.rolloutApplied = nil
 	e.rolloutReports = nil
 	e.taskKeys = nil
