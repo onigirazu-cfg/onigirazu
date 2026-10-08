@@ -276,6 +276,9 @@ for c in $cases; do
       record "$c" "$h" FAIL "verify-local: $(echo "$out" | grep -v '^$' | tail -2 | paste -sd' ' - | cut -c1-300)"; continue
     fi
     record "$c" "$h" PASS "apply+verify"
+    # "note: ..." lines of a passing verify-local are shown (timings and such)
+    grep '^note: ' <<<"${out:-}" | sed "s/^/      $h /" || true
+    out=""
     passed="$passed $h"
   done
 
