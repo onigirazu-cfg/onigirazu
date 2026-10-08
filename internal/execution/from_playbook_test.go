@@ -71,3 +71,22 @@ func TestFromPlaybookResultKeepsTasksWithTheSameName(t *testing.T) {
 		t.Errorf("ignored failure = %+v", r)
 	}
 }
+
+// a task's duration is its wall time over hosts and loop items
+func TestFromPlaybookResultTaskWallTime(t *testing.T) {
+	t0 := time.Date(2026, 10, 8, 10, 0, 0, 0, time.UTC)
+	item := func(at, took time.Duration) types.TaskResult {
+		return types.TaskResult{TaskName: "copy (item 1)", TaskKey: "copy", Success: true, Timestamp: t0.Add(at), Duration: took}
+	}
+	result := &types.PlaybookResult{Plays: []types.PlayResult{{Hosts: []types.HostResult{
+		{Host: "a", Tasks: []types.TaskResult{item(0, 0), item(time.Second, 0), item(2*time.Second, 500*time.Millisecond)}},
+		{Host: "b", Tasks: []types.TaskResult{item(100*time.Millisecond, 3*time.Second)}},
+	}}}}
+	exec := FromPlaybookResult(result, "p", "p", t0, 5*time.Second)
+	require.Len(t, exec.Tasks, 1)
+	assert.Equal(t, 4, exec.Tasks[0].Total)
+	assert.Equal(t, "copy", exec.Tasks[0].Name)
+	assert.Equal(t, t0, exec.Tasks[0].StartTime)
+	assert.Equal(t, t0.Add(3100*time.Millisecond), exec.Tasks[0].EndTime)
+	assert.Equal(t, 3100*time.Millisecond, exec.Tasks[0].Duration)
+}
