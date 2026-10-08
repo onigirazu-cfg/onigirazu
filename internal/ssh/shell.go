@@ -104,7 +104,7 @@ type shellPool struct {
 }
 
 func (c *Client) startShell(user string) (*remoteShell, error) {
-	session, err := c.client.NewSession()
+	session, err := c.newSession()
 	if err != nil {
 		return nil, err
 	}
@@ -350,7 +350,7 @@ func (c *Client) closeShells() {
 
 // execSession runs a command in a session of its own
 func (c *Client) execSession(ctx context.Context, command string, combined bool) ([]byte, []byte, int, error) {
-	session, err := c.client.NewSession()
+	session, err := c.newSession()
 	if err != nil {
 		return nil, nil, 0, fmt.Errorf("%w: %v", ErrNotSent, err)
 	}
