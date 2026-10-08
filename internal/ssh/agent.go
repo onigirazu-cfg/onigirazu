@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/onigirazu-cfg/onigirazu/internal/agentbin"
 )
 
 // The agent (cmd/onigirazu-agent) is the command server as a Go binary:
@@ -58,9 +60,13 @@ func (c *Client) agentFailed(user string) {
 	c.agent.mu.Unlock()
 }
 
-// localAgent is the agent binary for goos/goarch: in $ONIGIRAZU_AGENT_DIR or
-// next to the onigirazu executable, named onigirazu-agent-<os>-<arch>
+// localAgent is the agent binary for goos/goarch: built into onigirazu
+// (internal/agentbin), else in $ONIGIRAZU_AGENT_DIR or next to the
+// onigirazu executable, named onigirazu-agent-<os>-<arch>
 func localAgent(goos, goarch string) ([]byte, error) {
+	if data, ok := agentbin.Get(goos, goarch); ok {
+		return data, nil
+	}
 	name := "onigirazu-agent-" + goos + "-" + goarch
 	var dirs []string
 	if d := os.Getenv("ONIGIRAZU_AGENT_DIR"); d != "" {

@@ -60,11 +60,9 @@ resolve_images || exit 1
 template="$(jq -r '.u2404' <<<"$images_json")"
 
 log "Building onigirazu"
+# the agents built into onigirazu, as in a release
+[ "${ONIGIRAZU_AGENT:-}" = 1 ] && (cd "$ROOT" && go generate ./internal/agentbin)
 (cd "$ROOT" && go build -o "$BIN" ./cmd/onigirazu)
-if [ "${ONIGIRAZU_AGENT:-}" = 1 ]; then
-  # next to the binary, where onigirazu looks for it; the VMs are linux/amd64
-  (cd "$ROOT" && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o "$WORK/onigirazu-agent-linux-amd64" ./cmd/onigirazu-agent)
-fi
 ssh-keygen -q -t ed25519 -N '' -C "onigirazu-bench-$RUN_ID" -f "$KEY"
 for try in 1 2 3; do
   terraform -chdir="$TF_DIR" init -input=false >/dev/null && break
