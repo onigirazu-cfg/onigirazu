@@ -25,13 +25,6 @@ pull docker mongo:7
 pull docker alpine:3.20
 pull podman docker.io/library/alpine:3.20
 
-# Guest customization of a clone renames the image's netplan file and writes
-# its own DHCP config without "dhcp-identifier: mac"; on 26.04 the initramfs
-# and networkd then lease with different client ids and the address changes
-# on reboot. A networkd drop-in survives the customization.
-mkdir -p /etc/systemd/network/10-netplan-ens192.network.d
-printf '[DHCPv4]\nClientIdentifier=mac\n' > /etc/systemd/network/10-netplan-ens192.network.d/10-client-id.conf
-
 # A pre-warmed VM (e2e/pool.sh) gets its run's key after it booted: a timer
 # applies guestinfo.e2e_authorized_key and e2e_hostname whenever they change
 cat > /usr/local/sbin/e2e-access-refresh.sh <<'EOS'
