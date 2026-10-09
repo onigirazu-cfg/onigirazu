@@ -517,11 +517,11 @@ func TestExecuteTask_DataModulesKeepNumbers(t *testing.T) {
 		name := name
 		mock := NewMockModule(name)
 		mock.executeFunc = func(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
-			seen[name] = args["n"]
+			seen[name] = args["minute"] // an argument cron has: others fail the task
 			return types.TaskResult{Success: true}, nil
 		}
 		registry.RegisterModule(mock)
-		_, err := registry.ExecuteTask(context.Background(), &types.Task{Module: name, Args: map[string]interface{}{"n": 3}}, types.Host{Name: "h"}, nil)
+		_, err := registry.ExecuteTask(context.Background(), &types.Task{Module: name, Args: map[string]interface{}{"minute": 3}}, types.Host{Name: "h"}, nil)
 		assert.NoError(t, err)
 	}
 	assert.Equal(t, 3, seen["set_fact"])
