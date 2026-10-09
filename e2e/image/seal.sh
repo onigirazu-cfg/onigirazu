@@ -28,6 +28,11 @@ network:
         name: "en*"
       dhcp4: true
       dhcp-identifier: mac
+      # a reboot keeps the address: networkd would release the lease on the
+      # way down and a VM of a parallel run could take it (99-reboot failed
+      # "unreachable" with 8 runs in flight); dhcp-release.sh releases it
+      dhcp4-overrides:
+        send-release: false
 NETPLAN
 chmod 600 /etc/netplan/01-e2e-dhcp.yaml
 cloud-init clean --logs --seed >/dev/null 2>&1 || true
