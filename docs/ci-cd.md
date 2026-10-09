@@ -12,13 +12,17 @@ All automation is GitHub Actions in `.github/workflows/`. Dependency updates com
 | Security Scan (`security.yml`) | push and PR to `main`, Mondays 06:00 UTC, manual | govulncheck (blocking); gosec, Trivy, Nancy (report only, SARIF to code scanning); CodeQL; dependency review on PRs (fails on moderate or higher) |
 | License Check (`license-check.yml`) | push and PR to `main` | `go-licenses` check and report (non-blocking) |
 | Documentation (`docs.yml`) | push and PR to `main` | renders `README.md` to HTML and deploys `docs/` to GitHub Pages (on `main` only) |
-| E2E (`e2e.yml`) | manual, daily 05:00 UTC; janitor hourly | playbooks from `e2e/cases/` on disposable vSphere VMs, 4 shards, self-hosted runners labelled `vsphere-e2e`; see [e2e/README.md](../e2e/README.md) |
+| E2E (`e2e.yml`) | PRs from this repository (the cases the change needs), manual, daily 05:00 UTC; janitor hourly at :30 | playbooks from `e2e/cases/` on disposable vSphere VMs, 1–4 shards, self-hosted runners labelled `vsphere-e2e`; see [e2e/README.md](../e2e/README.md) |
+| E2E base image (`e2e-image.yml`) | pushes to `main` touching `e2e/image/`, nightly 03:30 UTC, manual | rebuilds the `e2e-base-*` templates, purges and refills the VM pool |
+| E2E Windows (`e2e-windows.yml`) | PRs touching the WinRM code, Windows modules or tests; manual; nightly 06:00 UTC | `e2e/cases-windows/` on one disposable Windows VM |
+| Bench (`bench.yml`) | manual; PRs that change `bench/` (one host) | onigirazu vs Ansible on fresh VMs; see [bench/README.md](../bench/README.md) |
+| Ansible comparison (`compat.yml`) | PRs touching code | the roles of `compat/` converged by both tools |
 | Auto Release (`auto-release.yml`) | push to `main` (not docs/`*.md`/`.github`/examples-only), manual | version bump from commit types, tag, GitHub Release, starts Release Gate |
 | Release Gate (`release-gate.yml`) | `v*` tag push, manual | security, code quality, tests (coverage >= 15%), builds, lint; starts Release |
 | Release (`release.yml`) | manual (started by Release Gate) | GoReleaser, multi-arch image to `ghcr.io/onigirazu-cfg/onigirazu` |
 
 
-E2E does not run for pull requests; start it on a branch with `gh workflow run e2e.yml --ref <branch>`.
+E2E does not run for pull requests from forks or Dependabot; start it on a branch with `gh workflow run e2e.yml --ref <branch>`.
 
 The release chain is described in [Release Process](RELEASE_PROCESS.md).
 

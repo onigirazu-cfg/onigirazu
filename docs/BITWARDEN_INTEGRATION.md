@@ -23,14 +23,17 @@ db_port: "{{ bitwarden('app-db', 'port') }}"             # a custom field
 api_key: "{{ lookup('community.general.bitwarden', 'api', field='key') }}"
 ```
 
-The item is a name or an id. Fields: `password`, `username`, `totp`, `notes`, or the name of a
-custom field. The session reaches `bw` in its environment, never on a command line, and the
+The item is a name or an id. Fields: `password` (`pass`), `username` (`user`), `totp` (the stored
+TOTP secret, not a code), `notes` (`note`), or the name of a custom field (case-insensitive). The session reaches `bw` in its environment, never on a command line, and the
 vault stays unlocked after the run.
 
 ## HashiCorp Vault
 
 Secrets are read from a KV version 2 engine. The token comes from `VAULT_TOKEN` or
-`~/.vault-token` (`vault login`); the address from `secrets.vault.address` or `VAULT_ADDR`.
+`~/.vault-token` (`vault login`); the address from `secrets.vault.address` or `VAULT_ADDR`, the
+namespace from `secrets.vault.namespace` or `VAULT_NAMESPACE`. `VAULT_SKIP_VERIFY=true` skips the
+token check at start-up. The `secrets:` block of `onigirazu.yml` is read by `apply`, `plan`, `drift`,
+`verify` and `pull`; other commands use the environment only.
 
 ```yaml
 # onigirazu.yml
@@ -45,10 +48,14 @@ secrets:
 ```yaml
 db_password: "{{ vault('app/db', 'password') }}"
 all_of_it: "{{ vault('app/db') }}"          # the whole secret as JSON
-# as Ansible's community.hashi_vault lookups (the mount's data/ prefix is accepted)
+# as Ansible's community.hashi_vault lookups: `<mount>/data/<path>` or a path inside secrets.vault.mount
 db_password: "{{ lookup('community.hashi_vault.hashi_vault', 'secret=secret/data/app/db:password') }}"
 db: "{{ lookup('community.hashi_vault.vault_kv2_get', 'app/db').secret }}"   # a dict
 ```
+
+The lookups' `url`, `token`, `namespace`, `auth_method` and `engine_mount_point` options are accepted
+and ignored: the server, the mount and the credentials always come from the configuration and the
+environment.
 
 Without a token, an AppRole logs in: `VAULT_ROLE_ID` (or `secrets.vault.role_id`) and `VAULT_SECRET_ID`
 (environment only, never in a file); `secrets.vault.auth_mount` names the auth method's mount (default
@@ -64,10 +71,12 @@ A provider is set up the first time a template uses it: runs without secrets nee
 
 ## SOPS
 
-A YAML or JSON file encrypted with [SOPS](https://github.com/getsops/sops) (age, PGP, KMS) is opened
-wherever onigirazu reads a vars file: `vars_files`, `group_vars/` and `host_vars/`, `include_vars`,
-`community.sops.load_vars`. The `sops` binary does the decryption with the keys it finds
-(`SOPS_AGE_KEY_FILE`, the PGP keyring, cloud credentials); a file is decrypted once per run.
+A YAML or JSON file encrypted with [SOPS](https://github.com/getsops/sops) (age, PGP, KMS; not the
+dotenv, INI or binary formats) is opened wherever a whole Ansible Vault file is accepted (see
+[VAULT.md](VAULT.md)): playbooks, `vars_files`, inventories, `group_vars/` and `host_vars/`, role
+files, `-e @file`, `include_vars`, `community.sops.load_vars`. The `sops` binary does the decryption
+with the keys it finds (`SOPS_AGE_KEY_FILE`, the PGP keyring, cloud credentials); a file is decrypted
+once per run.
 
 ```yaml
 - hosts: db
@@ -77,5 +86,7 @@ wherever onigirazu reads a vars file: `vars_files`, `group_vars/` and `host_vars
     - debug: {msg: "{{ lookup('community.sops.sops', 'files/token.sops.yml') }}"}   # the plain text
 ```
 
-`lookup('community.sops.sops', file, rstrip=False)` keeps the trailing newline. A SOPS file without
-`sops` installed, or without a key for it, fails the run with sops's own message.
+`lookup('community.sops.sops', file, rstrip=False)` keeps the trailing newline (`base64`,
+`input_type` and `output_type` are accepted and ignored); a file that is not SOPS-encrypted fails the
+lookup. Without `sops` installed the run fails with "the file is encrypted with SOPS but sops is not
+installed"; without a key for the file, with sops's own message.

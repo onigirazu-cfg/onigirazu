@@ -169,7 +169,7 @@ listing them. The result is read like a dynamic script's output: hosts with `ans
 plugin: netbox
 url: https://netbox.example.com
 token: ${NETBOX_TOKEN}            # default: $NETBOX_TOKEN
-filters: {site: fra1, role: server, tag: managed, tenant: ops, status: active}
+filters: {site: fra1, role: server, tag: managed, tenant: ops, status: active, platform: ubuntu}   # the six keys accepted
 devices: true                     # /api/dcim/devices/
 virtual_machines: true            # /api/virtualization/virtual-machines/
 group_by: [site, role, tags, type, platform, tenant]   # default: site, role, tags
@@ -228,7 +228,7 @@ variables: `proxmox_vmid`, `proxmox_node`, `proxmox_type`, `proxmox_status`, `pr
 
 ```yaml
 plugin: netbird
-url: https://api.netbird.io       # or the self-hosted management API
+url: https://api.netbird.io       # default; or the self-hosted management API
 token: ${NETBIRD_TOKEN}           # a personal access token; default: $NETBIRD_TOKEN
 connected: true                   # default: only peers online now
 groups: [servers]                 # only peers in one of these NetBird groups; default: all

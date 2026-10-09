@@ -1,10 +1,22 @@
 # Inventory Plugins
 
-Inventory plugins do not supply hosts today. For hosts from a cloud API or a CMDB use a
-[dynamic inventory script](INVENTORY_FORMATS.md#dynamic-inventory): any executable that
-prints Ansible inventory JSON for `--list`, including existing Ansible inventory scripts.
+Hosts come from an API through an inventory file whose top-level key is `plugin:`, given with `-i`
+like any other inventory:
 
-## What exists
+```yaml
+plugin: netbox            # netbox, vsphere, proxmox or netbird (also onigirazu.netbox)
+url: https://netbox.example.com
+token: ${NETBOX_TOKEN}
+```
+
+The options, the groups and the variables of each source are in
+[Inventory formats — inventory plugins](INVENTORY_FORMATS.md#inventory-plugins). For any other
+API use a [dynamic inventory script](INVENTORY_FORMATS.md#dynamic-inventory): any executable
+that prints Ansible inventory JSON for `--list`, including existing Ansible inventory scripts.
+
+## Go inventory plugins (`.so`)
+
+This section covers only Go plugins; they do not supply hosts.
 
 - The Go interface `InventoryPlugin` in `internal/plugins/interface.go` (`GetHosts`,
   `GetGroups`, `Refresh`, `GetCacheTTL`) and `BaseInventoryPlugin` in
