@@ -102,6 +102,30 @@ func localAgent(goos, goarch string) ([]byte, error) {
 	return nil, fmt.Errorf("no %s", name)
 }
 
+// agentImage is an agent binary and the id in its remote name
+type agentImage struct {
+	data []byte
+	id   string
+	err  error
+}
+
+// agentImages: each platform's agent is unpacked and hashed once per run,
+// not once per host (500 hosts spent a third of the run's CPU on it)
+var agentImages sync.Map
+
+func cachedAgent(goos, goarch string) agentImage {
+	load, _ := agentImages.LoadOrStore(goos+"/"+goarch, sync.OnceValue(func() agentImage {
+		data, err := localAgent(goos, goarch)
+		if err != nil {
+			return agentImage{err: err}
+		}
+		sum := sha256.Sum256(data)
+		return agentImage{data: data, id: hex.EncodeToString(sum[:8])}
+	}))
+	get, _ := load.(func() agentImage)
+	return get()
+}
+
 // platform maps "uname -sm" to GOOS and GOARCH
 func platform(uname string) (string, string, bool) {
 	f := strings.Fields(uname)
@@ -128,13 +152,13 @@ func (c *Client) installAgent() string {
 	if !ok {
 		return ""
 	}
-	data, err := localAgent(goos, goarch)
-	if err != nil {
-		c.logger.Debug("agent: %v", err)
+	img := cachedAgent(goos, goarch)
+	if img.err != nil {
+		c.logger.Debug("agent: %v", img.err)
 		return ""
 	}
-	sum := sha256.Sum256(data)
-	remote := path.Join(lines[1], ".onigirazu", "bin", "onigirazu-agent-"+hex.EncodeToString(sum[:8]))
+	data := img.data
+	remote := path.Join(lines[1], ".onigirazu", "bin", "onigirazu-agent-"+img.id)
 	if !c.agentRuns(ctx, remote) {
 		tmp := fmt.Sprintf("%s.%d.tmp", remote, time.Now().UnixNano())
 		if err := c.WriteFile(tmp, data, 0o755); err != nil {

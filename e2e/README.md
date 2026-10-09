@@ -62,3 +62,6 @@ Repository secrets: `VSPHERE_SERVER`, `VSPHERE_USER`, `VSPHERE_PASSWORD`,
 `E2E_DATACENTER`, `E2E_CLUSTER`, `E2E_HOST`, `E2E_DATASTORE`, `E2E_NETWORK`,
 `E2E_FOLDER`, `E2E_LIBRARY`. Secrets rather than variables: Actions logs of a
 public repository are public.
+
+Before the hard power-off each VM releases its DHCP lease (`dhcp-release.sh`): the network's pool is
+small and a powered-off VM keeps its lease until it expires.

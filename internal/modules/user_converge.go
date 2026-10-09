@@ -204,14 +204,14 @@ func (m *UserModuleFixed) convergeUser(ctx context.Context, host types.Host, arg
 			return done(true, fmt.Sprintf("user %s would be created", name))
 		}
 		argv := m.buildUserAddCommand(name, args)
+		script := shellJoin(argv...)
 		// useradd refuses to create the user's own group when it exists:
-		// make that group the primary one
+		// make that group the primary one (checked in the same command)
 		if getStringArg(args, "group", "") == "" {
-			if _, err := runOnHost(ctx, host, args, "getent", "group", name); err == nil {
-				argv = append(argv[:len(argv)-1], "-g", name, name)
-			}
+			withGroup := shellJoin(append(argv[:len(argv)-1:len(argv)-1], "-g", name, name)...)
+			script = fmt.Sprintf("if getent group %s >/dev/null; then %s; else %s; fi", shellQuote(name), withGroup, script)
 		}
-		if _, err := runOnHost(ctx, host, args, argv...); err != nil {
+		if _, err := runShellOnHost(ctx, host, args, script); err != nil {
 			return fail(fmt.Sprintf("error creating user: %v", err))
 		}
 		return done(true, fmt.Sprintf("user %s created", name))

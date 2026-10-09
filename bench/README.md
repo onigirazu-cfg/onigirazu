@@ -22,3 +22,22 @@ state `site.yml` leaves: files with their modes and contents, packages, users, c
 services, ufw, the container and its HTTP answer, the databases. Any failed check fails the bench; the
 summary lists the checks per tool, host count and run.
 
+
+## Scale
+
+`bench/scale.sh BIN N "CONCURRENCIES"` starts N small Alpine sshd containers on one docker host,
+runs a short playbook (facts, a directory, five files in a loop, lineinfile, command, assert) at each
+concurrency, a converge and a second run, and prints wall time, CPU time and peak memory of onigirazu.
+It cleans up its containers (`KEEP=1` leaves them and the work directory); `SERVER` picks the command
+server. Run it on a lab docker host, not on a laptop.
+
+500 hosts on a 16-core lab VM (2026-10-09):
+
+| concurrency | converge | second run | CPU (second run) | memory |
+|---|---|---|---|---|
+| 50  | 7.4 s | 5.8 s | 6.2 s | 233 MB |
+| 100 | 7.3 s | 5.6 s | 6.1 s | 243 MB |
+| 500 | 7.8 s | 5.5 s | 6.0 s | 284 MB |
+
+With `SERVER=sh` (the POSIX shell server, no agent upload) at concurrency 100: converge 8.7 s, second run
+7.8 s, CPU 5.4 s, 215 MB.

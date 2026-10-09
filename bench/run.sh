@@ -42,6 +42,8 @@ TFSTATE="$WORK/tf.tfstate"
 TFVARS="$WORK/run.tfvars.json"
 destroy() {
   [ -f "$TFSTATE" ] || return 0
+  # shellcheck disable=SC2046
+  "$ROOT/e2e/dhcp-release.sh" "$KEY" $(terraform -chdir="$TF_DIR" output -state="$TFSTATE" -json hosts 2>/dev/null | jq -r '.[]?')
   terraform -chdir="$TF_DIR" destroy -auto-approve -input=false -state="$TFSTATE" -var-file="$TFVARS" >/dev/null ||
     echo "destroy failed; the janitor will remove the VMs"
   rm -f "$TFSTATE"
