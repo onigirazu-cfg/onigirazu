@@ -80,13 +80,8 @@ func (m *FindModule) Execute(ctx context.Context, host types.Host, args map[stri
 		result.Duration = time.Since(startTime)
 		return result, err
 	}
-	findPatterns := patterns
-	if sel.useRegex {
-		findPatterns = []string{"*"} // regexes are matched here, not by find
-	}
-
-	// Find files matching pattern
-	found, err := m.findFiles(exec, paths, findPatterns, fileType, sel.depth, recurse)
+	// Find the entries; the names are matched here, by glob or regex
+	found, err := m.findFiles(exec, paths, fileType, sel.depth, recurse)
 	if err != nil {
 		result.Failed = true
 		result.Error = fmt.Sprintf("find failed: %v", err)
@@ -115,41 +110,33 @@ func (m *FindModule) Execute(ctx context.Context, host types.Host, args map[stri
 }
 
 // findFiles searches for files matching the pattern
-func (m *FindModule) findFiles(exec *executor.CommandExecutor, paths, patterns []string, fileType string, maxDepth int, recurse bool) ([]map[string]interface{}, error) {
+func (m *FindModule) findFiles(exec *executor.CommandExecutor, paths []string, fileType string, maxDepth int, recurse bool) ([]map[string]interface{}, error) {
 	var files []map[string]interface{}
 
 	// Like Ansible, only the given directory unless recurse is set (then down
 	// to depth levels); never the given directory itself
-	depth := "-mindepth 1 -maxdepth 1 "
+	depth := "-mindepth 1 -maxdepth 1"
 	if recurse {
-		depth = "-mindepth 1 "
+		depth = "-mindepth 1"
 		if maxDepth > 0 {
-			depth += fmt.Sprintf("-maxdepth %d ", maxDepth)
+			depth += fmt.Sprintf(" -maxdepth %d", maxDepth)
 		}
-	}
-	quoted := make([]string, len(paths))
-	for i, p := range paths {
-		quoted[i] = shellQuote(p)
-	}
-	names := make([]string, len(patterns))
-	for i, p := range patterns {
-		names[i] = "-name " + shellQuote(p)
 	}
 	// one command for the list and the stats, a line per file: "type size
 	// mode mtime path"; GNU find prints them itself, elsewhere one stat runs
-	// for the whole list
-	typeFlag := "-type " + m.getTypeFlag(fileType) + " "
+	// for the whole list. The paths travel as arguments of the script, the
+	// names are matched by the caller: nothing of the task is in the script
+	typeFlag := " -type " + m.getTypeFlag(fileType)
 	if fileType == "any" {
 		typeFlag = ""
 	}
-	sel := fmt.Sprintf("%s %s%s\\( %s \\)", strings.Join(quoted, " "), depth, typeFlag, strings.Join(names, " -o "))
-	cmd := fmt.Sprintf(`if find /dev/null -maxdepth 0 -printf '' 2>/dev/null; then
-  find %s -printf '%%y %%s %%m %%T@ %%p\n' 2>/dev/null
+	script := fmt.Sprintf(`if find /dev/null -maxdepth 0 -printf '' 2>/dev/null; then
+  find "$@" %s%s -printf '%%y %%s %%m %%T@ %%p\n' 2>/dev/null
 else
-  find %s -print 2>/dev/null | tr '\n' '\0' | xargs -0 stat -f '%%p %%z %%Lp %%m %%N' 2>/dev/null || true
-fi`, sel, sel)
+  find "$@" %s%s -print 2>/dev/null | tr '\n' '\0' | xargs -0 stat -f '%%p %%z %%Lp %%m %%N' 2>/dev/null || true
+fi`, depth, typeFlag, depth, typeFlag)
 
-	output, err := exec.Execute(cmd)
+	output, err := exec.Execute("sh", append([]string{"-c", script, "find"}, paths...)...)
 	if err != nil {
 		// If path doesn't exist, return empty list
 		if strings.Contains(err.Error(), "No such file") || strings.Contains(err.Error(), "no such file") {

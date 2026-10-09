@@ -16,6 +16,7 @@ type findSelection struct {
 	hidden            bool
 	useRegex          bool
 	patterns, exclude []*regexp.Regexp
+	globs             []string // patterns without use_regex
 	excludeGlobs      []string
 	depth             int
 }
@@ -60,7 +61,7 @@ func newFindSelection(args map[string]interface{}, patterns []string) (*findSele
 			s.exclude = append(s.exclude, re)
 		}
 	} else {
-		s.excludeGlobs = excludes
+		s.globs, s.excludeGlobs = patterns, excludes
 	}
 	return s, nil
 }
@@ -98,6 +99,18 @@ func (s *findSelection) keep(f map[string]interface{}, now float64) bool {
 			if re.MatchString(name) {
 				return false
 			}
+		}
+	}
+	if len(s.globs) > 0 {
+		matched := false
+		for _, g := range s.globs {
+			if ok, _ := filepath.Match(g, name); ok {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return false
 		}
 	}
 	for _, g := range s.excludeGlobs {
