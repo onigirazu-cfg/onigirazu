@@ -136,7 +136,7 @@ type ExecutionEngine struct {
 	safe             SafeApply
 	restorer         Restorer
 	rolloutVars      map[string]interface{}
-	verifyOnly       bool // run only the plays' verify: checks (onigirazu verify)
+	verifyOnly       bool   // run only the plays' verify: checks (onigirazu verify)
 	freeStrategy     bool   // the play runs with strategy: free
 	playThrottle     string // the play's throttle, for tasks without their own
 	rolloutUnhealthy []string
