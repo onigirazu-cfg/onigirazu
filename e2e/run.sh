@@ -172,6 +172,7 @@ if [ "${E2E_POOL:-1}" = 1 ]; then
   for key in $(jq -r 'keys[]' <<<"$images_json"); do
     ip="$("$HERE/pool.sh" claim "$key" "tmp-e2e-onigirazu-$RUN_ID-$key" "$(cat "$KEY.pub")" "e2e-$key" || true)"
     [ -n "$ip" ] || { echo "$key: none in the pool"; continue; }
+    [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "$key: the pool claim answered with something that is not an address"
     echo "$key: pre-warmed"
     claimed_json="$(jq -c --arg k "$key" --arg ip "$ip" '. + {($k): $ip}' <<<"$claimed_json")"
     echo "$key" >> "$WORK/claimed"
