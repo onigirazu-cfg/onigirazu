@@ -520,11 +520,14 @@ once; a Python or POSIX sh fallback) that runs commands, probes and writes files
 process or session per task; the file modules reuse one capture of the target. Measured with
 [`bench/`](bench/README.md) (a ~40-module playbook, the same for both tools, on fresh VMs):
 
-| second (unchanged) run | 1 host | 10 hosts |
-|---|---|---|
-| Ansible (forks=10, pipelining, ControlPersist) | ~170 s | ~170 s |
-| Onigirazu, agent | 1.7 s | 2.5 s |
-| Onigirazu, sh server (no agent, no Python) | 3.1 s | 4.0 s |
+| 1 host, 10 hosts | converge | second (unchanged) run | check mode |
+|---|---|---|---|
+| Ansible (forks=10, pipelining, ControlPersist) | 168 s, 181 s | 167 s, 172 s | 168 s, 168 s |
+| Onigirazu | 10.3 s, 13.8 s | 1.6 s, 2.0 s | 1.1 s, 1.3 s |
+| control-side CPU, 10 hosts | 2.0 s vs 182 s | 1.4 s vs 163 s | 1.1 s vs 159 s |
+
+Both tools leave the hosts in the same state (about 1100 goss checks per host pass after each run).
+Without the agent (the POSIX sh server, no Python on the hosts) a second run takes 3.1 s and 4.0 s.
 
 On 500 hosts (containers, `bench/scale.sh`) a short playbook converges in 7.4 s and a second run
 takes 5.5 s with 6 s of CPU and 280 MB on the control side, at any concurrency from 50 to 500.
