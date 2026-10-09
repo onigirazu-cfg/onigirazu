@@ -254,7 +254,8 @@ func verifyCheckScript(c verifyCheck) (string, error) {
 		}
 		if v, ok := a["enabled"]; ok {
 			want, _ := parseBool(v)
-			fmt.Fprintf(&b, "en=$(systemctl is-enabled %s 2>/dev/null); ", name)
+			// a socket-activated service is enabled through its socket
+			fmt.Fprintf(&b, "en=$(systemctl is-enabled %s 2>/dev/null); case \"$en\" in enabled|static|alias|indirect) ;; *) s=$(systemctl is-enabled %s.socket 2>/dev/null); [ \"$s\" = enabled ] && en=enabled ;; esac; ", name, name)
 			if want {
 				fmt.Fprintf(&b, "case \"$en\" in enabled|static|alias|indirect) ;; *) fail %d \"${en:-not enabled}\"; exit 0 ;; esac; ", n)
 			} else {

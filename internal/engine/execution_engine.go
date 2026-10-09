@@ -789,7 +789,12 @@ func (e *ExecutionEngine) executePlayOn(ctx context.Context, play *types.Play, h
 
 	// verify: the goss-style checks of the play, one task on every host
 	if len(play.Verify) > 0 {
-		check := types.Task{Name: "verify", Module: "verify", Args: map[string]interface{}{"checks": play.Verify}}
+		// a plain list: the argument renderer walks []interface{} only
+		checks := make([]interface{}, len(play.Verify))
+		for i, c := range play.Verify {
+			checks[i] = c
+		}
+		check := types.Task{Name: "verify", Module: "verify", Args: map[string]interface{}{"checks": checks}}
 		if err := e.executeTask(ctx, &check, e.activeHosts(hosts), playVars, result); err != nil {
 			var hf *hostsFailedError
 			if !errors.As(err, &hf) {
