@@ -67,8 +67,10 @@ func (m *AptModule) PreCheckState(ctx context.Context, host types.Host, args map
 	currentState := make(map[string]interface{})
 	allCorrect := true
 
+	// a failed query counts as not installed: the task then runs
+	installed, _ := installedPackages(ctx, host, args, pkgNames)
 	for _, pkgName := range pkgNames {
-		isInstalled := debPackageInstalled(ctx, host, args, pkgName)
+		isInstalled := installed[pkgName]
 		currentState[pkgName] = isInstalled
 
 		// "latest" cannot be decided without asking apt, so it always runs
@@ -287,13 +289,6 @@ func aptGet(ctx context.Context, host types.Host, args map[string]interface{}, a
 		return out, fmt.Errorf("apt-get %s failed: %w", aptArgs[0], err)
 	}
 	return out, nil
-}
-
-// debPackageInstalled reports whether a package is fully installed on the host
-// (dpkg -l also lists removed packages that left config files behind)
-func debPackageInstalled(ctx context.Context, host types.Host, args map[string]interface{}, pkg string) bool {
-	out, err := runOnHost(ctx, host, args, "dpkg-query", "-W", "-f=${Status}", pkg)
-	return err == nil && strings.TrimSpace(out) == "install ok installed"
 }
 
 func (m *AptModule) updateAptCache(ctx context.Context, host types.Host, args map[string]interface{}) error {
