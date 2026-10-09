@@ -400,6 +400,9 @@ func (m *CopyModule) executeRemote(ctx context.Context, host types.Host, args ma
 		result.Output["backup_file"] = backupPath
 	}
 
+	if err := validateBeforeWrite(ctx, host, args, dest, sourceData); err != nil {
+		return fail(err.Error(), err)
+	}
 	if err := installRemoteFile(ctx, host, args, sshClient, dest, sourceData, fileMode, current); err != nil {
 		return fail(err.Error(), err)
 	}

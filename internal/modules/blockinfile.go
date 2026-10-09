@@ -112,6 +112,20 @@ func (m *BlockinfileModule) Execute(ctx context.Context, host types.Host, args m
 		result.Duration = time.Since(startTime)
 		return result, nil
 	}
+	// a missing file is made only with create: true (Ansible); removing a
+	// block from it changes nothing
+	if !fileExists && !getBoolArg(args, "create", false) {
+		if state == "absent" {
+			result.Success = true
+			result.Output["msg"] = "file does not exist"
+			result.Duration = time.Since(startTime)
+			return result, nil
+		}
+		result.Success = false
+		result.Error = fmt.Sprintf("Destination %s does not exist !", filePath)
+		result.Duration = time.Since(startTime)
+		return result, nil
+	}
 	fileContent := string(data)
 	// A YAML "|" block ends with a newline; the markers add their own
 	block = strings.TrimRight(block, "\n")
@@ -189,6 +203,12 @@ func (m *BlockinfileModule) Execute(ctx context.Context, host types.Host, args m
 				return result, nil
 			}
 			result.Output["backup"] = backupPath
+		}
+		if err := validateBeforeWrite(ctx, host, args, filePath, []byte(newContent)); err != nil {
+			result.Success = false
+			result.Error = err.Error()
+			result.Duration = time.Since(startTime)
+			return result, nil
 		}
 		if err := writeHostFile(ctx, host, args, filePath, []byte(newContent), argMode(args, filePath)); err != nil {
 			result.Success = false

@@ -189,6 +189,16 @@ func (m *LineinfileModule) Execute(ctx context.Context, host types.Host, args ma
 			}
 			result.Output["backup_file"] = backupPath
 		}
+		content := strings.Join(newLines, "\n")
+		if len(newLines) > 0 {
+			content += "\n"
+		}
+		if err := validateBeforeWrite(ctx, host, args, path, []byte(content)); err != nil {
+			result.Success = false
+			result.Error = err.Error()
+			result.Duration = time.Since(startTime)
+			return result, err
+		}
 		if err := m.writeRemoteFile(ctx, host, exec, args, path, newLines, !fileExists); err != nil {
 			result.Success = false
 			result.Error = fmt.Sprintf("failed to write file: %v", err)

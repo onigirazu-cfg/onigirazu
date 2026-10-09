@@ -8,3 +8,4 @@ plays:
           name: [figlet, sl]
           state: present
           update_cache: true
+          lock_timeout: 120
