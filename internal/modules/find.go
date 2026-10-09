@@ -129,11 +129,11 @@ func (m *FindModule) findFiles(exec *executor.CommandExecutor, paths, patterns [
 	}
 	quoted := make([]string, len(paths))
 	for i, p := range paths {
-		quoted[i] = "'" + escapeSingleQuotes(p) + "'"
+		quoted[i] = shellQuote(p)
 	}
 	names := make([]string, len(patterns))
 	for i, p := range patterns {
-		names[i] = "-name '" + escapeSingleQuotes(p) + "'"
+		names[i] = "-name " + shellQuote(p)
 	}
 	// one command for the list and the stats, a line per file: "type size
 	// mode mtime path"; GNU find prints them itself, elsewhere one stat runs
