@@ -2355,7 +2355,7 @@ func (e *ExecutionEngine) hostVariables(host *types.Host, variables map[string]i
 	hostVars := e.hostVars[host.Name]
 	// one map, filled in order of precedence: it is built for every task
 	// and loop item, and merging step by step copied it four times
-	vars := make(map[string]interface{}, len(variables)+len(e.variables)+len(host.Vars)+len(facts)+len(hostVars)+len(e.extraVars)+12)
+	vars := make(map[string]interface{}, max(len(variables), len(e.variables), len(host.Vars), len(facts)))
 	for _, m := range []map[string]interface{}{variables, e.variables, host.Vars} {
 		for k, v := range m {
 			vars[k] = v

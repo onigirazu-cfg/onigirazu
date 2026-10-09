@@ -134,7 +134,17 @@ jobs:
           # the nightly run tests the golden images themselves
           E2E_BASE: ${{ github.event_name == 'schedule' && '0' || '1' }}
           E2E_SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}
+          E2E_DIAG: ${{ runner.temp }}/e2e-diag
         run: e2e/run.sh
+
+      - name: Upload diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-diag-${{ matrix.shard }}
+          path: ${{ runner.temp }}/e2e-diag
+          if-no-files-found: ignore
+          retention-days: 7
 
   janitor:
     if: github.event_name == 'workflow_dispatch' || github.event.schedule == '30 * * * *'

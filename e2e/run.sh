@@ -55,13 +55,31 @@ E2E_IMAGES="${E2E_IMAGES:-u2404=ubuntu-24.04 u2604=ubuntu-26.04}"
 log() { printf '\n==> %s\n' "$*"; }
 die() { echo "error: $*" >&2; exit 1; }
 
+# a failed run: what vCenter knows about each VM (power, guest IP, tools,
+# last events) and a console screenshot into $E2E_DIAG (uploaded by CI)
+diagnose() {
+  local vm dir="${E2E_DIAG:-$WORK/diag}"
+  mkdir -p "$dir"
+  log "VM state"
+  while IFS= read -r vm; do
+    [ -n "$vm" ] || continue
+    govc vm.info -json "$vm" 2>/dev/null | jq -r '(.virtualMachines // .VirtualMachines)[0] |
+      "\(.name): power=\(.runtime.powerState) guest=\(.guest.guestState) tools=\(.guest.toolsRunningStatus) ip=\(.guest.ipAddress // "-") boot=\(.runtime.bootTime // "-")"'
+    govc events -n 8 "$vm" 2>/dev/null | sed 's/^/    /'
+    govc vm.console -capture "$dir/${vm##*/}.png" "$vm" >/dev/null 2>&1 && echo "    console: ${vm##*/}.png"
+  done < <(govc find "/$TF_VAR_datacenter/vm/$TF_VAR_folder" -type m -name "tmp-e2e-onigirazu-$RUN_ID-*" 2>/dev/null)
+}
+
 cleanup() {
   local rc=$?
+  if [ "$rc" != 0 ] && [ -f "$TF_DIR/terraform.tfstate" ]; then diagnose || true; fi
   if [ -z "${KEEP_VMS:-}" ] && [ -f "$TF_DIR/terraform.tfstate" ]; then
     log "Destroying VMs"
     # throwaway VMs: power them off hard first; terraform would wait for a
     # clean guest shutdown (over a minute with the databases running)
     local vm n=0 t0=$SECONDS
+    # shellcheck disable=SC2046
+    [ -n "${hosts_json:-}" ] && "$HERE/dhcp-release.sh" "$KEY" $(jq -r '.[]' <<<"$hosts_json")
     # the folder path may have spaces: one VM per line
     while IFS= read -r vm; do
       [ -n "$vm" ] || continue
