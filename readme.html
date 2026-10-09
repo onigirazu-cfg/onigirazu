@@ -646,35 +646,38 @@ per-host counts and a browser for task results.</p>
 <li>Work files on the hosts live in <code>~/.onigirazu/tmp</code> of the connecting user.</li>
 </ul>
 <h2>Performance</h2>
-<p>One SSH connection per host, one long-lived shell on it with commands framed over it, and a
-single state capture reused by the file modules. A second (unchanged) run of a 20-task playbook
-on 10 hosts:</p>
+<p>One SSH connection per host and, on it, a small command server (a static Go agent uploaded
+once; a Python or POSIX sh fallback) that runs commands, probes and writes files without a new
+process or session per task; the file modules reuse one capture of the target. Measured with
+<a href="bench/README.md"><code>bench/</code></a> (a ~40-module playbook, the same for both tools, on fresh VMs):</p>
 <table>
 <thead>
 <tr>
-<th></th>
-<th>Local network</th>
-<th>50 ms round trip</th>
+<th>second (unchanged) run</th>
+<th>1 host</th>
+<th>10 hosts</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>Ansible, defaults</td>
-<td>14.4 s</td>
-<td>70 s</td>
+<td>Ansible (forks=10, pipelining, ControlPersist)</td>
+<td>~170 s</td>
+<td>~170 s</td>
 </tr>
 <tr>
-<td>Ansible, forks=10 + pipelining</td>
-<td>7.0 s</td>
-<td>13.6 s</td>
+<td>Onigirazu, agent</td>
+<td>1.7 s</td>
+<td>2.5 s</td>
 </tr>
 <tr>
-<td>Onigirazu</td>
-<td>0.8 s</td>
-<td>3.6 s</td>
+<td>Onigirazu, sh server (no agent, no Python)</td>
+<td>3.1 s</td>
+<td>4.0 s</td>
 </tr>
 </tbody>
 </table>
+<p>On 500 hosts (containers, <code>bench/scale.sh</code>) a short playbook converges in 7.4 s and a second run
+takes 5.5 s with 6 s of CPU and 280 MB on the control side, at any concurrency from 50 to 500.</p>
 <h2>Documentation</h2>
 <p>All guides are listed in <a href="docs/README.md">docs/README.md</a>. Start with:</p>
 <ul>
