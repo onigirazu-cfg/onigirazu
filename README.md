@@ -418,6 +418,7 @@ return values and examples: [docs/modules/README.md](docs/modules/README.md). Ne
 | `apply PLAYBOOK` | Run a playbook |
 | `plan PLAYBOOK` | Show what `apply` would change |
 | `drift PLAYBOOK` | Check that hosts still match a playbook; `--fix` applies |
+| `pull --repo URL` | This host converges itself from a git repository, once or on a timer ([pull mode](docs/PULL.md)) |
 | `diff PLAYBOOK` | Compare a playbook with the last recorded run |
 | `rollback` | List, inspect and restore snapshots of runs |
 | `state` | Managed state: `resources`, `rm`, `unlock`; `list`, `show` |
