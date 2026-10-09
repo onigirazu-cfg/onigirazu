@@ -176,6 +176,7 @@ jobs:
           GOVC_INSECURE: '1'
           E2E_DATACENTER: ${{ secrets.E2E_DATACENTER }}
           E2E_FOLDER: ${{ secrets.E2E_FOLDER }}
+          E2E_CLUSTER: ${{ secrets.E2E_CLUSTER }}
           TTL_HOURS: ${{ inputs.purge_vms && '0' || '3' }}
           MIKROTIK_API_URL: ${{ secrets.MIKROTIK_API_URL }}
           MIKROTIK_API_USER: ${{ secrets.MIKROTIK_API_USER }}

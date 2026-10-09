@@ -108,7 +108,9 @@ for key in $(jq -r 'keys[]' <<<"$hosts_json"); do
   govc find "$FOLDER" -type m -name "e2e-base-$key-*" | awk '{print substr($0, length($0) - 12) " " $0}' | sort | cut -d' ' -f2- | head -n -"$KEEP" | while read -r old; do
     echo "$key: removing $old"
     old_macs="$("$HERE/dhcp-leases.sh" macs "$old" | tr '\n' ' ')"
-    # a running e2e may still have linked clones of it: the next build retries
+    # a template object is turned back into a VM first (vm.destroy refuses
+    # templates); a running linked clone keeps it, the janitor retries
+    govc vm.markasvm -pool "/$TF_VAR_datacenter/host/$TF_VAR_cluster/Resources" "$old" >/dev/null 2>&1 || true
     # shellcheck disable=SC2086
     govc vm.destroy "$old" && "$HERE/dhcp-leases.sh" remove $old_macs || echo "$key: $old not removed (linked clones still running?)"
   done
