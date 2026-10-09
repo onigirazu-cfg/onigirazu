@@ -73,13 +73,35 @@ func (m *FindModule) Execute(ctx context.Context, host types.Host, args map[stri
 	}
 	defer exec.Close()
 
+	sel, err := newFindSelection(args, patterns)
+	if err != nil {
+		result.Failed = true
+		result.Error = err.Error()
+		result.Duration = time.Since(startTime)
+		return result, err
+	}
+	findPatterns := patterns
+	if sel.useRegex {
+		findPatterns = []string{"*"} // regexes are matched here, not by find
+	}
+
 	// Find files matching pattern
-	files, err := m.findFiles(exec, paths, patterns, fileType, limit, recurse)
+	found, err := m.findFiles(exec, paths, findPatterns, fileType, sel.depth, recurse)
 	if err != nil {
 		result.Failed = true
 		result.Error = fmt.Sprintf("find failed: %v", err)
 		result.Duration = time.Since(startTime)
 		return result, err
+	}
+	files := make([]map[string]interface{}, 0, len(found))
+	now := float64(time.Now().UnixNano()) / 1e9
+	for _, f := range found {
+		if sel.keep(f, now) {
+			files = append(files, f)
+			if limit > 0 && len(files) == limit {
+				break
+			}
+		}
 	}
 
 	result.Success = true
@@ -93,13 +115,17 @@ func (m *FindModule) Execute(ctx context.Context, host types.Host, args map[stri
 }
 
 // findFiles searches for files matching the pattern
-func (m *FindModule) findFiles(exec *executor.CommandExecutor, paths, patterns []string, fileType string, limit int, recurse bool) ([]map[string]interface{}, error) {
+func (m *FindModule) findFiles(exec *executor.CommandExecutor, paths, patterns []string, fileType string, maxDepth int, recurse bool) ([]map[string]interface{}, error) {
 	var files []map[string]interface{}
 
-	// Like Ansible, only the given directory unless recurse is set
+	// Like Ansible, only the given directory unless recurse is set (then down
+	// to depth levels); never the given directory itself
 	depth := "-mindepth 1 -maxdepth 1 "
 	if recurse {
-		depth = ""
+		depth = "-mindepth 1 "
+		if maxDepth > 0 {
+			depth += fmt.Sprintf("-maxdepth %d ", maxDepth)
+		}
 	}
 	quoted := make([]string, len(paths))
 	for i, p := range paths {
@@ -118,10 +144,10 @@ func (m *FindModule) findFiles(exec *executor.CommandExecutor, paths, patterns [
 	}
 	sel := fmt.Sprintf("%s %s%s\\( %s \\)", strings.Join(quoted, " "), depth, typeFlag, strings.Join(names, " -o "))
 	cmd := fmt.Sprintf(`if find /dev/null -maxdepth 0 -printf '' 2>/dev/null; then
-  find %s -printf '%%y %%s %%m %%T@ %%p\n' 2>/dev/null | head -n %d
+  find %s -printf '%%y %%s %%m %%T@ %%p\n' 2>/dev/null
 else
-  find %s -print 2>/dev/null | head -n %d | tr '\n' '\0' | xargs -0 stat -f '%%p %%z %%Lp %%m %%N' 2>/dev/null || true
-fi`, sel, m.getLimitValue(limit), sel, m.getLimitValue(limit))
+  find %s -print 2>/dev/null | tr '\n' '\0' | xargs -0 stat -f '%%p %%z %%Lp %%m %%N' 2>/dev/null || true
+fi`, sel, sel)
 
 	output, err := exec.Execute(cmd)
 	if err != nil {
@@ -205,14 +231,6 @@ func (m *FindModule) getTypeFlag(fileType string) string {
 	default:
 		return "f" // Default to files
 	}
-}
-
-// getLimitValue returns the appropriate limit value for head command
-func (m *FindModule) getLimitValue(limit int) int {
-	if limit <= 0 {
-		return 999999 // Very large number
-	}
-	return limit
 }
 
 // escapeSingleQuotes escapes single quotes in pattern

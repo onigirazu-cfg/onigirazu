@@ -9,7 +9,19 @@ plays:
           pattern: "*.conf"
           type: file
         register: found
-      - name: Save the count
+      # the patching role's cleanup: old directories, recursively; never the
+      # searched directory itself, and not the new ones
+      - name: Old directories
+        find:
+          paths: /opt/onigirazu-e2e-find
+          file_type: directory
+          age: 30d
+          recurse: true
+        register: old
+      - name: Hidden entries too
+        find: {paths: /opt/onigirazu-e2e-find, patterns: "*.conf", hidden: true}
+        register: with_hidden
+      - name: Save the results
         copy:
-          content: "{{ found.matched }}\n"
+          content: "{{ found.matched }} {{ old.files | map(attribute='path') | join(',') }} {{ with_hidden.matched }}\n"
           dest: /root/onigirazu-e2e-find

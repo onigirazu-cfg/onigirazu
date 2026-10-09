@@ -25,7 +25,7 @@ var moduleArgs = map[string][]string{
 	"fail":             {"msg"},
 	"fetch":            {"dest", "fail_on_missing", "flat", "src", "validate"},
 	"file":             {"access_time", "content", "dest", "force", "group", "mode", "modification_time", "name", "owner", "path", "recurse", "src", "state"},
-	"find":             {"file_type", "limit", "path", "paths", "pattern", "patterns", "recurse", "type"},
+	"find":             {"age", "age_stamp", "contains", "depth", "exclude", "excludes", "file_type", "hidden", "limit", "path", "paths", "pattern", "patterns", "recurse", "size", "type", "use_regex"},
 	"firewall":         {"action", "operation", "port", "protocol", "service", "source", "state"},
 	"get_url":          {"backup", "checksum", "dest", "force", "group", "headers", "mode", "owner", "timeout", "url"},
 	"getent":           {"database", "fail_key", "key", "split"},

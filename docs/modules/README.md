@@ -319,7 +319,8 @@ Returns `dest`, `checksum` (SHA-256 of the source), `size`, `msg` and `backup_fi
 
 ### find
 
-List the entries of a directory on the host that match a glob pattern and a type. Never changes anything.
+List the entries of a directory on the host that match the patterns, type, age and size, as Ansible's `find`. Never
+changes anything; the searched directory itself is never in the result.
 
 #### Parameters
 
@@ -330,8 +331,15 @@ List the entries of a directory on the host that match a glob pattern and a type
 | `file_type` | string | `file` | `any`, `file`, `directory`, `link`, `socket`, `pipe`, `block` or `char`; `type` is an alias |
 | `recurse` | boolean | `false` | Search subdirectories too; otherwise only the directory's own entries |
 | `limit` | integer | `0` | Maximum number of entries (0 = no limit) |
+| `depth` | integer | - | With `recurse`, how many levels down |
+| `age` | string | - | `30d`: at least that old (mtime); `-2h`: at most. Units `s`, `m`, `h`, `d`, `w` |
+| `size` | string | - | `10m`: at least that size; `-1k`: at most. Units `b`, `k`, `m`, `g`, `t` |
+| `hidden` | boolean | `false` | Include entries whose name starts with `.` |
+| `excludes` | string/list | - | Names to leave out (globs, or regexes with `use_regex`) |
+| `use_regex` | boolean | `false` | `patterns` and `excludes` are regexes matched from the start of the name |
 
-A missing directory returns an empty list.
+A missing directory returns an empty list. `contains` and an `age_stamp` other than `mtime` are not supported and fail
+the task rather than match more than asked.
 
 #### Return Values
 
