@@ -5,9 +5,12 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/onigirazu-cfg/onigirazu/internal/vault"
@@ -68,6 +71,29 @@ func (m *CopyModule) Execute(ctx context.Context, host types.Host, args map[stri
 	group := getStringArg(args, "group", "")
 	content := getStringArg(args, "content", "")
 
+	// Ansible's directory forms: content cannot go to a directory; a source
+	// directory is copied file by file (its contents with a trailing /); a file
+	// copied to "dir/" or to an existing directory keeps its name in there
+	if content != "" && strings.HasSuffix(dest, "/") {
+		result.Failed = true
+		result.Error = "can not use content with a dir as dest"
+		return result, fmt.Errorf("%s", result.Error)
+	}
+	if src != "" && content == "" && !remoteSrc {
+		if st, err := os.Stat(src); err == nil && st.IsDir() {
+			return m.copyTree(ctx, host, args, src, dest, result)
+		}
+		if strings.HasSuffix(dest, "/") || m.destIsDir(ctx, host, args, dest) {
+			dest = path.Join(dest, filepath.Base(src))
+			sub := make(map[string]interface{}, len(args))
+			for k, v := range args {
+				sub[k] = v
+			}
+			sub["dest"] = dest
+			args = sub
+		}
+	}
+
 	// Handle content vs src
 	var sourceData []byte
 	var err error
@@ -127,6 +153,66 @@ func (m *CopyModule) Execute(ctx context.Context, host types.Host, args map[stri
 	} else {
 		return m.applyOwnership(ctx, host, args, dest, owner, group)(m.executeRemote(ctx, host, args, dest, sourceData, backup, force, remoteSrc, mode, "", sourceChecksum, result))
 	}
+}
+
+// destIsDir reports whether dest is a directory on the host: from the
+// capture taken before the task, else asked
+func (m *CopyModule) destIsDir(ctx context.Context, host types.Host, args map[string]interface{}, dest string) bool {
+	if before, ok := args["_before"].(map[string]interface{}); ok && before["path"] == dest && before["error"] == nil {
+		return before["kind"] == "directory"
+	}
+	if sshpkg.IsLocal(host) {
+		st, err := os.Stat(dest)
+		return err == nil && st.IsDir()
+	}
+	_, err := runShellOnHost(ctx, host, args, "[ -d "+shellQuote(dest)+" ]")
+	return err == nil
+}
+
+// copyTree copies a local directory: src/ puts its contents into dest, src
+// puts the directory itself there, as Ansible does. Every file goes through
+// the single-file copy (compare, then write); empty directories are skipped.
+func (m *CopyModule) copyTree(ctx context.Context, host types.Host, args map[string]interface{}, src, dest string, result types.TaskResult) (types.TaskResult, error) {
+	root := dest
+	if !strings.HasSuffix(src, "/") {
+		root = path.Join(dest, filepath.Base(src))
+	}
+	var files, changed int
+	err := filepath.WalkDir(src, func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		rel, err := filepath.Rel(src, p)
+		if err != nil {
+			return err
+		}
+		sub := make(map[string]interface{}, len(args))
+		for k, v := range args {
+			sub[k] = v
+		}
+		delete(sub, "_before") // it describes dest, not this file
+		sub["src"], sub["dest"] = p, path.Join(root, filepath.ToSlash(rel))
+		r, err := m.Execute(ctx, host, sub)
+		if err != nil {
+			return fmt.Errorf("%s: %w", p, err)
+		}
+		files++
+		if r.Changed {
+			changed++
+		}
+		return nil
+	})
+	if err != nil {
+		result.Failed = true
+		result.Error = err.Error()
+		return result, err
+	}
+	result.Success = true
+	result.Changed = changed > 0
+	result.Output["dest"] = root
+	result.Output["files"] = files
+	result.Output["msg"] = fmt.Sprintf("%d of %d files changed", changed, files)
+	return result, nil
 }
 
 // executeLocal handles file copying on local host
