@@ -490,7 +490,8 @@ Without a terminal the normal output is used. See [docs/INTERACTIVE_MODE.md](doc
 
 - `apply -o json` writes one document to stdout (status, totals, every task per host); logs go
   to stderr. Exit codes: 0 success, 1 failure, 5 a batch was rolled back, 130 interrupted.
-- `drift` and `plan` have JSON and HTML reports; `drift --notify` posts to webhooks.
+- `drift` and `plan` have JSON, HTML and Markdown reports; `drift --notify` posts to webhooks;
+  `plan --github-comment` comments the plan on a pull request ([docs/PLAN_IN_PR.md](docs/PLAN_IN_PR.md)).
 - `apply --background` returns at once; `show-execution` reads the result later.
 - `audit` keeps the history of runs with per-host statistics.
 - `onigirazu test` runs a role's Molecule scenarios (docker/podman instances, converge,

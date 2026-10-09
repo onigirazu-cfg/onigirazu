@@ -76,6 +76,7 @@ type driftCheckOptions struct {
 	notifyOK                 bool     // tell them about a clean check too
 	metricsFile, metricsPush string   // Prometheus text: a textfile collector file, a push URL
 	metricsLabels            []string // extra labels, name=value
+	githubComment            bool     // post the markdown report on the pull request of this workflow run
 }
 
 // applyArgs are the apply arguments of a drift check (or of --fix)
@@ -271,8 +272,17 @@ func runDriftCheck(cmd *cobra.Command, playbook string, o driftCheckOptions) err
 		if err := writeDriftHTML(out, report); err != nil {
 			return err
 		}
+	case "markdown", "md":
+		writeDriftMarkdown(out, report)
 	default:
-		return fmt.Errorf("unknown format %q (text, json, html)", o.format)
+		return fmt.Errorf("unknown format %q (text, json, html, markdown)", o.format)
+	}
+	if o.githubComment {
+		var md strings.Builder
+		writeDriftMarkdown(&md, report)
+		if err := githubComment(md.String(), fmt.Sprintf("<!-- onigirazu-plan: %s -->", playbook)); err != nil {
+			return fmt.Errorf("github comment: %w", err)
+		}
 	}
 
 	switch {
