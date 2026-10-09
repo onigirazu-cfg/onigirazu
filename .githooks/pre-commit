@@ -17,9 +17,9 @@ fi
 
 # lint reads module arguments from a table generated from the modules
 if grep -q '^internal/modules/' <<<"$staged"; then
-  go generate ./internal/cli
-  if ! git diff --quiet -- internal/cli/lint_module_args.go; then
-    echo "pre-commit: internal/cli/lint_module_args.go was stale and is regenerated: stage it" >&2
+  go generate ./internal/modules
+  if ! git diff --quiet -- internal/modules/module_args.go; then
+    echo "pre-commit: internal/modules/module_args.go was stale and is regenerated: stage it" >&2
     exit 1
   fi
 fi

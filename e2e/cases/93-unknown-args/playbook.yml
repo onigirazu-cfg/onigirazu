@@ -1,0 +1,25 @@
+plays:
+  - name: unknown module arguments fail, as in Ansible
+    hosts: all
+    become: true
+    tasks:
+      - name: A parameter the module does not have
+        file:
+          path: /etc/onigirazu-e2e-unknown
+          state: touch
+          colour: red
+        register: unknown
+        ignore_errors: true
+      - name: A parameter accepted for Ansible playbooks
+        sysctl:
+          name: net.ipv4.ip_forward
+          value: "0"
+          sysctl_set: true
+          state: present
+      - name: Host variables of add_host are free
+        add_host: {name: e2e-extra, groups: extra, any_var: 1}
+      - name: Check
+        assert:
+          that:
+            - unknown is failed
+            - "'Unsupported parameters for (file) module: colour' in unknown.msg"

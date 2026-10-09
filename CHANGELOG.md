@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- A task with an argument its module does not have fails like Ansible (`Unsupported parameters for (...) module`); such arguments were ignored
 - **Security policy:** nothing is restricted by default (the built-in defaults blocked 23 of 44 modules and every path outside /tmp, /var/tmp, /home, /opt). A policy file is loaded from `--security-policy`, `$ONIGIRAZU_SECURITY_POLICY`, `./security-policy.json`, `~/.onigirazu/security-policy.json` or `/etc/onigirazu/security-policy.json`; heuristic checks need `"strict": true`; `allowed_hosts`, `allowed_ports` and `allowed_file_types` are now enforced
 - Modules act on the target host: `apt`, `yum`, `script` and the pre-checks of `user`, `group`, `service`, `package` ran on the control machine
 - The task title is no longer passed as the module's `name` argument
