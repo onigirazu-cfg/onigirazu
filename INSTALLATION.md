@@ -97,7 +97,7 @@ and runs as an unprivileged user.
 
 ## Build from Source
 
-Requires Go 1.26.6 or later (see `go.mod`) and Git.
+Requires Go 1.26.9 or later (see `go.mod`) and Git.
 
 ```bash
 git clone https://github.com/onigirazu-cfg/onigirazu.git
