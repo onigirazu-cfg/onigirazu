@@ -396,7 +396,7 @@ func (c *Client) takeShell(user string) (*remoteShell, error) {
 		var exitErr *ssh.ExitError
 		// a server as another user that does not start (sudo wants a
 		// password) is not tried again on this connection
-		if user != "" || errors.As(err, &exitErr) || strings.Contains(err.Error(), "shell did not start") {
+		if user != "" || errors.As(err, &exitErr) || strings.Contains(err.Error(), "shell did not start") || isWindowsSSH(c.host) {
 			p.mu.Lock()
 			p.disabled = true
 			p.mu.Unlock()
