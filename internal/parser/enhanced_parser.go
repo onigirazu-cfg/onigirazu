@@ -203,7 +203,7 @@ func (p *EnhancedParser) validatePlay(play *types.Play, index int) error {
 		return fmt.Errorf("play '%s' must specify hosts", play.Name)
 	}
 
-	if len(play.Tasks) == 0 && len(play.PreTasks) == 0 && len(play.PostTasks) == 0 && len(play.Roles) == 0 {
+	if len(play.Tasks) == 0 && len(play.PreTasks) == 0 && len(play.PostTasks) == 0 && len(play.Roles) == 0 && len(play.Verify) == 0 {
 		return fmt.Errorf("play '%s' must contain at least one task or role", play.Name)
 	}
 

@@ -269,6 +269,8 @@ apply() {  # case_dir -> writes task_end events to $WORK/events.jsonl
 
 # First error lines of the last apply, for the job log
 apply_errors() {
+  # the failed tasks' own messages first (the module's reason), then the log
+  jq -r 'select(.success == false and .msg != null and .msg != "") | "      \(.host) \(.task): \(.msg)"' "$WORK/events.jsonl" 2>/dev/null | cut -c1-400 | head -4
   records | jq -r 'select(.level == "ERROR" or .level == "WARN") | "      \(.level): \(.message)"' |
     cut -c1-400 | head -"${1:-4}"
 }

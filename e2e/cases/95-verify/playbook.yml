@@ -1,0 +1,25 @@
+plays:
+  - name: verify checks the host after the play
+    hosts: all
+    become: true
+    tasks:
+      - name: A file to check
+        copy: {dest: /etc/onigirazu-e2e-verify.conf, content: "listen 80\nworker_processes 4\n", mode: "0640"}
+      - name: A group to check
+        group: {name: e2everify}
+    verify:
+      - file: {path: /etc/onigirazu-e2e-verify.conf, mode: "0640", owner: root, group: root, contains: ["listen 80", "/^worker_processes [0-9]+$/"]}
+      - file: {path: /etc/onigirazu-e2e-no-such-file, exists: false}
+      - file: {path: /etc, type: directory}
+      - package: {name: git, installed: true}
+      - package: {name: no-such-package-xyz, installed: false}
+      - service: {name: ssh, running: true, enabled: true}
+      - port: {port: 22, listening: true}
+      - port: {port: 59999, listening: false}
+      - process: {name: sshd, running: true}
+      - user: {name: e2e, exists: true, groups: [e2e]}
+      - group: {name: e2everify, exists: true}
+      - command: {cmd: "echo hello; echo warn >&2", exit_status: 0, stdout: [hello], stderr: ["/^warn$/"]}
+      - mount: {path: /, exists: true}
+      - kernel_param: {name: kernel.hostname, value: "e2e-{{ inventory_hostname }}"}
+      - dns: {name: localhost}

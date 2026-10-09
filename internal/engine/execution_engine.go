@@ -136,6 +136,7 @@ type ExecutionEngine struct {
 	safe             SafeApply
 	restorer         Restorer
 	rolloutVars      map[string]interface{}
+	verifyOnly       bool // run only the plays' verify: checks (onigirazu verify)
 	rolloutUnhealthy []string
 	rolloutApplied   []types.TaskResult
 	rolloutReports   []types.BatchReport
@@ -658,6 +659,12 @@ func (e *ExecutionEngine) executePlayOn(ctx context.Context, play *types.Play, h
 		e.forceHandlers = false
 	}()
 
+	// onigirazu verify: only the verify: checks of the play run
+	if e.verifyOnly {
+		only := *play
+		only.PreTasks, only.Roles, only.RoleObjects, only.Tasks, only.PostTasks = nil, nil, nil, nil, nil
+		play = &only
+	}
 	// As in Ansible: pre_tasks, handlers, roles and tasks, handlers,
 	// post_tasks, handlers
 	if len(play.PreTasks) > 0 {
@@ -777,6 +784,22 @@ func (e *ExecutionEngine) executePlayOn(ctx context.Context, play *types.Play, h
 		result.Success = false
 		if !play.IgnoreErrors {
 			return result, err
+		}
+	}
+
+	// verify: the goss-style checks of the play, one task on every host
+	if len(play.Verify) > 0 {
+		// a plain list: the argument renderer walks []interface{} only
+		checks := make([]interface{}, len(play.Verify))
+		for i, c := range play.Verify {
+			checks[i] = c
+		}
+		check := types.Task{Name: "verify", Module: "verify", Args: map[string]interface{}{"checks": checks}}
+		if err := e.executeTask(ctx, &check, e.activeHosts(hosts), playVars, result); err != nil {
+			var hf *hostsFailedError
+			if !errors.As(err, &hf) {
+				return result, fmt.Errorf("verify failed: %w", err)
+			}
 		}
 	}
 
@@ -2562,6 +2585,9 @@ func (e *ExecutionEngine) SetForceBecome(become bool, user string) {
 }
 
 // SetStartAtTask skips every task before the one with this name
+// SetVerifyOnly makes every play run only its verify: checks
+func (e *ExecutionEngine) SetVerifyOnly(on bool) { e.verifyOnly = on }
+
 func (e *ExecutionEngine) SetStartAtTask(name string) {
 	e.startAt = strings.TrimSpace(name)
 }
