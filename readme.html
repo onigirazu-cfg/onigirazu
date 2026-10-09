@@ -628,7 +628,8 @@ per-host counts and a browser for task results.</p>
 <ul>
 <li><code>apply -o json</code> writes one document to stdout (status, totals, every task per host); logs go
   to stderr. Exit codes: 0 success, 1 failure, 5 a batch was rolled back, 130 interrupted.</li>
-<li><code>drift</code> and <code>plan</code> have JSON and HTML reports; <code>drift --notify</code> posts to webhooks.</li>
+<li><code>drift</code> and <code>plan</code> have JSON, HTML and Markdown reports; <code>drift --notify</code> posts to webhooks;
+  <code>plan --github-comment</code> comments the plan on a pull request (<a href="docs/PLAN_IN_PR.md">docs/PLAN_IN_PR.md</a>).</li>
 <li><code>apply --background</code> returns at once; <code>show-execution</code> reads the result later.</li>
 <li><code>audit</code> keeps the history of runs with per-host statistics.</li>
 <li><code>onigirazu test</code> runs a role's Molecule scenarios (docker/podman instances, converge,
