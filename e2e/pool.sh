@@ -30,7 +30,9 @@ vm_json() { govc vm.info -json -e "$1" 2>/dev/null | jq -c '(.virtualMachines //
 guest_ipv4() {
   local i ip
   for i in $(seq 30); do
-    ip="$(govc vm.info -json "$1" 2>/dev/null | jq -r '(.virtualMachines // .VirtualMachines // [])[0].guest.net[]?.ipAddress[]? // empty' |
+    # the virtual NIC only (deviceConfigId >= 0): the tools also report the
+    # guest's docker bridge, which came first
+    ip="$(govc vm.info -json "$1" 2>/dev/null | jq -r '(.virtualMachines // .VirtualMachines // [])[0].guest.net[]? | select((.deviceConfigId // -1) >= 0) | .ipAddress[]? // empty' |
       grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | grep -vE '^(127\.|169\.254\.)' | head -1)"
     [ -n "$ip" ] && { echo "$ip"; return 0; }
     [ "$i" = 30 ] || sleep 2
