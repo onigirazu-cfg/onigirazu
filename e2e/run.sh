@@ -73,7 +73,7 @@ diagnose() {
 cleanup() {
   local rc=$?
   if [ "$rc" != 0 ] && [ -f "$TF_DIR/terraform.tfstate" ]; then diagnose || true; fi
-  if [ -z "${KEEP_VMS:-}" ] && [ -f "$TF_DIR/terraform.tfstate" ]; then
+  if [ -z "${KEEP_VMS:-}" ] && { [ -f "$TF_DIR/terraform.tfstate" ] || [ -f "$WORK/claimed" ]; }; then
     log "Destroying VMs"
     # throwaway VMs: power them off hard first; terraform would wait for a
     # clean guest shutdown (over a minute with the databases running)
@@ -91,8 +91,15 @@ cleanup() {
     wait
     echo "powered off $n VM(s) in $((SECONDS - t0)) s"
     t0=$SECONDS
-    terraform -chdir="$TF_DIR" destroy -auto-approve -input=false -var-file="$TFVARS" >/dev/null ||
-      echo "destroy failed; the janitor will remove the VMs"
+    if [ -f "$TF_DIR/terraform.tfstate" ]; then
+      terraform -chdir="$TF_DIR" destroy -auto-approve -input=false -var-file="$TFVARS" >/dev/null ||
+        echo "destroy failed; the janitor will remove the VMs"
+    fi
+    # pre-warmed VMs this run claimed are not in the terraform state
+    while IFS= read -r key; do
+      govc vm.destroy "/$TF_VAR_datacenter/vm/$TF_VAR_folder/tmp-e2e-onigirazu-$RUN_ID-$key" >/dev/null 2>&1 ||
+        echo "claimed VM $key not destroyed; the janitor will"
+    done < <(cat "$WORK/claimed" 2>/dev/null)
     echo "destroyed in $((SECONDS - t0)) s"
     # the VMs' DHCP leases go with them
     # shellcheck disable=SC2086
@@ -156,23 +163,41 @@ log "Building onigirazu"
 (cd "$ROOT" && go generate ./internal/agentbin && go build -o "$BIN" ./cmd/onigirazu)
 ssh-keygen -q -t ed25519 -N '' -C "onigirazu-e2e-$RUN_ID" -f "$KEY"
 
-# --- create the VMs ------------------------------------------------------------
-log "Creating VMs (run $RUN_ID)"
-# the provider registry drops connections now and then
-for try in 1 2 3; do
-  terraform -chdir="$TF_DIR" init -input=false >/dev/null && break
-  [ "$try" = 3 ] && exit 1
-  sleep 15
-done
-# One vars file for apply and destroy
-jq -n --arg run_id "$RUN_ID" --arg run_url "$RUN_URL" --argjson images "$images_json" \
-  --arg public_key "$(cat "$KEY.pub")" \
-  '{run_id: $run_id, run_url: $run_url, images: $images, public_key: $public_key}' > "$TFVARS"
-if ! terraform -chdir="$TF_DIR" apply -auto-approve -input=false -var-file="$TFVARS" >/dev/null; then
-  diagnose_permissions
-  die "terraform apply failed"
+# --- pre-warmed VMs, then the rest --------------------------------------------
+# a pool VM (e2e/pool.sh) is claimed by renaming it to this run's name and
+# given this run's key; what the pool lacks is created with terraform
+claimed_json="{}"
+if [ "${E2E_POOL:-1}" = 1 ]; then
+  log "Claiming pre-warmed VMs"
+  for key in $(jq -r 'keys[]' <<<"$images_json"); do
+    ip="$("$HERE/pool.sh" claim "$key" "tmp-e2e-onigirazu-$RUN_ID-$key" "$(cat "$KEY.pub")" "e2e-$key" 2>/dev/null || true)"
+    [ -n "$ip" ] || { echo "$key: none in the pool"; continue; }
+    echo "$key: pre-warmed"
+    claimed_json="$(jq -c --arg k "$key" --arg ip "$ip" '. + {($k): $ip}' <<<"$claimed_json")"
+    echo "$key" >> "$WORK/claimed"
+  done
 fi
-hosts_json="$(terraform -chdir="$TF_DIR" output -json hosts)"
+to_create="$(jq -c --argjson c "$claimed_json" 'with_entries(select(.key as $k | $c[$k] == null))' <<<"$images_json")"
+hosts_json="$claimed_json"
+if [ "$to_create" != "{}" ]; then
+  log "Creating VMs (run $RUN_ID)"
+  # the provider registry drops connections now and then
+  for try in 1 2 3; do
+    terraform -chdir="$TF_DIR" init -input=false >/dev/null && break
+    [ "$try" = 3 ] && exit 1
+    sleep 15
+  done
+  # One vars file for apply and destroy
+  jq -n --arg run_id "$RUN_ID" --arg run_url "$RUN_URL" --argjson images "$to_create" \
+    --arg public_key "$(cat "$KEY.pub")" \
+    '{run_id: $run_id, run_url: $run_url, images: $images, public_key: $public_key}' > "$TFVARS"
+  if ! terraform -chdir="$TF_DIR" apply -auto-approve -input=false -var-file="$TFVARS" >/dev/null; then
+    diagnose_permissions
+    die "terraform apply failed"
+  fi
+  hosts_json="$(jq -s '.[0] + .[1]' <<<"$claimed_json
+$(terraform -chdir="$TF_DIR" output -json hosts)")"
+fi
 # Actions logs of a public repository are public: keep internal addresses out
 if [ -n "${GITHUB_ACTIONS:-}" ]; then
   for ip in $(jq -r '.[]' <<<"$hosts_json"); do echo "::add-mask::$ip"; done

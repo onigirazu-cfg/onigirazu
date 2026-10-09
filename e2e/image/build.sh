@@ -91,7 +91,7 @@ for key in $(jq -r 'keys[]' <<<"$hosts_json"); do
   name="e2e-base-$key-$golden-$stamp"
   terraform -chdir="$TF_DIR" state rm "vsphere_virtual_machine.vm[\"$key\"]" >/dev/null
   govc vm.change -vm "$vm" -e guestinfo.e2e_authorized_key= \
-    -annotation "onigirazu e2e base template: $golden with the packages the e2e cases install. Built by $RUN_URL. Replaced by the next build; e2e/image/build.sh."
+    -annotation "onigirazu e2e base template: $golden with the packages the e2e cases install, e2e-access-refresh. Built by $RUN_URL. Replaced by the next build; e2e/image/build.sh."
   govc object.rename "$vm" "$name"
   # e2e VMs are linked clones of this snapshot: a delta disk, no full copy
   govc snapshot.create -vm "$FOLDER/$name" -m=false -q=false base >/dev/null
