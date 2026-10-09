@@ -18,3 +18,20 @@ plays:
           path: /etc/onigirazu-e2e-no-such-file.conf
           regexp: "^x="
           state: absent
+      - name: A line the validate command accepts
+        lineinfile:
+          path: /etc/onigirazu-e2e-lines.conf
+          line: "checked=1"
+          validate: "grep -q '^checked=1$' %s"
+      - name: A line the validate command refuses leaves the file alone
+        lineinfile:
+          path: /etc/onigirazu-e2e-lines.conf
+          line: "bad=1"
+          validate: "grep -q '^no-such-line$' %s"
+        register: refused
+        ignore_errors: true
+      - name: The refusal is a failure
+        assert:
+          that:
+            - refused is failed
+            - "'failed to validate' in refused.msg"

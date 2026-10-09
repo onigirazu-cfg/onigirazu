@@ -11,6 +11,7 @@ import (
 // password.
 type dbConn struct {
 	user, password, host, port string
+	socket                     string // login_unix_socket
 }
 
 func dbConnFromArgs(args map[string]interface{}) dbConn {
@@ -21,6 +22,7 @@ func dbConnFromArgs(args map[string]interface{}) dbConn {
 	if p, ok := toInt(args["login_port"]); ok && p > 0 {
 		c.port = fmt.Sprint(p)
 	}
+	c.socket, _ = args["login_unix_socket"].(string)
 	return c
 }
 
@@ -41,6 +43,9 @@ func (c dbConn) mysqlClient(bin string) string {
 	if c.port != "" {
 		b.WriteString(" -P " + c.port)
 	}
+	if c.socket != "" {
+		b.WriteString(" --socket=" + shellQuote(c.socket))
+	}
 	return b.String()
 }
 
@@ -55,8 +60,11 @@ func (c dbConn) psqlArgs() string {
 	if c.user != "" {
 		b.WriteString(" -U " + shellQuote(c.user))
 	}
+	// a socket directory goes where the host would (psql takes both as -h)
 	if c.host != "" {
 		b.WriteString(" -h " + shellQuote(c.host))
+	} else if c.socket != "" {
+		b.WriteString(" -h " + shellQuote(c.socket))
 	}
 	if c.port != "" {
 		b.WriteString(" -p " + c.port)

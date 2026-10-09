@@ -370,6 +370,11 @@ func (m *TemplateModule) executeRemote(ctx context.Context, host types.Host, cli
 		if _, modeSet := args["mode"]; !modeSet && current.Exists {
 			writeMode = current.Mode
 		}
+		if err := validateBeforeWrite(ctx, host, args, dest, []byte(renderedContent)); err != nil {
+			result.Error = err.Error()
+			result.Duration = time.Since(startTime)
+			return result, fmt.Errorf("%s", result.Error)
+		}
 		if err := installRemoteFile(ctx, host, args, client, dest, []byte(renderedContent), writeMode, current); err != nil {
 			result.Error = err.Error()
 			result.Duration = time.Since(startTime)

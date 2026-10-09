@@ -82,6 +82,9 @@ func (m *ReplaceModule) Execute(ctx context.Context, host types.Host, args map[s
 		}
 		result.Output["backup_file"] = backup
 	}
+	if err := validateBeforeWrite(ctx, host, args, path, []byte(after)); err != nil {
+		return fail(err.Error())
+	}
 	if err := writeHostFile(ctx, host, args, path, []byte(after), argMode(args, path)); err != nil {
 		return fail(err.Error())
 	}

@@ -147,7 +147,8 @@ func usermodArgs(ctx context.Context, host types.Host, args map[string]interface
 			opts = append(opts, "-G", strings.Join(want, ","))
 		}
 	}
-	if password := getStringArg(args, "password", ""); password != "" {
+	// update_password: on_create leaves an existing account's password alone
+	if password := getStringArg(args, "password", ""); password != "" && getStringArg(args, "update_password", "always") != "on_create" {
 		// the stored hash needs root to read
 		out, err := runOnHost(ctx, host, args, "getent", "shadow", getStringArg(args, "name", ""))
 		if err != nil {
