@@ -1,0 +1,25 @@
+plays:
+  - name: strategy free, a play throttle
+    hosts: all
+    become: true
+    strategy: free
+    throttle: 1
+    tasks:
+      - name: Each host at its own pace
+        copy: {dest: /etc/onigirazu-e2e-free-1, content: "{{ inventory_hostname }}\n"}
+      - name: A block inside
+        block:
+          - name: Second step
+            lineinfile: {path: /etc/onigirazu-e2e-free-1b, line: "step 2", create: true}
+          - name: A command
+            command: sh -c 'echo ok > /etc/onigirazu-e2e-free-2'
+            changed_when: false
+        always:
+          - name: Always runs
+            file: {path: /etc/onigirazu-e2e-free-always, state: touch}
+      - name: Handlers still work
+        copy: {dest: /etc/onigirazu-e2e-free-3, content: "v1\n"}
+        notify: free handler
+    handlers:
+      - name: free handler
+        copy: {dest: /etc/onigirazu-e2e-free-handler, content: "ran\n"}

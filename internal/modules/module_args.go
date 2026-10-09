@@ -64,6 +64,7 @@ var ModuleArgs = map[string][]string{
 	"unarchive":        {"creates", "dest", "extra_opts", "group", "list_files", "owner", "remote_src", "src"},
 	"uri":              {"body", "body_format", "headers", "method", "password", "return_content", "status_code", "timeout", "url", "user", "validate_certs"},
 	"user":             {"append", "comment", "create_home", "gid", "group", "groups", "home", "move_home", "name", "password", "remove", "shell", "state", "system", "uid", "update_password"},
+	"verify":           {"checks"},
 	"wait_for":         {"delay", "host", "path", "port", "search_regex", "state", "timeout"},
 	"win_command":      {"chdir", "cmd", "creates", "data", "executable", "removes", "stdin"},
 	"win_ping":         {"chdir", "cmd", "creates", "data", "executable", "removes", "stdin"},

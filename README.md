@@ -294,7 +294,10 @@ stops with `any_errors_fatal`, above `max_fail_percentage`, or when no host is l
       throttle: 2
 ```
 
-An unhealthy batch is rolled back and the rollout stops (exit code 5). `--canary 1 --canary-pause
+`strategy: free` lets every host run the play's tasks at its own pace instead of waiting for the
+slowest host at every task (handlers still run at the end, for the hosts that notified them); a
+play-level `throttle` applies to every task without its own. An unhealthy batch is rolled back and
+the rollout stops (exit code 5). `--canary 1 --canary-pause
 5m` runs one host first and checks it again after a soak; `--auto-rollback` rolls back a batch
 whose tasks fail. See [docs/SAFE_APPLY.md](docs/SAFE_APPLY.md).
 
@@ -418,6 +421,7 @@ return values and examples: [docs/modules/README.md](docs/modules/README.md). Ne
 | `apply PLAYBOOK` | Run a playbook |
 | `plan PLAYBOOK` | Show what `apply` would change |
 | `drift PLAYBOOK` | Check that hosts still match a playbook; `--fix` applies |
+| `verify PLAYBOOK` | Run the plays' `verify:` checks (files, packages, services, ports, http, ...) and report them ([docs/VERIFY.md](docs/VERIFY.md)) |
 | `pull --repo URL` | This host converges itself from a git repository, once or on a timer ([pull mode](docs/PULL.md)) |
 | `diff PLAYBOOK` | Compare a playbook with the last recorded run |
 | `rollback` | List, inspect and restore snapshots of runs |
@@ -507,9 +511,10 @@ Without a terminal the normal output is used. See [docs/INTERACTIVE_MODE.md](doc
   (`-J`/`ProxyJump`, aliases from `~/.ssh/config`) are checked the same way.
 - Passwords (`ansible_password`, `ansible_become_password`) never appear on command lines;
   sudo reads them on stdin. `no_log: true` keeps a task's values out of logs, state and output.
-- Secrets come from Bitwarden/Vaultwarden (`bw` CLI, `BW_SESSION`) or HashiCorp Vault when a
-  template uses them: `{{ bitwarden('app-db') }}`, `{{ vault('app/db', 'password') }}`,
-  `lookup('community.general.bitwarden', ...)`. See [docs/BITWARDEN_INTEGRATION.md](docs/BITWARDEN_INTEGRATION.md).
+- Secrets come from Bitwarden/Vaultwarden (`bw` CLI, `BW_SESSION`), HashiCorp Vault (token or
+  AppRole) or SOPS-encrypted vars files when a template uses them: `{{ bitwarden('app-db') }}`,
+  `{{ vault('app/db', 'password') }}`, `lookup('community.hashi_vault.hashi_vault', ...)`,
+  `lookup('community.sops.sops', ...)`. See [docs/BITWARDEN_INTEGRATION.md](docs/BITWARDEN_INTEGRATION.md).
 - An optional security policy restricts modules, hosts, paths and commands:
   [docs/SECURITY_POLICY_GUIDE.md](docs/SECURITY_POLICY_GUIDE.md).
 - Work files on the hosts live in `~/.onigirazu/tmp` of the connecting user.

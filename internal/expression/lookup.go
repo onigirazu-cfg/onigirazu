@@ -37,7 +37,9 @@ func lookupItems(base, varsArg interface{}, args []interface{}) ([]interface{}, 
 	}
 	plugin, terms := fmt.Sprint(args[0]), args[1:]
 	// lookup('ansible.builtin.env', ...) is lookup('env', ...)
-	plugin = strings.TrimPrefix(strings.TrimPrefix(plugin, "ansible.builtin."), "community.general.")
+	for _, c := range []string{"ansible.builtin.", "community.general.", "community.sops.", "community.hashi_vault."} {
+		plugin = strings.TrimPrefix(plugin, c)
+	}
 	var out []interface{}
 	switch plugin {
 	case "env":
@@ -149,6 +151,12 @@ func lookupItems(base, varsArg interface{}, args []interface{}) ([]interface{}, 
 		return []interface{}{items[rand.IntN(len(items))]}, nil // #nosec G404 -- not for security
 	case "bitwarden":
 		return bitwardenLookup(terms)
+	case "sops":
+		return sopsLookup(resolve, terms)
+	case "hashi_vault":
+		return hashiVaultLookup(terms)
+	case "vault_kv2_get":
+		return vaultKV2GetLookup(terms)
 	default:
 		return nil, fmt.Errorf("lookup plugin %q is not supported", plugin)
 	}
