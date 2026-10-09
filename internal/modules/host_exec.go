@@ -249,6 +249,29 @@ func installRemoteFile(ctx context.Context, host types.Host, args map[string]int
 	return nil
 }
 
+// validateBeforeWrite runs the task's validate command on a temporary copy
+// of the new content before the file is written, as Ansible does: %s in the
+// command is the copy; a non-zero exit leaves the file as it was
+func validateBeforeWrite(ctx context.Context, host types.Host, args map[string]interface{}, path string, data []byte) error {
+	cmd := getStringArg(args, "validate", "")
+	if cmd == "" || inCheckMode(args) {
+		return nil
+	}
+	if !strings.Contains(cmd, "%s") {
+		return fmt.Errorf("validate must contain %%s: %s", cmd)
+	}
+	tmp := remoteTempName(".onigirazu-validate-", filepath.Base(path))
+	if err := writeHostFile(ctx, host, args, tmp, data, 0o600); err != nil {
+		return err
+	}
+	q := shellQuote(tmp)
+	out, err := runShellOnHost(ctx, host, args, strings.ReplaceAll(cmd, "%s", q)+"; rc=$?; rm -f "+q+"; exit $rc")
+	if err != nil {
+		return fmt.Errorf("failed to validate %s with %q: %v: %s", path, cmd, err, strings.TrimSpace(out))
+	}
+	return nil
+}
+
 // readHostFile returns the content of path on the host (with become), and
 // whether it exists. Content travels base64-encoded, so any bytes survive.
 func readHostFile(ctx context.Context, host types.Host, args map[string]interface{}, path string) ([]byte, bool, error) {

@@ -15,10 +15,16 @@ import (
 //go:embed agents
 var agents embed.FS
 
+// Compressed is the gzipped agent for goos/goarch, if this build has it
+func Compressed(goos, goarch string) ([]byte, bool) {
+	data, err := agents.ReadFile("agents/onigirazu-agent-" + goos + "-" + goarch + ".gz")
+	return data, err == nil
+}
+
 // Get is the agent for goos/goarch, if this build has it
 func Get(goos, goarch string) ([]byte, bool) {
-	data, err := agents.ReadFile("agents/onigirazu-agent-" + goos + "-" + goarch + ".gz")
-	if err != nil {
+	data, ok := Compressed(goos, goarch)
+	if !ok {
 		return nil, false
 	}
 	r, err := gzip.NewReader(bytes.NewReader(data))

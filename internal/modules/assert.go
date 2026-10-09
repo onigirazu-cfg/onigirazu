@@ -44,7 +44,12 @@ func (m *AssertModule) Execute(ctx context.Context, host types.Host, args map[st
 		}
 		if !holds {
 			msg := getStringArg(args, "fail_msg", getStringArg(args, "msg", "Assertion failed"))
+			// without a message of the task's own the error names the
+			// condition; msg stays what Ansible returns
 			result.Success, result.Error = false, msg
+			if getStringArg(args, "fail_msg", getStringArg(args, "msg", "")) == "" {
+				result.Error = fmt.Sprintf("%s: %s", msg, cond)
+			}
 			result.Output["msg"], result.Output["assertion"] = msg, cond
 			result.Output["evaluated_to"] = false
 			result.Duration = time.Since(start)

@@ -105,6 +105,7 @@ func localAgent(goos, goarch string) ([]byte, error) {
 // agentImage is an agent binary and the id in its remote name
 type agentImage struct {
 	data []byte
+	gz   []byte // the same gzipped, when the build embeds it
 	id   string
 	err  error
 }
@@ -120,7 +121,8 @@ func cachedAgent(goos, goarch string) agentImage {
 			return agentImage{err: err}
 		}
 		sum := sha256.Sum256(data)
-		return agentImage{data: data, id: hex.EncodeToString(sum[:8])}
+		gz, _ := agentbin.Compressed(goos, goarch)
+		return agentImage{data: data, gz: gz, id: hex.EncodeToString(sum[:8])}
 	}))
 	get, _ := load.(func() agentImage)
 	return get()
@@ -143,11 +145,12 @@ func platform(uname string) (string, string, bool) {
 func (c *Client) installAgent() string {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	out, _, rc, err := c.execSession(ctx, `uname -sm; printf '%s\n' "$HOME"`, false)
+	out, _, rc, err := c.execSession(ctx, `uname -sm; printf '%s\n' "$HOME"; command -v gzip || true`, false)
 	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-	if err != nil || rc != 0 || len(lines) != 2 || !strings.HasPrefix(lines[1], "/") {
+	if err != nil || rc != 0 || len(lines) < 2 || !strings.HasPrefix(lines[1], "/") {
 		return ""
 	}
+	hasGzip := len(lines) > 2 && lines[2] != ""
 	goos, goarch, ok := platform(lines[0])
 	if !ok {
 		return ""
@@ -161,11 +164,20 @@ func (c *Client) installAgent() string {
 	remote := path.Join(lines[1], ".onigirazu", "bin", "onigirazu-agent-"+img.id)
 	if !c.agentRuns(ctx, remote) {
 		tmp := fmt.Sprintf("%s.%d.tmp", remote, time.Now().UnixNano())
-		if err := c.WriteFile(tmp, data, 0o755); err != nil {
+		install := "mv -f " + quote(tmp) + " " + quote(remote) + " || rm -f " + quote(tmp)
+		upload, mode := data, os.FileMode(0o755)
+		// the gzipped agent is less than half the bytes: unpacked on the host
+		if hasGzip && img.gz != nil {
+			upload, mode = img.gz, 0o600
+			install = "gzip -dc " + quote(tmp+".gz") + " > " + quote(tmp) + " && chmod 755 " + quote(tmp) +
+				" && mv -f " + quote(tmp) + " " + quote(remote) + "; rc=$?; rm -f " + quote(tmp+".gz") + " " + quote(tmp) + "; exit $rc"
+			tmp += ".gz"
+		}
+		if err := c.WriteFile(tmp, upload, mode); err != nil {
 			c.logger.Debug("agent: upload: %v", err)
 			return ""
 		}
-		_, _, rc, err := c.execSession(ctx, "mv -f "+quote(tmp)+" "+quote(remote)+" || rm -f "+quote(tmp), false)
+		_, _, rc, err := c.execSession(ctx, install, false)
 		if err != nil || rc != 0 || !c.agentRuns(ctx, remote) {
 			return ""
 		}

@@ -62,8 +62,10 @@ func (m *ReplaceModule) Execute(ctx context.Context, host types.Host, args map[s
 		return fail(fmt.Sprintf("path %s does not exist", path))
 	}
 	before := string(data)
-	after := re.ReplaceAllString(before, repl)
-	count := len(re.FindAllStringIndex(before, -1))
+	after, count, err := replaceWithin(before, re, repl, getStringArg(args, "after", ""), getStringArg(args, "before", ""))
+	if err != nil {
+		return fail(err.Error())
+	}
 	result.Output["msg"] = fmt.Sprintf("%d replacements made", count)
 	if after == before {
 		result.Duration = time.Since(start)
@@ -82,6 +84,9 @@ func (m *ReplaceModule) Execute(ctx context.Context, host types.Host, args map[s
 		}
 		result.Output["backup_file"] = backup
 	}
+	if err := validateBeforeWrite(ctx, host, args, path, []byte(after)); err != nil {
+		return fail(err.Error())
+	}
 	if err := writeHostFile(ctx, host, args, path, []byte(after), argMode(args, path)); err != nil {
 		return fail(err.Error())
 	}
@@ -97,4 +102,36 @@ func (m *ReplaceModule) Validate(args map[string]interface{}) error {
 		return fmt.Errorf("argument 'regexp' is required")
 	}
 	return nil
+}
+
+// replaceWithin replaces the matches of re in content, as Ansible's replace
+// does with after and before: only after the first match of afterPat, only
+// before the first match of beforePat (searched after afterPat's); a pattern
+// that does not match leaves the content alone
+func replaceWithin(content string, re *regexp.Regexp, repl, afterPat, beforePat string) (string, int, error) {
+	start, end := 0, len(content)
+	if afterPat != "" {
+		a, err := regexp.Compile("(?m)" + afterPat)
+		if err != nil {
+			return "", 0, fmt.Errorf("invalid after: %v", err)
+		}
+		loc := a.FindStringIndex(content)
+		if loc == nil {
+			return content, 0, nil
+		}
+		start = loc[1]
+	}
+	if beforePat != "" {
+		b, err := regexp.Compile("(?m)" + beforePat)
+		if err != nil {
+			return "", 0, fmt.Errorf("invalid before: %v", err)
+		}
+		loc := b.FindStringIndex(content[start:])
+		if loc == nil {
+			return content, 0, nil
+		}
+		end = start + loc[0]
+	}
+	region := content[start:end]
+	return content[:start] + re.ReplaceAllString(region, repl) + content[end:], len(re.FindAllStringIndex(region, -1)), nil
 }

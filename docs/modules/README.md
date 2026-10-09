@@ -281,7 +281,7 @@ Copy a file from the control machine (or, with `remote_src`, from the host) or w
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `src` | string | - | Source file (not a directory); `src` or `content` is required |
+| `src` | string | - | Source file or directory; `src` or `content` is required |
 | `content` | string | - | File content instead of `src` |
 | `dest` | string | - | Destination path (required) |
 | `backup` | boolean | `false` | Keep the old file as `<dest>.backup.<YYYYMMDD-HHMMSS>` |
@@ -290,8 +290,15 @@ Copy a file from the control machine (or, with `remote_src`, from the host) or w
 | `group` | string | - | File group |
 | `force` | boolean | `true` | `false` leaves an existing `dest` alone, whatever it contains |
 | `remote_src` | boolean | `false` | `src` is a path on the host, not on the control machine |
+| `validate` | string | - | Command run on a copy of the new content before the file is written, `%s` = the copy; a non-zero exit fails the task and leaves the file as it was (`/usr/sbin/sshd -t -f %s`) |
 
 Returns `dest`, `checksum` (SHA-256 of the source), `size`, `msg` and `backup_file` when a backup was made.
+
+Directories, as in Ansible: `src: dir/` copies the directory's contents into `dest`, `src: dir` copies the
+directory itself (`dest/dir/...`); `mode`, `owner` and `group` apply to every file, empty directories are
+skipped, and the result has `files` and how many changed. A file copied to a `dest` ending in `/` or to an
+existing directory keeps its name in there. `content` with a `dest` ending in `/` fails. A missing parent
+directory of `dest` is created (Ansible fails there). `remote_src` copies single files only.
 
 #### Example
 
@@ -418,6 +425,7 @@ Render a Jinja2 template on the control machine and write it to the host.
 | `force` | boolean | `false` | Rewrite the file even when the content is unchanged |
 | `trim_blocks` | boolean | `true` | Remove the newline after a `{% ... %}` tag |
 | `lstrip_blocks` | boolean | `false` | Remove spaces before a tag at the start of a line (`{%+` keeps them) |
+| `validate` | string | - | Command run on a copy of the new content before the file is written, `%s` = the copy; a non-zero exit fails the task and leaves the file as it was (`/usr/sbin/sshd -t -f %s`) |
 
 `{%-`/`-%}` strip whitespace, as in Ansible. `ansible_managed` is "Ansible managed" unless the playbook sets it. Returns `dest`, `size`, `checksum` and `backup_file` when a backup was made.
 
@@ -558,6 +566,7 @@ Ensure a line is present in a file, or remove matching lines.
 | `mode` | string | - | File mode, e.g. `"0644"` (a new file is `0644` without it) |
 | `owner` | string | - | File owner (name or uid) |
 | `group` | string | - | File group (name or gid) |
+| `validate` | string | - | Command run on a copy of the new content before the file is written, `%s` = the copy; a non-zero exit fails the task and leaves the file as it was (`/usr/sbin/sshd -t -f %s`) |
 
 A new line goes to the end of the file when there is no `insertafter`/`insertbefore` or it matches nothing, as in Ansible. An invalid pattern fails the task.
 
@@ -597,6 +606,8 @@ Insert, update or remove a block of text between marker lines.
 | `mode` | string | - | File mode, e.g. `"0644"` (a new file is `0644` without it) |
 | `owner` | string | - | File owner (name or uid) |
 | `group` | string | - | File group (name or gid) |
+| `validate` | string | - | Command run on a copy of the new content before the file is written, `%s` = the copy; a non-zero exit fails the task and leaves the file as it was (`/usr/sbin/sshd -t -f %s`) |
+| `create` | boolean | `false` | Create a missing file; without it a missing file fails the task (`state: absent` then changes nothing) |
 
 A new block goes to the end of the file when there is no `insertafter`/`insertbefore` or it matches nothing, as in Ansible; an existing block is updated in place. An invalid pattern fails the task. Returns `path`, `state`, `msg` and `backup`.
 
@@ -626,6 +637,9 @@ Replace every match of a regular expression in a file (Go RE2 syntax, multiline 
 | `mode` | string | - | File mode, e.g. `"0644"` (a new file is `0644` without it) |
 | `owner` | string | - | File owner (name or uid) |
 | `group` | string | - | File group (name or gid) |
+| `validate` | string | - | Command run on a copy of the new content before the file is written, `%s` = the copy; a non-zero exit fails the task and leaves the file as it was (`/usr/sbin/sshd -t -f %s`) |
+| `after` | string | - | Replace only after the first match of this regexp |
+| `before` | string | - | Replace only before the first match of this regexp (after `after`'s) |
 
 Returns `msg` (number of replacements) and `backup_file`.
 
@@ -652,6 +666,7 @@ Set or remove one option of an INI file. Also `community.general.ini_file`.
 | `create` | boolean | `true` | Create a missing file |
 | `backup` | boolean | `false` | Keep the old file as `<path>.<YYYYMMDDhhmmss>~` |
 | `mode` | string | - | Octal mode of the written file |
+| `validate` | string | - | Command run on a copy of the new content before the file is written, `%s` = the copy; a non-zero exit fails the task and leaves the file as it was (`/usr/sbin/sshd -t -f %s`) |
 
 Other lines of the option in the section are removed (Ansible's `exclusive`).
 
@@ -749,6 +764,7 @@ Set a kernel parameter now and in a sysctl file.
 | `sysctl_file` | string | `/etc/sysctl.d/99-onigirazu.conf` | File for the persistent setting |
 | `persist` | boolean | `true` | Write the setting to `sysctl_file` |
 | `reload` | boolean | `true` | Run `sysctl -p <sysctl_file>` after the file changed |
+| `sysctl_set` | boolean | - | Accepted for Ansible playbooks; the running value is always set here |
 
 #### Example
 
@@ -797,6 +813,8 @@ Reboot the host and wait until it is back (a new boot id).
 | `msg` | string | `System will reboot in a few seconds` | Message for `wall` (with `pre_reboot_delay`) |
 | `reboot_command` | string | - | Command that reboots; default: `systemctl reboot` two seconds later |
 | `test_boot` | boolean | `false` | Only check `systemctl is-system-running` (`degraded` passes); no reboot |
+| `test_command` | string | - | After the new boot, wait until this command succeeds on the host |
+| `connect_timeout` | integer | - | Accepted for Ansible playbooks; the SSH client's own connect timeout applies |
 
 A local host (the control machine) is never rebooted. Returns `msg` and `elapsed` (seconds).
 
@@ -991,6 +1009,7 @@ Debian/Ubuntu packages with `apt-get`.
 | `upgrade` | string | `no` | `yes`/`safe` (apt-get upgrade), `full`/`dist` (dist-upgrade); predicted in check mode |
 | `autoremove` | boolean | `false` | Remove unused packages |
 | `autoclean` | boolean | `false` | Clean the package cache |
+| `lock_timeout` | integer | `0` | Seconds to wait for the dpkg lock (`-o DPkg::Lock::Timeout`) |
 
 `absent` removes with `apt-get remove` (configuration files stay). Returns `state`, `packages`, `msg`, `cache_updated`, `upgrade`.
 
@@ -1196,6 +1215,7 @@ Manage user accounts. An existing account is brought to the given settings.
 | `create_home` | boolean | `true` | Create the home directory (new accounts) |
 | `system` | boolean | `false` | System account (new accounts) |
 | `remove` | boolean | `false` | With `state: absent`: also remove the home directory |
+| `update_password` | string | `always` | `on_create` sets `password` only when the account is created |
 
 `gid` is accepted only when the account is created; use `group` to change the primary group of an existing account.
 
@@ -1559,11 +1579,16 @@ Manage Docker containers with the docker CLI on the host.
 | `cpus` | number | - | CPU limit (e.g. `1.5`) |
 | `memory` | string | - | Memory limit (`512m`, `1g` or bytes) |
 | `force` | boolean | `false` | Remove with `docker rm -f` (`absent`) |
+| `recreate` | boolean | `false` | Create the container again even when nothing differs |
+| `comparisons` | dict | - | `{option: ignore}` leaves an option out of the comparison; `'*': ignore` leaves out all |
 
-A new container is created with `docker run -d` (so `present` also starts it). An existing container is not compared
-with the other arguments and is kept as it is. Only `cpus` and `memory` are compared and changed in place with
-`docker update`; the swap limit stays unlimited if it was, otherwise it becomes twice the memory, as docker sets
-for a new container. Returns `action`, `container`, `updated`.
+A new container is created with `docker run -d` (so `present` also starts it). An existing container (`present`,
+`started`) is compared with the options the task sets, as Ansible does, and created again when one differs:
+`image` (by image ID, so a newer pull of the same tag counts), `env` (the task's variables must be set; the image's
+own are allowed), `ports`, `volumes`, `command`, `restart_policy`, `networks` (the listed ones must be attached).
+Options the task leaves out are not compared. `cpus` and `memory` alone change in place with `docker update`; the
+swap limit stays unlimited if it was, otherwise it becomes twice the memory, as docker sets for a new container.
+Returns `action` (`created`, `recreated`, `started`, ...), `differences`, `container`, `updated`.
 
 #### Examples
 
@@ -1731,6 +1756,7 @@ Manage MySQL/MariaDB databases.
 | `charset` | string | `utf8mb4` | Character set of a new database |
 | `collation` | string | `utf8mb4_unicode_ci` | Collation of a new database |
 | `target` | string | - | File on the host for `dump` / `import` (required there) |
+| `login_unix_socket` | string | - | Unix socket (MySQL) or socket directory (PostgreSQL) to connect through |
 
 An existing database is not altered. `dump` and `import` always report `changed`. Returns `action` and `database`.
 
@@ -1762,6 +1788,7 @@ Manage MySQL/MariaDB accounts.
 | `password` | string | - | Password, set when the account is created |
 | `state` | string | `present` | `present` or `absent` |
 | `priv` | string | - | `db.table:PRIV,PRIV/db2.*:ALL`; granted, never revoked |
+| `login_unix_socket` | string | - | Unix socket (MySQL) or socket directory (PostgreSQL) to connect through |
 
 #### Examples
 
@@ -1787,6 +1814,7 @@ Manage PostgreSQL databases.
 | `owner` | string | - | Owner role of a new database |
 | `encoding` | string | - | Encoding of a new database (created from `template0`) |
 | `target` | string | - | File on the host for `dump` / `restore` (required there) |
+| `login_unix_socket` | string | - | Unix socket (MySQL) or socket directory (PostgreSQL) to connect through |
 
 An existing database is not altered.
 
@@ -1817,6 +1845,7 @@ Manage PostgreSQL login roles.
 | `priv` | string | - | Database privileges, e.g. `CONNECT,CREATE` (needs `db`); granted, never revoked |
 | `superuser` | boolean | `false` | `SUPERUSER` for a new role |
 | `createdb` | boolean | `false` | `CREATEDB` for a new role |
+| `login_unix_socket` | string | - | Unix socket (MySQL) or socket directory (PostgreSQL) to connect through |
 
 #### Examples
 
