@@ -97,7 +97,7 @@ func (a *UnifiedAptManager) Install(ctx context.Context, name, version string) (
 	}
 
 	// Execute installation with context
-	output, err := a.executeWithContext(ctx, "sudo", "apt-get", "install", "-y", "--no-install-recommends", packageSpec)
+	output, err := a.executeWithContext(ctx, "sudo", "apt-get", "-o", "DPkg::Lock::Timeout=60", "install", "-y", "--no-install-recommends", packageSpec)
 	operation.Output = output
 	operation.Duration = time.Since(startTime)
 
@@ -158,7 +158,7 @@ func (a *UnifiedAptManager) Remove(ctx context.Context, name string) (*PackageOp
 	}
 
 	// Execute removal
-	output, err := a.executeWithContext(ctx, "sudo", "apt-get", "remove", "-y", name)
+	output, err := a.executeWithContext(ctx, "sudo", "apt-get", "-o", "DPkg::Lock::Timeout=60", "remove", "-y", name)
 	operation.Output = output
 	operation.Duration = time.Since(startTime)
 
@@ -203,7 +203,7 @@ func (a *UnifiedAptManager) Update(ctx context.Context, name string) (*PackageOp
 	operation.OldVersion = currentState.Version
 
 	// Execute update
-	output, err := a.executeWithContext(ctx, "sudo", "apt-get", "install", "-y", "--only-upgrade", name)
+	output, err := a.executeWithContext(ctx, "sudo", "apt-get", "-o", "DPkg::Lock::Timeout=60", "install", "-y", "--only-upgrade", name)
 	operation.Output = output
 	operation.Duration = time.Since(startTime)
 
@@ -237,14 +237,14 @@ func (a *UnifiedAptManager) UpdateAll(ctx context.Context) (*PackageOperation, e
 	}
 
 	// Update package cache first
-	if _, err := a.executeWithContext(ctx, "sudo", "apt-get", "update"); err != nil {
+	if _, err := a.executeWithContext(ctx, "sudo", "apt-get", "-o", "DPkg::Lock::Timeout=60", "update"); err != nil {
 		operation.Error = fmt.Sprintf("failed to update package cache: %v", err)
 		operation.Duration = time.Since(startTime)
 		return operation, err
 	}
 
 	// Upgrade all packages
-	output, err := a.executeWithContext(ctx, "sudo", "apt-get", "upgrade", "-y")
+	output, err := a.executeWithContext(ctx, "sudo", "apt-get", "-o", "DPkg::Lock::Timeout=60", "upgrade", "-y")
 	operation.Output = output
 	operation.Duration = time.Since(startTime)
 
@@ -402,7 +402,7 @@ func (a *UnifiedAptManager) InstallMultiple(ctx context.Context, packages []Pack
 	}
 
 	// Execute batch installation
-	output, err := a.executeWithContext(ctx, append([]string{"sudo", "apt-get", "install", "-y", "--no-install-recommends"}, packageList...)...)
+	output, err := a.executeWithContext(ctx, append([]string{"sudo", "apt-get", "-o", "DPkg::Lock::Timeout=60", "install", "-y", "--no-install-recommends"}, packageList...)...)
 
 	// Create operations for each package
 	for _, pkg := range packages {
@@ -453,7 +453,7 @@ func (a *UnifiedAptManager) RemoveMultiple(ctx context.Context, packages []strin
 	}
 
 	// Execute batch removal
-	output, err := a.executeWithContext(ctx, append([]string{"sudo", "apt-get", "remove", "-y"}, packages...)...)
+	output, err := a.executeWithContext(ctx, append([]string{"sudo", "apt-get", "-o", "DPkg::Lock::Timeout=60", "remove", "-y"}, packages...)...)
 
 	// Create operations for each package
 	for _, name := range packages {
@@ -502,7 +502,7 @@ func (a *UnifiedAptManager) RefreshCache(ctx context.Context) error {
 		return nil
 	}
 
-	_, err := a.executeWithContext(ctx, "sudo", "apt-get", "update")
+	_, err := a.executeWithContext(ctx, "sudo", "apt-get", "-o", "DPkg::Lock::Timeout=60", "update")
 	if err != nil {
 		return fmt.Errorf("failed to update package cache: %w", err)
 	}
@@ -755,7 +755,7 @@ func (a *UnifiedAptManager) ListUpgradable(ctx context.Context) ([]PackageInfo, 
 
 // Clean cleans package cache
 func (a *UnifiedAptManager) Clean(ctx context.Context) error {
-	_, err := a.executeWithContext(ctx, "sudo", "apt-get", "clean")
+	_, err := a.executeWithContext(ctx, "sudo", "apt-get", "-o", "DPkg::Lock::Timeout=60", "clean")
 	if err != nil {
 		return fmt.Errorf("clean failed: %w", err)
 	}
