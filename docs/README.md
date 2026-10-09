@@ -38,7 +38,7 @@ Start with the [Quick Start](QUICK_START_CONFIGURATION.md). The project
 
 - [Module reference](modules/README.md)
 - [systemd, cron and firewall modules](MODULES_SYSTEMD_CRON_FIREWALL.md)
-- Windows hosts: the `win_*` modules in the [module reference](modules/README.md), over WinRM or OpenSSH ([inventory variables](INVENTORY_FORMATS.md#connection-variables))
+- Windows hosts: the `win_*` modules in the [module reference](modules/README.md), over WinRM or OpenSSH ([host variables](INVENTORY_FORMATS.md#host-variables))
 - [Ansible bridge](ANSIBLE_BRIDGE.md) — modules Onigirazu lacks run through ansible-core
 
 ## Configuration and security
