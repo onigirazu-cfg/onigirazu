@@ -63,5 +63,8 @@ Repository secrets: `VSPHERE_SERVER`, `VSPHERE_USER`, `VSPHERE_PASSWORD`,
 `E2E_FOLDER`, `E2E_LIBRARY`. Secrets rather than variables: Actions logs of a
 public repository are public.
 
+When a run fails, the log shows each VM's power state, guest state, guest IP, boot time and last vCenter
+events, and the console screenshots are uploaded as the `e2e-diag-<shard>` artifact (7 days).
+
 Before the hard power-off each VM releases its DHCP lease (`dhcp-release.sh`): the network's pool is
 small and a powered-off VM keeps its lease until it expires.
