@@ -13,7 +13,7 @@ set -euo pipefail
 
 PREFIX="tmp-e2e-onigirazu-"
 TTL_HOURS="${TTL_HOURS:-3}"
-: "${E2E_DATACENTER:?}" "${E2E_FOLDER:?}"
+: "${E2E_DATACENTER:?}" "${E2E_FOLDER:?}" "${E2E_CLUSTER:?}"
 folder="/$E2E_DATACENTER/vm/$E2E_FOLDER"
 
 cutoff="$(date -u -d "-$TTL_HOURS hours" +%s 2>/dev/null || date -u -v-"$TTL_HOURS"H +%s)"
@@ -62,12 +62,23 @@ done < <(govc vm.info -json "$folder/*" 2>/dev/null | jq -r '
 
 echo "e2e VMs found: $found, deleted: $deleted"
 
+# destroy_base removes a base template: a template object is turned back
+# into a VM first (vm.destroy refuses templates); a linked clone still
+# running keeps it, and the next janitor tries again
+destroy_base() {
+  local vm="$1" out
+  if [ "$(govc vm.info -json "$vm" 2>/dev/null | jq -r '(.virtualMachines // .VirtualMachines // [])[0].config.template')" = true ]; then
+    govc vm.markasvm -pool "/$E2E_DATACENTER/host/$E2E_CLUSTER/Resources" "$vm" >/dev/null 2>&1 || true
+  fi
+  out="$(govc vm.destroy "$vm" 2>&1)" || echo "       not removed: ${out:-?}"
+}
+
 # base templates: the newest 2 per image key stay (image/build.sh keeps as
 # many); older ones that a running linked clone kept alive go now
 for key in $(govc find "$folder" -type m -name "e2e-base-*" 2>/dev/null | sed -E 's|.*/e2e-base-([a-z0-9]+)-.*|\1|' | sort -u); do
   govc find "$folder" -type m -name "e2e-base-$key-*" | awk '{print substr($0, length($0) - 12) " " $0}' | sort | cut -d' ' -f2- | head -n -2 | while read -r old; do
     echo "delete ${old##*/} (older base template)"
-    [ -n "${DRY_RUN:-}" ] || govc vm.destroy "$old" 2>/dev/null || echo "       still in use by a linked clone"
+    [ -n "${DRY_RUN:-}" ] || destroy_base "$old"
   done
 done
 

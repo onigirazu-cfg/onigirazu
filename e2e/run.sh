@@ -72,7 +72,7 @@ diagnose() {
 
 cleanup() {
   local rc=$?
-  if [ "$rc" != 0 ] && [ -f "$TF_DIR/terraform.tfstate" ]; then diagnose || true; fi
+  if [ "$rc" != 0 ] && { [ -f "$TF_DIR/terraform.tfstate" ] || [ -f "$WORK/claimed" ]; }; then diagnose || true; fi
   if [ -z "${KEEP_VMS:-}" ] && { [ -f "$TF_DIR/terraform.tfstate" ] || [ -f "$WORK/claimed" ]; }; then
     log "Destroying VMs"
     # throwaway VMs: power them off hard first; terraform would wait for a
@@ -170,8 +170,9 @@ claimed_json="{}"
 if [ "${E2E_POOL:-1}" = 1 ]; then
   log "Claiming pre-warmed VMs"
   for key in $(jq -r 'keys[]' <<<"$images_json"); do
-    ip="$("$HERE/pool.sh" claim "$key" "tmp-e2e-onigirazu-$RUN_ID-$key" "$(cat "$KEY.pub")" "e2e-$key" 2>/dev/null || true)"
+    ip="$("$HERE/pool.sh" claim "$key" "tmp-e2e-onigirazu-$RUN_ID-$key" "$(cat "$KEY.pub")" "e2e-$key" || true)"
     [ -n "$ip" ] || { echo "$key: none in the pool"; continue; }
+    [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "$key: the pool claim answered with something that is not an address"
     echo "$key: pre-warmed"
     claimed_json="$(jq -c --arg k "$key" --arg ip "$ip" '. + {($k): $ip}' <<<"$claimed_json")"
     echo "$key" >> "$WORK/claimed"
@@ -238,6 +239,8 @@ done < <(govc find "/$TF_VAR_datacenter/vm/$TF_VAR_folder" -type m -name "tmp-e2
 log "Waiting for SSH"
 for h in $(jq -r 'keys[]' <<<"$hosts_json"); do
   for _ in $(seq 60); do on_host "$h" true 2>/dev/null && break; sleep 5; done
+  # say how the host refuses, not just that it does (key not applied, sshd down, no route)
+  on_host "$h" true 2>/dev/null || echo "$h: $(timeout 20 ssh "${SSH_OPTS[@]}" -v "e2e@$(host_ip "$h")" true 2>&1 | grep -E 'Permission denied|Connection refused|timed out|No route|Authentications that can continue|Offering|Server accepts' | tail -3 | paste -sd' | ' -)"
   on_host "$h" 'sudo -n true' || die "$h: no ssh/sudo access as e2e"
   echo "$h ready: $(on_host "$h" '. /etc/os-release; echo $PRETTY_NAME')"
 done
