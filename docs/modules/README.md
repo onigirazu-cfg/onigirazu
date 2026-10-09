@@ -630,6 +630,8 @@ Replace every match of a regular expression in a file (Go RE2 syntax, multiline 
 | `owner` | string | - | File owner (name or uid) |
 | `group` | string | - | File group (name or gid) |
 | `validate` | string | - | Command run on a copy of the new content before the file is written, `%s` = the copy; a non-zero exit fails the task and leaves the file as it was (`/usr/sbin/sshd -t -f %s`) |
+| `after` | string | - | Replace only after the first match of this regexp |
+| `before` | string | - | Replace only before the first match of this regexp (after `after`'s) |
 
 Returns `msg` (number of replacements) and `backup_file`.
 

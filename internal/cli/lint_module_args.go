@@ -49,7 +49,7 @@ var moduleArgs = map[string][]string{
 	"postgresql_db":    {"encoding", "login_host", "login_password", "login_port", "login_unix_socket", "login_user", "name", "owner", "state", "target"},
 	"postgresql_user":  {"createdb", "db", "login_host", "login_password", "login_port", "login_unix_socket", "login_user", "name", "password", "priv", "state", "superuser"},
 	"reboot":           {"connect_timeout", "msg", "post_reboot_delay", "pre_reboot_delay", "reboot_command", "reboot_timeout", "test_boot", "test_command"},
-	"replace":          {"backup", "dest", "group", "mode", "name", "owner", "path", "regexp", "replace", "validate"},
+	"replace":          {"after", "backup", "before", "dest", "group", "mode", "name", "owner", "path", "regexp", "replace", "validate"},
 	"script":           {"args", "cmd", "script"},
 	"service":          {"enabled", "name", "state"},
 	"set_fact":         {},
