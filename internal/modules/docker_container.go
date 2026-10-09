@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/onigirazu-cfg/onigirazu/internal/executor"
@@ -29,6 +30,7 @@ type ContainerState struct {
 	NanoCPUs      int64             `json:"nano_cpus"`
 	Memory        int64             `json:"memory"`
 	MemorySwap    int64             `json:"memory_swap"`
+	inspect       map[string]interface{}
 }
 
 func NewDockerContainerModule() *DockerContainerModule {
@@ -90,11 +92,36 @@ func (m *DockerContainerModule) Execute(ctx context.Context, host types.Host, ar
 		update = limits.updateArgs(currentState)
 	}
 
+	// an existing container whose options differ from the task is created
+	// again, as Ansible's docker_container does (recreate: true always)
+	var diffs []string
+	if exists && (state == "present" || state == "started") {
+		imageID := ""
+		if image := getStringArg(args, "image", ""); image != "" {
+			out, err := exec.Execute(shellJoin("docker", "image", "inspect", "-f", "{{.Id}}", image) + " 2>/dev/null")
+			if err == nil {
+				imageID = strings.TrimSpace(out)
+			}
+		}
+		diffs = containerDiffs(currentState.inspect, args, imageID)
+		if getBoolArg(args, "recreate", false) {
+			diffs = append(diffs, "recreate")
+		}
+		if len(diffs) > 0 {
+			update = nil // the new container gets the limits from its creation
+		}
+	}
+
 	if inCheckMode(args) {
 		running := exists && currentState.Running
 		if action := plannedContainerAction(state, exists, running); action != "" {
 			result.Changed = true
 			result.Output["action"] = action
+		}
+		if len(diffs) > 0 {
+			result.Changed = true
+			result.Output["action"] = "recreated"
+			result.Output["differences"] = diffs
 		}
 		if len(update) > 0 {
 			result.Changed = true
@@ -116,6 +143,16 @@ func (m *DockerContainerModule) Execute(ctx context.Context, host types.Host, ar
 		result.Output["updated"] = true
 	}
 
+	if len(diffs) > 0 {
+		if err := m.removeContainer(ctx, exec, name, map[string]interface{}{"force": true}); err != nil {
+			result.Success = false
+			result.Error = fmt.Sprintf("failed to remove container to recreate it: %v", err)
+			return result, err
+		}
+		exists = false
+		result.Output["differences"] = diffs
+	}
+
 	switch state {
 	case "present", "started":
 		if !exists {
@@ -125,7 +162,7 @@ func (m *DockerContainerModule) Execute(ctx context.Context, host types.Host, ar
 				return result, err
 			}
 			result.Changed = true
-			result.Output["action"] = "created"
+			result.Output["action"] = map[bool]string{true: "recreated", false: "created"}[len(diffs) > 0]
 		}
 
 		if state == "started" && (!exists || !currentState.Running) {
@@ -210,9 +247,10 @@ func (m *DockerContainerModule) getContainerState(ctx context.Context, exec *exe
 	containerConfig, _ := container["Config"].(map[string]interface{})
 	image, _ := containerConfig["Image"].(string)
 	state := &ContainerState{
-		Name:  name,
-		ID:    id,
-		Image: image,
+		Name:    name,
+		ID:      id,
+		Image:   image,
+		inspect: container,
 	}
 
 	if stateMap, ok := container["State"].(map[string]interface{}); ok {
