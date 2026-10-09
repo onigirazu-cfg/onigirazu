@@ -12,6 +12,7 @@ Archive name: `onigirazu_<Os>_<Arch>.tar.gz`, `.zip` for Windows.
 | Linux | `x86_64`, `arm64`, `armv6`, `armv7`, `i386` | `onigirazu_Linux_armv7.tar.gz` |
 | macOS | `x86_64`, `arm64` | `onigirazu_Darwin_arm64.tar.gz` |
 | Windows | `x86_64`, `i386` | `onigirazu_Windows_x86_64.zip` |
+| agent for Windows hosts | `amd64`, `arm64` | embedded in `onigirazu` |
 | FreeBSD | `x86_64`, `i386` | `onigirazu_Freebsd_x86_64.tar.gz` |
 | OpenBSD | `x86_64`, `i386` | `onigirazu_Openbsd_x86_64.tar.gz` |
 | NetBSD | `x86_64`, `i386` | `onigirazu_Netbsd_x86_64.tar.gz` |
