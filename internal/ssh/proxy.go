@@ -59,7 +59,7 @@ func dialHost(host types.Host, address string, config *ssh.ClientConfig, auth []
 		}
 		return client, jumps, nil
 	}
-	client, err := ssh.Dial("tcp", address, config)
+	client, err := dialRetrying(address, config)
 	return client, nil, err
 }
 
@@ -196,3 +196,27 @@ type pipeAddr string
 
 func (a pipeAddr) Network() string { return "tcp" }
 func (a pipeAddr) String() string  { return string(a) }
+
+// dialRetrying dials like ssh.Dial, trying again a few times when the host
+// refuses or resets the connection: sshd restarted by the previous task
+// (hardening roles) is back within seconds, and Ansible retries as well
+func dialRetrying(address string, config *ssh.ClientConfig) (*ssh.Client, error) {
+	var client *ssh.Client
+	var err error
+	for attempt := 0; attempt < 4; attempt++ {
+		if attempt > 0 {
+			time.Sleep(time.Duration(attempt) * 2 * time.Second)
+		}
+		client, err = ssh.Dial("tcp", address, config)
+		if err == nil || !isTransientDialError(err) {
+			return client, err
+		}
+	}
+	return client, err
+}
+
+func isTransientDialError(err error) bool {
+	msg := err.Error()
+	return strings.Contains(msg, "connection refused") || strings.Contains(msg, "connection reset") ||
+		strings.Contains(msg, "unexpected EOF") || strings.Contains(msg, "handshake failed: EOF")
+}
