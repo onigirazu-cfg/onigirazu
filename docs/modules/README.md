@@ -1557,11 +1557,16 @@ Manage Docker containers with the docker CLI on the host.
 | `cpus` | number | - | CPU limit (e.g. `1.5`) |
 | `memory` | string | - | Memory limit (`512m`, `1g` or bytes) |
 | `force` | boolean | `false` | Remove with `docker rm -f` (`absent`) |
+| `recreate` | boolean | `false` | Create the container again even when nothing differs |
+| `comparisons` | dict | - | `{option: ignore}` leaves an option out of the comparison; `'*': ignore` leaves out all |
 
-A new container is created with `docker run -d` (so `present` also starts it). An existing container is not compared
-with the other arguments and is kept as it is. Only `cpus` and `memory` are compared and changed in place with
-`docker update`; the swap limit stays unlimited if it was, otherwise it becomes twice the memory, as docker sets
-for a new container. Returns `action`, `container`, `updated`.
+A new container is created with `docker run -d` (so `present` also starts it). An existing container (`present`,
+`started`) is compared with the options the task sets, as Ansible does, and created again when one differs:
+`image` (by image ID, so a newer pull of the same tag counts), `env` (the task's variables must be set; the image's
+own are allowed), `ports`, `volumes`, `command`, `restart_policy`, `networks` (the listed ones must be attached).
+Options the task leaves out are not compared. `cpus` and `memory` alone change in place with `docker update`; the
+swap limit stays unlimited if it was, otherwise it becomes twice the memory, as docker sets for a new container.
+Returns `action` (`created`, `recreated`, `started`, ...), `differences`, `container`, `updated`.
 
 #### Examples
 
