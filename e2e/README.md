@@ -43,7 +43,7 @@ Runs every case in `cases/` on disposable vSphere VMs cloned from the current
 - `playbook.yml` — applied to all VMs (`hosts: all`);
 - `setup.sh` — optional; runs on each VM as root before the first apply;
 - `verify.sh` — runs on each VM as root after the apply and must exit 0;
-- `verify-local.sh` — optional; runs on the runner in the case directory with `HOST` set
+- `verify-local.sh` — optional; runs on the runner in the case directory with `HOST`, `HOST_IP`, `KEY` set
   (for results that land on the control machine, e.g. fetch); its `note: ...` lines are
   shown in the log when it passes;
 - `EXPECT_FAIL` — optional; the apply must fail (no verify, no second apply);

@@ -1001,7 +1001,7 @@ Debian/Ubuntu packages with `apt-get`.
 | `upgrade` | string | `no` | `yes`/`safe` (apt-get upgrade), `full`/`dist` (dist-upgrade); predicted in check mode |
 | `autoremove` | boolean | `false` | Remove unused packages |
 | `autoclean` | boolean | `false` | Clean the package cache |
-| `lock_timeout` | integer | `0` | Seconds to wait for the dpkg lock (`-o DPkg::Lock::Timeout`) |
+| `lock_timeout` | integer | `60` | Seconds to wait for the dpkg lock (`-o DPkg::Lock::Timeout`), as Ansible; `0` fails at once |
 
 `absent` removes with `apt-get remove` (configuration files stay). Returns `state`, `packages`, `msg`, `cache_updated`, `upgrade`.
 
