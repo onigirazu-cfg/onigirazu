@@ -27,7 +27,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v6
       with:
-        go-version: ${{ matrix.go-version }}
+        go-version-file: go.mod
         cache: true
         cache-dependency-path: go.sum
 
@@ -211,7 +211,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v6
       with:
-        go-version: '1.26'
+        go-version-file: go.mod
         cache: true
         cache-dependency-path: go.sum
 
