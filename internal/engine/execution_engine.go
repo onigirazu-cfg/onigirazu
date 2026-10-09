@@ -136,7 +136,9 @@ type ExecutionEngine struct {
 	safe             SafeApply
 	restorer         Restorer
 	rolloutVars      map[string]interface{}
-	verifyOnly       bool // run only the plays' verify: checks (onigirazu verify)
+	verifyOnly       bool   // run only the plays' verify: checks (onigirazu verify)
+	freeStrategy     bool   // the play runs with strategy: free
+	playThrottle     string // the play's throttle, for tasks without their own
 	rolloutUnhealthy []string
 	rolloutApplied   []types.TaskResult
 	rolloutReports   []types.BatchReport
@@ -634,6 +636,12 @@ func (e *ExecutionEngine) executePlayOn(ctx context.Context, play *types.Play, h
 	// does): "/backup/{{ inventory_hostname }}" differs per host
 	playVars = e.mergeVariables(playVars, e.extraVars)
 	playScope := e.scope
+	free, err := playStrategyFree(play.Strategy)
+	if err != nil {
+		return result, err
+	}
+	e.freeStrategy, e.playThrottle = free, play.Throttle
+	defer func() { e.freeStrategy, e.playThrottle = false, "" }()
 	e.assignKeys(play.PreTasks, playScope+"/pre_tasks")
 	e.assignKeys(play.Tasks, playScope+"/tasks")
 	e.assignKeys(play.PostTasks, playScope+"/post_tasks")
@@ -819,6 +827,11 @@ func (e *ExecutionEngine) executePlayOn(ctx context.Context, play *types.Play, h
 // executeTaskList executes a list of tasks
 func (e *ExecutionEngine) executeTaskList(ctx context.Context, tasks []types.Task, hosts []types.Host,
 	variables map[string]interface{}, playResult *types.PlayResult) error {
+	// strategy: free — every host runs the list at its own pace, as a block
+	// runs on each host; a host stops at its first failure
+	if e.freeStrategy && len(hosts) > 1 && len(tasks) > 0 {
+		return e.executeBlock(ctx, &types.Task{Name: "strategy: free", Block: tasks}, hosts, variables, playResult)
+	}
 	for i, task := range tasks {
 		// Check for context cancellation (graceful shutdown)
 		select {

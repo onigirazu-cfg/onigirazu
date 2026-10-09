@@ -294,7 +294,10 @@ stops with `any_errors_fatal`, above `max_fail_percentage`, or when no host is l
       throttle: 2
 ```
 
-An unhealthy batch is rolled back and the rollout stops (exit code 5). `--canary 1 --canary-pause
+`strategy: free` lets every host run the play's tasks at its own pace instead of waiting for the
+slowest host at every task (handlers still run at the end, for the hosts that notified them); a
+play-level `throttle` applies to every task without its own. An unhealthy batch is rolled back and
+the rollout stops (exit code 5). `--canary 1 --canary-pause
 5m` runs one host first and checks it again after a soak; `--auto-rollback` rolls back a batch
 whose tasks fail. See [docs/SAFE_APPLY.md](docs/SAFE_APPLY.md).
 

@@ -775,23 +775,29 @@ func (t *Task) MarshalYAML() (interface{}, error) {
 
 // Play represents a set of tasks to execute
 type Play struct {
-	Name              string                 `yaml:"name"`
-	Hosts             string                 `yaml:"hosts"`
-	Vars              map[string]interface{} `yaml:"vars,omitempty"`
-	VarsFiles         []string               `yaml:"vars_files,omitempty"`
-	Tasks             []Task                 `yaml:"tasks"`
-	PreTasks          []Task                 `yaml:"pre_tasks,omitempty"`
-	PostTasks         []Task                 `yaml:"post_tasks,omitempty"`
-	Handlers          []Task                 `yaml:"handlers,omitempty"`
-	Become            bool                   `yaml:"become,omitempty"`
-	BecomeUser        string                 `yaml:"become_user,omitempty"`
-	BecomeMethod      string                 `yaml:"become_method,omitempty"`
-	Tags              []string               `yaml:"tags,omitempty"`
-	When              string                 `yaml:"when,omitempty"`
-	Serial            interface{}            `yaml:"serial,omitempty"`
-	MaxFailPercentage *int                   `yaml:"max_fail_percentage,omitempty"`
-	AnyErrorsFatal    bool                   `yaml:"any_errors_fatal,omitempty"`
-	ForceHandlers     bool                   `yaml:"force_handlers,omitempty"`
+	Name         string                 `yaml:"name"`
+	Hosts        string                 `yaml:"hosts"`
+	Vars         map[string]interface{} `yaml:"vars,omitempty"`
+	VarsFiles    []string               `yaml:"vars_files,omitempty"`
+	Tasks        []Task                 `yaml:"tasks"`
+	PreTasks     []Task                 `yaml:"pre_tasks,omitempty"`
+	PostTasks    []Task                 `yaml:"post_tasks,omitempty"`
+	Handlers     []Task                 `yaml:"handlers,omitempty"`
+	Become       bool                   `yaml:"become,omitempty"`
+	BecomeUser   string                 `yaml:"become_user,omitempty"`
+	BecomeMethod string                 `yaml:"become_method,omitempty"`
+	Tags         []string               `yaml:"tags,omitempty"`
+	When         string                 `yaml:"when,omitempty"`
+	Serial       interface{}            `yaml:"serial,omitempty"`
+	// Strategy: "linear" (default; every task on all hosts, then the next)
+	// or "free" (every host runs the play's tasks at its own pace)
+	Strategy string `yaml:"strategy,omitempty"`
+	// Throttle of the play: how many hosts run a task at once, for tasks
+	// without their own throttle
+	Throttle          string `yaml:"throttle,omitempty"`
+	MaxFailPercentage *int   `yaml:"max_fail_percentage,omitempty"`
+	AnyErrorsFatal    bool   `yaml:"any_errors_fatal,omitempty"`
+	ForceHandlers     bool   `yaml:"force_handlers,omitempty"`
 	// HealthCheck runs after every batch on its hosts; OnUnhealthy is
 	// rollback (default with health checks), stop or continue
 	HealthCheck []Task `yaml:"health_check,omitempty"`
