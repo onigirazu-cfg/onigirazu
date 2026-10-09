@@ -18,6 +18,7 @@ plays:
           state: present
       - name: Host variables of add_host are free
         add_host: {name: e2e-extra, groups: extra, any_var: 1}
+        changed_when: false  # add_host always reports a change, as in Ansible
       - name: Check
         assert:
           that:
