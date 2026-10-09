@@ -30,3 +30,9 @@ func TestAssertModule(t *testing.T) {
 
 	assert.Error(t, NewAssertModule().Validate(map[string]interface{}{}))
 }
+
+func TestAssertErrorNamesCondition(t *testing.T) {
+	r, _ := NewAssertModule().Execute(context.Background(), types.Host{Name: "h"}, map[string]interface{}{"that": []interface{}{"1 == 1", "2 > 3"}})
+	assert.Equal(t, "Assertion failed: 2 > 3", r.Error)
+	assert.Equal(t, "Assertion failed", r.Output["msg"])
+}
