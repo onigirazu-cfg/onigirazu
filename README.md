@@ -515,15 +515,19 @@ Without a terminal the normal output is used. See [docs/INTERACTIVE_MODE.md](doc
 
 ## Performance
 
-One SSH connection per host, one long-lived shell on it with commands framed over it, and a
-single state capture reused by the file modules. A second (unchanged) run of a 20-task playbook
-on 10 hosts:
+One SSH connection per host and, on it, a small command server (a static Go agent uploaded
+once; a Python or POSIX sh fallback) that runs commands, probes and writes files without a new
+process or session per task; the file modules reuse one capture of the target. Measured with
+[`bench/`](bench/README.md) (a ~40-module playbook, the same for both tools, on fresh VMs):
 
-| | Local network | 50 ms round trip |
+| second (unchanged) run | 1 host | 10 hosts |
 |---|---|---|
-| Ansible, defaults | 14.4 s | 70 s |
-| Ansible, forks=10 + pipelining | 7.0 s | 13.6 s |
-| Onigirazu | 0.8 s | 3.6 s |
+| Ansible (forks=10, pipelining, ControlPersist) | ~170 s | ~170 s |
+| Onigirazu, agent | 1.7 s | 2.5 s |
+| Onigirazu, sh server (no agent, no Python) | 3.1 s | 4.0 s |
+
+On 500 hosts (containers, `bench/scale.sh`) a short playbook converges in 7.4 s and a second run
+takes 5.5 s with 6 s of CPU and 280 MB on the control side, at any concurrency from 50 to 500.
 
 ## Documentation
 
