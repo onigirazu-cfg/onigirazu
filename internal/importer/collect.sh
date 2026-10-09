@@ -22,7 +22,10 @@ case $os in
 debian)
   apt-mark showmanual 2>/dev/null | sed "s/^/PKG$T/"
   cat /var/lib/dpkg/info/*.list 2>/dev/null | sort -u > "$tmp/owned"
-  dpkg --verify 2>/dev/null | awk 'substr($1,3,1)=="5" && $2=="c" {print $3}' > "$tmp/changed"
+  # changed conffiles: hash only them (dpkg --verify hashes every package file, ~25 s)
+  dpkg-query -W -f='${Conffiles}\n' 2>/dev/null |
+    awk 'NF >= 2 && length($2) == 32 && $NF != "obsolete" {print $2 "  " $1}' |
+    md5sum -c 2>/dev/null | sed -n 's/: FAILED$//p' > "$tmp/changed"
   ;;
 redhat)
   (dnf repoquery --userinstalled --qf '%{name}' 2>/dev/null || yum history userinstalled 2>/dev/null | tail -n +2) |

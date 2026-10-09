@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- Go 1.26.9 and golang.org/x/net v0.60.0 close the govulncheck findings in net/http, html/template and x/net
 - Go 1.26.6 and updated dependencies (x/crypto, x/net, x/text and others) close all govulncheck findings
 - Bitwarden password is passed to `bw login` through the environment instead of the command line
 
