@@ -649,9 +649,10 @@ per-host counts and a browser for task results.</p>
   (<code>-J</code>/<code>ProxyJump</code>, aliases from <code>~/.ssh/config</code>) are checked the same way.</li>
 <li>Passwords (<code>ansible_password</code>, <code>ansible_become_password</code>) never appear on command lines;
   sudo reads them on stdin. <code>no_log: true</code> keeps a task's values out of logs, state and output.</li>
-<li>Secrets come from Bitwarden/Vaultwarden (<code>bw</code> CLI, <code>BW_SESSION</code>) or HashiCorp Vault when a
-  template uses them: <code>{{ bitwarden('app-db') }}</code>, <code>{{ vault('app/db', 'password') }}</code>,
-  <code>lookup('community.general.bitwarden', ...)</code>. See <a href="docs/BITWARDEN_INTEGRATION.md">docs/BITWARDEN_INTEGRATION.md</a>.</li>
+<li>Secrets come from Bitwarden/Vaultwarden (<code>bw</code> CLI, <code>BW_SESSION</code>), HashiCorp Vault (token or
+  AppRole) or SOPS-encrypted vars files when a template uses them: <code>{{ bitwarden('app-db') }}</code>,
+  <code>{{ vault('app/db', 'password') }}</code>, <code>lookup('community.hashi_vault.hashi_vault', ...)</code>,
+  <code>lookup('community.sops.sops', ...)</code>. See <a href="docs/BITWARDEN_INTEGRATION.md">docs/BITWARDEN_INTEGRATION.md</a>.</li>
 <li>An optional security policy restricts modules, hosts, paths and commands:
   <a href="docs/SECURITY_POLICY_GUIDE.md">docs/SECURITY_POLICY_GUIDE.md</a>.</li>
 <li>Work files on the hosts live in <code>~/.onigirazu/tmp</code> of the connecting user.</li>
