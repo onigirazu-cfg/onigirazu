@@ -142,6 +142,10 @@ func (c *Client) startShell(user string) (*remoteShell, error) {
 	agent := c.agentFor(user)
 	if agent != "" {
 		command = agent
+	} else if isWindowsSSH(c.host) {
+		// no sh there: without the agent every command is its own session
+		_ = session.Close()
+		return nil, fmt.Errorf("no command server on the Windows host")
 	}
 	if user != "" {
 		// sudo once for the server instead of once per command; -n: a

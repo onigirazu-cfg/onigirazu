@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 )
 
-var platforms = [][2]string{{"linux", "amd64"}, {"linux", "arm64"}, {"linux", "arm"}, {"linux", "386"}}
+var platforms = [][2]string{{"linux", "amd64"}, {"linux", "arm64"}, {"linux", "arm"}, {"linux", "386"}, {"windows", "amd64"}, {"windows", "arm64"}}
 
 func main() {
 	tmp, err := os.MkdirTemp("", "onigirazu-agent")
