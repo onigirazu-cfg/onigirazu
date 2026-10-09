@@ -81,8 +81,10 @@ cleanup() {
     # shellcheck disable=SC2046
     [ -n "${hosts_json:-}" ] && "$HERE/dhcp-release.sh" "$KEY" $(jq -r '.[]' <<<"$hosts_json")
     # the folder path may have spaces: one VM per line
+    local macs=""
     while IFS= read -r vm; do
       [ -n "$vm" ] || continue
+      macs="$macs $("$HERE/dhcp-leases.sh" macs "$vm" | tr '\n' ' ')"
       govc vm.power -off -force "$vm" >/dev/null 2>&1 &
       n=$((n + 1))
     done < <(govc find "/$TF_VAR_datacenter/vm/$TF_VAR_folder" -type m -name "tmp-e2e-onigirazu-$RUN_ID-*" 2>/dev/null)
@@ -92,6 +94,9 @@ cleanup() {
     terraform -chdir="$TF_DIR" destroy -auto-approve -input=false -var-file="$TFVARS" >/dev/null ||
       echo "destroy failed; the janitor will remove the VMs"
     echo "destroyed in $((SECONDS - t0)) s"
+    # the VMs' DHCP leases go with them
+    # shellcheck disable=SC2086
+    "$HERE/dhcp-leases.sh" remove $macs
   fi
   if [ -n "${KEEP_VMS:-}" ] && [ -f "$KEY" ]; then
     # Kept VMs are only reachable with this run's key; it stays on the runner
