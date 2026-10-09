@@ -20,6 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `config` rejects a non-string `key` instead of panicking
 - SSH client formats IPv6 addresses correctly
 
+### Added
+
+- `onigirazu pull`: pull mode — a host clones a git repository and runs a playbook against itself, once or on a timer (`pull install` writes a systemd timer); `--only-on-change`, `--drift-only` (docs/PULL.md)
+
 ### Changed
 
 - A task with an argument its module does not have fails like Ansible (`Unsupported parameters for (...) module`); such arguments were ignored
