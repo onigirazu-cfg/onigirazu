@@ -265,6 +265,26 @@ func (msl *MultiSourceLoader) loadFromDirectory(ctx context.Context, dirPath str
 func (msl *MultiSourceLoader) loadStaticFile(ctx context.Context, filePath string) error {
 	msl.logger.Debug("Loading static inventory file: %s", filePath)
 
+	// a plugin configuration (plugin: netbox, ...) asks a system for the
+	// hosts; the answer is read like a dynamic script's
+	if data, err := os.ReadFile(filePath); err == nil { // #nosec G304 -- the user's inventory file
+		if name, cfg, err := pluginConfig(data); err != nil {
+			return fmt.Errorf("%s: %w", filePath, err)
+		} else if name != "" {
+			msl.logger.Info("Loading inventory from %s (%s)", name, filePath)
+			out, err := inventoryPlugins[name](ctx, cfg)
+			if err != nil {
+				return fmt.Errorf("%s: %w", filePath, err)
+			}
+			inv := &types.Inventory{}
+			if err := msl.parseDynamicInventoryOutput(out, inv); err != nil {
+				return fmt.Errorf("%s: %w", filePath, err)
+			}
+			msl.mergeInventory(inv)
+			return nil
+		}
+	}
+
 	// Parse the inventory file
 	inventory, err := msl.parser.ParseInventory(ctx, filePath)
 	if err != nil {
