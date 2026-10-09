@@ -20,7 +20,10 @@ import (
 type pluginLoader func(ctx context.Context, cfg map[string]interface{}) ([]byte, error)
 
 var inventoryPlugins = map[string]pluginLoader{
-	"netbox": loadNetboxInventory,
+	"netbox":  loadNetboxInventory,
+	"vsphere": loadVsphereInventory,
+	"proxmox": loadProxmoxInventory,
+	"netbird": loadNetbirdInventory,
 }
 
 // pluginConfig reads the file when it is a plugin configuration; nil when

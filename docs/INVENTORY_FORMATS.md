@@ -183,6 +183,64 @@ Groups: `site_<slug>`, `role_<slug>`, `tag_<slug>`, `device` / `virtual_machine`
 `netbox_type`. `ansible_host` is the primary IPv4 (else IPv6) without its prefix; a host without one
 keeps its name as the address. Only `status: active` objects unless `filters.status` says otherwise.
 
+### vsphere
+
+```yaml
+plugin: vsphere
+url: https://vcenter.example.com
+user: inventory@vsphere.local
+password: ${VSPHERE_PASSWORD}     # default: $VSPHERE_PASSWORD
+insecure: true                    # self-signed certificate
+folders: [Production, Staging]    # VM folder names; default: every folder
+powered_on: true                  # default: only running VMs
+group_by: [folder, power_state, guest_family]   # default: folder, power_state
+```
+
+vCenter REST API (a session from the credentials, closed afterwards). Groups: `folder_<name>`,
+`power_state_powered_on`, `guest_family_linux`. Host variables: `vsphere_id`, `vsphere_folder`,
+`vsphere_power_state`, `vsphere_cpu_count`, `vsphere_memory_mib`, `vsphere_guest_host_name`,
+`vsphere_guest_family`, `vsphere_guest_os`, `vsphere_ip_addresses`. `ansible_host` is the guest's
+first IPv4 that is not loopback, link-local or a docker bridge (VMware Tools must run); the VM's
+name is the host name.
+
+### proxmox
+
+```yaml
+plugin: proxmox
+url: https://pve.example.com:8006
+user: inventory@pve
+token_id: onigirazu
+token_secret: ${PROXMOX_TOKEN_SECRET}   # default: $PROXMOX_TOKEN_SECRET
+insecure: true
+running: true                     # default: only running guests
+templates: false                  # default: templates left out
+agent: true                       # default: addresses from the QEMU guest agent / container interfaces
+group_by: [node, type, status, tags, pool]   # default: node, type, tags
+```
+
+An API token (`user@realm!token_id`) with `VM.Audit` on the guests (and `VM.Monitor` for the agent
+query). Groups: `node_<name>`, `type_qemu` / `type_lxc`, `status_<s>`, `tag_<t>`, `pool_<p>`. Host
+variables: `proxmox_vmid`, `proxmox_node`, `proxmox_type`, `proxmox_status`, `proxmox_tags`,
+`proxmox_pool`, `proxmox_ip_addresses`. `ansible_host` is the first usable IPv4 the guest agent
+(QEMU) or the container reports; without one the name is the address.
+
+### netbird
+
+```yaml
+plugin: netbird
+url: https://api.netbird.io       # or the self-hosted management API
+token: ${NETBIRD_TOKEN}           # a personal access token; default: $NETBIRD_TOKEN
+connected: true                   # default: only peers online now
+groups: [servers]                 # only peers in one of these NetBird groups; default: all
+group_by: [groups, os]            # default: groups
+```
+
+Hosts are the peers, named by their DNS label, with `ansible_host` the NetBird address — the
+control machine reaches them over the mesh. Groups: `netbird_<group>` per NetBird group,
+`os_<linux|darwin|windows>`. Host variables: `netbird_id`, `netbird_ip`, `netbird_hostname`,
+`netbird_dns_label`, `netbird_connected`, `netbird_os`, `netbird_version`, `netbird_groups`,
+`netbird_ssh_enabled`, `netbird_last_seen`.
+
 ## Host variables
 
 | Variable | Meaning | Default |
