@@ -25,6 +25,20 @@ FOLDER="/$TF_VAR_datacenter/vm/$TF_VAR_folder"
 E2E_BASE=1 resolve_images >/dev/null
 
 vm_json() { govc vm.info -json -e "$1" 2>/dev/null | jq -c '(.virtualMachines // .VirtualMachines // [])[0] // {}'; }
+# guest_ipv4 waits up to a minute for the address of the VM's NIC as the
+# tools report it (vm.ip answered with something that was not an address)
+guest_ipv4() {
+  local i ip
+  for i in $(seq 30); do
+    # the virtual NIC only (deviceConfigId >= 0): the tools also report the
+    # guest's docker bridge, which came first
+    ip="$(govc vm.info -json "$1" 2>/dev/null | jq -r '(.virtualMachines // .VirtualMachines // [])[0].guest.net[]? | select((.deviceConfigId // -1) >= 0) | .ipAddress[]? // empty' |
+      grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | grep -vE '^(127\.|169\.254\.)' | head -1)"
+    [ -n "$ip" ] && { echo "$ip"; return 0; }
+    [ "$i" = 30 ] || sleep 2
+  done
+  return 1
+}
 template_of() { jq -r '[.config.extraConfig[]? | select(.key == "guestinfo.e2e_template") | .value] | first // ""' <<<"$1"; }
 pooled_template() {  # key -> the template the pool clones, "" when none qualifies
   local tpl
@@ -37,6 +51,8 @@ pool_vms() { govc find "$FOLDER" -type m -name "pool-e2e-*-$1" 2>/dev/null; }
 case "$cmd" in
 claim)
   key="$1" name="$2" pub="$3" host="$4"
+  # the address is the only thing on stdout: govc prints task progress there
+  exec 3>&1 1>&2
   tpl="$(pooled_template "$key")"
   [ -n "$tpl" ] || exit 0
   while IFS= read -r vm; do
@@ -45,13 +61,12 @@ claim)
     [ "$(template_of "$info")" = "$tpl" ] || continue
     [ "$(jq -r .runtime.powerState <<<"$info")" = poweredOn ] || continue
     # the rename is the claim: it fails when another shard renamed it first
-    govc object.rename "$vm" "$name" 2>/dev/null || continue
+    govc object.rename "$vm" "$name" >/dev/null 2>&1 || continue
     new="$FOLDER/$name"
     govc vm.change -vm "$new" -e "guestinfo.e2e_authorized_key=$pub" -e "guestinfo.e2e_hostname=$host" \
       -annotation "e2e run: ${RUN_URL:-local}; was ${vm##*/}" >/dev/null
-    ip="$(govc vm.ip -v4 -wait 1m "$new" 2>/dev/null | head -1)"
-    [ -n "$ip" ] && { echo "$ip"; exit 0; }
-    echo "pool: ${vm##*/} has no address, removed" >&2
+    if ip="$(guest_ipv4 "$new")"; then echo "$ip" >&3; exit 0; fi
+    echo "pool: ${vm##*/} reports no IPv4 address, removed" >&2
     govc vm.destroy "$new" >/dev/null 2>&1 || true
   done < <(pool_vms "$key" | sort -R)
   ;;
