@@ -78,6 +78,8 @@ cleanup() {
     # throwaway VMs: power them off hard first; terraform would wait for a
     # clean guest shutdown (over a minute with the databases running)
     local vm n=0 t0=$SECONDS
+    # shellcheck disable=SC2046
+    [ -n "${hosts_json:-}" ] && "$HERE/dhcp-release.sh" "$KEY" $(jq -r '.[]' <<<"$hosts_json")
     # the folder path may have spaces: one VM per line
     while IFS= read -r vm; do
       [ -n "$vm" ] || continue

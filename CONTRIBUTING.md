@@ -4,7 +4,7 @@ By participating you agree to the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Setup
 
-Requirements: Go 1.26.6 or later (see `go.mod`), Git, Make, [golangci-lint](https://golangci-lint.run/) v2 (CI uses v2.13.2).
+Requirements: Go 1.26.9 or later (see `go.mod`), Git, Make, [golangci-lint](https://golangci-lint.run/) v2 (CI uses v2.13.2).
 
 ```bash
 git clone https://github.com/onigirazu-cfg/onigirazu.git
