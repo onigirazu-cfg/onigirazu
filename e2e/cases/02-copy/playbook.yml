@@ -10,3 +10,11 @@ plays:
           owner: root
           group: root
           mode: "0640"
+      - name: A directory's contents (trailing slash)
+        copy: {src: tree/, dest: /etc/onigirazu-e2e/tree-contents, mode: "0644"}
+      - name: The directory itself
+        copy: {src: tree, dest: /etc/onigirazu-e2e/tree-dir}
+      - name: A file into "dir/" that does not exist yet
+        copy: {src: tree/top.txt, dest: /etc/onigirazu-e2e/new-dir/}
+      - name: A file into an existing directory
+        copy: {src: tree/top.txt, dest: /etc/onigirazu-e2e/tree-contents}
