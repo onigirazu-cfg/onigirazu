@@ -128,6 +128,21 @@ func (m *RebootModule) Execute(ctx context.Context, host types.Host, args map[st
 				timeout, time.Since(downSince).Round(time.Second), lastErr))
 		}
 	}
+	// test_command: the host is back when it succeeds (Ansible: whoami)
+	if cmd := getStringArg(args, "test_command", ""); cmd != "" {
+		for {
+			if _, err := runShellOnHost(ctx, host, args, cmd); err == nil {
+				break
+			} else if time.Now().After(deadline) {
+				return fail(fmt.Sprintf("test command %q did not succeed within %s: %v", cmd, timeout, err))
+			}
+			if !sleep(5 * time.Second) {
+				return fail("canceled while waiting for the test command")
+			}
+		}
+	}
+	// connect_timeout is Ansible's per-attempt SSH timeout: the client's own applies here
+	_ = getIntArg(args, "connect_timeout", 0)
 	if delay := getIntArg(args, "post_reboot_delay", 0); delay > 0 && !sleep(time.Duration(delay)*time.Second) {
 		return fail("canceled")
 	}

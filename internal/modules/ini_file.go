@@ -91,6 +91,9 @@ func (m *IniFileModule) Execute(ctx context.Context, host types.Host, args map[s
 			mode = os.FileMode(n)
 		}
 	}
+	if err := validateBeforeWrite(ctx, host, args, path, []byte(after)); err != nil {
+		return fail(err.Error())
+	}
 	if err := writeHostFile(ctx, host, args, path, []byte(after), mode); err != nil {
 		return fail(err.Error())
 	}

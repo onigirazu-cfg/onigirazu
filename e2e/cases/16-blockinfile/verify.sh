@@ -10,3 +10,5 @@ test "$(head -n1 $f)" = '# managed'
 test "$(sed -n 2p $f)" = '# BEGIN HEAD'
 test "$(tail -n1 $f)" = '# END TAIL'
 grep -qx 'tail=1' $f
+test ! -e /etc/onigirazu-e2e-block-missing.conf
+grep -qx 'made=1' /etc/onigirazu-e2e-block-created.conf
