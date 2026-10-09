@@ -63,9 +63,10 @@ func (m *YumModule) PreCheckState(ctx context.Context, host types.Host, args map
 	currentState := make(map[string]interface{})
 	allCorrect := true
 
+	// a failed query counts as not installed: the task then runs
+	installed, _ := installedPackages(ctx, host, args, pkgNames)
 	for _, pkgName := range pkgNames {
-		_, err := runOnHost(ctx, host, args, "rpm", "-q", pkgName)
-		isInstalled := err == nil
+		isInstalled := installed[pkgName]
 
 		currentState[pkgName] = isInstalled
 
