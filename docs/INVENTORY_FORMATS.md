@@ -156,6 +156,33 @@ EOF
 Existing Ansible inventory scripts work unchanged. As in Ansible, a host that is only in
 `_meta.hostvars` is not added.
 
+## Inventory plugins
+
+A YAML inventory whose top-level `plugin` names a source asks that system for the hosts instead of
+listing them. The result is read like a dynamic script's output: hosts with `ansible_host` and
+`<plugin>_*` variables, groups by the fields you choose. Secrets are given as `${VAR}` or
+`env:VAR`, never pasted into the file. Several sources combine as any inventories do (`-i a -i b`).
+
+### netbox
+
+```yaml
+plugin: netbox
+url: https://netbox.example.com
+token: ${NETBOX_TOKEN}            # default: $NETBOX_TOKEN
+filters: {site: fra1, role: server, tag: managed, tenant: ops, status: active}
+devices: true                     # /api/dcim/devices/
+virtual_machines: true            # /api/virtualization/virtual-machines/
+group_by: [site, role, tags, type, platform, tenant]   # default: site, role, tags
+ansible_host: primary_ip          # or name
+```
+
+Groups: `site_<slug>`, `role_<slug>`, `tag_<slug>`, `device` / `virtual_machine`, `platform_<slug>`,
+`tenant_<slug>`. Host variables: `netbox_site`, `netbox_role`, `netbox_platform`, `netbox_tenant`,
+`netbox_status`, `netbox_tags` (list), `netbox_primary_ip4`, `netbox_primary_ip6`, `netbox_id`,
+`netbox_custom_fields`, `netbox_device_type` and `netbox_serial` (devices), `netbox_cluster` (VMs),
+`netbox_type`. `ansible_host` is the primary IPv4 (else IPv6) without its prefix; a host without one
+keeps its name as the address. Only `status: active` objects unless `filters.status` says otherwise.
+
 ## Host variables
 
 | Variable | Meaning | Default |

@@ -36,6 +36,7 @@ Release notes for 1.62.1–1.62.7 are on [GitHub Releases](https://github.com/on
 
 ### Added
 
+- Inventory plugins: a YAML inventory with `plugin: netbox` asks NetBox for devices and virtual machines (filters, groups by site/role/tags/type, `netbox_*` host variables; docs/INVENTORY_FORMATS.md)
 - **Vault Integration**: Complete HashiCorp Vault integration for secure secret management
   - `GetSecret(ctx, path, field)`: Retrieve secrets from Vault KVv2 with intelligent caching
   - `ListSecrets(ctx, filter)`: Discover available secrets with optional filtering
