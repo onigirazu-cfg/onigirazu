@@ -245,7 +245,7 @@ func verifyCheckScript(c verifyCheck) (string, error) {
 		var b strings.Builder
 		if v, ok := a["running"]; ok {
 			want, _ := parseBool(v)
-			fmt.Fprintf(&b, "st=$(systemctl is-active %s 2>/dev/null || service %s status >/dev/null 2>&1 && echo active || echo inactive); ", name, name)
+			fmt.Fprintf(&b, "st=$(systemctl is-active %s 2>/dev/null) || { service %s status >/dev/null 2>&1 && st=active || st=inactive; }; ", name, name)
 			if want {
 				fmt.Fprintf(&b, "[ \"$st\" = active ] || { fail %d \"$st\"; exit 0; }; ", n)
 			} else {

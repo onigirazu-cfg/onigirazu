@@ -63,7 +63,7 @@ claim)
     # the rename is the claim: it fails when another shard renamed it first
     govc object.rename "$vm" "$name" >/dev/null 2>&1 || continue
     new="$FOLDER/$name"
-    govc vm.change -vm "$new" -e "guestinfo.e2e_authorized_key=$pub" -e "guestinfo.e2e_hostname=e2e-$host" \
+    govc vm.change -vm "$new" -e "guestinfo.e2e_authorized_key=$pub" -e "guestinfo.e2e_hostname=$host" \
       -annotation "e2e run: ${RUN_URL:-local}; was ${vm##*/}" >/dev/null
     if ip="$(guest_ipv4 "$new")"; then echo "$ip" >&3; exit 0; fi
     echo "pool: ${vm##*/} reports no IPv4 address, removed" >&2
