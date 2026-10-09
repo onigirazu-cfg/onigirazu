@@ -142,6 +142,10 @@ func (c *Client) startShell(user string) (*remoteShell, error) {
 	agent := c.agentFor(user)
 	if agent != "" {
 		command = agent
+	} else if isWindowsSSH(c.host) {
+		// no sh there: without the agent every command is its own session
+		_ = session.Close()
+		return nil, fmt.Errorf("no command server on the Windows host")
 	}
 	if user != "" {
 		// sudo once for the server instead of once per command; -n: a
@@ -392,7 +396,7 @@ func (c *Client) takeShell(user string) (*remoteShell, error) {
 		var exitErr *ssh.ExitError
 		// a server as another user that does not start (sudo wants a
 		// password) is not tried again on this connection
-		if user != "" || errors.As(err, &exitErr) || strings.Contains(err.Error(), "shell did not start") {
+		if user != "" || errors.As(err, &exitErr) || strings.Contains(err.Error(), "shell did not start") || isWindowsSSH(c.host) {
 			p.mu.Lock()
 			p.disabled = true
 			p.mu.Unlock()

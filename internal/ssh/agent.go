@@ -10,8 +10,11 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+
 	"sync/atomic"
 	"time"
+
+	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 
 	"github.com/onigirazu-cfg/onigirazu/internal/agentbin"
 )
@@ -65,6 +68,9 @@ func (c *Client) agentFor(user string) string {
 	c.agent.once.Do(func() { c.agent.path = c.installAgent() })
 	if c.agent.path == "" {
 		return ""
+	}
+	if isWindowsSSH(c.host) {
+		return windowsAgentCommand(c.agent.path)
 	}
 	return quote(c.agent.path) + " serve"
 }
@@ -140,11 +146,26 @@ func platform(uname string) (string, string, bool) {
 	return goos, goarch, goos != "" && goarch != ""
 }
 
+// isWindowsSSH reports a Windows host reached over OpenSSH (ansible_shell_type
+// powershell or cmd, as Ansible marks them)
+func isWindowsSSH(host types.Host) bool {
+	for _, key := range []string{"onigirazu_shell_type", "ansible_shell_type"} {
+		switch host.Vars[key] {
+		case "powershell", "cmd":
+			return true
+		}
+	}
+	return false
+}
+
 // installAgent puts the agent on the host if it is not there yet and checks
 // that it runs; it returns its path, or "" to use the script server
 func (c *Client) installAgent() string {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
+	if isWindowsSSH(c.host) {
+		return c.installWindowsAgent(ctx)
+	}
 	out, _, rc, err := c.execSession(ctx, `uname -sm; printf '%s\n' "$HOME"; command -v gzip || true`, false)
 	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
 	if err != nil || rc != 0 || len(lines) < 2 || !strings.HasPrefix(lines[1], "/") {
@@ -189,4 +210,54 @@ func (c *Client) installAgent() string {
 func (c *Client) agentRuns(ctx context.Context, remote string) bool {
 	out, _, rc, err := c.execSession(ctx, quote(remote)+" serve </dev/null", false)
 	return err == nil && rc == 0 && strings.HasPrefix(string(out), "ONIGIRAZU-READY")
+}
+
+// windowsAgentCommand starts the agent whatever the server's default shell
+// is (cmd or PowerShell): through powershell.exe, the path quoted its way
+func windowsAgentCommand(remote string) string {
+	return `powershell.exe -NoProfile -NonInteractive -Command "& '` + strings.ReplaceAll(remote, "'", "''") + `' serve"`
+}
+
+// installWindowsAgent: the host is Windows with OpenSSH; the agent goes to
+// %USERPROFILE%\.onigirazu\bin, uploaded whole (no gzip there), and runs
+// PowerShell scripts for the commands
+func (c *Client) installWindowsAgent(ctx context.Context) string {
+	out, _, rc, err := c.execSession(ctx, `powershell.exe -NoProfile -NonInteractive -Command "Write-Output $env:PROCESSOR_ARCHITECTURE; Write-Output $env:USERPROFILE"`, false)
+	lines := strings.Split(strings.TrimSpace(strings.ReplaceAll(string(out), "\r", "")), "\n")
+	if err != nil || rc != 0 || len(lines) < 2 || !strings.Contains(lines[1], ":\\") {
+		c.logger.Debug("agent: windows: no platform answer: %v %q", err, out)
+		return ""
+	}
+	goarch := map[string]string{"AMD64": "amd64", "ARM64": "arm64"}[strings.ToUpper(strings.TrimSpace(lines[0]))]
+	if goarch == "" {
+		return ""
+	}
+	img := cachedAgent("windows", goarch)
+	if img.err != nil {
+		c.logger.Debug("agent: %v", img.err)
+		return ""
+	}
+	home := strings.TrimSpace(lines[1])
+	dir := home + `\.onigirazu\bin`
+	remote := dir + `\onigirazu-agent-` + img.id + ".exe"
+	if c.windowsAgentRuns(ctx, remote) {
+		return remote
+	}
+	if _, _, rc, err := c.execSession(ctx, `powershell.exe -NoProfile -NonInteractive -Command "New-Item -ItemType Directory -Force -Path '`+strings.ReplaceAll(dir, "'", "''")+`' | Out-Null"`, false); err != nil || rc != 0 {
+		return ""
+	}
+	// SFTP takes the path with forward slashes
+	if err := c.WriteFile(strings.ReplaceAll(remote, `\`, "/"), img.data, 0o755); err != nil {
+		c.logger.Debug("agent: windows upload: %v", err)
+		return ""
+	}
+	if !c.windowsAgentRuns(ctx, remote) {
+		return ""
+	}
+	return remote
+}
+
+func (c *Client) windowsAgentRuns(ctx context.Context, remote string) bool {
+	out, _, rc, err := c.execSession(ctx, windowsAgentCommand(remote), false)
+	return err == nil && rc == 0 && strings.HasPrefix(strings.TrimSpace(string(out)), "ONIGIRAZU-READY")
 }

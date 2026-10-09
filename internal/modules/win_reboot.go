@@ -36,15 +36,15 @@ func (m *WinRebootModule) Execute(ctx context.Context, host types.Host, args map
 		res.Duration = time.Since(start)
 		return res, nil
 	}
-	seconds := func(key string, def int) time.Duration {
-		if n, ok := toInt(args[key]); ok && n >= 0 {
-			return time.Duration(n) * time.Second
+	seconds := func(n, def int) time.Duration {
+		if n < 0 {
+			n = def
 		}
-		return time.Duration(def) * time.Second
+		return time.Duration(n) * time.Second
 	}
-	timeout := seconds("reboot_timeout", 600)
-	preDelay := seconds("pre_reboot_delay", 2)
-	postDelay := seconds("post_reboot_delay", 0)
+	timeout := seconds(getIntArg(args, "reboot_timeout", 600), 600)
+	preDelay := seconds(getIntArg(args, "pre_reboot_delay", 2), 2)
+	postDelay := seconds(getIntArg(args, "post_reboot_delay", 0), 0)
 	msg := getStringArg(args, "msg", "Reboot initiated by onigirazu")
 	test := getStringArg(args, "test_command", "whoami")
 

@@ -86,6 +86,11 @@ amd64, arm64, arm and 386; for other platforms put `onigirazu-agent-<os>-<arch>`
 without access to the login user's home falls to Python, a host without `python3` to `sh`.
 `ONIGIRAZU_NO_PYTHON=1` is the same as `remote_server: sh`.
 
+Windows hosts over OpenSSH (`ansible_shell_type: powershell` or `cmd`) get the Windows build of the agent
+(amd64, arm64) at `%USERPROFILE%\.onigirazu\bin\onigirazu-agent-<hash>.exe`; it runs each command as a PowerShell
+script and writes files natively, so a play needs no session per task. Without it (no binary for the platform)
+every command is its own SSH session.
+
 ## Keys that are accepted but have no effect
 
 These keys are parsed but nothing reads them; a file that sets one gets a warning:

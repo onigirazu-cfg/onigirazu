@@ -20,7 +20,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
 )
 
 func main() {
@@ -46,7 +45,7 @@ func main() {
 func workDir() (string, error) {
 	if home, err := os.UserHomeDir(); err == nil {
 		if st, err := os.Stat(home); err == nil {
-			if sys, ok := st.Sys().(*syscall.Stat_t); ok && int(sys.Uid) == os.Geteuid() {
+			if ownsFile(st) {
 				root := filepath.Join(home, ".onigirazu", "tmp")
 				if os.MkdirAll(root, 0o700) == nil {
 					if d, err := os.MkdirTemp(root, "go."); err == nil {
@@ -136,7 +135,7 @@ func run(work string, n int, command []byte, combined bool) ([]byte, []byte, int
 	if err := os.MkdirAll(work, 0o700); err != nil {
 		return nil, []byte(err.Error()), 255
 	}
-	script := filepath.Join(work, "c")
+	script := filepath.Join(work, scriptName)
 	if err := os.WriteFile(script, command, 0o600); err != nil {
 		return nil, []byte(err.Error()), 255
 	}
@@ -152,7 +151,7 @@ func run(work string, n int, command []byte, combined bool) ([]byte, []byte, int
 			return nil, []byte(err.Error()), 255
 		}
 	}
-	cmd := exec.Command("sh", script)
+	cmd := commandFor(script)
 	cmd.Stdout, cmd.Stderr = fo, fe
 	devnull, _ := os.Open(os.DevNull)
 	cmd.Stdin = devnull
@@ -168,11 +167,7 @@ func run(work string, n int, command []byte, combined bool) ([]byte, []byte, int
 	var exitErr *exec.ExitError
 	switch {
 	case errors.As(err, &exitErr):
-		if st, ok := exitErr.Sys().(syscall.WaitStatus); ok && st.Signaled() {
-			rc = 128 + int(st.Signal())
-		} else {
-			rc = exitErr.ExitCode()
-		}
+		rc = exitCodeOf(exitErr)
 	case err != nil:
 		return nil, []byte(err.Error()), 127
 	}
@@ -243,10 +238,7 @@ func probe(ids *names, limit int, path string) ([]byte, error) {
 			perm |= v
 		}
 	}
-	var uid, gid uint32
-	if sys, ok := st.Sys().(*syscall.Stat_t); ok {
-		uid, gid = sys.Uid, sys.Gid
-	}
+	uid, gid := ownerIDs(st)
 	head := fmt.Sprintf("%s %o %s %s %d", kind, perm, ids.user(uid), ids.group(gid), st.Size())
 	if kind != "file" {
 		return []byte(head + " -\n"), nil
@@ -291,8 +283,8 @@ func writeFile(request []byte) error {
 	uid, gid := -1, -1
 	if statErr == nil {
 		mode = st.Mode().Perm() | st.Mode()&(fs.ModeSetuid|fs.ModeSetgid|fs.ModeSticky)
-		if sys, isStat := st.Sys().(*syscall.Stat_t); isStat {
-			uid, gid = int(sys.Uid), int(sys.Gid)
+		if u, g, known := ownerIDsOK(st); known {
+			uid, gid = int(u), int(g)
 		}
 	}
 	if f[0] != "-" {
@@ -358,7 +350,7 @@ func writeFile(request []byte) error {
 		return err
 	}
 	if uid != -1 || gid != -1 {
-		if err := os.Chown(tmp.Name(), uid, gid); err != nil {
+		if err := chownFile(tmp.Name(), uid, gid); err != nil {
 			return err
 		}
 	}
