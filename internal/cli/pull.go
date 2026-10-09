@@ -25,6 +25,10 @@ type pullOptions struct {
 	extraVars                                     []string
 	interval                                      time.Duration
 	driftOnly, onlyOnChange, become               bool
+	notify                                        []string
+	notifyOK                                      bool
+	metricsFile, metricsPush                      string
+	metricsLabels                                 []string
 }
 
 func newPullCmd() *cobra.Command {
@@ -77,6 +81,11 @@ func addPullFlags(cmd *cobra.Command, o *pullOptions) {
 	f.BoolVar(&o.driftOnly, "drift-only", false, "Check mode: report what would change, change nothing (exit 2 on drift)")
 	f.BoolVar(&o.onlyOnChange, "only-on-change", false, "Run the playbook only when the repository changed since the last run")
 	f.BoolVarP(&o.become, "become", "b", false, "Use privilege escalation in every play")
+	f.StringArrayVar(&o.notify, "notify", nil, "Webhook (Slack/Mattermost style) to post to when a task fails or --drift-only finds drift (repeatable)")
+	f.BoolVar(&o.notifyOK, "notify-always", false, "Post to --notify after every run")
+	f.StringVar(&o.metricsFile, "metrics-file", "", "Write the run's metrics (Prometheus text) to this file, for node_exporter's textfile collector")
+	f.StringVar(&o.metricsPush, "metrics-push", "", "POST the metrics to this URL (VictoriaMetrics /api/v1/import/prometheus, a Pushgateway)")
+	f.StringArrayVar(&o.metricsLabels, "metrics-label", nil, "Extra label on every metric, name=value (repeatable)")
 }
 
 // pullDir is the checkout directory: --dir, or ~/.onigirazu/pull/<repo name>
@@ -231,6 +240,22 @@ func pullOnce(ctx context.Context, o *pullOptions, dir string, out interface{ Wr
 			}
 		}
 	}
+	if o.metricsFile != "" || o.metricsPush != "" {
+		labels, err := parseLabels(o.metricsLabels)
+		if err != nil {
+			return 1, err
+		}
+		emitMetrics(pullMetrics(o.repo, o.playbook, commit, changedTasks, failed, o.driftOnly, labels), o.metricsFile, o.metricsPush)
+	}
+	if len(o.notify) > 0 && (failed > 0 || (o.driftOnly && changedTasks > 0) || o.notifyOK) {
+		report := buildDriftReport(o.playbook, result)
+		report.Plan = o.driftOnly
+		for _, url := range o.notify {
+			if err := notifyWebhook(url, report); err != nil {
+				fmt.Fprintf(os.Stderr, "notify %s: %v\n", redactURL(url), err)
+			}
+		}
+	}
 	switch {
 	case failed > 0:
 		fmt.Fprintf(out, "pull: %d task(s) failed\n", failed)
@@ -266,6 +291,21 @@ func pullUnitFiles(o *pullOptions, self string) (service, timer string) {
 	}
 	if o.become {
 		args = append(args, "--become")
+	}
+	for _, v := range o.notify {
+		args = append(args, "--notify", v)
+	}
+	if o.notifyOK {
+		args = append(args, "--notify-always")
+	}
+	if o.metricsFile != "" {
+		args = append(args, "--metrics-file", o.metricsFile)
+	}
+	if o.metricsPush != "" {
+		args = append(args, "--metrics-push", o.metricsPush)
+	}
+	for _, v := range o.metricsLabels {
+		args = append(args, "--metrics-label", v)
 	}
 	quoted := make([]string, len(args))
 	for i, a := range args {

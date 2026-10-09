@@ -68,6 +68,19 @@ drift or errors are found; `--notify-always` also when all hosts are in sync.
 The body is `{"text": "<the text report>", "report": <the JSON report>}`. A
 failed post is reported on stderr and does not change the exit code.
 
+### Metrics
+
+`--metrics-file PATH` writes the check's metrics in the Prometheus text format, replacing the file
+in one step, for node_exporter's textfile collector (`--collector.textfile.directory`);
+`--metrics-push URL` POSTs the same text to VictoriaMetrics (`http://vm:8428/api/v1/import/prometheus`)
+or a Pushgateway (`http://pg:9091/metrics/job/onigirazu`). `--metrics-label name=value` adds a label to
+every metric (repeatable). Metrics: `onigirazu_drift_check_timestamp_seconds`, `onigirazu_drift_hosts`,
+`onigirazu_drift_orphans`, `onigirazu_drift_fixed` (labels `playbook`), and per host
+`onigirazu_drift_host_in_sync` (1 when nothing would change and no task failed), `onigirazu_drift_tasks`,
+`onigirazu_drift_errors` (labels `playbook`, `host`). An alert on `onigirazu_drift_host_in_sync == 0`
+or on a stale `onigirazu_drift_check_timestamp_seconds` covers both drift and a scheduler that
+stopped. A problem writing or pushing is reported on stderr and does not change the exit code.
+
 ### On a schedule
 
 ```ini
