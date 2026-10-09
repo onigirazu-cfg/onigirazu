@@ -511,9 +511,10 @@ Without a terminal the normal output is used. See [docs/INTERACTIVE_MODE.md](doc
   (`-J`/`ProxyJump`, aliases from `~/.ssh/config`) are checked the same way.
 - Passwords (`ansible_password`, `ansible_become_password`) never appear on command lines;
   sudo reads them on stdin. `no_log: true` keeps a task's values out of logs, state and output.
-- Secrets come from Bitwarden/Vaultwarden (`bw` CLI, `BW_SESSION`) or HashiCorp Vault when a
-  template uses them: `{{ bitwarden('app-db') }}`, `{{ vault('app/db', 'password') }}`,
-  `lookup('community.general.bitwarden', ...)`. See [docs/BITWARDEN_INTEGRATION.md](docs/BITWARDEN_INTEGRATION.md).
+- Secrets come from Bitwarden/Vaultwarden (`bw` CLI, `BW_SESSION`), HashiCorp Vault (token or
+  AppRole) or SOPS-encrypted vars files when a template uses them: `{{ bitwarden('app-db') }}`,
+  `{{ vault('app/db', 'password') }}`, `lookup('community.hashi_vault.hashi_vault', ...)`,
+  `lookup('community.sops.sops', ...)`. See [docs/BITWARDEN_INTEGRATION.md](docs/BITWARDEN_INTEGRATION.md).
 - An optional security policy restricts modules, hosts, paths and commands:
   [docs/SECURITY_POLICY_GUIDE.md](docs/SECURITY_POLICY_GUIDE.md).
 - Work files on the hosts live in `~/.onigirazu/tmp` of the connecting user.

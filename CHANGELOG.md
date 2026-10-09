@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `verify:` section of a play and `onigirazu verify`: goss-style checks of the hosts' state (file, package, service, port, process, user, group, command, http, mount, kernel_param, dns), one round trip per host (docs/VERIFY.md)
 - `strategy: free` (hosts run a play's tasks at their own pace) and a play-level `throttle`
+- SOPS-encrypted vars files (`vars_files`, `group_vars`/`host_vars`, `include_vars`, `community.sops.load_vars`) are decrypted through the `sops` binary; `lookup('community.sops.sops', file)` reads one; Vault logs in with an AppRole (`VAULT_ROLE_ID`, `VAULT_SECRET_ID`) when there is no token; `lookup('community.hashi_vault.hashi_vault', 'secret=...')` and `vault_kv2_get`
 - `drift --metrics-file/--metrics-push/--metrics-label` and the same on `pull`: drift and pull results as Prometheus metrics (node_exporter textfile collector, VictoriaMetrics import, Pushgateway); `pull --notify` posts to a Slack/Mattermost webhook
 - `onigirazu pull`: pull mode — a host clones a git repository and runs a playbook against itself, once or on a timer (`pull install` writes a systemd timer); `--only-on-change`, `--drift-only` (docs/PULL.md)
 
