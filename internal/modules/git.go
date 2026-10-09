@@ -41,7 +41,7 @@ func (m *GitModuleFixed) Execute(ctx context.Context, host types.Host, args map[
 	startTime := time.Now()
 
 	result := types.TaskResult{
-		TaskName:  "git",
+		TaskName:  taskName(args),
 		Host:      host.Name,
 		Module:    m.name,
 		Success:   false,

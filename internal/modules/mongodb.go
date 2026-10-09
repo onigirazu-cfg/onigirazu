@@ -29,7 +29,7 @@ func (m *MongoDBModule) GetDescription() string {
 func (m *MongoDBModule) Execute(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
 	startTime := time.Now()
 	result := types.TaskResult{
-		TaskName: "mongodb", Host: host.Name, Module: m.GetName(),
+		TaskName: taskName(args), Host: host.Name, Module: m.GetName(),
 		Success: true, Output: make(map[string]interface{}), Timestamp: startTime,
 	}
 	fail := func(err error) (types.TaskResult, error) {
