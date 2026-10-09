@@ -151,10 +151,15 @@ func (re *RollbackExecutor) executeRollbackOperation(ctx context.Context, resour
 		host.BecomeUser, _ = resource.RollbackOp.Args["_become_user"].(string)
 		host.BecomeMethod, _ = resource.RollbackOp.Args["_become_method"].(string)
 	}
-	// modules may add keys; the snapshot keeps its own copy
+	// modules may add keys; the snapshot keeps its own copy. The capture the
+	// task ran with ("_before") describes the host before that task, not
+	// now: a module answering from it would skip the rollback (apt saw the
+	// package as absent and left it installed)
 	args := make(map[string]interface{}, len(resource.RollbackOp.Args))
 	for k, v := range resource.RollbackOp.Args {
-		args[k] = v
+		if k != "_before" {
+			args[k] = v
+		}
 	}
 
 	// Validate arguments
