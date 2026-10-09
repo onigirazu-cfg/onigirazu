@@ -46,11 +46,11 @@ plays:
           cmd: '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"'
         when: "onigirazu_os_family == 'Darwin' and not homebrew_installed"
 
-      # Command with timeout
+      # Command with a timeout (a task keyword, as in Ansible)
       - name: "Run command with timeout"
         command:
           cmd: "sleep 2"
-          timeout: 5
+        timeout: 5
       # Check command result
       - name: "Verify command success"
         command:

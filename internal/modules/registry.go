@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"runtime/debug"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -229,6 +230,13 @@ func (r *Registry) ExecuteTask(ctx context.Context, task *types.Task, host types
 	for key, value := range task.Args {
 		args[key] = value
 	}
+	// arguments the module would ignore fail the task, as in Ansible: an
+	// unsupported option must not widen what a task does (find without
+	// age would have deleted everything)
+	if msg := unsupportedParameters(task.Module, args); msg != "" {
+		return types.TaskResult{TaskName: task.Name, Host: host.Name, Module: task.Module, Failed: true,
+			Error: msg, Timestamp: time.Now()}, nil
+	}
 	if !dataArgModules[task.Module] {
 		normalizeArgs(args)
 	}
@@ -315,6 +323,46 @@ func (r *Registry) ExecuteTask(ctx context.Context, task *types.Task, host types
 		}
 	}
 	return result, err
+}
+
+//go:generate go run ../cli/gen_modargs . module_args.go modules
+
+// AcceptedArgs are Ansible arguments a module accepts without reading them:
+// their effect is the default here
+var AcceptedArgs = map[string][]string{
+	"docker_container": {"comparisons"},
+}
+
+// FreeArgModules take any argument (add_host: host variables; set_fact: facts)
+var FreeArgModules = map[string]bool{"add_host": true, "set_fact": true}
+
+// unsupportedParameters names the arguments a module does not read, in
+// Ansible's words, or "" when all are known. Modules the table does not
+// describe are not checked.
+func unsupportedParameters(module string, args map[string]interface{}) string {
+	known := ModuleArgs[module]
+	if len(known) == 0 || FreeArgModules[module] {
+		return ""
+	}
+	ok := make(map[string]bool, len(known)+len(AcceptedArgs[module]))
+	for _, a := range known {
+		ok[a] = true
+	}
+	for _, a := range AcceptedArgs[module] {
+		ok[a] = true
+	}
+	var bad []string
+	for a := range args {
+		if !strings.HasPrefix(a, "_") && !ok[a] {
+			bad = append(bad, a)
+		}
+	}
+	if len(bad) == 0 {
+		return ""
+	}
+	sort.Strings(bad)
+	return fmt.Sprintf("Unsupported parameters for (%s) module: %s. Supported parameters include: %s",
+		module, strings.Join(bad, ", "), strings.Join(known, ", "))
 }
 
 // checkModeModules support check mode: they read, or they compare and stop

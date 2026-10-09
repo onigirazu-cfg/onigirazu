@@ -26,7 +26,7 @@ plays:
         git:
           repo: "https://github.com/octocat/Hello-World.git"
           dest: "{{ projects_dir }}/hello-world-branch"
-          branch: "master"
+          version: "master"
           clone: true
       # Update existing repository
       - name: "Update repository"
@@ -45,13 +45,12 @@ plays:
           dest: "{{ projects_dir }}/hello-world-shallow"
           depth: 1
           clone: true
-      # Clone private repository (requires SSH key)
+      # Clone private repository: the SSH key comes from the host's ssh
+      # configuration or agent
       - name: "Clone private repository"
         git:
           repo: "git@github.com:user/private-repo.git"
           dest: "{{ projects_dir }}/private-repo"
-          key_file: "~/.ssh/id_rsa"
-          clone: true
         ignore_errors: true  # May fail if SSH key not configured
 
       # Reset repository to clean state
