@@ -90,3 +90,13 @@ come from the runner (`write` in RouterOS covers everything, so the address rest
 /ip service enable www-ssl
 ```
 
+### Pre-warmed VMs
+
+`e2e/pool.sh` keeps `POOL_SIZE` (2) linked clones per image key powered on and waiting
+(`pool-e2e-<id>-<key>`, tagged with their template). A run claims one per key by renaming it to its
+own name — atomic in vCenter, so parallel shards never take the same VM — and sets its key through
+guestinfo; the base image's `e2e-access-refresh` timer applies it within seconds. What the pool lacks
+is created with terraform as before. The pool is refilled after every run and by the janitor; the
+image build purges VMs of the previous template. `E2E_POOL=0` skips the pool; the nightly run on
+golden images never uses it. Pool VMs hold DHCP leases while they wait.
+

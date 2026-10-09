@@ -33,6 +33,11 @@ variable "run_id" {
   }
 }
 
+variable "name_prefix" {
+  description = "VM name prefix: tmp-e2e-onigirazu- for a run's VMs, pool-e2e- for pre-warmed ones"
+  type        = string
+  default     = "tmp-e2e-onigirazu-"
+}
 variable "run_url" {
   type    = string
   default = "local run"

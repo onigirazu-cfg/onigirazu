@@ -133,6 +133,7 @@ jobs:
           KEEP_VMS: ${{ inputs.keep_vms && '1' || '' }}
           # the nightly run tests the golden images themselves
           E2E_BASE: ${{ github.event_name == 'schedule' && '0' || '1' }}
+          E2E_POOL: ${{ github.event_name == 'schedule' && '0' || '1' }}
           E2E_SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}
           E2E_DIAG: ${{ runner.temp }}/e2e-diag
           MIKROTIK_API_URL: ${{ secrets.MIKROTIK_API_URL }}
@@ -140,6 +141,25 @@ jobs:
           MIKROTIK_API_PASSWORD: ${{ secrets.MIKROTIK_API_PASSWORD }}
           MIKROTIK_API_INSECURE: ${{ secrets.MIKROTIK_API_INSECURE }}
         run: e2e/run.sh
+
+      # the pool is refilled for the next run (pool VMs come from the e2e base
+      # templates, which the nightly run does not use)
+      - name: Refill the pool
+        if: always() && github.event_name != 'schedule'
+        continue-on-error: true
+        env:
+          TF_VAR_vsphere_server: ${{ secrets.VSPHERE_SERVER }}
+          TF_VAR_vsphere_user: ${{ secrets.VSPHERE_USER }}
+          TF_VAR_vsphere_password: ${{ secrets.VSPHERE_PASSWORD }}
+          TF_VAR_datacenter: ${{ secrets.E2E_DATACENTER }}
+          TF_VAR_cluster: ${{ secrets.E2E_CLUSTER }}
+          TF_VAR_host: ${{ secrets.E2E_HOST }}
+          TF_VAR_datastore: ${{ secrets.E2E_DATASTORE }}
+          TF_VAR_network: ${{ secrets.E2E_NETWORK }}
+          TF_VAR_folder: ${{ secrets.E2E_FOLDER }}
+          TF_VAR_library: ${{ secrets.E2E_LIBRARY }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: e2e/pool.sh fill
 
       - name: Upload diagnostics
         if: failure()
@@ -158,6 +178,10 @@ jobs:
       GOVC_VERSION: v0.56.0
     steps:
       - uses: actions/checkout@v7
+
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_wrapper: false
 
       - name: Install govc
         run: |
@@ -183,3 +207,22 @@ jobs:
           MIKROTIK_API_INSECURE: ${{ secrets.MIKROTIK_API_INSECURE }}
           GH_TOKEN: ${{ github.token }}
         run: e2e/janitor.sh
+
+      - name: Pool of pre-warmed VMs
+        continue-on-error: true
+        env:
+          TF_VAR_vsphere_server: ${{ secrets.VSPHERE_SERVER }}
+          TF_VAR_vsphere_user: ${{ secrets.VSPHERE_USER }}
+          TF_VAR_vsphere_password: ${{ secrets.VSPHERE_PASSWORD }}
+          TF_VAR_datacenter: ${{ secrets.E2E_DATACENTER }}
+          TF_VAR_cluster: ${{ secrets.E2E_CLUSTER }}
+          TF_VAR_host: ${{ secrets.E2E_HOST }}
+          TF_VAR_datastore: ${{ secrets.E2E_DATASTORE }}
+          TF_VAR_network: ${{ secrets.E2E_NETWORK }}
+          TF_VAR_folder: ${{ secrets.E2E_FOLDER }}
+          TF_VAR_library: ${{ secrets.E2E_LIBRARY }}
+          MIKROTIK_API_URL: ${{ secrets.MIKROTIK_API_URL }}
+          MIKROTIK_API_USER: ${{ secrets.MIKROTIK_API_USER }}
+          MIKROTIK_API_PASSWORD: ${{ secrets.MIKROTIK_API_PASSWORD }}
+          MIKROTIK_API_INSECURE: ${{ secrets.MIKROTIK_API_INSECURE }}
+        run: e2e/pool.sh purge && e2e/pool.sh fill

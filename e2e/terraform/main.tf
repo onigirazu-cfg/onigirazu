@@ -57,7 +57,7 @@ resource "vsphere_virtual_machine" "vm" {
 
   # tmp- prefix and the folder mark these VMs as disposable; the janitor
   # deletes anything in the folder with this prefix once it is past its TTL
-  name             = "tmp-e2e-onigirazu-${var.run_id}-${each.key}"
+  name             = "${var.name_prefix}${var.run_id}-${each.key}"
   folder           = var.folder
   resource_pool_id = data.vsphere_compute_cluster.cluster.resource_pool_id
   host_system_id   = data.vsphere_host.host.id
@@ -81,6 +81,7 @@ resource "vsphere_virtual_machine" "vm" {
     # key and the host name (no guest customization: it costs a reboot)
     "guestinfo.e2e_authorized_key" = var.public_key
     "guestinfo.e2e_hostname"       = "e2e-${each.key}"
+    "guestinfo.e2e_template"       = each.value
   }
 
   network_interface {
