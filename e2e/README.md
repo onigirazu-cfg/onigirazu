@@ -63,6 +63,9 @@ Repository secrets: `VSPHERE_SERVER`, `VSPHERE_USER`, `VSPHERE_PASSWORD`,
 `E2E_FOLDER`, `E2E_LIBRARY`. Secrets rather than variables: Actions logs of a
 public repository are public.
 
+The hourly janitor removes the VMs of finished runs (a cancelled run gets no cleanup) at once, VMs kept
+with `keep_vms` and VMs it cannot match to a run after 3 h.
+
 When a run fails, the log shows each VM's power state, guest state, guest IP, boot time and last vCenter
 events, and the console screenshots are uploaded as the `e2e-diag-<shard>` artifact (7 days).
 

@@ -102,6 +102,10 @@ cleanup() {
     # Kept VMs are only reachable with this run's key; it stays on the runner
     local keep="$HOME/.cache/onigirazu-e2e/$RUN_ID"
     mkdir -p "$keep" && cp "$KEY" "$INVENTORY" "$keep/" 2>/dev/null && chmod 700 "$keep"
+    # the janitor removes VMs of finished runs at once, kept ones after its TTL
+    while IFS= read -r vm; do
+      [ -n "$vm" ] && govc vm.change -vm "$vm" -annotation "e2e keep_vms: $RUN_URL" >/dev/null 2>&1
+    done < <(govc find "/$TF_VAR_datacenter/vm/$TF_VAR_folder" -type m -name "tmp-e2e-onigirazu-$RUN_ID-*" 2>/dev/null)
     echo "kept VMs: key and inventory in $keep on the runner"
   fi
   rm -rf "$WORK"
