@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `drift --metrics-file/--metrics-push/--metrics-label` and the same on `pull`: drift and pull results as Prometheus metrics (node_exporter textfile collector, VictoriaMetrics import, Pushgateway); `pull --notify` posts to a Slack/Mattermost webhook
 - `onigirazu pull`: pull mode — a host clones a git repository and runs a playbook against itself, once or on a timer (`pull install` writes a systemd timer); `--only-on-change`, `--drift-only` (docs/PULL.md)
 
 ### Changed

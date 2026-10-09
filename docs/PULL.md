@@ -24,6 +24,8 @@ inventory is used instead.
 | `--interval` | Run again every interval; `0` runs once |
 | `--only-on-change` | Skip the run when the branch did not move since the last run |
 | `--drift-only` | Check mode: change nothing, exit 2 when something would change |
+| `--notify URL` | Webhook (Slack/Mattermost style) posted to when a task fails or `--drift-only` finds drift; `--notify-always` after every run |
+| `--metrics-file`, `--metrics-push`, `--metrics-label` | The run's metrics for node_exporter's textfile collector or pushed to VictoriaMetrics/Pushgateway (see [drift metrics](DRIFT_AND_ROLLBACK.md#metrics)): `onigirazu_pull_last_run_timestamp_seconds`, `onigirazu_pull_ok`, `onigirazu_pull_failed_tasks`, `onigirazu_pull_changed_tasks` (or `_drift_tasks`), `onigirazu_pull_commit_info{commit}` with labels `repo`, `playbook` |
 
 Exit codes: 0 converged, 1 a task failed or the repository could not be fetched, 2 drift (with
 `--drift-only`).
