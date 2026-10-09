@@ -28,6 +28,7 @@ func NewRegistry() *Registry {
 
 	// Register built-in modules
 	registry.RegisterModule(NewPingModule())
+	registry.RegisterModule(NewVerifyModule())
 	registry.RegisterModule(NewFileModule())
 	registry.RegisterModule(NewCopyModule())
 	registry.RegisterModule(NewFetchModule())
@@ -371,7 +372,7 @@ var checkModeModules = map[string]bool{
 	// read only
 	"ping": true, "debug": true, "set_fact": true, "stat": true, "find": true, "add_host": true, "group_by": true,
 	"fail": true, "wait_for": true, "assert": true, "include_vars": true,
-	"slurp": true, "docker_host_info": true, "setup": true, "gather_facts": true, "getent": true, "async_status": true,
+	"slurp": true, "docker_host_info": true, "setup": true, "gather_facts": true, "getent": true, "async_status": true, "verify": true,
 	// compare, then change
 	"file": true, "copy": true, "template": true, "lineinfile": true, "blockinfile": true,
 	"apt": true, "yum": true, "package": true, "service": true, "user": true, "group": true,

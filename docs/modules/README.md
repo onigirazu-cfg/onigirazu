@@ -330,6 +330,11 @@ directory of `dest` is created (Ansible fails there). `remote_src` copies single
     mode: "0644"
 ```
 
+### verify
+
+The checks of a play's `verify:` section, as one task (`checks`: the list). See [VERIFY.md](../VERIFY.md). Returns
+`checks`, `passed`, `failed`; fails when a check does. Check mode runs it.
+
 ### find
 
 List the entries of a directory on the host that match the patterns, type, age and size, as Ansible's `find`. Never

@@ -794,10 +794,13 @@ type Play struct {
 	ForceHandlers     bool                   `yaml:"force_handlers,omitempty"`
 	// HealthCheck runs after every batch on its hosts; OnUnhealthy is
 	// rollback (default with health checks), stop or continue
-	HealthCheck  []Task `yaml:"health_check,omitempty"`
-	OnUnhealthy  string `yaml:"on_unhealthy,omitempty"`
-	IgnoreErrors bool   `yaml:"ignore_errors,omitempty"`
-	GatherFacts  bool   `yaml:"gather_facts,omitempty"`
+	HealthCheck []Task `yaml:"health_check,omitempty"`
+	// Verify are goss-style checks of the hosts' state, run after the play's
+	// tasks and handlers (the verify module); `onigirazu verify` runs only them
+	Verify       []map[string]interface{} `yaml:"verify,omitempty"`
+	OnUnhealthy  string                   `yaml:"on_unhealthy,omitempty"`
+	IgnoreErrors bool                     `yaml:"ignore_errors,omitempty"`
+	GatherFacts  bool                     `yaml:"gather_facts,omitempty"`
 	// Environment of every task of the play; a task's own environment wins
 	Environment map[string]interface{} `yaml:"environment,omitempty"`
 	Roles       []RoleReference        `yaml:"roles,omitempty"` // NEW: List of roles to execute

@@ -71,6 +71,7 @@ func newApplyCommand(onResult func(*types.PlaybookResult)) *cobra.Command {
 		remoteUser     string
 		privateKey     string
 		startAtTask    string
+		verifyOnly     bool // onigirazu verify: only the plays' verify: checks
 		parallel       int
 		timeout        time.Duration
 		interactive    bool
@@ -498,6 +499,7 @@ Examples:
 			executionEngine.SetLimit(limit)
 			executionEngine.SetForceBecome(become || becomeUser != "", becomeUser)
 			executionEngine.SetStartAtTask(startAtTask)
+			executionEngine.SetVerifyOnly(verifyOnly)
 
 			if policySource != "" {
 				log.Info("Security policy loaded from %s", policySource)
@@ -1231,6 +1233,8 @@ Examples:
 	cmd.Flags().StringVarP(&remoteUser, "user", "u", "", "SSH user for every host")
 	cmd.Flags().StringVar(&privateKey, "private-key", "", "SSH private key for every host")
 	cmd.Flags().StringVar(&startAtTask, "start-at-task", "", "Skip tasks until the one with this name")
+	cmd.Flags().BoolVar(&verifyOnly, "verify-only", false, "Run only the plays' verify: checks (what `onigirazu verify` does)")
+	_ = cmd.Flags().MarkHidden("verify-only")
 	cmd.Flags().IntVarP(&parallel, "parallel", "f", 10, "Number of parallel executions")
 	cmd.Flags().DurationVarP(&timeout, "timeout", "t", 30*time.Minute, "Execution timeout")
 	cmd.Flags().BoolVar(&interactive, "interactive", false, "Interactive mode with beautiful TUI")

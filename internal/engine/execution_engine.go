@@ -136,6 +136,7 @@ type ExecutionEngine struct {
 	safe             SafeApply
 	restorer         Restorer
 	rolloutVars      map[string]interface{}
+	verifyOnly       bool // run only the plays' verify: checks (onigirazu verify)
 	rolloutUnhealthy []string
 	rolloutApplied   []types.TaskResult
 	rolloutReports   []types.BatchReport
@@ -659,124 +660,136 @@ func (e *ExecutionEngine) executePlayOn(ctx context.Context, play *types.Play, h
 	}()
 
 	// As in Ansible: pre_tasks, handlers, roles and tasks, handlers,
-	// post_tasks, handlers
-	if len(play.PreTasks) > 0 {
-		e.logger.Debug("Executing %d pre-tasks for play '%s'", len(play.PreTasks), play.Name)
-		if err := e.executeTaskList(ctx, play.PreTasks, hosts, playVars, result); err != nil {
-			return result, fmt.Errorf("pre-tasks failed: %w", err)
-		}
-	}
-	if err := e.flushHandlers(ctx, hosts, result); err != nil {
-		return result, err
-	}
-
-	// Execute roles (with conditional and dependency support)
-	if len(play.Roles) > 0 || len(play.RoleObjects) > 0 {
-		e.logger.Debug("Executing roles for play '%s'", play.Name)
-
-		// Use Roles (RoleReference) if available, otherwise fallback to RoleObjects
-		var roleRefs []types.RoleReference
-		if len(play.Roles) > 0 {
-			roleRefs = play.Roles
-		} else {
-			// Convert RoleObjects back to RoleReferences for consistency
-			for _, role := range play.RoleObjects {
-				roleRefs = append(roleRefs, types.RoleReference{Name: role.Name, Path: role.Path})
+	// post_tasks, handlers — unless only the verify: checks are wanted
+	if !e.verifyOnly {
+		if len(play.PreTasks) > 0 {
+			e.logger.Debug("Executing %d pre-tasks for play '%s'", len(play.PreTasks), play.Name)
+			if err := e.executeTaskList(ctx, play.PreTasks, hosts, playVars, result); err != nil {
+				return result, fmt.Errorf("pre-tasks failed: %w", err)
 			}
 		}
+		if err := e.flushHandlers(ctx, hosts, result); err != nil {
+			return result, err
+		}
 
-		for i, roleRef := range roleRefs {
-			e.logger.Debug("Processing role %d/%d: %s", i+1, len(roleRefs), roleRef.Name)
+		// Execute roles (with conditional and dependency support)
+		if len(play.Roles) > 0 || len(play.RoleObjects) > 0 {
+			e.logger.Debug("Executing roles for play '%s'", play.Name)
 
-			// Check conditional execution
-			if roleRef.When != "" {
-				holds, err := e.conditionHolds(ctx, roleRef.When, playVars)
-				if err != nil {
-					return result, fmt.Errorf("role '%s': %w", roleRef.Name, err)
-				} else if !holds {
-					e.logger.Debug("Skipping role '%s' due to condition", roleRef.Name)
-					e.keepScope(playScope + "/role:" + roleRef.Name)
-					continue
+			// Use Roles (RoleReference) if available, otherwise fallback to RoleObjects
+			var roleRefs []types.RoleReference
+			if len(play.Roles) > 0 {
+				roleRefs = play.Roles
+			} else {
+				// Convert RoleObjects back to RoleReferences for consistency
+				for _, role := range play.RoleObjects {
+					roleRefs = append(roleRefs, types.RoleReference{Name: role.Name, Path: role.Path})
 				}
 			}
 
-			// The parser loads roles relative to the playbook (RoleObjects);
-			// load here only what it did not
-			var role *types.Role
-			if i < len(play.RoleObjects) && play.RoleObjects[i] != nil {
-				role = play.RoleObjects[i]
-			} else {
-				var err error
-				role, err = e.roleLoader.LoadRole(ctx, roleRef)
+			for i, roleRef := range roleRefs {
+				e.logger.Debug("Processing role %d/%d: %s", i+1, len(roleRefs), roleRef.Name)
+
+				// Check conditional execution
+				if roleRef.When != "" {
+					holds, err := e.conditionHolds(ctx, roleRef.When, playVars)
+					if err != nil {
+						return result, fmt.Errorf("role '%s': %w", roleRef.Name, err)
+					} else if !holds {
+						e.logger.Debug("Skipping role '%s' due to condition", roleRef.Name)
+						e.keepScope(playScope + "/role:" + roleRef.Name)
+						continue
+					}
+				}
+
+				// The parser loads roles relative to the playbook (RoleObjects);
+				// load here only what it did not
+				var role *types.Role
+				if i < len(play.RoleObjects) && play.RoleObjects[i] != nil {
+					role = play.RoleObjects[i]
+				} else {
+					var err error
+					role, err = e.roleLoader.LoadRole(ctx, roleRef)
+					if err != nil {
+						e.logger.Error("Failed to load role '%s': %v", roleRef.Name, err)
+						e.keepScope(playScope + "/role:" + roleRef.Name)
+						if !play.IgnoreErrors {
+							return result, fmt.Errorf("failed to load role '%s': %w", roleRef.Name, err)
+						}
+						result.Success = false
+						continue
+					}
+				}
+
+				// Execute role with dependencies
+				if len(roleRef.Vars) > 0 {
+					withParams := *role
+					withParams.Params = roleRef.Vars
+					role = &withParams
+				}
+				e.inheritedTags = append(append([]string{}, play.Tags...), roleRef.Tags...)
+				e.scope = playScope
+				err := e.executeRoleWithDependencies(ctx, role, hosts, playVars, result)
+				e.inheritedTags = play.Tags
 				if err != nil {
-					e.logger.Error("Failed to load role '%s': %v", roleRef.Name, err)
-					e.keepScope(playScope + "/role:" + roleRef.Name)
+					e.logger.Error("Role '%s' failed: %v", role.Name, err)
 					if !play.IgnoreErrors {
-						return result, fmt.Errorf("failed to load role '%s': %w", roleRef.Name, err)
+						return result, fmt.Errorf("role '%s' failed: %w", role.Name, err)
 					}
 					result.Success = false
-					continue
 				}
 			}
+		}
 
-			// Execute role with dependencies
-			if len(roleRef.Vars) > 0 {
-				withParams := *role
-				withParams.Params = roleRef.Vars
-				role = &withParams
-			}
-			e.inheritedTags = append(append([]string{}, play.Tags...), roleRef.Tags...)
-			e.scope = playScope
-			err := e.executeRoleWithDependencies(ctx, role, hosts, playVars, result)
-			e.inheritedTags = play.Tags
-			if err != nil {
-				e.logger.Error("Role '%s' failed: %v", role.Name, err)
-				if !play.IgnoreErrors {
-					return result, fmt.Errorf("role '%s' failed: %w", role.Name, err)
+		// Execute main tasks
+		if len(play.Tasks) > 0 {
+			e.logger.Debug("Executing %d main tasks for play '%s'", len(play.Tasks), play.Name)
+			if err := e.executeTaskListWithRetry(ctx, play.Tasks, hosts, playVars, result); err != nil {
+				if !play.IgnoreErrors && !play.AnyErrorsFatal {
+					return result, fmt.Errorf("main tasks failed: %w", err)
 				}
 				result.Success = false
+
+				// Handle any_errors_fatal
+				if play.AnyErrorsFatal {
+					e.logger.Error("Task failed with any_errors_fatal=true, stopping execution")
+					return result, fmt.Errorf("task failed with any_errors_fatal: %w", err)
+				}
 			}
 		}
-	}
 
-	// Execute main tasks
-	if len(play.Tasks) > 0 {
-		e.logger.Debug("Executing %d main tasks for play '%s'", len(play.Tasks), play.Name)
-		if err := e.executeTaskListWithRetry(ctx, play.Tasks, hosts, playVars, result); err != nil {
-			if !play.IgnoreErrors && !play.AnyErrorsFatal {
-				return result, fmt.Errorf("main tasks failed: %w", err)
-			}
+		if err := e.flushHandlers(ctx, hosts, result); err != nil {
 			result.Success = false
+			if !play.IgnoreErrors {
+				return result, err
+			}
+		}
 
-			// Handle any_errors_fatal
-			if play.AnyErrorsFatal {
-				e.logger.Error("Task failed with any_errors_fatal=true, stopping execution")
-				return result, fmt.Errorf("task failed with any_errors_fatal: %w", err)
+		// Execute post-tasks
+		if len(play.PostTasks) > 0 {
+			e.logger.Debug("Executing %d post-tasks for play '%s'", len(play.PostTasks), play.Name)
+			if err := e.executeTaskList(ctx, play.PostTasks, hosts, playVars, result); err != nil {
+				e.logger.Warn("Post-tasks failed: %v", err)
+				// Post-task failures don't fail the play unless explicitly configured
+			}
+		}
+
+		if err := e.flushHandlers(ctx, hosts, result); err != nil {
+			e.logger.Error("Handlers failed: %v", err)
+			result.Success = false
+			if !play.IgnoreErrors {
+				return result, err
 			}
 		}
 	}
-
-	if err := e.flushHandlers(ctx, hosts, result); err != nil {
-		result.Success = false
-		if !play.IgnoreErrors {
-			return result, err
-		}
-	}
-
-	// Execute post-tasks
-	if len(play.PostTasks) > 0 {
-		e.logger.Debug("Executing %d post-tasks for play '%s'", len(play.PostTasks), play.Name)
-		if err := e.executeTaskList(ctx, play.PostTasks, hosts, playVars, result); err != nil {
-			e.logger.Warn("Post-tasks failed: %v", err)
-			// Post-task failures don't fail the play unless explicitly configured
-		}
-	}
-
-	if err := e.flushHandlers(ctx, hosts, result); err != nil {
-		e.logger.Error("Handlers failed: %v", err)
-		result.Success = false
-		if !play.IgnoreErrors {
-			return result, err
+	// verify: the goss-style checks of the play, one task on every host
+	if len(play.Verify) > 0 {
+		check := types.Task{Name: "verify", Module: "verify", Args: map[string]interface{}{"checks": play.Verify}}
+		if err := e.executeTask(ctx, &check, e.activeHosts(hosts), playVars, result); err != nil {
+			var hf *hostsFailedError
+			if !errors.As(err, &hf) {
+				return result, fmt.Errorf("verify failed: %w", err)
+			}
 		}
 	}
 
@@ -2562,6 +2575,9 @@ func (e *ExecutionEngine) SetForceBecome(become bool, user string) {
 }
 
 // SetStartAtTask skips every task before the one with this name
+// SetVerifyOnly makes every play run only its verify: checks
+func (e *ExecutionEngine) SetVerifyOnly(on bool) { e.verifyOnly = on }
+
 func (e *ExecutionEngine) SetStartAtTask(name string) {
 	e.startAt = strings.TrimSpace(name)
 }

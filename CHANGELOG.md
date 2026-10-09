@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `verify:` section of a play and `onigirazu verify`: goss-style checks of the hosts' state (file, package, service, port, process, user, group, command, http, mount, kernel_param, dns), one round trip per host (docs/VERIFY.md)
 - `drift --metrics-file/--metrics-push/--metrics-label` and the same on `pull`: drift and pull results as Prometheus metrics (node_exporter textfile collector, VictoriaMetrics import, Pushgateway); `pull --notify` posts to a Slack/Mattermost webhook
 - `onigirazu pull`: pull mode — a host clones a git repository and runs a playbook against itself, once or on a timer (`pull install` writes a systemd timer); `--only-on-change`, `--drift-only` (docs/PULL.md)
 
