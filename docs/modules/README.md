@@ -107,6 +107,12 @@ Argument aliases (an argument given under both names keeps its own value):
 
 Module-specific alternatives are listed with each module.
 
+A task with an argument its module does not have fails, as in Ansible (`Unsupported parameters for (find)
+module: age_stamp. Supported parameters include: ...`): an ignored option must not widen what a task does.
+`add_host` and `set_fact` take any argument. `onigirazu lint` warns about such arguments, and `onigirazu doc
+<module>` lists the arguments a module has. A few Ansible arguments are accepted and documented as such with
+the module (`sysctl_set`, `connect_timeout`): their effect is the default here.
+
 ### Check Mode
 
 With `--check` only these modules run, reporting what they would change and changing nothing:
@@ -1388,6 +1394,7 @@ Clone a repository on the host, or update an existing clone.
 | `update` | boolean | `true` | Fetch and check out `version` in an existing clone |
 | `force` | boolean | `false` | Clone even when `dest` exists and is not a git repository |
 | `depth` | integer | - | Shallow clone with that many commits; a branch or tag clones just that ref, a commit needs its full hash |
+| `clone` | boolean | `true` | `false` leaves a missing repository alone (nothing is cloned) |
 
 `changed` means the checked-out commit changed. Returns `before`, `after`, `version`, `dest`, `info`.
 
