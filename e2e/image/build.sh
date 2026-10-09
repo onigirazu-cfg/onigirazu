@@ -85,6 +85,8 @@ for key in $(jq -r 'keys[]' <<<"$hosts_json"); do
   done
   [ "$(govc vm.info -json "$vm" | jq -r '(.virtualMachines // .VirtualMachines)[0].runtime.powerState')" = poweredOff ] ||
     die "$key: the VM did not power off"
+  # shellcheck disable=SC2046
+  "$HERE/dhcp-leases.sh" remove $("$HERE/dhcp-leases.sh" macs "$vm")
 
   name="e2e-base-$key-$golden-$stamp"
   terraform -chdir="$TF_DIR" state rm "vsphere_virtual_machine.vm[\"$key\"]" >/dev/null
@@ -103,8 +105,10 @@ for key in $(jq -r 'keys[]' <<<"$hosts_json"); do
   # keep the newest $KEEP of this key
   govc find "$FOLDER" -type m -name "e2e-base-$key-*" | sort | head -n -"$KEEP" | while read -r old; do
     echo "$key: removing $old"
+    old_macs="$("$HERE/dhcp-leases.sh" macs "$old" | tr '\n' ' ')"
     # a running e2e may still have linked clones of it: the next build retries
-    govc vm.destroy "$old" || echo "$key: $old not removed (linked clones still running?)"
+    # shellcheck disable=SC2086
+    govc vm.destroy "$old" && "$HERE/dhcp-leases.sh" remove $old_macs || echo "$key: $old not removed (linked clones still running?)"
   done
 done
 log "Done"

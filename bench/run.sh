@@ -42,11 +42,18 @@ TFSTATE="$WORK/tf.tfstate"
 TFVARS="$WORK/run.tfvars.json"
 destroy() {
   [ -f "$TFSTATE" ] || return 0
+  # the leases of this run's VMs are removed after them (names as terraform makes them)
+  local prefix macs
+  prefix="tmp-e2e-onigirazu-$(printf '%s' "$RUN_ID" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9-')"
+  # shellcheck disable=SC2046
+  macs="$("$ROOT/e2e/dhcp-leases.sh" macs $(govc find "/$TF_VAR_datacenter/vm/$TF_VAR_folder" -type m -name "$prefix*" 2>/dev/null) | tr '\n' ' ')"
   # shellcheck disable=SC2046
   "$ROOT/e2e/dhcp-release.sh" "$KEY" $(terraform -chdir="$TF_DIR" output -state="$TFSTATE" -json hosts 2>/dev/null | jq -r '.[]?')
   terraform -chdir="$TF_DIR" destroy -auto-approve -input=false -state="$TFSTATE" -var-file="$TFVARS" >/dev/null ||
     echo "destroy failed; the janitor will remove the VMs"
   rm -f "$TFSTATE"
+  # shellcheck disable=SC2086
+  "$ROOT/e2e/dhcp-leases.sh" remove $macs
 }
 cleanup() { local rc=$?; destroy; rm -rf "$WORK"; exit "$rc"; }
 trap cleanup EXIT

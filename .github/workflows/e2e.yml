@@ -135,6 +135,10 @@ jobs:
           E2E_BASE: ${{ github.event_name == 'schedule' && '0' || '1' }}
           E2E_SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}
           E2E_DIAG: ${{ runner.temp }}/e2e-diag
+          MIKROTIK_API_URL: ${{ secrets.MIKROTIK_API_URL }}
+          MIKROTIK_API_USER: ${{ secrets.MIKROTIK_API_USER }}
+          MIKROTIK_API_PASSWORD: ${{ secrets.MIKROTIK_API_PASSWORD }}
+          MIKROTIK_API_INSECURE: ${{ secrets.MIKROTIK_API_INSECURE }}
         run: e2e/run.sh
 
       - name: Upload diagnostics
@@ -173,5 +177,9 @@ jobs:
           E2E_DATACENTER: ${{ secrets.E2E_DATACENTER }}
           E2E_FOLDER: ${{ secrets.E2E_FOLDER }}
           TTL_HOURS: ${{ inputs.purge_vms && '0' || '3' }}
+          MIKROTIK_API_URL: ${{ secrets.MIKROTIK_API_URL }}
+          MIKROTIK_API_USER: ${{ secrets.MIKROTIK_API_USER }}
+          MIKROTIK_API_PASSWORD: ${{ secrets.MIKROTIK_API_PASSWORD }}
+          MIKROTIK_API_INSECURE: ${{ secrets.MIKROTIK_API_INSECURE }}
           GH_TOKEN: ${{ github.token }}
         run: e2e/janitor.sh

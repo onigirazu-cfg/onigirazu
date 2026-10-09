@@ -68,3 +68,22 @@ events, and the console screenshots are uploaded as the `e2e-diag-<shard>` artif
 
 Before the hard power-off each VM releases its DHCP lease (`dhcp-release.sh`): the network's pool is
 small and a powered-off VM keeps its lease until it expires.
+
+### DHCP leases
+
+The e2e network's DHCP pool is small and the VMs are powered off hard, so nothing gives their
+leases back. `e2e/dhcp-leases.sh` removes them on the MikroTik through its REST API: a run removes
+the leases of its own VMs by MAC after destroying them (e2e, bench, image build), and the janitor
+sweeps dynamic leases of VMware MACs that belong to no VM in vCenter. Without the secrets the
+scripts say so and the leases are left to expire.
+
+Secrets: `MIKROTIK_API_URL` (`https://<router>`), `MIKROTIK_API_USER`, `MIKROTIK_API_PASSWORD`,
+`MIKROTIK_API_INSECURE` (`1` for a self-signed certificate). On the router, a user that may only
+come from the runner (`write` in RouterOS covers everything, so the address restriction matters):
+
+```
+/user group add name=dhcp-leases policy=read,write,api,rest-api,!local,!telnet,!ssh,!ftp,!reboot,!policy,!test,!winbox,!password,!web,!sniff,!sensitive,!romon
+/user add name=onigirazu-e2e group=dhcp-leases address=<runner IP>/32 password=<from the password manager>
+/ip service enable www-ssl
+```
+
