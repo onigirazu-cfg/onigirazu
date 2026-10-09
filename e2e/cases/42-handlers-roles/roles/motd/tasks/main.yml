@@ -3,3 +3,13 @@
     content: "{{ motd_text }}\n"
     dest: /etc/onigirazu-e2e-motd
   notify: role handler
+
+# a flush inside the role runs the role's own handler right here (it ran
+# nowhere: the role's handlers were loaded after its tasks)
+- name: Flush inside the role
+  meta: flush_handlers
+- name: The role handler has run by now
+  stat: {path: /root/onigirazu-e2e-role-handler}
+  register: role_handler_file
+- name: Check
+  assert: {that: role_handler_file.stat.exists}

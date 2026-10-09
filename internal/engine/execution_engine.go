@@ -1990,6 +1990,10 @@ func (e *ExecutionEngine) executeRole(ctx context.Context, role *types.Role, hos
 	// Priority: RoleVars > PlayVars > Defaults (handled by roleLoader)
 	roleVars := e.mergeRoleVariables(role, variables)
 
+	// role handlers run with the play's at the next flush: known before the
+	// role's tasks, which may flush them themselves (meta: flush_handlers)
+	e.addHandlers(role.Handlers, roleVars)
+
 	// Execute role pre_tasks if defined
 	if len(role.PreTasks) > 0 {
 		e.logger.Debug("Executing %d pre-tasks for role '%s'", len(role.PreTasks), role.Name)
@@ -2006,9 +2010,6 @@ func (e *ExecutionEngine) executeRole(ctx context.Context, role *types.Role, hos
 			// Continue to handlers even if tasks fail
 		}
 	}
-
-	// role handlers run with the play's, at the next flush
-	e.addHandlers(role.Handlers, roleVars)
 
 	// Execute role post_tasks if defined
 	if len(role.PostTasks) > 0 {
