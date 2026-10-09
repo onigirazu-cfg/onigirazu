@@ -15,7 +15,7 @@ on:
         type: string
         default: ''
       keep_vms:
-        description: 'Keep the VMs for debugging (the janitor still removes them after 3h)'
+        description: 'Keep the VMs for debugging (the janitor removes them after 3h; VMs of other finished runs go at its next run)'
         required: false
         type: boolean
         default: false
