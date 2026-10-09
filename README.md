@@ -428,7 +428,7 @@ return values and examples: [docs/modules/README.md](docs/modules/README.md). Ne
 | `lint`, `fmt` | Best-practice checks (arguments of bridged modules against ansible-doc too); YAML formatting |
 | `doc MODULE` | A module's arguments: built in, or through the Ansible bridge |
 | `graph PLAYBOOK` | Plays, tasks, handlers and variables as ASCII, DOT or Mermaid |
-| `inventory` | `--list`, `--host`, `--graph`, `--json` (as `ansible-inventory`) |
+| `inventory` | `--list`, `--host`, `--graph`, `--json` (as `ansible-inventory`); sources: YAML/JSON/TOML/INI, scripts, [plugins](docs/INVENTORY_FORMATS.md#inventory-plugins) (NetBox, vSphere, Proxmox, NetBird) |
 | `galaxy install -r FILE` | Install roles and collections from a requirements file |
 | `vault` | `encrypt`, `decrypt`, `view`, `encrypt_string` of Ansible Vault data |
 | `healthcheck` | Reachability, disk, memory, CPU and services of the inventory hosts |
