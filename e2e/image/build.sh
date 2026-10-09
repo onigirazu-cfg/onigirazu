@@ -102,8 +102,10 @@ for key in $(jq -r 'keys[]' <<<"$hosts_json"); do
     echo "$key: $name kept as a powered-off VM (VirtualMachine.Provisioning.MarkAsTemplate missing?)"
   fi
 
-  # keep the newest $KEEP of this key
-  govc find "$FOLDER" -type m -name "e2e-base-$key-*" | sort | head -n -"$KEEP" | while read -r old; do
+  # keep the newest $KEEP of this key: newest by the build stamp at the end
+  # of the name, not by the golden image's stamp in the middle (the janitor
+  # retries what a running linked clone keeps alive)
+  govc find "$FOLDER" -type m -name "e2e-base-$key-*" | awk '{print substr($0, length($0) - 12) " " $0}' | sort | cut -d' ' -f2- | head -n -"$KEEP" | while read -r old; do
     echo "$key: removing $old"
     old_macs="$("$HERE/dhcp-leases.sh" macs "$old" | tr '\n' ' ')"
     # a running e2e may still have linked clones of it: the next build retries
