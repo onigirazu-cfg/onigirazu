@@ -308,21 +308,24 @@ func IsLocal(host types.Host) bool {
 	}
 
 	// Check if it's the local machine's IP
+	return localAddrs()[host.Address]
+}
+
+// localAddrs are this machine's non-loopback addresses, read once: listing
+// the interfaces for every task cost 40% of a 500-host run's CPU
+var localAddrs = sync.OnceValue(func() map[string]bool {
+	set := map[string]bool{}
 	addrs, err := net.InterfaceAddrs()
 	if err != nil {
-		return false
+		return set
 	}
-
 	for _, addr := range addrs {
 		if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
-			if ipnet.IP.String() == host.Address {
-				return true
-			}
+			set[ipnet.IP.String()] = true
 		}
 	}
-
-	return false
-}
+	return set
+})
 
 // WriteFile writes data to a file on the remote host using SFTP
 func (c *Client) WriteFile(remotePath string, data []byte, mode os.FileMode) error {
