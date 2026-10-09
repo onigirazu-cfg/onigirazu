@@ -38,7 +38,8 @@ while IFS=$'\t' read -r name created; do
   echo "delete $name (created $created)"
   if [ -z "${DRY_RUN:-}" ]; then
     govc vm.power -off -force "$folder/$name" >/dev/null 2>&1 || true
-    govc vm.destroy "$folder/$name"
+    # two janitors may run at once (schedule + dispatch): the other one won
+    govc vm.destroy "$folder/$name" 2>/dev/null || echo "       already gone"
     deleted=$((deleted + 1))
   fi
 done < <(govc vm.info -json "$folder/*" 2>/dev/null | jq -r '

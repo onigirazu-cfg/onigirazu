@@ -284,8 +284,9 @@ func (m *AptModule) Execute(ctx context.Context, host types.Host, args map[strin
 // aptGet runs apt-get non-interactively on the target host
 func aptGet(ctx context.Context, host types.Host, args map[string]interface{}, aptArgs ...string) (string, error) {
 	argv := []string{"env", "DEBIAN_FRONTEND=noninteractive", "apt-get"}
-	// lock_timeout: wait that long for the dpkg lock (apt 1.9.11+), as Ansible
-	if n := getIntArg(args, "lock_timeout", 0); n > 0 {
+	// lock_timeout: wait that long for the dpkg lock (apt 1.9.11+); 60 s by
+	// default as in Ansible (apt-daily holds it after a boot)
+	if n := getIntArg(args, "lock_timeout", 60); n > 0 {
 		argv = append(argv, "-o", "DPkg::Lock::Timeout="+strconv.Itoa(n))
 	}
 	argv = append(argv, aptArgs...)
