@@ -62,6 +62,15 @@ done < <(govc vm.info -json "$folder/*" 2>/dev/null | jq -r '
 
 echo "e2e VMs found: $found, deleted: $deleted"
 
+# base templates: the newest 2 per image key stay (image/build.sh keeps as
+# many); older ones that a running linked clone kept alive go now
+for key in $(govc find "$folder" -type m -name "e2e-base-*" 2>/dev/null | sed -E 's|.*/e2e-base-([a-z0-9]+)-.*|\1|' | sort -u); do
+  govc find "$folder" -type m -name "e2e-base-$key-*" | awk '{print substr($0, length($0) - 12) " " $0}' | sort | cut -d' ' -f2- | head -n -2 | while read -r old; do
+    echo "delete ${old##*/} (older base template)"
+    [ -n "${DRY_RUN:-}" ] || govc vm.destroy "$old" 2>/dev/null || echo "       still in use by a linked clone"
+  done
+done
+
 # DHCP leases of VMs that no longer exist (killed runs, hard power-offs)
 [ -n "${DRY_RUN:-}" ] || "$(dirname "$0")/dhcp-leases.sh" sweep
 
