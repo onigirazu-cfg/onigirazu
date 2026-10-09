@@ -332,6 +332,8 @@ func (r *Registry) ExecuteTask(ctx context.Context, task *types.Task, host types
 // their effect is the default here
 var AcceptedArgs = map[string][]string{
 	"docker_container": {"comparisons"},
+	// the WinRM/SSH client's own timeouts apply; the boot time is read the same way
+	"win_reboot": {"boot_time_command", "connect_timeout", "shutdown_timeout"},
 }
 
 // FreeArgModules take any argument (add_host: host variables; set_fact: facts)
