@@ -35,9 +35,15 @@ chmod 600 /etc/netplan/01-e2e-dhcp.yaml
 # another address). netplan 1.0 (24.04) has no key for it, so it is a
 # networkd drop-in on the file netplan generates; dhcp-release.sh adds a
 # later drop-in that turns the release on at the end of a run.
-mkdir -p /etc/systemd/network/10-netplan-e2e-all.network.d
-printf '[DHCPv4]\nSendRelease=no\nClientIdentifier=mac\n' > /etc/systemd/network/10-netplan-e2e-all.network.d/00-e2e.conf
-rm -rf /etc/systemd/network/10-netplan-ens192.network.d
+# networkd takes the first matching .network file (the installer's catch-all
+# 10-netplan-all-nics wins over 10-netplan-e2e-all), so every generated
+# file gets the drop-in
+netplan generate >/dev/null 2>&1 || true
+rm -rf /etc/systemd/network/10-netplan-*.network.d
+for n in /run/systemd/network/10-netplan-*.network; do
+  mkdir -p "/etc/systemd/network/$(basename "$n").d"
+  printf '[DHCPv4]\nSendRelease=no\nClientIdentifier=mac\n' > "/etc/systemd/network/$(basename "$n").d/00-e2e.conf"
+done
 cloud-init clean --logs --seed >/dev/null 2>&1 || true
 apt-get clean
 rm -rf /tmp/* /var/tmp/*
