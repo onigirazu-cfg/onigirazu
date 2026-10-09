@@ -72,7 +72,7 @@ diagnose() {
 
 cleanup() {
   local rc=$?
-  if [ "$rc" != 0 ] && [ -f "$TF_DIR/terraform.tfstate" ]; then diagnose || true; fi
+  if [ "$rc" != 0 ] && { [ -f "$TF_DIR/terraform.tfstate" ] || [ -f "$WORK/claimed" ]; }; then diagnose || true; fi
   if [ -z "${KEEP_VMS:-}" ] && { [ -f "$TF_DIR/terraform.tfstate" ] || [ -f "$WORK/claimed" ]; }; then
     log "Destroying VMs"
     # throwaway VMs: power them off hard first; terraform would wait for a
@@ -170,7 +170,7 @@ claimed_json="{}"
 if [ "${E2E_POOL:-1}" = 1 ]; then
   log "Claiming pre-warmed VMs"
   for key in $(jq -r 'keys[]' <<<"$images_json"); do
-    ip="$("$HERE/pool.sh" claim "$key" "tmp-e2e-onigirazu-$RUN_ID-$key" "$(cat "$KEY.pub")" "e2e-$key" 2>/dev/null || true)"
+    ip="$("$HERE/pool.sh" claim "$key" "tmp-e2e-onigirazu-$RUN_ID-$key" "$(cat "$KEY.pub")" "e2e-$key" || true)"
     [ -n "$ip" ] || { echo "$key: none in the pool"; continue; }
     echo "$key: pre-warmed"
     claimed_json="$(jq -c --arg k "$key" --arg ip "$ip" '. + {($k): $ip}' <<<"$claimed_json")"
