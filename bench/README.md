@@ -38,3 +38,6 @@ server. Run it on a lab docker host, not on a laptop.
 | 50  | 7.4 s | 5.8 s | 6.2 s | 233 MB |
 | 100 | 7.3 s | 5.6 s | 6.1 s | 243 MB |
 | 500 | 7.8 s | 5.5 s | 6.0 s | 284 MB |
+
+With `SERVER=sh` (the POSIX shell server, no agent upload) at concurrency 100: converge 8.7 s, second run
+7.8 s, CPU 5.4 s, 215 MB.
