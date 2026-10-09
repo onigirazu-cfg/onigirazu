@@ -45,7 +45,7 @@ func NewDockerContainerModule() *DockerContainerModule {
 func (m *DockerContainerModule) Execute(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
 	startTime := time.Now()
 	result := types.TaskResult{
-		TaskName:  "docker_container",
+		TaskName:  taskName(args),
 		Host:      host.Name,
 		Module:    m.GetName(),
 		Success:   true,

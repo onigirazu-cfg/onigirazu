@@ -54,7 +54,7 @@ func (m *TemplateModule) Execute(ctx context.Context, host types.Host, args map[
 	startTime := time.Now()
 
 	result := types.TaskResult{
-		TaskName:  "template",
+		TaskName:  taskName(args),
 		Host:      host.Name,
 		Module:    m.GetName(),
 		Success:   false,

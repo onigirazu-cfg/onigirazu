@@ -33,7 +33,7 @@ func (m *CronModule) GetDescription() string {
 func (m *CronModule) Execute(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
 	startTime := time.Now()
 	result := types.TaskResult{
-		TaskName:  "cron",
+		TaskName:  taskName(args),
 		Host:      host.Name,
 		Module:    m.GetName(),
 		Success:   true,
@@ -61,7 +61,7 @@ func (m *CronModule) Execute(ctx context.Context, host types.Host, args map[stri
 // executeCron performs the actual cron operations
 func (m *CronModule) executeCron(ctx context.Context, exec *executor.CommandExecutor, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
 	result := types.TaskResult{
-		TaskName:  "cron",
+		TaskName:  taskName(args),
 		Host:      host.Name,
 		Module:    m.GetName(),
 		Success:   true,
