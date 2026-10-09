@@ -281,7 +281,7 @@ Copy a file from the control machine (or, with `remote_src`, from the host) or w
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `src` | string | - | Source file (not a directory); `src` or `content` is required |
+| `src` | string | - | Source file or directory; `src` or `content` is required |
 | `content` | string | - | File content instead of `src` |
 | `dest` | string | - | Destination path (required) |
 | `backup` | boolean | `false` | Keep the old file as `<dest>.backup.<YYYYMMDD-HHMMSS>` |
@@ -292,6 +292,12 @@ Copy a file from the control machine (or, with `remote_src`, from the host) or w
 | `remote_src` | boolean | `false` | `src` is a path on the host, not on the control machine |
 
 Returns `dest`, `checksum` (SHA-256 of the source), `size`, `msg` and `backup_file` when a backup was made.
+
+Directories, as in Ansible: `src: dir/` copies the directory's contents into `dest`, `src: dir` copies the
+directory itself (`dest/dir/...`); `mode`, `owner` and `group` apply to every file, empty directories are
+skipped, and the result has `files` and how many changed. A file copied to a `dest` ending in `/` or to an
+existing directory keeps its name in there. `content` with a `dest` ending in `/` fails. A missing parent
+directory of `dest` is created (Ansible fails there). `remote_src` copies single files only.
 
 #### Example
 
