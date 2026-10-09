@@ -9,7 +9,7 @@ import (
 )
 
 func TestUnsupportedParameters(t *testing.T) {
-	if msg := unsupportedParameters("find", map[string]interface{}{"paths": "/tmp", "age_stamp": "atime", "_before": 1}); !strings.HasPrefix(msg, "Unsupported parameters for (find) module: age_stamp. Supported parameters include: ") {
+	if msg := unsupportedParameters("find", map[string]interface{}{"paths": "/tmp", "bogus": "red", "_before": 1}); !strings.HasPrefix(msg, "Unsupported parameters for (find) module: bogus. Supported parameters include: ") {
 		t.Fatalf("got %q", msg)
 	}
 	if msg := unsupportedParameters("find", map[string]interface{}{"paths": "/tmp", "recurse": true}); msg != "" {
