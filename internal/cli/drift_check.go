@@ -60,20 +60,22 @@ type DriftReport struct {
 }
 
 type driftCheckOptions struct {
-	plan       bool // plan: the same report, changes are not an error
-	fix        bool
-	format     string
-	output     string
-	extraVars  []string
-	limit      string
-	tags       string
-	skipTags   string
-	become     bool
-	becomeUser string
-	user       string
-	privateKey string
-	notify     []string // webhooks told about drift and errors
-	notifyOK   bool     // tell them about a clean check too
+	plan                     bool // plan: the same report, changes are not an error
+	fix                      bool
+	format                   string
+	output                   string
+	extraVars                []string
+	limit                    string
+	tags                     string
+	skipTags                 string
+	become                   bool
+	becomeUser               string
+	user                     string
+	privateKey               string
+	notify                   []string // webhooks told about drift and errors
+	notifyOK                 bool     // tell them about a clean check too
+	metricsFile, metricsPush string   // Prometheus text: a textfile collector file, a push URL
+	metricsLabels            []string // extra labels, name=value
 }
 
 // applyArgs are the apply arguments of a drift check (or of --fix)
@@ -232,6 +234,13 @@ func runDriftCheck(cmd *cobra.Command, playbook string, o driftCheckOptions) err
 		report.Fixed = true
 	}
 
+	if o.metricsFile != "" || o.metricsPush != "" {
+		labels, err := parseLabels(o.metricsLabels)
+		if err != nil {
+			return err
+		}
+		emitMetrics(driftMetrics(report, labels), o.metricsFile, o.metricsPush)
+	}
 	if len(report.Drift) > 0 || len(report.Errors) > 0 || o.notifyOK {
 		for _, url := range o.notify {
 			if err := notifyWebhook(url, report); err != nil {
