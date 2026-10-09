@@ -64,4 +64,8 @@ jobs:
           TF_VAR_library: ${{ secrets.E2E_LIBRARY }}
           RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          MIKROTIK_API_URL: ${{ secrets.MIKROTIK_API_URL }}
+          MIKROTIK_API_USER: ${{ secrets.MIKROTIK_API_USER }}
+          MIKROTIK_API_PASSWORD: ${{ secrets.MIKROTIK_API_PASSWORD }}
+          MIKROTIK_API_INSECURE: ${{ secrets.MIKROTIK_API_INSECURE }}
         run: e2e/image/build.sh

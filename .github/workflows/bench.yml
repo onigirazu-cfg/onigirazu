@@ -95,6 +95,10 @@ jobs:
           BENCH_VARS: ${{ inputs.vars || '{}' }}
           ONIGIRAZU_REMOTE_SERVER: ${{ inputs.server || 'auto' }}
           BENCH_OUT: ${{ runner.temp }}/bench-results
+          MIKROTIK_API_URL: ${{ secrets.MIKROTIK_API_URL }}
+          MIKROTIK_API_USER: ${{ secrets.MIKROTIK_API_USER }}
+          MIKROTIK_API_PASSWORD: ${{ secrets.MIKROTIK_API_PASSWORD }}
+          MIKROTIK_API_INSECURE: ${{ secrets.MIKROTIK_API_INSECURE }}
         run: bench/run.sh
 
       - uses: actions/upload-artifact@v7

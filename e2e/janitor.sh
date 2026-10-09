@@ -6,7 +6,8 @@
 # GITHUB_REPOSITORY set, VMs of workflow runs still in progress are kept.
 #
 # Environment: GOVC_URL GOVC_USERNAME GOVC_PASSWORD GOVC_INSECURE,
-#   E2E_DATACENTER, E2E_FOLDER; optional TTL_HOURS (default 3), DRY_RUN=1
+#   E2E_DATACENTER, E2E_FOLDER; optional TTL_HOURS (default 3), DRY_RUN=1;
+#   MIKROTIK_API_* for the DHCP leases (dhcp-leases.sh)
 set -euo pipefail
 
 PREFIX="tmp-e2e-onigirazu-"
@@ -45,6 +46,9 @@ done < <(govc vm.info -json "$folder/*" 2>/dev/null | jq -r '
   (.virtualMachines // .VirtualMachines // [])[] | [.name, (.config.createDate // "")] | @tsv')
 
 echo "e2e VMs found: $found, deleted: $deleted"
+
+# DHCP leases of VMs that no longer exist (killed runs, hard power-offs)
+[ -n "${DRY_RUN:-}" ] || "$(dirname "$0")/dhcp-leases.sh" sweep
 
 # Work directories of runs that were killed (a cancelled job gets no EXIT
 # trap): they hold the run's private key. At least 3 hours old even when
