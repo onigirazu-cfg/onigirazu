@@ -17,6 +17,7 @@ Start with the [Quick Start](QUICK_START_CONFIGURATION.md). The project
 - [Compliance profiles](COMPLY.md) — `onigirazu comply`: CIS-style controls with severities, scores and fixes
 - [Safe apply](SAFE_APPLY.md) — `serial`, canary batches, health checks, automatic rollback, `strategy: free`, `throttle`
 - [Pull mode](PULL.md) — `onigirazu pull`: a host converges itself from git, on a timer, with notifications and metrics
+- [Fleet server](SERVE.md) — `onigirazu serve`: scheduled jobs, results per host, run history, web page and API
 - [Listen mode](LISTEN.md) — `onigirazu listen`: playbooks on Alertmanager, GitHub and Mattermost events, any webhook
 - [Plan in a pull request](PLAN_IN_PR.md) — `plan --github-comment` as a sticky PR comment
 - [Machine-readable results](MACHINE_OUTPUT.md) — `-o json|yaml`, exit codes
