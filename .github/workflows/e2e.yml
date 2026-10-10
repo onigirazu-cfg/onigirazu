@@ -25,7 +25,7 @@ on:
         type: boolean
         default: false
   schedule:
-    - cron: '0 5 * * *'   # e2e, after the 01:00 image rebuild
+    - cron: '0 5 * * *'   # e2e, after the 03:30 image rebuild
     - cron: '30 * * * *'  # janitor
 
 permissions:
@@ -34,7 +34,7 @@ permissions:
 
 jobs:
   # Which cases, on how many shards: a pull request runs the cases its changes
-  # need (e2e/select-cases.sh), one shard per ~5 min of cases, at most four
+  # need (e2e/select-cases.sh), one shard per ~150 s of cases, at most four
   plan:
     if: >-
       (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository &&

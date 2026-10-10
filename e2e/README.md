@@ -15,7 +15,7 @@ Runs every case in `cases/` on disposable vSphere VMs cloned from the current
   own VMs, balanced by `case-seconds.tsv` (longest case first onto the least loaded
   shard; times measured in a run). Add a new slow case there.
 - Base templates: `image/build.sh` (workflow `E2E base image`: nightly at 03:30 UTC,
-  on changes to `image/`, `images.sh`, `setup-lib.sh`, and by hand) clones each golden
+  on pushes to `main` that change `image/`, `images.sh`, `setup-lib.sh` or the workflow, and by hand) clones each golden
   `[latest]` image, preinstalls what the cases install (`image/prepare.sh`: packages,
   Docker and the container images), seals it like the golden image (`image/seal.sh`)
   and keeps it as `e2e-base-<os>-<golden item>-<time>` in the e2e folder (two per OS),
@@ -27,13 +27,17 @@ Runs every case in `cases/` on disposable vSphere VMs cloned from the current
   golden images. A new install in a case's `setup.sh` belongs in `prepare.sh` too.
 - VMs are named `tmp-e2e-onigirazu-<run>-<os>`, live in a dedicated folder and
   carry a "TEMPORARY" note with the run link and expiry time.
-- `janitor.sh` runs hourly and deletes e2e VMs older than 3 hours from that
-  folder, covering cancelled runs. `purge_vms` removes all of them at once;
-  VMs of runs still in progress are kept.
+- `janitor.sh` runs hourly: VMs of finished runs go at once, `keep_vms` VMs and VMs it cannot
+  match to a run after 3 h, VMs of runs still in progress stay; it also removes base templates
+  older than the newest two per key, sweeps orphan DHCP leases (with the MikroTik secrets), deletes
+  stale `onigirazu-e2e.*` work directories and runs `pool.sh purge && pool.sh fill`. `purge_vms`
+  removes every e2e VM at once.
 - Access: each run generates an SSH key and passes it as
   `guestinfo.e2e_authorized_key`, the host name as `guestinfo.e2e_hostname`; the
   image's first-boot unit creates user `e2e` and sets the name (no guest
-  customization). The base images bring their own DHCP netplan.
+  customization). The base images bring their own DHCP netplan (`seal.sh`: client id = MAC) and
+  a networkd drop-in `SendRelease=no` on every netplan-generated `.network` file, so a reboot keeps
+  the address; `dhcp-release.sh` turns the release back on at the end of a run.
 - Cleanup powers the run's VMs off hard before `terraform destroy` (no clean guest
   shutdown to wait for).
 
@@ -43,7 +47,7 @@ Runs every case in `cases/` on disposable vSphere VMs cloned from the current
 - `playbook.yml` — applied to all VMs (`hosts: all`);
 - `setup.sh` — optional; runs on each VM as root before the first apply;
 - `verify.sh` — runs on each VM as root after the apply and must exit 0;
-- `verify-local.sh` — optional; runs on the runner in the case directory with `HOST`, `HOST_IP`, `KEY` set
+- `verify-local.sh` — optional; runs on the runner in the case directory with `HOST`, `HOST_IP`, `KEY`, `BIN`, `INVENTORY` set
   (for results that land on the control machine, e.g. fetch); its `note: ...` lines are
   shown in the log when it passes;
 - `EXPECT_FAIL` — optional; the apply must fail (no verify, no second apply);
@@ -63,11 +67,10 @@ Repository secrets: `VSPHERE_SERVER`, `VSPHERE_USER`, `VSPHERE_PASSWORD`,
 `E2E_FOLDER`, `E2E_LIBRARY`. Secrets rather than variables: Actions logs of a
 public repository are public.
 
-The hourly janitor removes the VMs of finished runs (a cancelled run gets no cleanup) at once, VMs kept
-with `keep_vms` and VMs it cannot match to a run after 3 h.
-
-When a run fails, the log shows each VM's power state, guest state, guest IP, boot time and last vCenter
-events, and the console screenshots are uploaded as the `e2e-diag-<shard>` artifact (7 days).
+When a run fails, the log shows the failed tasks' own messages first, then the log's errors, then each
+VM's power state, guest state, tools status, guest IP, boot time and last vCenter events; the console
+screenshots are uploaded as the `e2e-diag-<shard>` artifact (7 days). This diagnosis exists for the
+Linux run only.
 
 Before the hard power-off each VM releases its DHCP lease (`dhcp-release.sh`): the network's pool is
 small and a powered-off VM keeps its lease until it expires.
@@ -96,7 +99,17 @@ come from the runner (`write` in RouterOS covers everything, so the address rest
 (`pool-e2e-<id>-<key>`, tagged with their template). A run claims one per key by renaming it to its
 own name — atomic in vCenter, so parallel shards never take the same VM — and sets its key through
 guestinfo; the base image's `e2e-access-refresh` timer applies it within seconds. What the pool lacks
-is created with terraform as before. The pool is refilled after every run and by the janitor; the
+is created with terraform as before. The pool is refilled after every run and purged and refilled by the janitor; the
 image build purges VMs of the previous template. `E2E_POOL=0` skips the pool; the nightly run on
 golden images never uses it. Pool VMs hold DHCP leases while they wait.
 
+
+## Windows
+
+Workflow `E2E Windows` (`e2e-windows.yml`) runs `run-windows.sh` on one disposable Windows VM cloned from
+the Windows golden image: on pull requests from this repository that touch `internal/winrm/`, the Windows
+modules or these tests, by hand (`cases`, `keep_vms`) and nightly at 06:00 UTC. The cases live in
+`cases-windows/` (`playbook.yml`, `verify.yml`, `NOT_IDEMPOTENT`), the VM in `terraform-windows/`. The
+binary is built with `go generate ./internal/agentbin`, so the Windows agent is embedded and the
+`13-ssh` case exercises it. No pool, no DHCP release and no VM diagnosis there; a kept VM's inventory
+and ssh key stay in `~/.cache/onigirazu-e2e/<run>` on the runner.

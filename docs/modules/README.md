@@ -26,7 +26,8 @@ For a one-line summary of each module see the [Alphabetical Index](INDEX.md).
 
 ## Module Overview
 
-Each task calls one module with its arguments. Arguments a module does not read are ignored.
+Each task calls one module with its arguments. An argument the module does not have fails the task
+(`Unsupported parameters for (...) module`), as in Ansible; `add_host` and `set_fact` take any argument.
 
 ### Module Structure
 
@@ -2231,7 +2232,7 @@ wrote a local fact. The host's variables get the new facts; the result's
 
 Local facts (`ansible_local`) are the `*.fact` files of `fact_path` by name:
 JSON, else INI sections, else text; an executable file is run and its output
-read. Other arguments such as `gather_subset` are ignored.
+read. `gather_subset` is accepted and has no effect: every fact is gathered.
 
 ```yaml
 - ansible.builtin.setup:

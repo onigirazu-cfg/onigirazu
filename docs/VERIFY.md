@@ -41,14 +41,14 @@ web2: 5 passed, 1 failed
 
 | Kind | Arguments |
 |---|---|
-| `file` | `path`; `exists` (true); `type` file/directory/link; `mode` (`"0644"`); `owner`; `group`; `contains` (list); `target` (of a link) |
+| `file` | `path`; `exists` (true); `type` file/directory/link (or symlink); `mode` (`"0644"`); `owner`; `group`; `contains` (list); `target` (of a link) |
 | `package` | `name`; `installed` (true); `version` (prefix) |
-| `service` | `name`; `running`; `enabled` (systemd, `service` as fallback for running) |
+| `service` | `name`; `running`; `enabled` (systemd: enabled, static, alias, indirect or an enabled `<name>.socket`; `service` as fallback for running) |
 | `port` | `port`; `listening` (true); `proto` tcp/udp; `ip` (a bound address) |
 | `process` | `name` (as `pgrep -x`); `running` (true) |
 | `user` | `name`; `exists` (true); `uid`; `gid`; `home`; `shell`; `groups` (list, all must hold) |
 | `group` | `name`; `exists` (true); `gid` |
-| `command` | `cmd` (run with `sh -c`); `exit_status` (0); `stdout`, `stderr` (lists); `timeout` (30 s) |
+| `command` | `cmd` (run with `timeout N sh -c`, needs coreutils `timeout`); `exit_status` (0); `stdout`, `stderr` (lists); `timeout` (30 s) |
 | `http` | `url` (from the host, with curl); `status` (200); `body` (list); `insecure`; `timeout` (10 s) |
 | `mount` | `path`; `exists` (true); `type`; `opts` (list) |
 | `kernel_param` | `name`; `value` |

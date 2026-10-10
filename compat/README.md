@@ -46,7 +46,7 @@ the docker-test-lab VM. A case is a plain Ansible playbook for `hosts: all`; wri
 The container corpus does not catch everything: a pilot of the ClanRed `clanred.infra` roles on two
 disposable e2e VMs (2026-10-09) found handlers lost after `meta: flush_handlers` inside a role, no retry
 of a refused SSH connection after a task restarted sshd, `find` ignoring `age`, `validate` ignored and
-unknown module arguments ignored. The method, per role, on the kept VMs of an e2e run
+unknown module arguments ignored (all fixed since; unknown arguments now fail as in Ansible). The method, per role, on the kept VMs of an e2e run
 (`keep_vms`): the role's molecule `converge.yml` with onigirazu twice (the second run must change
 nothing), its `verify.yml`, then `ansible-playbook` with the same `converge.yml` on the same hosts: every
 task Ansible still changes is something onigirazu left different, or a task that is not idempotent
