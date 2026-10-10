@@ -491,6 +491,10 @@ return values and examples: <a href="docs/modules/README.md">docs/modules/README
 <td>Run the plays' <code>verify:</code> checks (files, packages, services, ports, http, ...) and report them (<a href="docs/VERIFY.md">docs/VERIFY.md</a>)</td>
 </tr>
 <tr>
+<td><code>comply --profile PROFILE</code></td>
+<td>Check hosts against a compliance profile (bundled <code>linux-baseline</code>, <code>ssh</code>, or your own CIS-style controls) and score them; <code>comply list</code>, <code>comply show</code> (<a href="docs/COMPLY.md">docs/COMPLY.md</a>)</td>
+</tr>
+<tr>
 <td><code>pull --repo URL</code></td>
 <td>This host converges itself from a git repository: once, every <code>--interval</code>, or <code>pull install</code> (systemd timer); <code>--drift-only</code>, <code>--only-on-change</code>, <code>--notify</code>, <code>--metrics-*</code> (<a href="docs/PULL.md">pull mode</a>)</td>
 </tr>
@@ -654,6 +658,8 @@ per-host counts and a browser for task results.</p>
 <li><code>listen</code> runs playbooks on events — an alert, a push, a chat command — with per-rule throttling
   (<a href="docs/LISTEN.md">docs/LISTEN.md</a>).</li>
 <li><code>verify</code> runs the plays' <code>verify:</code> checks and reports them, also as JSON (<a href="docs/VERIFY.md">docs/VERIFY.md</a>).</li>
+<li><code>verify</code> runs the plays' <code>verify:</code> checks and reports them, also as JSON (<a href="docs/VERIFY.md">docs/VERIFY.md</a>);
+  <code>comply</code> scores hosts against compliance profiles, with Markdown/HTML reports and metrics (<a href="docs/COMPLY.md">docs/COMPLY.md</a>).</li>
 <li><code>apply --background</code> returns at once; <code>show-execution</code> reads the result later.</li>
 <li><code>audit</code> keeps the history of runs with per-host statistics.</li>
 <li><code>onigirazu test</code> runs a role's Molecule scenarios (docker/podman instances, converge,
