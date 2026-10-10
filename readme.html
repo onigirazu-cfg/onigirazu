@@ -495,6 +495,10 @@ return values and examples: <a href="docs/modules/README.md">docs/modules/README
 <td>This host converges itself from a git repository: once, every <code>--interval</code>, or <code>pull install</code> (systemd timer); <code>--drift-only</code>, <code>--only-on-change</code>, <code>--notify</code>, <code>--metrics-*</code> (<a href="docs/PULL.md">pull mode</a>)</td>
 </tr>
 <tr>
+<td><code>listen -f listen.yml</code></td>
+<td>Run playbooks on events: Alertmanager/vmalert alerts, GitHub webhooks, Mattermost commands, any JSON POST; <code>listen test</code>, <code>listen install</code> (<a href="docs/LISTEN.md">docs/LISTEN.md</a>)</td>
+</tr>
+<tr>
 <td><code>plugin list</code></td>
 <td>Command plugins found (<code>onigirazu-NAME</code> executables)</td>
 </tr>
@@ -647,6 +651,8 @@ per-host counts and a browser for task results.</p>
   webhooks and <code>--metrics-*</code> exports Prometheus metrics.</li>
 <li><code>pull</code> runs a playbook from git on the host itself, once or on a systemd timer, with the same
   notifications and metrics (<a href="docs/PULL.md">docs/PULL.md</a>).</li>
+<li><code>listen</code> runs playbooks on events — an alert, a push, a chat command — with per-rule throttling
+  (<a href="docs/LISTEN.md">docs/LISTEN.md</a>).</li>
 <li><code>verify</code> runs the plays' <code>verify:</code> checks and reports them, also as JSON (<a href="docs/VERIFY.md">docs/VERIFY.md</a>).</li>
 <li><code>apply --background</code> returns at once; <code>show-execution</code> reads the result later.</li>
 <li><code>audit</code> keeps the history of runs with per-host statistics.</li>

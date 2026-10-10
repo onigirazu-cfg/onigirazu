@@ -16,6 +16,7 @@ Start with the [Quick Start](QUICK_START_CONFIGURATION.md). The project
 - [Verify](VERIFY.md) — `verify:` checks of a play and `onigirazu verify`
 - [Safe apply](SAFE_APPLY.md) — `serial`, canary batches, health checks, automatic rollback, `strategy: free`, `throttle`
 - [Pull mode](PULL.md) — `onigirazu pull`: a host converges itself from git, on a timer, with notifications and metrics
+- [Listen mode](LISTEN.md) — `onigirazu listen`: playbooks on Alertmanager, GitHub and Mattermost events, any webhook
 - [Plan in a pull request](PLAN_IN_PR.md) — `plan --github-comment` as a sticky PR comment
 - [Machine-readable results](MACHINE_OUTPUT.md) — `-o json|yaml`, exit codes
 
