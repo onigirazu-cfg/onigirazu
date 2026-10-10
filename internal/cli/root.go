@@ -93,6 +93,7 @@ across your infrastructure with a focus on simplicity and reliability.`,
 	rootCmd.AddCommand(newPullCmd())
 	rootCmd.AddCommand(newListenCmd())
 	rootCmd.AddCommand(newServeCmd())
+	rootCmd.AddCommand(newMCPCmd())
 	rootCmd.AddCommand(newVerifyCmd())
 	rootCmd.AddCommand(newComplyCmd())
 	rootCmd.AddCommand(inventoryCmd)

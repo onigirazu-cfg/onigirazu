@@ -435,6 +435,7 @@ return values and examples: [docs/modules/README.md](docs/modules/README.md). Ne
 | `comply --profile PROFILE` | Check hosts against a compliance profile (bundled `linux-baseline`, `ssh`, or your own CIS-style controls) and score them; `comply list`, `comply show` ([docs/COMPLY.md](docs/COMPLY.md)) |
 | `pull --repo URL` | This host converges itself from a git repository: once, every `--interval`, or `pull install` (systemd timer); `--drift-only`, `--only-on-change`, `--notify`, `--metrics-*` ([pull mode](docs/PULL.md)) |
 | `serve -f serve.yml` | Fleet server: scheduled drift/apply/verify/comply jobs, results per host, run history, web page and REST API behind a token or a reverse proxy's identity ([docs/SERVE.md](docs/SERVE.md)) |
+| `mcp -i INVENTORY` | MCP server over stdio for AI agents: inventory, plan, drift, verify, comply, run history, module docs; `apply` only with `--allow-apply` ([docs/MCP.md](docs/MCP.md)) |
 | `listen -f listen.yml` | Run playbooks on events: Alertmanager/vmalert alerts, GitHub webhooks, Mattermost commands, any JSON POST; `listen test`, `listen install` ([docs/LISTEN.md](docs/LISTEN.md)) |
 | `plugin list` | Command plugins found (`onigirazu-NAME` executables) |
 | `diff PLAYBOOK` | Compare a playbook with the last recorded run |
@@ -513,6 +514,8 @@ Without a terminal the normal output is used. See [docs/INTERACTIVE_MODE.md](doc
   ([docs/LISTEN.md](docs/LISTEN.md)).
 - `serve` is the fleet server: scheduled jobs, their results per host, the run history, a web page
   and an API with viewer/operator roles ([docs/SERVE.md](docs/SERVE.md)).
+- `mcp` makes all of this available to AI agents as MCP tools, read-only unless allowed
+  ([docs/MCP.md](docs/MCP.md)).
 - `verify` runs the plays' `verify:` checks and reports them, also as JSON ([docs/VERIFY.md](docs/VERIFY.md)).
 - `verify` runs the plays' `verify:` checks and reports them, also as JSON ([docs/VERIFY.md](docs/VERIFY.md));
   `comply` scores hosts against compliance profiles, with Markdown/HTML reports and metrics ([docs/COMPLY.md](docs/COMPLY.md)).
