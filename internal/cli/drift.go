@@ -78,6 +78,7 @@ The older snapshot comparison is still available with --snapshot <id>.`,
 	cmd.Flags().StringArrayVar(&driftCheck.metricsLabels, "metrics-label", nil, "Extra label on every metric, name=value (repeatable)")
 	cmd.Flags().StringArrayVarP(&driftCheck.extraVars, "extra-vars", "e", nil, "Extra variables, as for apply (repeatable)")
 	cmd.Flags().StringVar(&driftCheck.limit, "limit", "", "Check only hosts matching this pattern")
+	cmd.Flags().StringVar(&driftCheck.exclude, "exclude", "", "Leave out hosts matching this pattern")
 	cmd.Flags().StringVar(&driftCheck.tags, "tags", "", "Check only tasks with these tags")
 	cmd.Flags().StringVar(&driftCheck.skipTags, "skip-tags", "", "Skip tasks with these tags")
 	cmd.Flags().BoolVarP(&driftCheck.become, "become", "b", false, "Use privilege escalation in every play")

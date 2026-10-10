@@ -157,7 +157,10 @@ YAML is read as Ansible reads it: unquoted `yes`/`no`/`on`/`off` values are bool
   `check_mode`, `diff`, `vars`, `environment`, `action` (also with a templated module name),
   `async` with `poll` (the task fails after `async` seconds); `poll: 0` starts it in the
   background and `async_status` reports on it (jobs live in the onigirazu process, which waits
-  for unfinished ones at the end of the run)
+  for unfinished ones at the end of the run); register projections (`register:` as a map of
+  names to expressions over `_task.result`, ansible-core 2.20) and `_task.result` in
+  `changed_when`/`failed_when`/`until`; `argument_specs` of roles (`meta/argument_specs.yml`)
+  and of plays validate variables before anything runs
 - **Short forms**: `command: make install chdir=/src`, `file: path=/etc/app state=directory`,
   `args:`; argument aliases such as `apt: pkg:`, `file: dest:`, `systemd: unit:`
 - **Module names**: `ansible.builtin.*`, `ansible.legacy.*` and the collection modules
@@ -165,7 +168,7 @@ YAML is read as Ansible reads it: unquoted `yes`/`no`/`on`/`off` values are bool
   `community.general.ufw`/`ini_file`/`timezone`/`archive`,
   `community.docker.docker_container`/`docker_image`/`docker_compose`/`docker_compose_v2`/`docker_host_info`,
   `community.mysql.mysql_db`/`mysql_user`, `community.postgresql.postgresql_db`/`postgresql_user`,
-  `community.sops.load_vars`, `ansible.windows.*`, `community.windows.*`,
+  `community.sops.load_vars`, `community.general.pipx`/`flatpak`, `ansible.windows.*`, `community.windows.*`,
   `chocolatey.chocolatey.win_chocolatey`); `dnf`/`dnf5` run the `yum` module
 - **Roles and collections**: `roles/` next to the playbook, `roles_path` and `collections_path`
   from `ansible.cfg`, `ANSIBLE_ROLES_PATH`, `ANSIBLE_COLLECTIONS_PATH`,
@@ -180,7 +183,7 @@ YAML is read as Ansible reads it: unquoted `yes`/`no`/`on`/`off` values are bool
   `ansible_ssh_common_args`/`ansible_ssh_extra_args` (`ConnectTimeout`, `ProxyJump`/`-J`,
   `ProxyCommand`, `StrictHostKeyChecking=no`), `ansible_connection` `local`, `docker`, `podman`;
   templated values and `-e` overrides
-- **Jinja**: filters (`default`, `map`, `select`/`selectattr`, `combine`, `regex_*`,
+- **Jinja**: filters by bare or fully qualified name (`| ansible.builtin.to_json`, `is ansible.builtin.version`) — `default`, `map`, `select`/`selectattr`, `combine`, `regex_*`,
   `to_json`/`from_yaml`, `ternary`, set operations, `password_hash`, ...), tests (`is defined`,
   `is version`, `is success`/`failed`/`changed`/`skipped`, `is match`/`search`, ...), `~`,
   inline `if`, `omit`, Python string/dict/list methods (`.split()`, `.get()`), lookups
@@ -404,7 +407,7 @@ to change. Secrets become variables with an example file. See [docs/IMPORT.md](d
 |------|---------|
 | Commands | `command`, `shell`, `script` |
 | Files | `file`, `copy`, `template`, `lineinfile`, `blockinfile`, `replace`, `ini_file`, `fetch`, `slurp`, `stat`, `find`, `archive`, `unarchive`, `get_url`, `config` (JSON/YAML/TOML keys) |
-| Packages | `package`, `apt`, `yum` (also `dnf`), `apt_repository`, `apt_key`, `pip` |
+| Packages | `package`, `apt`, `yum` (also `dnf`), `apt_repository`, `apt_key`, `pip`, `pipx`, `flatpak` |
 | Services and system | `service`, `systemd`, `cron`, `sysctl`, `mount`, `hostname`, `timezone`, `reboot`, `user`, `group`, `authorized_key`, `getent` |
 | Network and firewall | `uri`, `wait_for`, `firewall` (ufw, firewalld, iptables), `ufw` |
 | Containers | `docker_container`, `docker_image`, `docker_compose` (v1 and v2), `docker_host_info`, `podman` |
@@ -464,7 +467,7 @@ onigirazu apply site.yml -i hosts.ini \
   --check --diff -f 20
 ```
 
-`--list-hosts`, `--list-tasks`, `--list-tags` and `--syntax-check` print and exit;
+`--exclude PATTERN` leaves hosts out (also on `plan`, `drift`, `verify`); `--list-hosts`, `--list-tasks`, `--list-tags` and `--syntax-check` print and exit;
 `--start-at-task` skips to a task; `-o json|yaml` prints a machine-readable result.
 Every command has `--help`. Global flags: `-i`, `-c` (config file), `-s` (state file), `-v`, `--show-debug`,
 `--no-color`, `--security-policy`.

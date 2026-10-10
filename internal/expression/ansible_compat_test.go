@@ -56,3 +56,17 @@ func TestLookupFQCN(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "v", got)
 }
+
+func TestBuiltinPrefixedFiltersAndTests(t *testing.T) {
+	cases := map[string]interface{}{
+		`{{ x | ansible.builtin.to_json }}`:                       `{"a": 1}`,
+		`{{ "1.2.3" is ansible.builtin.version("1.2.0", ">=") }}`: true,
+		`{{ "v" is not ansible.legacy.match("x") }}`:              true,
+	}
+	for code, want := range cases {
+		got, err := Eval(code, map[string]interface{}{"x": map[string]interface{}{"a": 1}})
+		if err != nil || got != want {
+			t.Errorf("%s = %v, %v; want %v", code, got, err, want)
+		}
+	}
+}

@@ -66,6 +66,7 @@ func newApplyCommand(onResult func(*types.PlaybookResult)) *cobra.Command {
 		outputFormat   string
 		extraVars      []string
 		limit          string
+		exclude        string
 		become         bool
 		becomeUser     string
 		remoteUser     string
@@ -495,6 +496,12 @@ Examples:
 				executionEngine.SetExtraVars(vars)
 				// -e ansible_user=... reaches the hosts, as in Ansible
 				inventoryManager.SetConnectionOverrides(vars)
+			}
+			if exclude != "" {
+				if limit == "" {
+					limit = "all"
+				}
+				limit += ":!" + exclude
 			}
 			executionEngine.SetLimit(limit)
 			executionEngine.SetForceBecome(become || becomeUser != "", becomeUser)
@@ -1228,6 +1235,7 @@ Examples:
 	cmd.Flags().StringVarP(&outputFormat, "output", "o", "text", "Output format (text, json, yaml)")
 	cmd.Flags().StringArrayVarP(&extraVars, "extra-vars", "e", nil, "Variables that override all others: key=value ..., JSON/YAML, or @file (repeatable)")
 	cmd.Flags().StringVar(&limit, "limit", "", "Run only on hosts matching this pattern (e.g. web1, web:!web3)")
+	cmd.Flags().StringVar(&exclude, "exclude", "", "Leave out hosts matching this pattern (as --limit 'all:!PATTERN')")
 	cmd.Flags().BoolVarP(&become, "become", "b", false, "Use privilege escalation in every play")
 	cmd.Flags().StringVar(&becomeUser, "become-user", "", "User to become (implies --become)")
 	cmd.Flags().StringVarP(&remoteUser, "user", "u", "", "SSH user for every host")

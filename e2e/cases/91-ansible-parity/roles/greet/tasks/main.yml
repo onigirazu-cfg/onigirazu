@@ -1,0 +1,3 @@
+- copy:
+    dest: /etc/onigirazu-e2e-greet
+    content: "{{ greet_mode }} hello {{ greet_name }}\n"

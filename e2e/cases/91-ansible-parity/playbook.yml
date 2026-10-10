@@ -1,0 +1,31 @@
+# ansible-core 2.19/2.20 forms: fully qualified filters and tests, register
+# projections with _task.result, argument specs of a role and of a play
+plays:
+  - name: register projections and qualified names
+    hosts: all
+    become: true
+    argument_specs:
+      main:
+        options:
+          parity_port: {type: int, required: true}
+          parity_tag: {type: str, default: e2e}
+    vars:
+      parity_port: 8080
+    tasks:
+      - name: a command, its result projected
+        command: echo hello world
+        changed_when: false
+        register:
+          echo_result: _task.result
+          words: _task.result.stdout | ansible.builtin.split(" ") | length
+          shout: _task.result.stdout | upper
+      - name: _task.result in failed_when
+        command: echo goodbye
+        changed_when: false
+        failed_when: _task.result.stdout is ansible.builtin.contains("nope")
+      - copy:
+          dest: /etc/onigirazu-e2e-parity
+          content: "{{ echo_result.rc }} {{ words }} {{ shout }} {{ parity_port }} {{ parity_tag }} {{ [3, 1, 2] | ansible.builtin.sort | ansible.builtin.to_json }}\n"
+    roles:
+      - role: greet
+        vars: {greet_name: world, greet_mode: long}
