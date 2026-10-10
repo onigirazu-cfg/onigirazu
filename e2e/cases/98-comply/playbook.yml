@@ -1,0 +1,8 @@
+# the case is in verify-local.sh: comply runs the bundled profiles against this host
+plays:
+  - name: comply e2e prepares a known failure
+    hosts: all
+    become: true
+    gather_facts: false
+    tasks:
+      - sysctl: {name: net.ipv4.conf.all.log_martians, value: "0", sysctl_set: true, state: present}
