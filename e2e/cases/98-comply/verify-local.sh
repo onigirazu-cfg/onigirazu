@@ -20,7 +20,7 @@ assert len(h["controls"]) == 23, len(h["controls"])
 bad = {c["id"] for c in h["controls"] if not c["ok"]}
 assert "net-6" in bad, bad
 assert all(c["remediation"] for c in h["controls"])
-assert r["errors"] in (None, {}), r["errors"]
+assert not r.get("errors"), r.get("errors")
 print(f"note: linux-baseline {h['passed']}/{h['passed']+h['failed']} pass on {sys.argv[2]}, failing: {sorted(bad)}")
 PY
 # only high+ failures count: net-6 is low, so unless something worse fails this passes
