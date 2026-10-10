@@ -63,12 +63,13 @@ done < <(govc vm.info -json "$folder/*" 2>/dev/null | jq -r '
 echo "e2e VMs found: $found, deleted: $deleted"
 
 # destroy_base removes a base template: a template object is turned back
-# into a VM first (vm.destroy refuses templates); a linked clone still
+# into a VM first (vm.destroy refuses templates, needs MarkAsVM); a linked clone still
 # running keeps it, and the next janitor tries again
 destroy_base() {
   local vm="$1" out
   if [ "$(govc vm.info -json "$vm" 2>/dev/null | jq -r '(.virtualMachines // .VirtualMachines // [])[0].config.template')" = true ]; then
-    govc vm.markasvm -pool "/$E2E_DATACENTER/host/$E2E_CLUSTER/Resources" "$vm" >/dev/null 2>&1 || true
+    out="$(govc vm.markasvm -pool "/$E2E_DATACENTER/host/$E2E_CLUSTER/Resources" "$vm" 2>&1)" \
+      || { echo "       not removed: markasvm: ${out:-?} (VirtualMachine.Provisioning.MarkAsVM?)"; return 0; }
   fi
   out="$(govc vm.destroy "$vm" 2>&1)" || echo "       not removed: ${out:-?}"
 }

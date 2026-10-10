@@ -109,8 +109,11 @@ for key in $(jq -r 'keys[]' <<<"$hosts_json"); do
     echo "$key: removing $old"
     old_macs="$("$HERE/dhcp-leases.sh" macs "$old" | tr '\n' ' ')"
     # a template object is turned back into a VM first (vm.destroy refuses
-    # templates); a running linked clone keeps it, the janitor retries
-    govc vm.markasvm -pool "/$TF_VAR_datacenter/host/$TF_VAR_cluster/Resources" "$old" >/dev/null 2>&1 || true
+    # templates, VirtualMachine.Provisioning.MarkAsVM); a running linked
+    # clone keeps it, the janitor retries
+    if [ "$(govc vm.info -json "$old" | jq -r '(.virtualMachines // .VirtualMachines // [])[0].config.template')" = true ]; then
+      govc vm.markasvm -pool "/$TF_VAR_datacenter/host/$TF_VAR_cluster/Resources" "$old" || { echo "$key: $old: markasvm failed"; continue; }
+    fi
     # shellcheck disable=SC2086
     govc vm.destroy "$old" && "$HERE/dhcp-leases.sh" remove $old_macs || echo "$key: $old not removed (linked clones still running?)"
   done
