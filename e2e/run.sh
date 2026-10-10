@@ -243,6 +243,9 @@ for h in $(jq -r 'keys[]' <<<"$hosts_json"); do
   on_host "$h" true 2>/dev/null || echo "$h: $(timeout 20 ssh "${SSH_OPTS[@]}" -v "e2e@$(host_ip "$h")" true 2>&1 | grep -E 'Permission denied|Connection refused|timed out|No route|Authentications that can continue|Offering|Server accepts' | tail -3 | paste -sd' | ' -)"
   on_host "$h" 'sudo -n true' || die "$h: no ssh/sudo access as e2e"
   echo "$h ready: $(on_host "$h" '. /etc/os-release; echo $PRETTY_NAME')"
+  # apt without package lists cannot install anything (seen on VMs of a
+  # freshly built template): fetch them once, quietly, before any case
+  on_host "$h" 'ls /var/lib/apt/lists/*Packages* >/dev/null 2>&1 || sudo -n apt-get -o DPkg::Lock::Timeout=600 update -qq >/dev/null 2>&1 || true'
 done
 
 # --- run the cases -------------------------------------------------------------
