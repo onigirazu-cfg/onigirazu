@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -119,8 +120,11 @@ func TestListenHTTP(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	var mu sync.Mutex
 	var ran []string
 	d := newDispatcher(cfg, func(j *listenJob) (int, int, error) {
+		mu.Lock()
+		defer mu.Unlock()
 		ran = append(ran, j.rule.Name+" "+strings.Join(j.args, " "))
 		return 1, 0, nil
 	})
@@ -177,9 +181,12 @@ func TestListenHTTP(t *testing.T) {
 	defer cancel()
 	go d.worker(ctx)
 	deadline := time.Now().Add(2 * time.Second)
-	for len(ran) < 3 && time.Now().Before(deadline) {
+	count := func() int { mu.Lock(); defer mu.Unlock(); return len(ran) }
+	for count() < 3 && time.Now().Before(deadline) {
 		time.Sleep(20 * time.Millisecond)
 	}
+	mu.Lock()
+	defer mu.Unlock()
 	if len(ran) != 3 || !strings.HasPrefix(ran[0], "disk ") || !strings.Contains(ran[1], "-e sha=abc123") || !strings.Contains(ran[2], "--limit web3") {
 		t.Errorf("ran: %v", ran)
 	}
