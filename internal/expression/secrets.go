@@ -1,9 +1,12 @@
 package expression
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"github.com/onigirazu-cfg/onigirazu/internal/tfstate"
 )
 
 // SecretLookup reads a field of a secret from a provider (bitwarden,
@@ -152,4 +155,39 @@ func vaultSecret(path, field string) (interface{}, error) {
 		return v, nil
 	}
 	return data, nil
+}
+
+// tfOutputLookup is lookup('cloud.terraform.tf_output', 'name',
+// project_path='infra') or state_file='terraform.tfstate': an output of a
+// Terraform/OpenTofu project; without a name, all outputs as a dict
+func tfOutputLookup(resolve func(string) string, terms []interface{}) ([]interface{}, error) {
+	names, kw := lookupArgs(terms, "project_path", "state_file", "binary")
+	project, _ := kw["project_path"].(string)
+	state, _ := kw["state_file"].(string)
+	binary, _ := kw["binary"].(string)
+	if project == "" && state == "" {
+		project = "."
+	}
+	if project != "" {
+		project = resolve(project)
+	}
+	if state != "" {
+		state = resolve(state)
+	}
+	outputs, err := tfstate.Outputs(context.Background(), project, state, binary)
+	if err != nil {
+		return nil, fmt.Errorf("tf_output: %w", err)
+	}
+	if len(names) == 0 {
+		return []interface{}{outputs}, nil
+	}
+	out := make([]interface{}, 0, len(names))
+	for _, n := range names {
+		v, ok := outputs[fmt.Sprint(n)]
+		if !ok {
+			return nil, fmt.Errorf("tf_output: no output %q", n)
+		}
+		out = append(out, v)
+	}
+	return out, nil
 }

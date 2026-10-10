@@ -272,6 +272,7 @@ func (msl *MultiSourceLoader) loadStaticFile(ctx context.Context, filePath strin
 			return fmt.Errorf("%s: %w", filePath, err)
 		} else if name != "" {
 			msl.logger.Info("Loading inventory from %s (%s)", name, filePath)
+			cfg["_dir"] = filepath.Dir(filePath) // relative paths in the file start there
 			out, err := inventoryPlugins[name](ctx, cfg)
 			if err != nil {
 				return fmt.Errorf("%s: %w", filePath, err)

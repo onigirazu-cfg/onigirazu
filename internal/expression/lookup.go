@@ -37,7 +37,7 @@ func lookupItems(base, varsArg interface{}, args []interface{}) ([]interface{}, 
 	}
 	plugin, terms := fmt.Sprint(args[0]), args[1:]
 	// lookup('ansible.builtin.env', ...) is lookup('env', ...)
-	for _, c := range []string{"ansible.builtin.", "community.general.", "community.sops.", "community.hashi_vault."} {
+	for _, c := range []string{"ansible.builtin.", "community.general.", "community.sops.", "community.hashi_vault.", "cloud.terraform."} {
 		plugin = strings.TrimPrefix(plugin, c)
 	}
 	var out []interface{}
@@ -157,6 +157,8 @@ func lookupItems(base, varsArg interface{}, args []interface{}) ([]interface{}, 
 		return hashiVaultLookup(terms)
 	case "vault_kv2_get":
 		return vaultKV2GetLookup(terms)
+	case "tf_output":
+		return tfOutputLookup(resolve, terms)
 	default:
 		return nil, fmt.Errorf("lookup plugin %q is not supported", plugin)
 	}
