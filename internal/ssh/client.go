@@ -76,6 +76,13 @@ func hostKeyCallback(host types.Host, m *HostKeyManager) ssh.HostKeyCallback {
 	}
 }
 
+// HostKeyCallbackFor is the host key check of the configuration (known_hosts,
+// strict mode) for a host, honoring its insecure flag: for SSH connections
+// made outside the client (a device's CLI, say)
+func HostKeyCallbackFor(host types.Host) ssh.HostKeyCallback {
+	return hostKeyCallback(host, GetGlobalPool().hostKeyMgr)
+}
+
 // NewClientWithHostKeyManager creates a new SSH client with custom host key manager (deprecated, use NewClientWithHostKeyManagerAndLogger)
 func NewClientWithHostKeyManager(host types.Host, hostKeyManager *HostKeyManager) (*Client, error) {
 	return NewClientWithHostKeyManagerAndLogger(host, hostKeyManager, logger.New(false))
