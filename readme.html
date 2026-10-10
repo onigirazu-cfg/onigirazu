@@ -70,7 +70,8 @@
     <h1>Onigirazu</h1>
 <p><a href="https://github.com/onigirazu-cfg/onigirazu/releases/latest"><img alt="Release" src="https://img.shields.io/github/v/release/onigirazu-cfg/onigirazu" /></a></p>
 <p>Onigirazu is a configuration management tool in a single Go binary. It runs Ansible playbooks,
-roles and inventories over SSH, with nothing to install on the hosts (no Python, no agent), and
+roles and inventories over SSH (and WinRM for Windows), with nothing to install on the hosts
+beforehand (no Python; a small agent is uploaded on the first connection, with a shell fallback), and
 adds what Ansible leaves to other tools: a plan before every change, drift checks, rollback of a
 run, Terraform-like managed state, canary rollouts with health checks, and import of running hosts
 into a playbook.</p>
@@ -78,7 +79,7 @@ into a playbook.</p>
 <li><strong>Ansible-compatible</strong>: playbooks, roles, collections from git, <code>requirements.yml</code>,
   <code>ansible.cfg</code>, INI/YAML/JSON inventories, dynamic inventory scripts, <code>group_vars</code>/<code>host_vars</code>,
   Jinja expressions and filters, facts and magic variables, FQCN module names</li>
-<li><strong>61 built-in modules</strong> in Go: files, packages, services, users, containers, databases,
+<li><strong>80+ built-in modules</strong> in Go: files, packages, services, users, containers, databases,
   firewall, HTTP and more</li>
 <li><strong>See before you change</strong>: <code>plan</code> shows per host what <code>apply</code> would change, with file diffs</li>
 <li><strong>Undo</strong>: every run keeps a snapshot; <code>rollback</code> restores files, packages, services and accounts</li>
@@ -190,8 +191,9 @@ formats can be used side by side. Examples: <a href="docs/examples/README.md">do
 <p>YAML is read as Ansible reads it: unquoted <code>yes</code>/<code>no</code>/<code>on</code>/<code>off</code> values are booleans (YAML 1.1); quote them to keep text.</p>
 <ul>
 <li><strong>Playbooks</strong>: plays with <code>pre_tasks</code>, <code>tasks</code>, <code>post_tasks</code>, <code>handlers</code>, <code>roles</code>,
-  <code>vars</code>, <code>vars_files</code>, <code>environment</code>, <code>serial</code>, <code>max_fail_percentage</code>, <code>any_errors_fatal</code>,
-  <code>force_handlers</code>; <code>import_playbook</code>, <code>include_tasks</code>/<code>import_tasks</code> (with <code>vars</code>, <code>when</code>,
+  <code>vars</code>, <code>vars_files</code>, <code>environment</code>, <code>gather_facts</code>, <code>serial</code>, <code>strategy</code> (<code>linear</code>, <code>free</code>),
+  <code>throttle</code>, <code>max_fail_percentage</code>, <code>any_errors_fatal</code>, <code>force_handlers</code>, <code>verify:</code> checks
+  (<a href="docs/VERIFY.md">docs/VERIFY.md</a>); <code>import_playbook</code>, <code>include_tasks</code>/<code>import_tasks</code> (with <code>vars</code>, <code>when</code>,
   <code>tags</code> and <code>loop</code>; a loop runs each included task over the items in turn, not the whole file per
   item), <code>include_role</code>/<code>import_role</code>, <code>block</code>/<code>rescue</code>/<code>always</code></li>
 <li><strong>Task keywords</strong>: <code>when</code>, <code>loop</code> and <code>with_*</code> (items, list, dict, sequence, nested,
@@ -207,8 +209,10 @@ formats can be used side by side. Examples: <a href="docs/examples/README.md">do
 <li><strong>Module names</strong>: <code>ansible.builtin.*</code>, <code>ansible.legacy.*</code> and the collection modules
   Onigirazu implements (<code>ansible.posix.sysctl</code>/<code>mount</code>/<code>authorized_key</code>,
   <code>community.general.ufw</code>/<code>ini_file</code>/<code>timezone</code>/<code>archive</code>,
-  <code>community.docker.docker_container</code>/<code>docker_image</code>/<code>docker_compose_v2</code>/<code>docker_host_info</code>,
-  <code>community.mysql.*</code>, <code>community.postgresql.*</code>); <code>dnf</code> runs the <code>yum</code> module</li>
+  <code>community.docker.docker_container</code>/<code>docker_image</code>/<code>docker_compose</code>/<code>docker_compose_v2</code>/<code>docker_host_info</code>,
+  <code>community.mysql.mysql_db</code>/<code>mysql_user</code>, <code>community.postgresql.postgresql_db</code>/<code>postgresql_user</code>,
+  <code>community.sops.load_vars</code>, <code>ansible.windows.*</code>, <code>community.windows.*</code>,
+  <code>chocolatey.chocolatey.win_chocolatey</code>); <code>dnf</code>/<code>dnf5</code> run the <code>yum</code> module</li>
 <li><strong>Roles and collections</strong>: <code>roles/</code> next to the playbook, <code>roles_path</code> and <code>collections_path</code>
   from <code>ansible.cfg</code>, <code>ANSIBLE_ROLES_PATH</code>, <code>ANSIBLE_COLLECTIONS_PATH</code>,
   <code>namespace.collection.role</code>; <code>onigirazu galaxy install -r requirements.yml</code> installs roles
@@ -241,8 +245,11 @@ formats can be used side by side. Examples: <a href="docs/examples/README.md">do
   <code>ANSIBLE_VAULT_*</code> variables and <code>ansible.cfg</code>; <code>onigirazu vault encrypt|decrypt|view|encrypt_string</code>.
   See <a href="docs/VAULT.md">docs/VAULT.md</a></li>
 </ul>
-<p>Not supported: Python modules and plugins from collections (Onigirazu has its own modules;
-<code>validate</code> names any module it lacks) and Windows hosts (WinRM).
+<p>Windows hosts are managed with the <code>win_*</code> modules over WinRM (<code>ansible_connection: winrm</code>) or
+OpenSSH (<code>ansible_shell_type: powershell</code> or <code>cmd</code>; the agent runs there too).
+Not supported: Python modules and plugins from collections (Onigirazu has its own modules;
+<code>validate</code> names any module it lacks). A task argument its module does not have fails the task,
+as in Ansible.
 For Packer builds see <a href="docs/PACKER.md">docs/PACKER.md</a>.</p>
 <h2>Playbooks</h2>
 <h3>Variables and templates</h3>
@@ -341,7 +348,8 @@ onigirazu plan site.yml -i hosts.ini --format html --output plan.html
 </code></pre>
 
 <p><code>plan</code> runs the playbook in check mode and also lists resources that left the playbook (see
-Managed state). Formats: text, json, html.</p>
+Managed state). Formats: text, json, html, markdown; <code>--github-comment</code> posts the plan on the pull
+request of the workflow run (<a href="docs/PLAN_IN_PR.md">docs/PLAN_IN_PR.md</a>).</p>
 <h3>Drift</h3>
 <pre class="codehilite"><code class="language-bash">onigirazu drift site.yml -i hosts.ini                 # report; exit code 2 when a host drifted
 onigirazu drift site.yml -i hosts.ini --fix           # apply when drift is found
@@ -363,7 +371,9 @@ In sync: web2, db1
 
 <p>Every check is kept, so a drifting task shows since when it drifts. Exit codes: 0 in sync,
 2 drift, 1 a task could not be checked. <code>--notify</code> posts to Slack or
-Mattermost style webhooks. A systemd timer or CI schedule running <code>drift</code> watches a fleet.</p>
+Mattermost style webhooks; <code>--metrics-file</code> (node_exporter textfile collector), <code>--metrics-push URL</code>
+(VictoriaMetrics import, Pushgateway) and <code>--metrics-label k=v</code> export the result as Prometheus
+metrics. A systemd timer or CI schedule running <code>drift</code> watches a fleet.</p>
 <h3>Rollback</h3>
 <p>Every <code>apply</code> keeps a snapshot of what it changed: file contents (text up to 1 MiB), modes and
 owners, packages installed or removed, service states, users and groups it created.</p>
@@ -442,11 +452,11 @@ to change. Secrets become variables with an example file. See <a href="docs/IMPO
 </tr>
 <tr>
 <td>Flow and data</td>
-<td><code>debug</code>, <code>assert</code>, <code>fail</code>, <code>set_fact</code>, <code>include_vars</code>, <code>setup</code>/<code>gather_facts</code>, <code>pause</code>, <code>ping</code>, <code>meta</code>, <code>async_status</code>, <code>include_role</code>/<code>import_role</code></td>
+<td><code>debug</code>, <code>assert</code>, <code>fail</code>, <code>set_fact</code>, <code>include_vars</code>, <code>add_host</code>, <code>group_by</code>, <code>setup</code>/<code>gather_facts</code>, <code>pause</code>, <code>ping</code>, <code>meta</code>, <code>async_status</code>, <code>include_role</code>/<code>import_role</code>, <code>verify</code></td>
 </tr>
 </tbody>
 </table>
-<p>Any other Ansible module (a collection module, <code>win_*</code> on WinRM hosts) runs through an installed
+<p>Any other Ansible module (a collection module, or a <code>win_*</code> module Onigirazu does not implement) runs through an installed
 ansible-core when <code>ansible_bridge</code> in <code>onigirazu.yml</code> allows it: see
 <a href="docs/ANSIBLE_BRIDGE.md">docs/ANSIBLE_BRIDGE.md</a>.</p>
 <p>Modules compare the host with the task first and report <code>changed</code> only when they changed
@@ -482,7 +492,11 @@ return values and examples: <a href="docs/modules/README.md">docs/modules/README
 </tr>
 <tr>
 <td><code>pull --repo URL</code></td>
-<td>This host converges itself from a git repository, once or on a timer (<a href="docs/PULL.md">pull mode</a>)</td>
+<td>This host converges itself from a git repository: once, every <code>--interval</code>, or <code>pull install</code> (systemd timer); <code>--drift-only</code>, <code>--only-on-change</code>, <code>--notify</code>, <code>--metrics-*</code> (<a href="docs/PULL.md">pull mode</a>)</td>
+</tr>
+<tr>
+<td><code>plugin list</code></td>
+<td>Command plugins found (<code>onigirazu-NAME</code> executables)</td>
 </tr>
 <tr>
 <td><code>diff PLAYBOOK</code></td>
@@ -559,7 +573,7 @@ return values and examples: <a href="docs/modules/README.md">docs/modules/README
 
 <p><code>--list-hosts</code>, <code>--list-tasks</code>, <code>--list-tags</code> and <code>--syntax-check</code> print and exit;
 <code>--start-at-task</code> skips to a task; <code>-o json|yaml</code> prints a machine-readable result.
-Every command has <code>--help</code>. Global flags: <code>-i</code>, <code>-c</code> (config file), <code>-v</code>, <code>--show-debug</code>,
+Every command has <code>--help</code>. Global flags: <code>-i</code>, <code>-c</code> (config file), <code>-s</code> (state file), <code>-v</code>, <code>--show-debug</code>,
 <code>--no-color</code>, <code>--security-policy</code>.</p>
 <h2>Ad-hoc commands</h2>
 <pre class="codehilite"><code class="language-bash">onigirazu run web -m package -a &quot;name=nginx state=present&quot; -b -i hosts.ini   # Ansible style
@@ -628,8 +642,12 @@ per-host counts and a browser for task results.</p>
 <ul>
 <li><code>apply -o json</code> writes one document to stdout (status, totals, every task per host); logs go
   to stderr. Exit codes: 0 success, 1 failure, 5 a batch was rolled back, 130 interrupted.</li>
-<li><code>drift</code> and <code>plan</code> have JSON, HTML and Markdown reports; <code>drift --notify</code> posts to webhooks;
-  <code>plan --github-comment</code> comments the plan on a pull request (<a href="docs/PLAN_IN_PR.md">docs/PLAN_IN_PR.md</a>).</li>
+<li><code>drift</code> and <code>plan</code> have JSON, HTML and Markdown reports; <code>--github-comment</code> keeps the plan as one
+  comment on the pull request (<a href="docs/PLAN_IN_PR.md">docs/PLAN_IN_PR.md</a>); <code>drift --notify</code> posts to
+  webhooks and <code>--metrics-*</code> exports Prometheus metrics.</li>
+<li><code>pull</code> runs a playbook from git on the host itself, once or on a systemd timer, with the same
+  notifications and metrics (<a href="docs/PULL.md">docs/PULL.md</a>).</li>
+<li><code>verify</code> runs the plays' <code>verify:</code> checks and reports them, also as JSON (<a href="docs/VERIFY.md">docs/VERIFY.md</a>).</li>
 <li><code>apply --background</code> returns at once; <code>show-execution</code> reads the result later.</li>
 <li><code>audit</code> keeps the history of runs with per-host statistics.</li>
 <li><code>onigirazu test</code> runs a role's Molecule scenarios (docker/podman instances, converge,
@@ -695,8 +713,8 @@ process or session per task; the file modules reuse one capture of the target. M
 </table>
 <p>Both tools leave the hosts in the same state (about 1100 goss checks per host pass after each run).
 Without the agent (the POSIX sh server, no Python on the hosts) a second run takes 3.1 s and 4.0 s.</p>
-<p>On 500 hosts (containers, <code>bench/scale.sh</code>) a short playbook converges in 7.4 s and a second run
-takes 5.5 s with 6 s of CPU and 280 MB on the control side, at any concurrency from 50 to 500.</p>
+<p>On 500 hosts (containers, <code>bench/scale.sh</code>) a short playbook converges in 7.3–7.8 s and a second run
+takes 5.5–5.8 s with about 6 s of CPU and 230–285 MB on the control side, at concurrency 50 to 500.</p>
 <h2>Documentation</h2>
 <p>All guides are listed in <a href="docs/README.md">docs/README.md</a>. Start with:</p>
 <ul>

@@ -65,7 +65,8 @@ check that did not look at the host (another `--limit`) does not.
 
 `--notify URL` (repeatable) posts to a Slack or Mattermost style webhook when
 drift or errors are found; `--notify-always` also when all hosts are in sync.
-The body is `{"text": "<the text report>", "report": <the JSON report>}`. A
+The body is `{"text": "onigirazu on <control host>:\n```<the text report>```", "report": <the JSON
+report>}`; the text is cut at 3500 characters. A
 failed post is reported on stderr and does not change the exit code.
 
 ### Metrics
