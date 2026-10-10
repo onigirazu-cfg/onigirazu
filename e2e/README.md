@@ -21,7 +21,8 @@ Runs every case in `cases/` on disposable vSphere VMs cloned from the current
   and keeps it as `e2e-base-<os>-<golden item>-<time>` in the e2e folder (two per OS),
   a template with a snapshot `base`: test VMs are linked clones of it (a delta disk,
   ~50 s for a pair). The golden images (nightly run) are cloned in full. The vCenter
-  role needs `VirtualMachine.State.CreateSnapshot` for the snapshot.
+  role needs `VirtualMachine.State.CreateSnapshot` for the snapshot and
+  `VirtualMachine.Provisioning.MarkAsVM` to destroy old bases.
   Pull requests and manual runs clone the base of the current golden item when there
   is one (`E2E_BASE=1`), otherwise the golden image; the nightly run always tests the
   golden images. A new install in a case's `setup.sh` belongs in `prepare.sh` too.
