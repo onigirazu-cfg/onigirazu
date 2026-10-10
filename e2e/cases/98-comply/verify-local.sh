@@ -3,6 +3,7 @@
 # every control, the log_martians control fails (the playbook turned it off)
 # and --fail-on filters it, a custom profile file works too
 set -euo pipefail
+exec 2>&1; set -x
 work=$(mktemp -d); trap 'rm -rf "$work"' EXIT
 "$BIN" comply list | grep -q '^linux-baseline '
 "$BIN" comply show ssh | grep -q 'id: ssh-1'
