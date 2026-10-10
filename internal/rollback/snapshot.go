@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
@@ -176,14 +177,36 @@ func (sm *SnapshotManager) CleanupOldSnapshots(maxAge time.Duration) error {
 
 // KeepNewest deletes all but the newest keep snapshots
 func (sm *SnapshotManager) KeepNewest(keep int) error {
-	snapshots, err := sm.ListSnapshots()
-	if err != nil || len(snapshots) <= keep {
-		return err
+	// by the files' times: reading every snapshot to prune them cost a
+	// full parse of each run's results
+	files, err := os.ReadDir(sm.snapshotDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("failed to read snapshot directory: %w", err)
 	}
-	sort.Slice(snapshots, func(i, j int) bool { return snapshots[i].Timestamp.After(snapshots[j].Timestamp) })
+	type entry struct {
+		path string
+		mod  time.Time
+	}
+	var snapshots []entry
+	for _, file := range files {
+		name := file.Name()
+		if file.IsDir() || !strings.HasPrefix(name, "snapshot_") || filepath.Ext(name) != ".json" {
+			continue
+		}
+		if info, err := file.Info(); err == nil {
+			snapshots = append(snapshots, entry{filepath.Join(sm.snapshotDir, name), info.ModTime()})
+		}
+	}
+	if len(snapshots) <= keep {
+		return nil
+	}
+	sort.Slice(snapshots, func(i, j int) bool { return snapshots[i].mod.After(snapshots[j].mod) })
 	for _, snapshot := range snapshots[keep:] {
-		if err := sm.DeleteSnapshot(snapshot.ID); err != nil {
-			return err
+		if err := os.Remove(snapshot.path); err != nil {
+			return fmt.Errorf("failed to delete snapshot: %w", err)
 		}
 	}
 	return nil

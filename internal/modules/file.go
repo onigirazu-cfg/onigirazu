@@ -93,7 +93,7 @@ func (m *FileModule) Execute(ctx context.Context, host types.Host, args map[stri
 			result.Success = true
 			result.Output = map[string]interface{}{"message": fmt.Sprintf("Directory %s already exists", path)}
 		} else {
-			result, err = m.ensureDirectory(exec, path, result, startTime, inCheckMode(args))
+			result, err = m.ensureDirectory(exec, args, path, result, startTime, inCheckMode(args))
 		}
 	case "touch":
 		result, err = m.touchFile(exec, args, path, result, startTime, inCheckMode(args))
@@ -255,9 +255,12 @@ func (m *FileModule) applyAttributes(ctx context.Context, host types.Host, args 
 			return fail(fmt.Sprintf("invalid mode %q", mode))
 		}
 		var out string
-		// unchanged so far: the mode captured before the task is current
+		// unchanged so far: the mode captured before the task is current;
+		// a directory just created got its mode with mkdir
 		if b, ok := captured(args, path); ok && !result.Changed && (b["kind"] == "file" || b["kind"] == "directory") && b["mode"] != nil {
 			out = fmt.Sprint(b["mode"])
+		} else if args["_mode_set"] == path {
+			out = fmt.Sprintf("%o", want)
 		} else {
 			out, err = runOnHost(ctx, host, args, "stat", "-c", "%a", path)
 		}
@@ -436,10 +439,12 @@ func (m *FileModule) ensureFileAbsent(exec *executor.CommandExecutor, path strin
 	return result, nil
 }
 
-func (m *FileModule) ensureDirectory(exec *executor.CommandExecutor, path string, result types.TaskResult, startTime time.Time, check bool) (types.TaskResult, error) {
-	// Check if directory exists
-	checkCmd := fmt.Sprintf(`test -d %s && echo exists || echo notexists`, shellQuote(path))
-	output, err := exec.Execute(checkCmd)
+func (m *FileModule) ensureDirectory(exec *executor.CommandExecutor, args map[string]interface{}, path string, result types.TaskResult, startTime time.Time, check bool) (types.TaskResult, error) {
+	// the capture before the task found nothing there: no need to look again
+	output, err := "notexists", error(nil)
+	if b, ok := captured(args, path); !ok || b["kind"] != "absent" {
+		output, err = exec.Execute(fmt.Sprintf(`test -d %s && echo exists || echo notexists`, shellQuote(path)))
+	}
 
 	if err == nil && strings.TrimSpace(output) == "exists" {
 		result.Success = true
@@ -455,8 +460,14 @@ func (m *FileModule) ensureDirectory(exec *executor.CommandExecutor, path string
 		return wouldChange(result, startTime, fmt.Sprintf("directory %s would be created", path))
 	}
 
-	// Create directory
+	// Create directory, with its mode in the same command
 	createCmd := fmt.Sprintf(`mkdir -p %s`, shellQuote(path))
+	if mode := getStringArg(args, "mode", ""); mode != "" {
+		if want, perr := strconv.ParseUint(mode, 8, 32); perr == nil {
+			createCmd += fmt.Sprintf(" && chmod %04o %s", want, shellQuote(path))
+			args["_mode_set"] = path // applyAttributes need not read it back
+		}
+	}
 	_, err = exec.Execute(createCmd)
 	if err != nil {
 		result.Success = false

@@ -447,8 +447,14 @@ func (m *UnifiedPackageModule) PreCheckState(ctx context.Context, host types.Hos
 	allCorrect := true
 	currentState := make(map[string]interface{})
 
+	specNames := make([]string, len(packageSpecs))
+	for i, pkg := range packageSpecs {
+		specNames[i] = pkg.Name
+	}
+	// a failed query counts as not installed: the task then runs
+	present, _ := installedPackages(ctx, host, args, specNames)
 	for _, pkg := range packageSpecs {
-		installed := m.isPackageInstalled(ctx, host, args, pkg.Name)
+		installed := present[pkg.Name]
 		currentState[pkg.Name] = installed
 
 		if state == "present" && !installed {
@@ -475,17 +481,6 @@ func (m *UnifiedPackageModule) PreCheckState(ctx context.Context, host types.Hos
 		Reason:         fmt.Sprintf("Packages need to be set to state: %s", state),
 		CurrentState:   currentState,
 	}, nil
-}
-
-// isPackageInstalled checks on the target host whether a package is installed
-func (m *UnifiedPackageModule) isPackageInstalled(ctx context.Context, host types.Host, args map[string]interface{}, pkgName string) bool {
-	p := shellQuote(pkgName)
-	script := "if command -v dpkg-query >/dev/null 2>&1; then dpkg-query -W -f='${Status}' " + p + " 2>/dev/null | grep -q 'install ok installed'; " +
-		"elif command -v rpm >/dev/null 2>&1; then rpm -q " + p + " >/dev/null 2>&1; " +
-		"elif command -v pacman >/dev/null 2>&1; then pacman -Q " + p + " >/dev/null 2>&1; " +
-		"else exit 1; fi"
-	_, err := runShellOnHost(ctx, host, args, script)
-	return err == nil
 }
 
 // Execute manages system packages with all features

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	sshpkg "github.com/onigirazu-cfg/onigirazu/internal/ssh"
+	"github.com/onigirazu-cfg/onigirazu/internal/winrm"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
@@ -69,8 +70,23 @@ func NewCommandExecutor(host types.Host) (*CommandExecutor, error) {
 		executor.SetBecome(true, host.BecomeUser, host.BecomeMethod)
 	}
 	executor.setEnvironment(host.Environment)
+	executor.prewarm()
 
 	return executor, nil
+}
+
+// prewarm starts the connection's command servers in the background, the
+// become one too: the first command then does not wait for them one after
+// the other (each start is an SSH session, sudo another)
+func (e *CommandExecutor) prewarm() {
+	// a Windows host over SSH has no sh to start a server with
+	if e.sshClient == nil || winrm.IsWindows(e.host) {
+		return
+	}
+	e.sshClient.Prewarm("")
+	if e.become && e.becomeMethod == "sudo" && e.becomePassword == "" {
+		e.sshClient.Prewarm(e.becomeUser)
+	}
 }
 
 // NewCommandExecutorWithoutPool creates a new command executor without using connection pool
@@ -346,6 +362,45 @@ func (e *CommandExecutor) Probe(ctx context.Context, path string, limit int) (st
 	out, served, err := e.sshClient.Probe(ctx, user, path, limit)
 	if errors.Is(err, sshpkg.ErrNotSent) {
 		return "", false, nil // the shell probe reconnects
+	}
+	return string(out), served, err
+}
+
+// WriteFile writes data to path through the command server without a
+// process (see ssh.Client.Write); served is false when that is not possible
+func (e *CommandExecutor) WriteFile(ctx context.Context, path string, data []byte, mode, owner, group string) (bool, error) {
+	if e.sshClient == nil {
+		return false, nil
+	}
+	user := ""
+	if e.become {
+		if e.becomeMethod != "sudo" || e.becomePassword != "" {
+			return false, nil
+		}
+		user = e.becomeUser
+	}
+	served, err := e.sshClient.Write(ctx, user, path, data, mode, owner, group)
+	if errors.Is(err, sshpkg.ErrNotSent) {
+		return false, nil
+	}
+	return served, err
+}
+
+// ProbeMany is Probe for several paths in one round trip
+func (e *CommandExecutor) ProbeMany(ctx context.Context, paths []string, limit int) (string, bool, error) {
+	if e.sshClient == nil {
+		return "", false, nil
+	}
+	user := ""
+	if e.become {
+		if e.becomeMethod != "sudo" || e.becomePassword != "" {
+			return "", false, nil
+		}
+		user = e.becomeUser
+	}
+	out, served, err := e.sshClient.ProbeMany(ctx, user, paths, limit)
+	if errors.Is(err, sshpkg.ErrNotSent) {
+		return "", false, nil
 	}
 	return string(out), served, err
 }

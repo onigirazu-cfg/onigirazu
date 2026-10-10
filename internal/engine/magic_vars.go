@@ -4,8 +4,11 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/onigirazu-cfg/onigirazu/internal/cache"
+	"github.com/onigirazu-cfg/onigirazu/internal/interfaces"
+	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
 // ansibleFacts gives the gathered facts their Ansible names, so playbooks
@@ -56,8 +59,8 @@ func localFacts(local map[string]interface{}) map[string]interface{} {
 // withMagicVariables adds hostvars and groups to the variables of a task:
 // a snapshot taken before the task runs on its hosts
 func (e *ExecutionEngine) withMagicVariables(variables map[string]interface{}) map[string]interface{} {
-	hosts, err := e.inventoryMgr.GetHosts("all")
-	if err != nil {
+	hosts, groups, ok := e.inventoryView.get(e.inventoryMgr)
+	if !ok {
 		return variables
 	}
 	// nested task lists (blocks, run_once) come here again: start from the
@@ -68,7 +71,7 @@ func (e *ExecutionEngine) withMagicVariables(variables map[string]interface{}) m
 			base[k] = v
 		}
 	}
-	out := make(map[string]interface{})
+	out := make(map[string]interface{}, len(base))
 	for k, v := range base {
 		out[k] = v
 	}
@@ -78,17 +81,48 @@ func (e *ExecutionEngine) withMagicVariables(variables map[string]interface{}) m
 		hostvars[hosts[i].Name] = e.hostVariables(&hosts[i], base)
 	}
 	out["hostvars"] = hostvars
+	out["groups"] = groups
+	return out
+}
 
-	groups := map[string]interface{}{}
-	all := make([]interface{}, 0, len(hosts))
-	for _, h := range hosts {
-		all = append(all, h.Name)
+// inventorySnapshot holds the inventory's hosts and the groups variable for
+// a run: building them for every task (a host view per host, every group's
+// members) cost a share of the run that grew with the inventory
+type inventorySnapshot struct {
+	mu     sync.Mutex
+	valid  bool
+	hosts  []types.Host
+	groups map[string]interface{}
+}
+
+func (s *inventorySnapshot) reset() {
+	s.mu.Lock()
+	s.valid, s.hosts, s.groups = false, nil, nil
+	s.mu.Unlock()
+}
+
+// get returns the snapshot, taking it on first use; ok is false without an
+// inventory. The groups map is shared: nothing changes it in place.
+func (s *inventorySnapshot) get(inv interfaces.InventoryManager) (hosts []types.Host, groups map[string]interface{}, ok bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.valid {
+		return s.hosts, s.groups, true
 	}
-	groups["all"] = all
-	names := e.inventoryMgr.ListGroups()
-	sort.Strings(names)
-	for _, name := range names {
-		members, err := e.inventoryMgr.GetHosts(name)
+	all, err := inv.GetHosts("all")
+	if err != nil {
+		return nil, nil, false
+	}
+	groups = map[string]interface{}{}
+	names := make([]interface{}, 0, len(all))
+	for _, h := range all {
+		names = append(names, h.Name)
+	}
+	groups["all"] = names
+	groupNames := inv.ListGroups()
+	sort.Strings(groupNames)
+	for _, name := range groupNames {
+		members, err := inv.GetHosts(name)
 		if err != nil {
 			continue
 		}
@@ -98,8 +132,8 @@ func (e *ExecutionEngine) withMagicVariables(variables map[string]interface{}) m
 		}
 		groups[name] = list
 	}
-	out["groups"] = groups
-	return out
+	s.valid, s.hosts, s.groups = true, all, groups
+	return all, groups, true
 }
 
 // ansibleDistribution is the distribution name as Ansible spells it: the
@@ -125,6 +159,32 @@ func (e *ExecutionEngine) addMagicVars(vars map[string]interface{}) {
 	if e.limit != "" {
 		vars["ansible_limit"] = e.limit
 	}
+	all, batch := e.playHostLists()
+	vars["ansible_play_hosts_all"] = all
+	vars["ansible_play_batch"] = batch
+	vars["ansible_play_hosts"] = batch
+	vars["play_hosts"] = batch // the old name, still set by Ansible
+}
+
+// magicLists caches the play host lists of the magic variables: built for
+// every host of every task they made each task quadratic in the hosts
+type magicLists struct {
+	mu         sync.Mutex
+	version    uint64
+	valid      bool
+	all, batch []interface{}
+}
+
+// playHostLists are ansible_play_hosts_all and ansible_play_batch, built
+// again only when the hosts changed (the caller holds e.mutex for reading).
+// The lists are shared: nothing changes them in place.
+func (e *ExecutionEngine) playHostLists() (all, batch []interface{}) {
+	m := &e.magic
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.valid && m.version == e.hostsVersion {
+		return m.all, m.batch
+	}
 	list := func(names []string, skipFailed bool) []interface{} {
 		out := make([]interface{}, 0, len(names))
 		for _, n := range names {
@@ -135,14 +195,13 @@ func (e *ExecutionEngine) addMagicVars(vars map[string]interface{}) {
 		}
 		return out
 	}
-	batch := e.batchHosts
-	if len(batch) == 0 {
-		batch = e.playHosts
+	names := e.batchHosts
+	if len(names) == 0 {
+		names = e.playHosts
 	}
-	vars["ansible_play_hosts_all"] = list(e.playHosts, false)
-	vars["ansible_play_batch"] = list(batch, true)
-	vars["ansible_play_hosts"] = list(batch, true)
-	vars["play_hosts"] = list(batch, true) // the old name, still set by Ansible
+	m.all, m.batch = list(e.playHosts, false), list(names, true)
+	m.version, m.valid = e.hostsVersion, true
+	return m.all, m.batch
 }
 
 // SetCheckMode tells the run it is a check (ansible_check_mode)

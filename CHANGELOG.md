@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
-- Go 1.26.6 and updated dependencies (x/crypto, x/net, x/text and others) close all govulncheck findings
+- Go 1.26.9 and updated dependencies (x/crypto, x/net v0.60.0, x/text and others) close all govulncheck findings
 - Bitwarden password is passed to `bw login` through the environment instead of the command line
 
 ### Fixed
@@ -19,8 +19,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `config` rejects a non-string `key` instead of panicking
 - SSH client formats IPv6 addresses correctly
 
+### Added
+
+- `verify:` section of a play and `onigirazu verify`: goss-style checks of the hosts' state (file, package, service, port, process, user, group, command, http, mount, kernel_param, dns), one round trip per host (docs/VERIFY.md)
+- `strategy: free` (hosts run a play's tasks at their own pace) and a play-level `throttle`
+- SOPS-encrypted vars files (`vars_files`, `group_vars`/`host_vars`, `include_vars`, `community.sops.load_vars`) are decrypted through the `sops` binary; `lookup('community.sops.sops', file)` reads one; Vault logs in with an AppRole (`VAULT_ROLE_ID`, `VAULT_SECRET_ID`) when there is no token; `lookup('community.hashi_vault.hashi_vault', 'secret=...')` and `vault_kv2_get`
+- Windows hosts over OpenSSH use the agent too (`onigirazu-agent-windows-{amd64,arm64}.exe`): one PowerShell per command, native file writes, no session per task
+- `drift --metrics-file/--metrics-push/--metrics-label` and the same on `pull`: drift and pull results as Prometheus metrics (node_exporter textfile collector, VictoriaMetrics import, Pushgateway); `pull --notify` posts to a Slack/Mattermost webhook
+- `plan --github-comment` (and `drift`): the report as a pull request comment, replaced on every push; `--format markdown` (docs/PLAN_IN_PR.md)
+- `onigirazu pull`: pull mode — a host clones a git repository and runs a playbook against itself, once or on a timer (`pull install` writes a systemd timer); `--only-on-change`, `--drift-only` (docs/PULL.md)
+
 ### Changed
 
+- A task with an argument its module does not have fails like Ansible (`Unsupported parameters for (...) module`); such arguments were ignored
 - **Security policy:** nothing is restricted by default (the built-in defaults blocked 23 of 44 modules and every path outside /tmp, /var/tmp, /home, /opt). A policy file is loaded from `--security-policy`, `$ONIGIRAZU_SECURITY_POLICY`, `./security-policy.json`, `~/.onigirazu/security-policy.json` or `/etc/onigirazu/security-policy.json`; heuristic checks need `"strict": true`; `allowed_hosts`, `allowed_ports` and `allowed_file_types` are now enforced
 - Modules act on the target host: `apt`, `yum`, `script` and the pre-checks of `user`, `group`, `service`, `package` ran on the control machine
 - The task title is no longer passed as the module's `name` argument
@@ -34,6 +45,7 @@ Release notes for 1.62.1–1.62.7 are on [GitHub Releases](https://github.com/on
 
 ### Added
 
+- Inventory plugins: a YAML inventory with `plugin: netbox|vsphere|proxmox|netbird` asks that system for the hosts (filters, groups, `<plugin>_*` host variables, secrets from the environment; docs/INVENTORY_FORMATS.md)
 - **Vault Integration**: Complete HashiCorp Vault integration for secure secret management
   - `GetSecret(ctx, path, field)`: Retrieve secrets from Vault KVv2 with intelligent caching
   - `ListSecrets(ctx, filter)`: Discover available secrets with optional filtering

@@ -26,3 +26,25 @@ plays:
           path: /etc/onigirazu-e2e-block.conf
           line: "# managed"
           insertbefore: BOF
+      - name: A missing file without create fails
+        blockinfile:
+          path: /etc/onigirazu-e2e-block-missing.conf
+          block: "x=1"
+        register: missing
+        ignore_errors: true
+      - name: Removing a block from a missing file changes nothing
+        blockinfile:
+          path: /etc/onigirazu-e2e-block-missing.conf
+          block: "x=1"
+          state: absent
+        register: gone
+      - name: create makes it
+        blockinfile:
+          path: /etc/onigirazu-e2e-block-created.conf
+          block: "made=1"
+          create: true
+      - name: Check
+        assert:
+          that:
+            - missing is failed
+            - gone is not changed

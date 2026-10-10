@@ -35,6 +35,7 @@ nothing: every key is commented out, so the built-in defaults apply.
 | `ssh_timeout` | - | 60s | 30s |
 | `ssh_strict_host_key` | - | true | true |
 | `ssh_known_hosts_file` | - | `~/.ssh/known_hosts` | `~/.ssh/known_hosts` |
+| `remote_server` | - | - | - |
 | `enable_metrics` | - | true (port 9090) | false |
 
 Things to know before using one:

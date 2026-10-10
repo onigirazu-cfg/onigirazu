@@ -9,6 +9,7 @@ LDFLAGS=-ldflags "-s -w -X github.com/onigirazu-cfg/onigirazu/internal/version.V
 
 # Build project
 build:
+	go generate ./internal/agentbin
 	CGO_ENABLED=0 go build -trimpath $(LDFLAGS) -o bin/$(BINARY_NAME) cmd/onigirazu/main.go
 	CGO_ENABLED=0 go build -trimpath -o bin/onigirazu-test ./cmd/onigirazu-test
 

@@ -26,6 +26,9 @@ func (s slots) acquire() func() {
 func (e *ExecutionEngine) throttleSlots(ctx context.Context, task *types.Task, variables map[string]interface{}) (slots, error) {
 	value := strings.TrimSpace(task.Throttle)
 	if value == "" {
+		value = strings.TrimSpace(e.playThrottle) // the play's, when the task has none
+	}
+	if value == "" {
 		return nil, nil
 	}
 	if strings.Contains(value, "{{") {
@@ -43,4 +46,15 @@ func (e *ExecutionEngine) throttleSlots(ctx context.Context, task *types.Task, v
 		return nil, nil
 	}
 	return make(slots, n), nil
+}
+
+// playStrategyFree reads a play's strategy: linear (the default) or free
+func playStrategyFree(strategy string) (bool, error) {
+	switch strings.TrimSpace(strategy) {
+	case "", "linear":
+		return false, nil
+	case "free":
+		return true, nil
+	}
+	return false, fmt.Errorf("strategy: expected linear or free, got %q", strategy)
 }

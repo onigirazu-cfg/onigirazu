@@ -13,11 +13,17 @@ Start with the [Quick Start](QUICK_START_CONFIGURATION.md). The project
 - [Listing tags and tasks](LIST_TAGS_TASKS_GUIDE.md) — `--list-tags` and `--list-tasks`
 - [Interactive mode](INTERACTIVE_MODE.md) — `apply --interactive`
 - [Ad-hoc commands](ADHOC_GUIDE.md) — `onigirazu run` without a playbook
+- [Verify](VERIFY.md) — `verify:` checks of a play and `onigirazu verify`
+- [Safe apply](SAFE_APPLY.md) — `serial`, canary batches, health checks, automatic rollback, `strategy: free`, `throttle`
+- [Pull mode](PULL.md) — `onigirazu pull`: a host converges itself from git, on a timer, with notifications and metrics
+- [Plan in a pull request](PLAN_IN_PR.md) — `plan --github-comment` as a sticky PR comment
+- [Machine-readable results](MACHINE_OUTPUT.md) — `-o json|yaml`, exit codes
 
 ## Inventory
 
 - [Inventory formats](INVENTORY_FORMATS.md) — YAML, JSON, TOML, INI, host lists, dynamic scripts, `group_vars`/`host_vars`
 - [Ansible inventories](ANSIBLE_INVENTORY_QUICK_START.md) — using existing Ansible INI and YAML inventories
+- [Inventory plugins](INVENTORY_PLUGINS.md) — hosts from NetBox, vSphere, Proxmox and NetBird
 
 ## Writing playbooks
 
@@ -32,12 +38,14 @@ Start with the [Quick Start](QUICK_START_CONFIGURATION.md). The project
 
 - [Module reference](modules/README.md)
 - [systemd, cron and firewall modules](MODULES_SYSTEMD_CRON_FIREWALL.md)
+- Windows hosts: the `win_*` modules in the [module reference](modules/README.md), over WinRM or OpenSSH ([host variables](INVENTORY_FORMATS.md#host-variables))
+- [Ansible bridge](ANSIBLE_BRIDGE.md) — modules Onigirazu lacks run through ansible-core
 
 ## Configuration and security
 
 - [Configuration reference](CONFIGURATION_REFERENCE.md) — `onigirazu.yml` and `ONIGIRAZU_*` variables
 - [Ansible Vault](VAULT.md) — encrypted files and `!vault` values, passwords, `onigirazu vault`
-- [Secrets](BITWARDEN_INTEGRATION.md) — Bitwarden/Vaultwarden and HashiCorp Vault in templates
+- [Secrets](BITWARDEN_INTEGRATION.md) — Bitwarden/Vaultwarden, HashiCorp Vault (token or AppRole), SOPS-encrypted vars files; the Ansible lookups
 - [Security policy](SECURITY_POLICY_GUIDE.md) — restricting hosts, modules, paths and commands
 - [Troubleshooting](TROUBLESHOOTING_CONFIG.md)
 
@@ -46,9 +54,11 @@ Start with the [Quick Start](QUICK_START_CONFIGURATION.md). The project
 - [Plugins](PLUGIN_INTEGRATION.md) — filter, module and callback plugins
 - [Callback plugins](CALLBACKS_GUIDE.md)
 - [Module development](MODULE_DEVELOPMENT_GUIDE.md) and [module scaffolding](MODULE_SCAFFOLDING_GUIDE.md)
+- [Testing roles](TESTING_ROLES.md) — `onigirazu test` runs Molecule scenarios
 
 ## Project
 
 - [Supported platforms](PLATFORMS.md)
+- [Packer](PACKER.md) — onigirazu as the Packer provisioner
 - [CI/CD](ci-cd.md)
 - [Release process](RELEASE_PROCESS.md)

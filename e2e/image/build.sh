@@ -85,12 +85,16 @@ for key in $(jq -r 'keys[]' <<<"$hosts_json"); do
   done
   [ "$(govc vm.info -json "$vm" | jq -r '(.virtualMachines // .VirtualMachines)[0].runtime.powerState')" = poweredOff ] ||
     die "$key: the VM did not power off"
+  # shellcheck disable=SC2046
+  "$HERE/dhcp-leases.sh" remove $("$HERE/dhcp-leases.sh" macs "$vm")
 
   name="e2e-base-$key-$golden-$stamp"
   terraform -chdir="$TF_DIR" state rm "vsphere_virtual_machine.vm[\"$key\"]" >/dev/null
   govc vm.change -vm "$vm" -e guestinfo.e2e_authorized_key= \
-    -annotation "onigirazu e2e base template: $golden with the packages the e2e cases install. Built by $RUN_URL. Replaced by the next build; e2e/image/build.sh."
+    -annotation "onigirazu e2e base template: $golden with the packages the e2e cases install, e2e-access-refresh. Built by $RUN_URL. Replaced by the next build; e2e/image/build.sh."
   govc object.rename "$vm" "$name"
+  # e2e VMs are linked clones of this snapshot: a delta disk, no full copy
+  govc snapshot.create -vm "$FOLDER/$name" -m=false -q=false base >/dev/null
   # a powered-off VM clones as well; a template cannot be started by mistake
   if govc vm.markastemplate "$FOLDER/$name"; then
     echo "$key: template $name"
@@ -98,10 +102,17 @@ for key in $(jq -r 'keys[]' <<<"$hosts_json"); do
     echo "$key: $name kept as a powered-off VM (VirtualMachine.Provisioning.MarkAsTemplate missing?)"
   fi
 
-  # keep the newest $KEEP of this key
-  govc find "$FOLDER" -type m -name "e2e-base-$key-*" | sort | head -n -"$KEEP" | while read -r old; do
+  # keep the newest $KEEP of this key: newest by the build stamp at the end
+  # of the name, not by the golden image's stamp in the middle (the janitor
+  # retries what a running linked clone keeps alive)
+  govc find "$FOLDER" -type m -name "e2e-base-$key-*" | awk '{print substr($0, length($0) - 12) " " $0}' | sort | cut -d' ' -f2- | head -n -"$KEEP" | while read -r old; do
     echo "$key: removing $old"
-    govc vm.destroy "$old"
+    old_macs="$("$HERE/dhcp-leases.sh" macs "$old" | tr '\n' ' ')"
+    # a template object is turned back into a VM first (vm.destroy refuses
+    # templates); a running linked clone keeps it, the janitor retries
+    govc vm.markasvm -pool "/$TF_VAR_datacenter/host/$TF_VAR_cluster/Resources" "$old" >/dev/null 2>&1 || true
+    # shellcheck disable=SC2086
+    govc vm.destroy "$old" && "$HERE/dhcp-leases.sh" remove $old_macs || echo "$key: $old not removed (linked clones still running?)"
   done
 done
 log "Done"

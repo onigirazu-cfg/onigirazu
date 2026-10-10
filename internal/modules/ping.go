@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/onigirazu-cfg/onigirazu/internal/executor"
 	sshpkg "github.com/onigirazu-cfg/onigirazu/internal/ssh"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
@@ -96,22 +97,18 @@ func (m *PingModule) Validate(args map[string]interface{}) error {
 	return nil
 }
 
-// checkSSHConnection attempts to establish SSH connection to verify connectivity
+// checkSSHConnection runs a command on the host over the pooled connection:
+// the tasks after ping use the same connection and command servers instead
+// of a second handshake
 func (m *PingModule) checkSSHConnection(ctx context.Context, host types.Host) error {
-	// Try to create SSH client
-	client, err := sshpkg.NewClient(host)
+	exec, err := executor.NewCommandExecutor(host)
 	if err != nil {
 		return fmt.Errorf("failed to create SSH client: %w", err)
 	}
-	defer client.Close()
-
-	// Try to execute a simple command to verify the connection works
-	// Use 'true' command which is available on all Unix systems and returns immediately
-	_, err = client.ExecuteCommand("true")
-	if err != nil {
+	defer exec.Close()
+	if _, err := exec.ExecuteContext(ctx, "true"); err != nil {
 		return fmt.Errorf("failed to execute test command: %w", err)
 	}
-
 	return nil
 }
 

@@ -59,6 +59,8 @@ func (m *SysctlModule) Execute(ctx context.Context, host types.Host, args map[st
 	state := getStringArg(args, "state", "present")
 	sysctlFile := getStringArg(args, "sysctl_file", "/etc/sysctl.d/99-onigirazu.conf")
 	reload := getBoolArg(args, "reload", true)
+	// sysctl_set asks Ansible to set the running value too: always done here
+	_ = getBoolArg(args, "sysctl_set", false)
 
 	var execResult types.TaskResult = result
 

@@ -66,13 +66,16 @@ type Config struct {
 	EnableProfiling      bool     `yaml:"enable_profiling" json:"enable_profiling"`
 
 	// SSH/Connection
-	SSHTimeout                   time.Duration `yaml:"ssh_timeout" json:"ssh_timeout"`
-	SSHKeepAlive                 time.Duration `yaml:"ssh_keepalive" json:"ssh_keepalive"`
-	SSHMaxSessions               int           `yaml:"ssh_max_sessions" json:"ssh_max_sessions"`
-	ConnectionReuse              bool          `yaml:"connection_reuse" json:"connection_reuse"`
-	SSHStrictHostKey             bool          `yaml:"ssh_strict_host_key" json:"ssh_strict_host_key"`
-	SSHKnownHostsFile            string        `yaml:"ssh_known_hosts_file" json:"ssh_known_hosts_file"`
-	DefaultInsecureIgnoreHostKey bool          `yaml:"default_insecure_ignore_host_key" json:"default_insecure_ignore_host_key"`
+	SSHTimeout        time.Duration `yaml:"ssh_timeout" json:"ssh_timeout"`
+	SSHKeepAlive      time.Duration `yaml:"ssh_keepalive" json:"ssh_keepalive"`
+	SSHMaxSessions    int           `yaml:"ssh_max_sessions" json:"ssh_max_sessions"`
+	ConnectionReuse   bool          `yaml:"connection_reuse" json:"connection_reuse"`
+	SSHStrictHostKey  bool          `yaml:"ssh_strict_host_key" json:"ssh_strict_host_key"`
+	SSHKnownHostsFile string        `yaml:"ssh_known_hosts_file" json:"ssh_known_hosts_file"`
+	// RemoteServer: the command server on SSH hosts. auto: onigirazu-agent,
+	// else Python, else sh; python: Python, else sh; sh: sh only
+	RemoteServer                 string `yaml:"remote_server" json:"remote_server"`
+	DefaultInsecureIgnoreHostKey bool   `yaml:"default_insecure_ignore_host_key" json:"default_insecure_ignore_host_key"`
 
 	// Vault integration
 	VaultEnabled bool   `yaml:"vault_enabled" json:"vault_enabled"`
@@ -210,6 +213,7 @@ func DefaultConfig() *Config {
 		ConnectionReuse:              getEnvBool("ONIGIRAZU_CONNECTION_REUSE", true),
 		SSHStrictHostKey:             getEnvBool("ONIGIRAZU_SSH_STRICT_HOST_KEY", false),
 		SSHKnownHostsFile:            getEnvString("ONIGIRAZU_SSH_KNOWN_HOSTS_FILE", ""),
+		RemoteServer:                 getEnvString("ONIGIRAZU_REMOTE_SERVER", "auto"),
 		DefaultInsecureIgnoreHostKey: getEnvBool("ONIGIRAZU_DEFAULT_INSECURE_IGNORE_HOST_KEY", false),
 		VaultEnabled:                 getEnvBool("ONIGIRAZU_VAULT_ENABLED", false),
 		VaultAddress:                 getEnvString("ONIGIRAZU_VAULT_ADDRESS", ""),
@@ -377,7 +381,19 @@ func (c *Config) Validate() error {
 	if c.RetryDelay < 0 {
 		c.RetryDelay = 0
 	}
+	switch c.RemoteServer {
+	case "":
+		c.RemoteServer = "auto"
+	case "auto", "python", "sh":
+	default:
+		return fmt.Errorf("remote_server is %q: auto, python or sh", c.RemoteServer)
+	}
 	return nil
+}
+
+// GetRemoteServer is the command server mode for SSH hosts
+func (c *Config) GetRemoteServer() string {
+	return c.RemoteServer
 }
 
 // Interface methods for interfaces.Config

@@ -3,7 +3,8 @@
 [![Release](https://img.shields.io/github/v/release/onigirazu-cfg/onigirazu)](https://github.com/onigirazu-cfg/onigirazu/releases/latest)
 
 Onigirazu is a configuration management tool in a single Go binary. It runs Ansible playbooks,
-roles and inventories over SSH, with nothing to install on the hosts (no Python, no agent), and
+roles and inventories over SSH (and WinRM for Windows), with nothing to install on the hosts
+beforehand (no Python; a small agent is uploaded on the first connection, with a shell fallback), and
 adds what Ansible leaves to other tools: a plan before every change, drift checks, rollback of a
 run, Terraform-like managed state, canary rollouts with health checks, and import of running hosts
 into a playbook.
@@ -11,7 +12,7 @@ into a playbook.
 - **Ansible-compatible**: playbooks, roles, collections from git, `requirements.yml`,
   `ansible.cfg`, INI/YAML/JSON inventories, dynamic inventory scripts, `group_vars`/`host_vars`,
   Jinja expressions and filters, facts and magic variables, FQCN module names
-- **61 built-in modules** in Go: files, packages, services, users, containers, databases,
+- **80+ built-in modules** in Go: files, packages, services, users, containers, databases,
   firewall, HTTP and more
 - **See before you change**: `plan` shows per host what `apply` would change, with file diffs
 - **Undo**: every run keeps a snapshot; `rollback` restores files, packages, services and accounts
@@ -144,8 +145,9 @@ Existing Ansible content runs as it is in most cases. What is supported:
 YAML is read as Ansible reads it: unquoted `yes`/`no`/`on`/`off` values are booleans (YAML 1.1); quote them to keep text.
 
 - **Playbooks**: plays with `pre_tasks`, `tasks`, `post_tasks`, `handlers`, `roles`,
-  `vars`, `vars_files`, `environment`, `serial`, `max_fail_percentage`, `any_errors_fatal`,
-  `force_handlers`; `import_playbook`, `include_tasks`/`import_tasks` (with `vars`, `when`,
+  `vars`, `vars_files`, `environment`, `gather_facts`, `serial`, `strategy` (`linear`, `free`),
+  `throttle`, `max_fail_percentage`, `any_errors_fatal`, `force_handlers`, `verify:` checks
+  ([docs/VERIFY.md](docs/VERIFY.md)); `import_playbook`, `include_tasks`/`import_tasks` (with `vars`, `when`,
   `tags` and `loop`; a loop runs each included task over the items in turn, not the whole file per
   item), `include_role`/`import_role`, `block`/`rescue`/`always`
 - **Task keywords**: `when`, `loop` and `with_*` (items, list, dict, sequence, nested,
@@ -161,8 +163,10 @@ YAML is read as Ansible reads it: unquoted `yes`/`no`/`on`/`off` values are bool
 - **Module names**: `ansible.builtin.*`, `ansible.legacy.*` and the collection modules
   Onigirazu implements (`ansible.posix.sysctl`/`mount`/`authorized_key`,
   `community.general.ufw`/`ini_file`/`timezone`/`archive`,
-  `community.docker.docker_container`/`docker_image`/`docker_compose_v2`/`docker_host_info`,
-  `community.mysql.*`, `community.postgresql.*`); `dnf` runs the `yum` module
+  `community.docker.docker_container`/`docker_image`/`docker_compose`/`docker_compose_v2`/`docker_host_info`,
+  `community.mysql.mysql_db`/`mysql_user`, `community.postgresql.postgresql_db`/`postgresql_user`,
+  `community.sops.load_vars`, `ansible.windows.*`, `community.windows.*`,
+  `chocolatey.chocolatey.win_chocolatey`); `dnf`/`dnf5` run the `yum` module
 - **Roles and collections**: `roles/` next to the playbook, `roles_path` and `collections_path`
   from `ansible.cfg`, `ANSIBLE_ROLES_PATH`, `ANSIBLE_COLLECTIONS_PATH`,
   `namespace.collection.role`; `onigirazu galaxy install -r requirements.yml` installs roles
@@ -195,8 +199,11 @@ YAML is read as Ansible reads it: unquoted `yes`/`no`/`on`/`off` values are bool
   `ANSIBLE_VAULT_*` variables and `ansible.cfg`; `onigirazu vault encrypt|decrypt|view|encrypt_string`.
   See [docs/VAULT.md](docs/VAULT.md)
 
+Windows hosts are managed with the `win_*` modules over WinRM (`ansible_connection: winrm`) or
+OpenSSH (`ansible_shell_type: powershell` or `cmd`; the agent runs there too).
 Not supported: Python modules and plugins from collections (Onigirazu has its own modules;
-`validate` names any module it lacks) and Windows hosts (WinRM).
+`validate` names any module it lacks). A task argument its module does not have fails the task,
+as in Ansible.
 For Packer builds see [docs/PACKER.md](docs/PACKER.md).
 
 ## Playbooks
@@ -294,7 +301,10 @@ stops with `any_errors_fatal`, above `max_fail_percentage`, or when no host is l
       throttle: 2
 ```
 
-An unhealthy batch is rolled back and the rollout stops (exit code 5). `--canary 1 --canary-pause
+`strategy: free` lets every host run the play's tasks at its own pace instead of waiting for the
+slowest host at every task (handlers still run at the end, for the hosts that notified them); a
+play-level `throttle` applies to every task without its own. An unhealthy batch is rolled back and
+the rollout stops (exit code 5). `--canary 1 --canary-pause
 5m` runs one host first and checks it again after a soak; `--auto-rollback` rolls back a batch
 whose tasks fail. See [docs/SAFE_APPLY.md](docs/SAFE_APPLY.md).
 
@@ -315,7 +325,8 @@ onigirazu plan site.yml -i hosts.ini --format html --output plan.html
 ```
 
 `plan` runs the playbook in check mode and also lists resources that left the playbook (see
-Managed state). Formats: text, json, html.
+Managed state). Formats: text, json, html, markdown; `--github-comment` posts the plan on the pull
+request of the workflow run ([docs/PLAN_IN_PR.md](docs/PLAN_IN_PR.md)).
 
 ### Drift
 
@@ -341,7 +352,9 @@ In sync: web2, db1
 
 Every check is kept, so a drifting task shows since when it drifts. Exit codes: 0 in sync,
 2 drift, 1 a task could not be checked. `--notify` posts to Slack or
-Mattermost style webhooks. A systemd timer or CI schedule running `drift` watches a fleet.
+Mattermost style webhooks; `--metrics-file` (node_exporter textfile collector), `--metrics-push URL`
+(VictoriaMetrics import, Pushgateway) and `--metrics-label k=v` export the result as Prometheus
+metrics. A systemd timer or CI schedule running `drift` watches a fleet.
 
 ### Rollback
 
@@ -398,9 +411,9 @@ to change. Secrets become variables with an example file. See [docs/IMPORT.md](d
 | Databases | `mysql_db`, `mysql_user`, `postgresql_db`, `postgresql_user`, `mongodb` |
 | Source control | `git` |
 | Windows (WinRM or SSH) | `win_ping`, `win_command`, `win_shell`, `win_powershell`, `win_regedit`, `win_file`, `win_copy`, `win_service`, `win_timezone`, `win_firewall_rule`, `win_firewall`, `win_group_membership`, `win_feature`, `win_reboot`, `win_scheduled_task`, `win_chocolatey`, `win_optional_feature`, `win_disk_facts`, `win_initialize_disk`, `win_partition`, `win_format`; facts (`ansible_os_family: Windows`, ...) |
-| Flow and data | `debug`, `assert`, `fail`, `set_fact`, `include_vars`, `setup`/`gather_facts`, `pause`, `ping`, `meta`, `async_status`, `include_role`/`import_role` |
+| Flow and data | `debug`, `assert`, `fail`, `set_fact`, `include_vars`, `add_host`, `group_by`, `setup`/`gather_facts`, `pause`, `ping`, `meta`, `async_status`, `include_role`/`import_role`, `verify` |
 
-Any other Ansible module (a collection module, `win_*` on WinRM hosts) runs through an installed
+Any other Ansible module (a collection module, or a `win_*` module Onigirazu does not implement) runs through an installed
 ansible-core when `ansible_bridge` in `onigirazu.yml` allows it: see
 [docs/ANSIBLE_BRIDGE.md](docs/ANSIBLE_BRIDGE.md).
 
@@ -418,6 +431,9 @@ return values and examples: [docs/modules/README.md](docs/modules/README.md). Ne
 | `apply PLAYBOOK` | Run a playbook |
 | `plan PLAYBOOK` | Show what `apply` would change |
 | `drift PLAYBOOK` | Check that hosts still match a playbook; `--fix` applies |
+| `verify PLAYBOOK` | Run the plays' `verify:` checks (files, packages, services, ports, http, ...) and report them ([docs/VERIFY.md](docs/VERIFY.md)) |
+| `pull --repo URL` | This host converges itself from a git repository: once, every `--interval`, or `pull install` (systemd timer); `--drift-only`, `--only-on-change`, `--notify`, `--metrics-*` ([pull mode](docs/PULL.md)) |
+| `plugin list` | Command plugins found (`onigirazu-NAME` executables) |
 | `diff PLAYBOOK` | Compare a playbook with the last recorded run |
 | `rollback` | List, inspect and restore snapshots of runs |
 | `state` | Managed state: `resources`, `rm`, `unlock`; `list`, `show` |
@@ -427,7 +443,7 @@ return values and examples: [docs/modules/README.md](docs/modules/README.md). Ne
 | `lint`, `fmt` | Best-practice checks (arguments of bridged modules against ansible-doc too); YAML formatting |
 | `doc MODULE` | A module's arguments: built in, or through the Ansible bridge |
 | `graph PLAYBOOK` | Plays, tasks, handlers and variables as ASCII, DOT or Mermaid |
-| `inventory` | `--list`, `--host`, `--graph`, `--json` (as `ansible-inventory`) |
+| `inventory` | `--list`, `--host`, `--graph`, `--json` (as `ansible-inventory`); sources: YAML/JSON/TOML/INI, scripts, [plugins](docs/INVENTORY_FORMATS.md#inventory-plugins) (NetBox, vSphere, Proxmox, NetBird) |
 | `galaxy install -r FILE` | Install roles and collections from a requirements file |
 | `vault` | `encrypt`, `decrypt`, `view`, `encrypt_string` of Ansible Vault data |
 | `healthcheck` | Reachability, disk, memory, CPU and services of the inventory hosts |
@@ -446,7 +462,7 @@ onigirazu apply site.yml -i hosts.ini \
 
 `--list-hosts`, `--list-tasks`, `--list-tags` and `--syntax-check` print and exit;
 `--start-at-task` skips to a task; `-o json|yaml` prints a machine-readable result.
-Every command has `--help`. Global flags: `-i`, `-c` (config file), `-v`, `--show-debug`,
+Every command has `--help`. Global flags: `-i`, `-c` (config file), `-s` (state file), `-v`, `--show-debug`,
 `--no-color`, `--security-policy`.
 
 ## Ad-hoc commands
@@ -485,7 +501,12 @@ Without a terminal the normal output is used. See [docs/INTERACTIVE_MODE.md](doc
 
 - `apply -o json` writes one document to stdout (status, totals, every task per host); logs go
   to stderr. Exit codes: 0 success, 1 failure, 5 a batch was rolled back, 130 interrupted.
-- `drift` and `plan` have JSON and HTML reports; `drift --notify` posts to webhooks.
+- `drift` and `plan` have JSON, HTML and Markdown reports; `--github-comment` keeps the plan as one
+  comment on the pull request ([docs/PLAN_IN_PR.md](docs/PLAN_IN_PR.md)); `drift --notify` posts to
+  webhooks and `--metrics-*` exports Prometheus metrics.
+- `pull` runs a playbook from git on the host itself, once or on a systemd timer, with the same
+  notifications and metrics ([docs/PULL.md](docs/PULL.md)).
+- `verify` runs the plays' `verify:` checks and reports them, also as JSON ([docs/VERIFY.md](docs/VERIFY.md)).
 - `apply --background` returns at once; `show-execution` reads the result later.
 - `audit` keeps the history of runs with per-host statistics.
 - `onigirazu test` runs a role's Molecule scenarios (docker/podman instances, converge,
@@ -506,24 +527,32 @@ Without a terminal the normal output is used. See [docs/INTERACTIVE_MODE.md](doc
   (`-J`/`ProxyJump`, aliases from `~/.ssh/config`) are checked the same way.
 - Passwords (`ansible_password`, `ansible_become_password`) never appear on command lines;
   sudo reads them on stdin. `no_log: true` keeps a task's values out of logs, state and output.
-- Secrets come from Bitwarden/Vaultwarden (`bw` CLI, `BW_SESSION`) or HashiCorp Vault when a
-  template uses them: `{{ bitwarden('app-db') }}`, `{{ vault('app/db', 'password') }}`,
-  `lookup('community.general.bitwarden', ...)`. See [docs/BITWARDEN_INTEGRATION.md](docs/BITWARDEN_INTEGRATION.md).
+- Secrets come from Bitwarden/Vaultwarden (`bw` CLI, `BW_SESSION`), HashiCorp Vault (token or
+  AppRole) or SOPS-encrypted vars files when a template uses them: `{{ bitwarden('app-db') }}`,
+  `{{ vault('app/db', 'password') }}`, `lookup('community.hashi_vault.hashi_vault', ...)`,
+  `lookup('community.sops.sops', ...)`. See [docs/BITWARDEN_INTEGRATION.md](docs/BITWARDEN_INTEGRATION.md).
 - An optional security policy restricts modules, hosts, paths and commands:
   [docs/SECURITY_POLICY_GUIDE.md](docs/SECURITY_POLICY_GUIDE.md).
 - Work files on the hosts live in `~/.onigirazu/tmp` of the connecting user.
 
 ## Performance
 
-One SSH connection per host, one long-lived shell on it with commands framed over it, and a
-single state capture reused by the file modules. A second (unchanged) run of a 20-task playbook
-on 10 hosts:
+One SSH connection per host and, on it, a small command server (a static Go agent uploaded
+once; a Python or POSIX sh fallback) that runs commands, probes and writes files without a new
+process or session per task; the file modules reuse one capture of the target. Measured with
+[`bench/`](bench/README.md) (a ~40-module playbook, the same for both tools, on fresh VMs):
 
-| | Local network | 50 ms round trip |
-|---|---|---|
-| Ansible, defaults | 14.4 s | 70 s |
-| Ansible, forks=10 + pipelining | 7.0 s | 13.6 s |
-| Onigirazu | 0.8 s | 3.6 s |
+| 1 host, 10 hosts | converge | second (unchanged) run | check mode |
+|---|---|---|---|
+| Ansible (forks=10, pipelining, ControlPersist) | 168 s, 181 s | 167 s, 172 s | 168 s, 168 s |
+| Onigirazu | 10.3 s, 13.8 s | 1.6 s, 2.0 s | 1.1 s, 1.3 s |
+| control-side CPU, 10 hosts | 2.0 s vs 182 s | 1.4 s vs 163 s | 1.1 s vs 159 s |
+
+Both tools leave the hosts in the same state (about 1100 goss checks per host pass after each run).
+Without the agent (the POSIX sh server, no Python on the hosts) a second run takes 3.1 s and 4.0 s.
+
+On 500 hosts (containers, `bench/scale.sh`) a short playbook converges in 7.3–7.8 s and a second run
+takes 5.5–5.8 s with about 6 s of CPU and 230–285 MB on the control side, at concurrency 50 to 500.
 
 ## Documentation
 

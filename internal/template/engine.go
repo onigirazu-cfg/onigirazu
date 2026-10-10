@@ -159,6 +159,11 @@ func (e *Engine) GetSecretManager() *secrets.TemplateSecretManager {
 
 // Render renders a template string with variables
 func (e *Engine) Render(ctx context.Context, templateStr string, variables map[string]interface{}) (string, error) {
+	// no template syntax at all: most arguments; the passes below are
+	// regular expressions over the whole text
+	if !strings.Contains(templateStr, "{") {
+		return templateStr, nil
+	}
 	opts := blockOptionsFrom(ctx)
 	// lstrip_blocks: spaces and tabs before a block tag at the start of a
 	// line go; {%+ keeps them
