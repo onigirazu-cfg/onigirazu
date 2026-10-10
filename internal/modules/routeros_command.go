@@ -10,6 +10,7 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
+	sshpkg "github.com/onigirazu-cfg/onigirazu/internal/ssh"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
@@ -42,8 +43,10 @@ var routerosSSHDial = func(host types.Host) (*ssh.Client, error) {
 	if host.User == "" {
 		return nil, fmt.Errorf("routeros_command: ansible_user is required")
 	}
+	// the device's key is checked against known_hosts like any SSH host's;
+	// insecure_ignore_host_key / StrictHostKeyChecking=no turn it off per host
 	cfg := &ssh.ClientConfig{User: host.User + "+ct", Auth: []ssh.AuthMethod{ssh.Password(host.Password)}, Timeout: 20 * time.Second,
-		HostKeyCallback: ssh.InsecureIgnoreHostKey()} // #nosec G106 -- the device's key is not in known_hosts as a rule; routeros_api is the checked path
+		HostKeyCallback: sshpkg.HostKeyCallbackFor(host)}
 	return ssh.Dial("tcp", net.JoinHostPort(address, strconv.Itoa(port)), cfg)
 }
 
