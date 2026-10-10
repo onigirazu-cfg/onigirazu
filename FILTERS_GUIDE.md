@@ -383,6 +383,7 @@ loop: "{{ packages | select('match', '^python3-') | list }}"
 | `hashi_vault` (`community.hashi_vault.hashi_vault`) | A Vault KV v2 field: `secret=mount/data/path:field` |
 | `vault_kv2_get` (`community.hashi_vault.vault_kv2_get`) | A Vault KV v2 secret as a dict |
 | `sops` (`community.sops.sops`) | The plain text of a SOPS-encrypted file (`rstrip=`) |
+| `tf_output` (`cloud.terraform.tf_output`) | A Terraform/OpenTofu output (`project_path=` or `state_file=`); all outputs without a name |
 
 Collection prefixes `ansible.builtin.`, `community.general.`, `community.sops.` and
 `community.hashi_vault.` are accepted on the plugin name. Secrets lookups:

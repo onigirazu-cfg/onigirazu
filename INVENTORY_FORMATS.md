@@ -241,6 +241,35 @@ control machine reaches them over the mesh. Groups: `netbird_<group>` per NetBir
 `netbird_dns_label`, `netbird_connected`, `netbird_os`, `netbird_version`, `netbird_groups`,
 `netbird_ssh_enabled`, `netbird_last_seen`.
 
+### terraform
+
+```yaml
+plugin: terraform
+project: ../infra                 # a Terraform/OpenTofu project: `terraform show -json` runs there (remote backends work)
+# state: terraform.tfstate        # or a state file, relative to this file (default when no project)
+binary: terraform                 # default; tofu for OpenTofu
+workspace: prod                   # optional, selected first
+hosts:                            # which resources are hosts; default: the known machine types below
+  - type: vsphere_virtual_machine
+    name: "{{ name }}"            # attribute paths of the resource, dotted, "a|b" = first non-empty
+    address: "{{ default_ip_address|guest_ip_addresses.0 }}"
+    groups: ["vsphere", "{{ folder }}"]
+    vars: {ansible_user: ubuntu}
+group_by: [type, module]          # default: tf_<type> and module_<name>
+```
+
+Hosts are the managed resources of the machine types the plugin knows — `vsphere_virtual_machine`,
+`aws_instance`, `google_compute_instance`, `azurerm_linux/windows_virtual_machine`, `hcloud_server`,
+`digitalocean_droplet`, `linode_instance`, `vultr_instance`, `openstack_compute_instance_v2`,
+`proxmox_vm_qemu`, `proxmox_virtual_environment_vm`, `libvirt_domain`, `scaleway_instance_server`,
+`exoscale_compute_instance`, `upcloud_server` — or those listed under `hosts`; a listed known type
+keeps its default name and address paths. Resources of the `ansible/ansible` provider
+(`ansible_host`, `ansible_group`) are read as the `cloud.terraform` collection reads them. A CIDR
+address loses its length; cloud-init's `dhcp` is no address (the host name is used then). Host
+variables: `terraform_type`, `terraform_address`, `terraform_module`, `terraform` (every attribute),
+plus the mapping's `vars`. `lookup('cloud.terraform.tf_output', 'name', project_path='../infra')`
+(or `state_file=`) reads an output; without a name, all outputs as a dict.
+
 ## Host variables
 
 | Variable | Meaning | Default |

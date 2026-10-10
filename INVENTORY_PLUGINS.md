@@ -4,7 +4,7 @@ Hosts come from an API through an inventory file whose top-level key is `plugin:
 like any other inventory:
 
 ```yaml
-plugin: netbox            # netbox, vsphere, proxmox or netbird (also onigirazu.netbox)
+plugin: netbox            # netbox, vsphere, proxmox, netbird or terraform (also onigirazu.netbox)
 url: https://netbox.example.com
 token: ${NETBOX_TOKEN}
 ```
