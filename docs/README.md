@@ -24,7 +24,7 @@ Start with the [Quick Start](QUICK_START_CONFIGURATION.md). The project
 
 - [Inventory formats](INVENTORY_FORMATS.md) — YAML, JSON, TOML, INI, host lists, dynamic scripts, `group_vars`/`host_vars`
 - [Ansible inventories](ANSIBLE_INVENTORY_QUICK_START.md) — using existing Ansible INI and YAML inventories
-- [Inventory plugins](INVENTORY_PLUGINS.md) — hosts from NetBox, vSphere, Proxmox and NetBird
+- [Inventory plugins](INVENTORY_PLUGINS.md) — hosts from NetBox, vSphere, Proxmox, NetBird and Terraform/OpenTofu state
 
 ## Writing playbooks
 

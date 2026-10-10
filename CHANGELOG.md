@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `onigirazu listen`: an HTTP listener that runs playbooks on events — Alertmanager/vmalert alerts, GitHub webhooks (signature checked), Mattermost outgoing webhooks and slash commands, any JSON POST; rules are Jinja expressions over the event, runs are serial and throttled per rule and host; `listen test`, `listen install` (systemd), `/metrics` (docs/LISTEN.md)
+- Inventory plugin `terraform`: the machines of a Terraform/OpenTofu state (a project directory via `terraform show -json`, or a state file) become hosts — 16 machine resource types known, custom `hosts` mappings, `ansible_host`/`ansible_group` resources of the ansible provider; `lookup('cloud.terraform.tf_output', ...)` reads outputs
 - `verify:` section of a play and `onigirazu verify`: goss-style checks of the hosts' state (file, package, service, port, process, user, group, command, http, mount, kernel_param, dns), one round trip per host (docs/VERIFY.md)
 - `strategy: free` (hosts run a play's tasks at their own pace) and a play-level `throttle`
 - SOPS-encrypted vars files (`vars_files`, `group_vars`/`host_vars`, `include_vars`, `community.sops.load_vars`) are decrypted through the `sops` binary; `lookup('community.sops.sops', file)` reads one; Vault logs in with an AppRole (`VAULT_ROLE_ID`, `VAULT_SECRET_ID`) when there is no token; `lookup('community.hashi_vault.hashi_vault', 'secret=...')` and `vault_kv2_get`
