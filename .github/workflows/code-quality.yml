@@ -73,7 +73,7 @@ jobs:
 
     - name: Check for misspellings
       run: |
-        misspell -error .
+        misspell -error -i routeros .
 
     - name: Check line length
       run: |
