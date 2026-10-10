@@ -71,6 +71,7 @@ func newApplyCommand(onResult func(*types.PlaybookResult)) *cobra.Command {
 		remoteUser     string
 		privateKey     string
 		startAtTask    string
+		verifyOnly     bool // onigirazu verify: only the plays' verify: checks
 		parallel       int
 		timeout        time.Duration
 		interactive    bool
@@ -263,6 +264,9 @@ Examples:
 
 			// Initialize logger - redirect to TUI if in interactive mode
 			log := logger.NewEnhanced(cfg.LogLevel, logger.LogFormat(cfg.LogFormat), logWriter)
+			if noColor {
+				log.SetColors(false)
+			}
 			for _, w := range cfg.Warnings {
 				log.Warn("%s", w)
 			}
@@ -402,11 +406,6 @@ Examples:
 			// Also keep the enhanced manager for compatibility with execution engine
 			stateManager := state.NewEnhancedManager(cfg.StateFile, log)
 
-			// Load existing state before execution
-			if _, err := stateManager.LoadState(ctx); err != nil {
-				log.Warn("Failed to load existing state: %v", err)
-			}
-
 			// Create execution pool with signal handler's context for graceful shutdown support
 			executionPool := execution.NewPoolWithContext(ctx, cfg.MaxConcurrency, log)
 			progressTracker := progress.NewTracker()
@@ -500,6 +499,7 @@ Examples:
 			executionEngine.SetLimit(limit)
 			executionEngine.SetForceBecome(become || becomeUser != "", becomeUser)
 			executionEngine.SetStartAtTask(startAtTask)
+			executionEngine.SetVerifyOnly(verifyOnly)
 
 			if policySource != "" {
 				log.Info("Security policy loaded from %s", policySource)
@@ -1189,8 +1189,12 @@ Examples:
 				log.Info("Check mode: state file and snapshot left untouched")
 			} else {
 				log.Info("Saving state to: %s", cfg.StateFile)
-				if err := stateManager.SaveState(saveCtx, currentState); err != nil {
-					log.Warn("Failed to save final state (manager): %v", err)
+				// a file backend writes the same file (with its backups):
+				// writing it twice cost a full serialization of the run
+				if stateBackend.GetPath() != cfg.StateFile {
+					if err := stateManager.SaveState(saveCtx, currentState); err != nil {
+						log.Warn("Failed to save final state (manager): %v", err)
+					}
 				}
 
 				// Also save to backend
@@ -1229,6 +1233,8 @@ Examples:
 	cmd.Flags().StringVarP(&remoteUser, "user", "u", "", "SSH user for every host")
 	cmd.Flags().StringVar(&privateKey, "private-key", "", "SSH private key for every host")
 	cmd.Flags().StringVar(&startAtTask, "start-at-task", "", "Skip tasks until the one with this name")
+	cmd.Flags().BoolVar(&verifyOnly, "verify-only", false, "Run only the plays' verify: checks (what `onigirazu verify` does)")
+	_ = cmd.Flags().MarkHidden("verify-only")
 	cmd.Flags().IntVarP(&parallel, "parallel", "f", 10, "Number of parallel executions")
 	cmd.Flags().DurationVarP(&timeout, "timeout", "t", 30*time.Minute, "Execution timeout")
 	cmd.Flags().BoolVar(&interactive, "interactive", false, "Interactive mode with beautiful TUI")
@@ -1363,7 +1369,6 @@ func recordAuditResults(recorder *audit.Recorder, result *types.PlaybookResult, 
 // totals, and every task with its result per host
 func writeRunResult(w io.Writer, format string, result *types.PlaybookResult, playbookPath string, start time.Time) {
 	record := execution.FromPlaybookResult(result, playbookPath, filepath.Base(playbookPath), start, result.Duration)
-	record.PlaybookResult = nil // the per-task view above carries the same data
 	var data []byte
 	var err error
 	data, err = json.MarshalIndent(record, "", "  ")

@@ -90,11 +90,19 @@ func (e *ExecutionEngine) endHosts(names ...string) {
 }
 
 // takeNotified returns, per handler entry, the hosts (of the given ones)
-// that notified it, and forgets those notifications
+// that notified it, and forgets the notifications it hands out; a
+// notification no handler answers to yet is kept for a later flush
 func (h *playHandlers) takeNotified(hosts []types.Host) [][]types.Host {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	out := make([][]types.Host, len(h.entries))
+	taken := map[string]map[string]bool{} // notify name -> hosts handed out
+	take := func(name, host string) {
+		if taken[name] == nil {
+			taken[name] = map[string]bool{}
+		}
+		taken[name][host] = true
+	}
 	// of handlers with the same name only the first runs, as in Ansible (a
 	// role included twice loads its handlers twice)
 	seen := map[string]bool{}
@@ -105,14 +113,20 @@ func (h *playHandlers) takeNotified(hosts []types.Host) [][]types.Host {
 			if h.ended[host.Name] {
 				continue
 			}
-			if (byName && h.notified[entry.task.Name][host.Name]) || listensTo(&entry.task, h.notified, host.Name) {
+			if byName && h.notified[entry.task.Name][host.Name] {
 				out[i] = append(out[i], host)
+				take(entry.task.Name, host.Name)
+			} else if listensTo(&entry.task, h.notified, host.Name) {
+				out[i] = append(out[i], host)
+				for _, topic := range listenTopics(&entry.task) {
+					take(topic, host.Name)
+				}
 			}
 		}
 	}
-	for _, host := range hosts {
-		for _, set := range h.notified {
-			delete(set, host.Name)
+	for name, hostsOf := range taken {
+		for host := range hostsOf {
+			delete(h.notified[name], host)
 		}
 	}
 	return out
@@ -228,12 +242,17 @@ func (e *ExecutionEngine) runIncludedRole(ctx context.Context, task *types.Task,
 }
 
 // listensTo tells whether host notified one of the handler's listen topics
-func listensTo(t *types.Task, notified map[string]map[string]bool, host string) bool {
+// listenTopics are the names a handler listens to (listen: one or a list)
+func listenTopics(t *types.Task) []string {
 	topics := t.Listens
 	if len(topics) == 0 && t.Listen != "" {
 		topics = []string{t.Listen}
 	}
-	for _, topic := range topics {
+	return topics
+}
+
+func listensTo(t *types.Task, notified map[string]map[string]bool, host string) bool {
+	for _, topic := range listenTopics(t) {
 		if notified[topic][host] {
 			return true
 		}

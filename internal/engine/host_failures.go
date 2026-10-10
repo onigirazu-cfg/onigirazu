@@ -83,6 +83,7 @@ func (e *ExecutionEngine) continueAfter(ctx context.Context, err error, hosts []
 		if !e.failedHosts[name] {
 			e.failedHosts[name] = true
 			e.policy.batchFailed++
+			e.hostsVersion++
 		}
 	}
 	policy := e.policy

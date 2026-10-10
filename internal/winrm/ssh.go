@@ -52,8 +52,16 @@ func (r *sshRunner) run(ctx context.Context, command, stdin string) (Result, err
 	return res, nil
 }
 
-// RunPS runs the script through the same stdin bootstrap as WinRM
+// RunPS runs the script: through the agent kept on the host when it is
+// there (one PowerShell per script, no session per script), else through
+// the same stdin bootstrap as WinRM
 func (r *sshRunner) RunPS(ctx context.Context, script string) (Result, error) {
+	if client, err := sshpkg.GetGlobalPool().GetConnection(r.host); err == nil {
+		so, se, rc, served, err := client.ExecAs(ctx, "", "$ProgressPreference='SilentlyContinue'\r\n"+script+"\r\nif ($LASTEXITCODE) { exit $LASTEXITCODE }\r\n", false)
+		if served && err == nil {
+			return Result{Stdout: string(so), Stderr: cleanCLIXML(string(se)), ExitCode: rc}, nil
+		}
+	}
 	return r.run(ctx, EncodedCommand(bootstrap), b64(script))
 }
 
@@ -81,7 +89,16 @@ func (r *sshRunner) RunCmdInput(ctx context.Context, command, stdin string) (Res
 	return r.RunPS(ctx, fmt.Sprintf(cmdScript, psString(command), psString(stdin)))
 }
 
-// Upload writes data to a temporary file in pieces
+// Upload writes data to a temporary file: in one native write through the
+// agent when it is there, else in pieces
 func (r *sshRunner) Upload(ctx context.Context, data []byte) (string, error) {
+	if client, err := sshpkg.GetGlobalPool().GetConnection(r.host); err == nil {
+		if res, err := r.RunPS(ctx, "$p = [IO.Path]::GetTempFileName(); Write-Output $p"); err == nil && res.ExitCode == 0 {
+			path := strings.TrimSpace(res.Stdout)
+			if served, err := client.Write(ctx, "", path, data, "-", "-", "-"); served && err == nil {
+				return path, nil
+			}
+		}
+	}
 	return upload(ctx, r, data)
 }

@@ -1,0 +1,8 @@
+plays:
+  - name: checks that fail
+    hosts: all
+    become: true
+    verify:
+      - port: {port: 59998, listening: true}
+      - file: {path: /etc/onigirazu-e2e-verify.conf, contains: ["nothing like this"]}
+      - file: {path: /etc/hostname}

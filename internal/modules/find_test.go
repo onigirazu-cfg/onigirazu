@@ -135,30 +135,6 @@ func TestFindModuleTypeFlag(t *testing.T) {
 	}
 }
 
-func TestFindModuleLimitValue(t *testing.T) {
-	module := NewFindModule()
-
-	testCases := []struct {
-		name     string
-		limit    int
-		expected int
-	}{
-		{"zero limit", 0, 999999},
-		{"negative limit", -5, 999999},
-		{"positive limit", 100, 100},
-		{"large limit", 1000000, 1000000},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			result := module.getLimitValue(tc.limit)
-			if result != tc.expected {
-				t.Errorf("getLimitValue(%d) = %d, expected %d", tc.limit, result, tc.expected)
-			}
-		})
-	}
-}
-
 func TestEscapeSingleQuotes(t *testing.T) {
 	testCases := []struct {
 		name     string

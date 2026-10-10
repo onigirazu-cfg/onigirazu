@@ -9,6 +9,7 @@ format, so files work with both tools.
   `group_vars`/`host_vars`, role `defaults`/`vars`/tasks, `-e @file`
 - `!vault |` values inside any of these files
 - `copy` and `template` source files (`decrypt: false` on `copy` copies them as they are)
+- SOPS-encrypted YAML/JSON files are opened the same way, through the `sops` binary (not `copy`/`template` sources): see [Secrets — SOPS](BITWARDEN_INTEGRATION.md#sops)
 
 ## Passwords
 

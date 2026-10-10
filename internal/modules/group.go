@@ -47,9 +47,12 @@ func (m *GroupModuleFixed) PreCheckState(ctx context.Context, host types.Host, a
 		}
 	}
 
-	// Check current group existence using getent (fast: ~30ms)
-	_, err := runOnHost(ctx, host, args, "getent", "group", groupname)
-	groupExists := err == nil
+	// the capture before the task asked getent already
+	groupExists, known := capturedAccountExists(args, "group", groupname)
+	if !known {
+		_, err := runOnHost(ctx, host, args, "getent", "group", groupname)
+		groupExists = err == nil
+	}
 
 	currentState := map[string]interface{}{
 		"exists": groupExists,

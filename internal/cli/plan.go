@@ -16,14 +16,16 @@ that would change something, with diffs of files. Nothing is changed.
 plan is drift for a change you are about to make: the same report, exit code 0
 when there are changes (1 when a task cannot be checked).`,
 		Example: `  onigirazu plan site.yml -i hosts.yml
-  onigirazu plan site.yml -i hosts.yml --limit web --format json`,
+  onigirazu plan site.yml -i hosts.yml --limit web --format json
+  onigirazu plan site.yml -i hosts.yml --github-comment   # in a pull request workflow`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			o.plan = true
 			return runDriftCheck(cmd, args[0], o)
 		},
 	}
-	cmd.Flags().StringVar(&o.format, "format", "text", "Report format (text, json, html)")
+	cmd.Flags().StringVar(&o.format, "format", "text", "Report format (text, json, html, markdown)")
+	cmd.Flags().BoolVar(&o.githubComment, "github-comment", false, "Post the plan as a comment on the pull request of this GitHub Actions run, replacing the previous one (GITHUB_TOKEN)")
 	cmd.Flags().StringVar(&o.output, "output", "", "Write the report to this file")
 	cmd.Flags().StringArrayVarP(&o.extraVars, "extra-vars", "e", nil, "Extra variables, as for apply (repeatable)")
 	cmd.Flags().StringVar(&o.limit, "limit", "", "Plan only for hosts matching this pattern")

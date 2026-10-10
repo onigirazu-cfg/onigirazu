@@ -45,6 +45,15 @@ func (e *ExitStatusError) ExitStatus() int { return e.Status }
 // removed its own output files reports empty output).
 var shellScript = pythonServer() + posixServer
 
+// serverScript is the script server to start: the Python one where python3
+// is there, unless remote_server is sh (or ONIGIRAZU_NO_PYTHON=1)
+func serverScript() string {
+	if serverMode() == "sh" {
+		return posixServer
+	}
+	return shellScript
+}
+
 //go:embed shell_server.py
 var shellServerPy []byte
 
@@ -70,13 +79,23 @@ while IFS= read -r l; do
   [ -d "$d" ] || mkdir -p -m 700 "$d"
   n=$((n+1)); o="$d/o$n"; e="$d/e$n"
   m=${l%% *}; l=${l#* }
-  printf '%s' "$l" | base64 -d > "$d/c" 2>/dev/null || { printf 'ONIGIRAZU 255 0 0\n'; continue; }
+  base64 -d > "$d/c" 2>/dev/null <<EOF || { printf 'ONIGIRAZU 255 0 0\n'; continue; }
+$l
+EOF
   if [ "$m" = C ]; then sh "$d/c" </dev/null >"$o" 2>&1; rc=$?; : >"$e"
   else sh "$d/c" </dev/null >"$o" 2>"$e"; rc=$?; fi
-  so=$(wc -c <"$o" 2>/dev/null) || so=0; se=$(wc -c <"$e" 2>/dev/null) || se=0
+  # one wc for both sizes: "N o", "M e", "T total" (the path may have
+  # spaces: stderr's size is the total less stdout's); a command that
+  # removed its own output file gets the slow way
+  if [ -f "$o" ] && [ -f "$e" ]; then
+    set -f; set -- $(wc -c "$o" "$e"); set +f; so=$1; eval "se=\$(( \${$(($# - 1))} - so ))"
+  else
+    so=$(wc -c <"$o" 2>/dev/null) || so=0; se=$(wc -c <"$e" 2>/dev/null) || se=0
+  fi
   printf 'ONIGIRAZU %d %d %d\n' "$rc" $((so)) $((se))
   cat "$o" "$e" 2>/dev/null
-  rm -f "$o" "$e"
+  # the outputs of finished commands go in batches, not one rm each
+  [ $((n % 64)) -ne 0 ] || rm -f "$d"/o* "$d"/e*
 done
 `
 
@@ -85,8 +104,9 @@ type remoteShell struct {
 	session *ssh.Session
 	stdin   io.WriteCloser
 	stdout  *bufio.Reader
-	// probe: the server answers "P" requests (the Python one)
-	probe bool
+	// probe, write: the server answers "P"/"Q" and "W" requests (the
+	// Python one and the agent)
+	probe, write bool
 }
 
 func (s *remoteShell) close() {
@@ -104,7 +124,7 @@ type shellPool struct {
 }
 
 func (c *Client) startShell(user string) (*remoteShell, error) {
-	session, err := c.client.NewSession()
+	session, err := c.newSession()
 	if err != nil {
 		return nil, err
 	}
@@ -118,7 +138,15 @@ func (c *Client) startShell(user string) (*remoteShell, error) {
 		_ = session.Close()
 		return nil, err
 	}
-	command := "sh -c " + quote(shellScript)
+	command := "sh -c " + quote(serverScript())
+	agent := c.agentFor(user)
+	if agent != "" {
+		command = agent
+	} else if isWindowsSSH(c.host) {
+		// no sh there: without the agent every command is its own session
+		_ = session.Close()
+		return nil, fmt.Errorf("no command server on the Windows host")
+	}
 	if user != "" {
 		// sudo once for the server instead of once per command; -n: a
 		// password prompt fails the start, and become falls back to sudo
@@ -134,9 +162,17 @@ func (c *Client) startShell(user string) (*remoteShell, error) {
 	f := strings.Fields(line)
 	if err != nil || len(f) == 0 || f[0] != "ONIGIRAZU-READY" {
 		s.close()
+		if agent != "" {
+			// e.g. the become user cannot reach the login user's home
+			c.agentFailed(user)
+			return c.startShell(user)
+		}
 		return nil, fmt.Errorf("shell did not start: %q", line)
 	}
-	s.probe = len(f) > 1 && f[1] == "P"
+	for _, flag := range f[1:] {
+		s.probe = s.probe || flag == "P"
+		s.write = s.write || flag == "W"
+	}
 	return s, nil
 }
 
@@ -197,6 +233,57 @@ func modeOf(combined bool) string {
 		return "C"
 	}
 	return "S"
+}
+
+// Write writes data to path on the host as user through the command server,
+// without a process: in a file next to it moved over it, missing parent
+// directories made. mode is octal or "-" (keep, 0644 for a new file),
+// owner and group a name, an id or "-" (keep). served is false when the
+// server cannot (the sh one): the caller writes with commands.
+func (c *Client) Write(ctx context.Context, user, path string, data []byte, mode, owner, group string) (served bool, err error) {
+	if err := ctx.Err(); err != nil {
+		return true, err
+	}
+	shell, err := c.takeShell(user)
+	if err != nil || shell == nil {
+		return false, nil
+	}
+	if !shell.write || strings.ContainsAny(path, "\n\x00") {
+		c.returnShell(user, shell)
+		return false, nil
+	}
+	_, e, rc, err := c.runIn(ctx, user, shell, "W", mode+" "+owner+" "+group+"\n"+path+"\n"+string(data))
+	if err != nil {
+		return true, err
+	}
+	if rc != 0 {
+		return true, fmt.Errorf("write %s: %s", path, strings.TrimSpace(string(e)))
+	}
+	return true, nil
+}
+
+// ProbeMany is Probe for several paths in one request: the records come in
+// the order of paths, each followed by "\x1e\n"
+func (c *Client) ProbeMany(ctx context.Context, user string, paths []string, limit int) (out []byte, served bool, err error) {
+	if err := ctx.Err(); err != nil {
+		return nil, true, err
+	}
+	shell, err := c.takeShell(user)
+	if err != nil || shell == nil {
+		return nil, false, nil
+	}
+	if !shell.probe {
+		c.returnShell(user, shell)
+		return nil, false, nil
+	}
+	o, e, rc, err := c.runIn(ctx, user, shell, "Q", strconv.Itoa(limit)+"\n"+strings.Join(paths, "\n"))
+	if err != nil {
+		return nil, true, err
+	}
+	if rc != 0 {
+		return nil, true, fmt.Errorf("probe: %s", strings.TrimSpace(string(e)))
+	}
+	return o, true, nil
 }
 
 // Probe describes path (kind, mode, owner, group, size and the content up to
@@ -309,7 +396,7 @@ func (c *Client) takeShell(user string) (*remoteShell, error) {
 		var exitErr *ssh.ExitError
 		// a server as another user that does not start (sudo wants a
 		// password) is not tried again on this connection
-		if user != "" || errors.As(err, &exitErr) || strings.Contains(err.Error(), "shell did not start") {
+		if user != "" || errors.As(err, &exitErr) || strings.Contains(err.Error(), "shell did not start") || isWindowsSSH(c.host) {
 			p.mu.Lock()
 			p.disabled = true
 			p.mu.Unlock()
@@ -350,7 +437,7 @@ func (c *Client) closeShells() {
 
 // execSession runs a command in a session of its own
 func (c *Client) execSession(ctx context.Context, command string, combined bool) ([]byte, []byte, int, error) {
-	session, err := c.client.NewSession()
+	session, err := c.newSession()
 	if err != nil {
 		return nil, nil, 0, fmt.Errorf("%w: %v", ErrNotSent, err)
 	}
@@ -394,4 +481,31 @@ func (b *safeBuffer) Bytes() []byte {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return append([]byte(nil), b.buf...)
+}
+
+// Prewarm starts a command server for user ("" is the login user) in the
+// background, once per connection, and puts it in the pool
+func (c *Client) Prewarm(user string) {
+	if _, started := c.prewarmed.LoadOrStore(user, true); started {
+		return
+	}
+	go func() {
+		p := c.pool(user)
+		p.mu.Lock()
+		skip := p.disabled || len(p.idle) > 0
+		p.mu.Unlock()
+		if skip || c.closed.Load() {
+			return
+		}
+		s, err := c.startShell(user)
+		if err != nil {
+			if user != "" {
+				p.mu.Lock()
+				p.disabled = true // as takeShell: no second try with sudo
+				p.mu.Unlock()
+			}
+			return
+		}
+		c.returnShell(user, s)
+	}()
 }

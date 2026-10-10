@@ -8,14 +8,15 @@ nor Python.
 ```sh
 cd roles/users
 onigirazu test                      # the default scenario: the whole test sequence
-onigirazu test -s all               # every scenario
+onigirazu test -s all               # every scenario (--scenario-name)
+onigirazu test list                 # the scenarios and their platforms
 onigirazu test --destroy never      # keep the instances after the run
 onigirazu test converge             # one step: create first, then converge, verify, ...
-onigirazu test login                # a shell in the instance
+onigirazu test login --host web     # a shell in the instance
 onigirazu test destroy
 ```
 
-Steps: `dependency`, `cleanup`, `destroy`, `syntax`, `create`, `prepare`, `converge`, `idempotence`,
+Steps: `list`, `dependency`, `cleanup`, `destroy`, `syntax`, `create`, `prepare`, `converge`, `idempotence`,
 `side_effect`, `verify`; `test` runs the scenario's `test_sequence` (Molecule's by default) and
 destroys the instances at the end, after a failure too, unless `--destroy never`.
 
@@ -29,14 +30,14 @@ What is read from `molecule.yml` (environment variables are expanded as Molecule
 | `provisioner.env` | passed to the runs; relative `*_PATH` values start at the scenario directory |
 | `provisioner.playbooks` | other file names for `converge`, `prepare`, `verify`, `side_effect`, `cleanup` |
 | `provisioner.inventory` | `group_vars`, `host_vars` |
-| `dependency` | `galaxy` with `requirements-file`: `onigirazu galaxy install` into the scenario's cache directory (`--no-deps` skips it) |
+| `dependency` | `galaxy` with `requirements-file` or `role-file`: `onigirazu galaxy install` into the scenario's cache directory (`--no-deps` skips it) |
 | `verifier` | `ansible` (`verify.yml`); others are skipped |
 | `scenario.test_sequence` | the steps of `test` |
 
-The instances use the container connection (`ansible_connection: docker`), so images need no SSH
+The instances use the container connection (`ansible_connection: docker` or `podman`, after the driver), so images need no SSH
 server. Container names are `molecule-<role>-<scenario>-<platform>`, so the scenarios of different
 roles can run at the same time. The role's parent directory is in `ANSIBLE_ROLES_PATH`, as in
 Molecule. The inventory, the state of the runs and the installed dependencies live in the user
-cache directory (`~/.cache/onigirazu-test/`), not in the role.
+cache directory (`~/.cache/onigirazu-test/` on Linux, `~/Library/Caches/onigirazu-test/` on macOS), not in the role.
 
 `idempotence` runs converge again and fails, listing the tasks and hosts, when any task changes.

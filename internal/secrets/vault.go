@@ -47,7 +47,9 @@ func NewVaultClient(config map[string]interface{}) (*VaultClient, error) {
 	}
 
 	token, _ := config["token"].(string)
-	if token == "" {
+	roleID, _ := config["role_id"].(string)
+	secretID, _ := config["secret_id"].(string)
+	if token == "" && (roleID == "" || secretID == "") {
 		return nil, &ProviderError{
 			Provider: "vault",
 			Message:  "vault token is required",
@@ -78,11 +80,25 @@ func NewVaultClient(config map[string]interface{}) (*VaultClient, error) {
 		}
 	}
 
-	// Set token and namespace
-	client.SetToken(token)
 	if namespace != "" {
 		client.SetNamespace(namespace)
 	}
+	// AppRole: the login's client token is the token
+	if token == "" {
+		authMount, _ := config["auth_mount"].(string)
+		if authMount == "" {
+			authMount = "approle"
+		}
+		login, err := client.Logical().Write("auth/"+authMount+"/login", map[string]interface{}{"role_id": roleID, "secret_id": secretID})
+		if err != nil {
+			return nil, &ProviderError{Provider: "vault", Message: fmt.Sprintf("approle login failed: %v", err)}
+		}
+		if login == nil || login.Auth == nil || login.Auth.ClientToken == "" {
+			return nil, &ProviderError{Provider: "vault", Message: "approle login returned no token"}
+		}
+		token = login.Auth.ClientToken
+	}
+	client.SetToken(token)
 
 	// Verify connectivity with a simple lookup (skip in test environments)
 	if os.Getenv("VAULT_SKIP_VERIFY") != "true" {

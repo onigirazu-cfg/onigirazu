@@ -20,6 +20,7 @@ import (
 	"github.com/onigirazu-cfg/onigirazu/internal/facts"
 	"github.com/onigirazu-cfg/onigirazu/internal/interfaces"
 	"github.com/onigirazu-cfg/onigirazu/internal/metrics"
+	"github.com/onigirazu-cfg/onigirazu/internal/modules"
 	"github.com/onigirazu-cfg/onigirazu/internal/parser"
 	"github.com/onigirazu-cfg/onigirazu/internal/plugins"
 	"github.com/onigirazu-cfg/onigirazu/internal/security"
@@ -65,7 +66,16 @@ type ExecutionEngine struct {
 	playsTargeted int
 	playsTotal    int
 
-	config            interfaces.Config
+	config interfaces.Config
+	// hostSlots bounds the hosts worked on at once (max_concurrency)
+	hostSlots chan struct{}
+	// hostsVersion changes with playHosts, batchHosts and failedHosts (under
+	// mutex); the magic variables built from them are cached by it
+	hostsVersion uint64
+	magic        magicLists
+	// inventoryView: the inventory's hosts and groups for hostvars and
+	// groups, read once per playbook run (nothing changes them during it)
+	inventoryView     inventorySnapshot
 	logger            interfaces.Logger
 	stateManager      interfaces.StateManager
 	inventoryMgr      interfaces.InventoryManager
@@ -126,6 +136,9 @@ type ExecutionEngine struct {
 	safe             SafeApply
 	restorer         Restorer
 	rolloutVars      map[string]interface{}
+	verifyOnly       bool   // run only the plays' verify: checks (onigirazu verify)
+	freeStrategy     bool   // the play runs with strategy: free
+	playThrottle     string // the play's throttle, for tasks without their own
 	rolloutUnhealthy []string
 	rolloutApplied   []types.TaskResult
 	rolloutReports   []types.BatchReport
@@ -205,7 +218,12 @@ func NewExecutionEngine(
 	// Create default tag filter (no filtering)
 	defaultFilter, _ := tagfilter.New("", "")
 
+	var hostSlots chan struct{}
+	if config != nil && config.GetMaxConcurrency() > 0 {
+		hostSlots = make(chan struct{}, config.GetMaxConcurrency())
+	}
 	return &ExecutionEngine{
+		hostSlots:         hostSlots,
 		config:            config,
 		logger:            logger,
 		stateManager:      stateManager,
@@ -315,6 +333,8 @@ func (e *ExecutionEngine) ExecutePlaybook(ctx context.Context, playbook *types.P
 	e.logger.Info("Starting playbook execution: %s", playbook.Name)
 	e.mutex.Lock()
 	e.failedHosts = nil
+	e.hostsVersion++
+	e.inventoryView.reset()
 	e.rolloutApplied = nil
 	e.rolloutReports = nil
 	e.taskKeys = nil
@@ -528,6 +548,7 @@ func (e *ExecutionEngine) executePlay(ctx context.Context, play *types.Play) (*t
 		e.targetedHosts[h.Name] = true
 		e.playHosts = append(e.playHosts, h.Name)
 	}
+	e.hostsVersion++
 	e.playsTargeted++
 	e.mutex.Unlock()
 	batches, canary, err := e.rolloutBatches(play, len(hosts))
@@ -579,6 +600,7 @@ func (e *ExecutionEngine) executePlayOn(ctx context.Context, play *types.Play, h
 	for i, h := range hosts {
 		e.batchHosts[i] = h.Name
 	}
+	e.hostsVersion++
 	e.mutex.Unlock()
 
 	if len(hosts) == 0 {
@@ -614,6 +636,12 @@ func (e *ExecutionEngine) executePlayOn(ctx context.Context, play *types.Play, h
 	// does): "/backup/{{ inventory_hostname }}" differs per host
 	playVars = e.mergeVariables(playVars, e.extraVars)
 	playScope := e.scope
+	free, err := playStrategyFree(play.Strategy)
+	if err != nil {
+		return result, err
+	}
+	e.freeStrategy, e.playThrottle = free, play.Throttle
+	defer func() { e.freeStrategy, e.playThrottle = false, "" }()
 	e.assignKeys(play.PreTasks, playScope+"/pre_tasks")
 	e.assignKeys(play.Tasks, playScope+"/tasks")
 	e.assignKeys(play.PostTasks, playScope+"/post_tasks")
@@ -639,6 +667,12 @@ func (e *ExecutionEngine) executePlayOn(ctx context.Context, play *types.Play, h
 		e.forceHandlers = false
 	}()
 
+	// onigirazu verify: only the verify: checks of the play run
+	if e.verifyOnly {
+		only := *play
+		only.PreTasks, only.Roles, only.RoleObjects, only.Tasks, only.PostTasks = nil, nil, nil, nil, nil
+		play = &only
+	}
 	// As in Ansible: pre_tasks, handlers, roles and tasks, handlers,
 	// post_tasks, handlers
 	if len(play.PreTasks) > 0 {
@@ -761,6 +795,22 @@ func (e *ExecutionEngine) executePlayOn(ctx context.Context, play *types.Play, h
 		}
 	}
 
+	// verify: the goss-style checks of the play, one task on every host
+	if len(play.Verify) > 0 {
+		// a plain list: the argument renderer walks []interface{} only
+		checks := make([]interface{}, len(play.Verify))
+		for i, c := range play.Verify {
+			checks[i] = c
+		}
+		check := types.Task{Name: "verify", Module: "verify", Args: map[string]interface{}{"checks": checks}}
+		if err := e.executeTask(ctx, &check, e.activeHosts(hosts), playVars, result); err != nil {
+			var hf *hostsFailedError
+			if !errors.As(err, &hf) {
+				return result, fmt.Errorf("verify failed: %w", err)
+			}
+		}
+	}
+
 	// health checks of the batch, for the rollout to decide on
 	e.rolloutVars = playVars
 	if len(play.HealthCheck) > 0 {
@@ -777,6 +827,11 @@ func (e *ExecutionEngine) executePlayOn(ctx context.Context, play *types.Play, h
 // executeTaskList executes a list of tasks
 func (e *ExecutionEngine) executeTaskList(ctx context.Context, tasks []types.Task, hosts []types.Host,
 	variables map[string]interface{}, playResult *types.PlayResult) error {
+	// strategy: free — every host runs the list at its own pace, as a block
+	// runs on each host; a host stops at its first failure
+	if e.freeStrategy && len(hosts) > 1 && len(tasks) > 0 {
+		return e.executeBlock(ctx, &types.Task{Name: "strategy: free", Block: tasks}, hosts, variables, playResult)
+	}
 	for i, task := range tasks {
 		// Check for context cancellation (graceful shutdown)
 		select {
@@ -872,8 +927,10 @@ func (e *ExecutionEngine) executeTask(ctx context.Context, task *types.Task, hos
 		}
 	}
 
-	// run_once: the first host runs it, the others get its registered result
-	if task.RunOnce && len(hosts) > 1 {
+	// run_once: the first host runs it, the others get its registered result;
+	// add_host runs once per task (per loop item) whatever the hosts, as in
+	// Ansible
+	if (task.RunOnce || types.ShortModuleName(task.Module) == "add_host") && len(hosts) > 1 {
 		if err := e.executeTask(ctx, runOnceTask(task), hosts[:1], variables, playResult); err != nil {
 			return err
 		}
@@ -951,6 +1008,8 @@ func (e *ExecutionEngine) executeTaskParallel(ctx context.Context, task *types.T
 		// Submit to execution pool
 		e.executionPool.Submit(func() {
 			defer wg.Done()
+			ctx, release := e.hostSlot(ctx)
+			defer release()
 			defer slots.acquire()()
 
 			if err := e.executeTaskOnHost(ctx, task, &host, variables, playResult); err != nil {
@@ -1387,6 +1446,9 @@ func (e *ExecutionEngine) finishTask(task *types.Task, host *types.Host, result 
 			e.setHostVar(host.Name, prefix+"_failed_result", failedResult)
 		}
 	}
+	if !real.Failed {
+		e.applyInventoryChange(task, host, real)
+	}
 	if (task.Module == "set_fact" || task.Module == "include_vars" || task.Module == "getent") && !real.Failed {
 		if facts, ok := real.Output["onigirazu_facts"].(map[string]interface{}); ok {
 			for key, value := range facts {
@@ -1441,6 +1503,8 @@ func (e *ExecutionEngine) executeTaskWithLoop(ctx context.Context, task *types.T
 		wg.Add(1)
 		e.executionPool.Submit(func() {
 			defer wg.Done()
+			ctx, release := e.hostSlot(ctx)
+			defer release()
 			defer slots.acquire()()
 			if err := e.runLoopOnHost(ctx, task, host, variables, playResult); err != nil {
 				mutex.Lock()
@@ -1473,6 +1537,8 @@ func (e *ExecutionEngine) runLoopOnHost(ctx context.Context, task *types.Task, h
 	if indexVar == "" {
 		indexVar = "item_index"
 	}
+
+	ctx = modules.WithLoopProbes(ctx, e.prefetchLoop(ctx, task, host, variables, items, itemVar, indexVar))
 
 	results := make([]interface{}, 0, len(items))
 	changed, failed := false, false
@@ -1541,10 +1607,8 @@ func (e *ExecutionEngine) initializeExecution() {
 		HostStats: make(map[string]*HostStats),
 	}
 
-	// Load state
-	if _, err := e.stateManager.LoadState(context.Background()); err != nil {
-		e.logger.Warn("Failed to load state: %v", err)
-	}
+	// the previous state is not read: nothing in a run uses it, and it holds
+	// the previous run's results (a full decompress and parse)
 }
 
 // getPlayHosts gets target hosts for a play
@@ -1594,24 +1658,32 @@ func (e *ExecutionEngine) SetLimit(pattern string) {
 func (e *ExecutionEngine) gatherFacts(ctx context.Context, hosts []types.Host) error {
 	e.logger.Debug("Gathering facts from %d hosts", len(hosts))
 
-	// Gather facts from each host
+	// on all hosts at once, as the tasks run: one after another, 10 hosts
+	// took ten times as long as one
+	var wg sync.WaitGroup
 	for _, host := range hosts {
-		// Gather system facts using the facts gatherer (with caching)
-		systemFacts, err := e.factsGatherer.GatherFacts(ctx, host)
-		if err != nil {
-			e.logger.Warn("Failed to gather facts from %s: %v", host.Name, err)
-			// Continue with basic facts on error
-			e.setFacts(host.Name, map[string]interface{}{
-				"onigirazu_hostname": host.Name,
-				"onigirazu_host":     host.Address,
-				"onigirazu_port":     host.Port,
-				"onigirazu_user":     host.User,
-			})
-			continue
-		}
-
-		e.setFacts(host.Name, hostFacts(host, systemFacts))
+		wg.Add(1)
+		e.executionPool.Submit(func() {
+			defer wg.Done()
+			ctx, release := e.hostSlot(ctx)
+			defer release()
+			// Gather system facts using the facts gatherer (with caching)
+			systemFacts, err := e.factsGatherer.GatherFacts(ctx, host)
+			if err != nil {
+				e.logger.Warn("Failed to gather facts from %s: %v", host.Name, err)
+				// Continue with basic facts on error
+				e.setFacts(host.Name, map[string]interface{}{
+					"onigirazu_hostname": host.Name,
+					"onigirazu_host":     host.Address,
+					"onigirazu_port":     host.Port,
+					"onigirazu_user":     host.User,
+				})
+				return
+			}
+			e.setFacts(host.Name, hostFacts(host, systemFacts))
+		})
 	}
+	wg.Wait()
 
 	// Log cache statistics
 	stats := e.factsGatherer.GetCacheStats()
@@ -1954,6 +2026,10 @@ func (e *ExecutionEngine) executeRole(ctx context.Context, role *types.Role, hos
 	// Priority: RoleVars > PlayVars > Defaults (handled by roleLoader)
 	roleVars := e.mergeRoleVariables(role, variables)
 
+	// role handlers run with the play's at the next flush: known before the
+	// role's tasks, which may flush them themselves (meta: flush_handlers)
+	e.addHandlers(role.Handlers, roleVars)
+
 	// Execute role pre_tasks if defined
 	if len(role.PreTasks) > 0 {
 		e.logger.Debug("Executing %d pre-tasks for role '%s'", len(role.PreTasks), role.Name)
@@ -1970,9 +2046,6 @@ func (e *ExecutionEngine) executeRole(ctx context.Context, role *types.Role, hos
 			// Continue to handlers even if tasks fail
 		}
 	}
-
-	// role handlers run with the play's, at the next flush
-	e.addHandlers(role.Handlers, roleVars)
 
 	// Execute role post_tasks if defined
 	if len(role.PostTasks) > 0 {
@@ -2315,7 +2388,16 @@ func (e *ExecutionEngine) getHostVar(host, key string) interface{} {
 func (e *ExecutionEngine) hostVariables(host *types.Host, variables map[string]interface{}) map[string]interface{} {
 	e.mutex.RLock()
 	defer e.mutex.RUnlock()
-	vars := e.mergeVariables(variables, e.variables, host.Vars)
+	facts, hasFacts := e.hostFactsOf(host.Name)
+	hostVars := e.hostVars[host.Name]
+	// one map, filled in order of precedence: it is built for every task
+	// and loop item, and merging step by step copied it four times
+	vars := make(map[string]interface{}, max(len(variables), len(e.variables), len(host.Vars), len(facts)))
+	for _, m := range []map[string]interface{}{variables, e.variables, host.Vars} {
+		for k, v := range m {
+			vars[k] = v
+		}
+	}
 	// always defined, facts or not
 	vars["inventory_hostname"] = host.Name
 	e.addMagicVars(vars)
@@ -2325,10 +2407,18 @@ func (e *ExecutionEngine) hostVariables(host *types.Host, variables map[string]i
 	if _, ok := vars["onigirazu_host"]; !ok {
 		vars["onigirazu_host"] = host.Address
 	}
-	if facts, exists := e.hostFactsOf(host.Name); exists {
-		vars = e.mergeVariables(vars, map[string]interface{}{"onigirazu_facts": facts}, facts)
+	if hasFacts {
+		vars["onigirazu_facts"] = facts
+		for k, v := range facts {
+			vars[k] = v
+		}
 	}
-	return e.mergeVariables(vars, e.hostVars[host.Name], e.extraVars)
+	for _, m := range []map[string]interface{}{hostVars, e.extraVars} {
+		for k, v := range m {
+			vars[k] = v
+		}
+	}
+	return vars
 }
 
 func splitLines(text string) []interface{} {
@@ -2386,7 +2476,7 @@ func (e *ExecutionEngine) executeBlock(ctx context.Context, block *types.Task, h
 	// inside the block a failure goes to rescue; the host leaves the run
 	// only when the block as a whole failed on it
 	ctx = context.WithValue(ctx, inBlockKey{}, true)
-	runOnHost := func(host types.Host) error {
+	runOnHost := func(ctx context.Context, host types.Host) error {
 		one := []types.Host{host}
 		err := e.executeTaskList(ctx, body, one, variables, playResult)
 		if err != nil && len(rescue) > 0 {
@@ -2403,7 +2493,7 @@ func (e *ExecutionEngine) executeBlock(ctx context.Context, block *types.Task, h
 
 	var failed failures
 	if len(hosts) == 1 {
-		if err := runOnHost(hosts[0]); err != nil {
+		if err := runOnHost(ctx, hosts[0]); err != nil {
 			failed.add(hosts[0].Name, err)
 		}
 		return failed.err()
@@ -2415,7 +2505,9 @@ func (e *ExecutionEngine) executeBlock(ctx context.Context, block *types.Task, h
 		wg.Add(1)
 		e.executionPool.Submit(func() {
 			defer wg.Done()
-			if err := runOnHost(host); err != nil {
+			ctx, release := e.hostSlot(ctx)
+			defer release()
+			if err := runOnHost(ctx, host); err != nil {
 				mutex.Lock()
 				failed.add(host.Name, err)
 				mutex.Unlock()
@@ -2506,6 +2598,9 @@ func (e *ExecutionEngine) SetForceBecome(become bool, user string) {
 }
 
 // SetStartAtTask skips every task before the one with this name
+// SetVerifyOnly makes every play run only its verify: checks
+func (e *ExecutionEngine) SetVerifyOnly(on bool) { e.verifyOnly = on }
+
 func (e *ExecutionEngine) SetStartAtTask(name string) {
 	e.startAt = strings.TrimSpace(name)
 }
@@ -2645,4 +2740,60 @@ func extendedLoopVars(items []interface{}, i int) map[string]interface{} {
 		v["nextitem"] = items[next]
 	}
 	return v
+}
+
+// hostSlotKey marks a context whose host already holds a slot
+type hostSlotKey struct{}
+
+// hostSlot takes one of the max_concurrency slots for work on one host.
+// Work nested in it (a block's tasks, a loop) runs in the slot its host
+// already holds, so it cannot wait on itself.
+func (e *ExecutionEngine) hostSlot(ctx context.Context) (context.Context, func()) {
+	if e.hostSlots == nil || ctx.Value(hostSlotKey{}) != nil {
+		return ctx, func() {}
+	}
+	select {
+	case e.hostSlots <- struct{}{}:
+	case <-ctx.Done():
+		return ctx, func() {}
+	}
+	return context.WithValue(ctx, hostSlotKey{}, true), func() { <-e.hostSlots }
+}
+
+// prefetchLoop captures the targets of all items of a file module's loop on
+// host in one round trip (see modules.LoopProbes); nil when it does not apply
+func (e *ExecutionEngine) prefetchLoop(ctx context.Context, task *types.Task, host *types.Host,
+	variables map[string]interface{}, items []interface{}, itemVar, indexVar string) *modules.LoopProbes {
+	keys := modules.CapturePathKeys(task.Module)
+	if len(keys) == 0 || len(items) < 2 || task.DelegateTo != "" || strings.Contains(task.BecomeUser, "{{") {
+		return nil
+	}
+	arg := ""
+	for _, k := range keys {
+		if v, ok := task.Args[k].(string); ok && v != "" {
+			arg = v
+			break
+		}
+	}
+	if arg == "" {
+		return nil
+	}
+	e.mutex.RLock()
+	become := effectiveBecome(task, e.playBecome)
+	e.mutex.RUnlock()
+	base := e.hostVariables(host, variables)
+	paths := make([]string, 0, len(items))
+	for i, item := range items {
+		vars := make(map[string]interface{}, len(base))
+		for k, v := range base {
+			vars[k] = v
+		}
+		vars[itemVar], vars[indexVar] = item, i
+		// an item whose path does not render here probes for itself
+		if path, err := e.templateEngine.Render(ctx, arg, vars); err == nil {
+			paths = append(paths, path)
+		}
+	}
+	return modules.PrefetchLoop(ctx, *host, &types.Task{Module: task.Module, Become: become.Become,
+		BecomeUser: become.User, BecomeMethod: become.Method}, paths)
 }

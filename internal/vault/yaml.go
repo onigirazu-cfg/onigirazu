@@ -68,10 +68,17 @@ func ReadFile(path string) ([]byte, error) {
 	return out, nil
 }
 
-// Load reads YAML text the way Ansible does: a whole encrypted file becomes
-// its plain text, a !vault value its plain string, and plain yes/no/on/off
+// Load reads YAML text the way Ansible does: a whole encrypted file (vault
+// or SOPS) becomes its plain text, a !vault value its plain string, and plain yes/no/on/off
 // values are booleans (YAML 1.1); other text is returned as is
 func Load(data []byte) ([]byte, error) {
+	if IsSOPS(data) {
+		plain, err := DecryptSOPS(data)
+		if err != nil {
+			return nil, err
+		}
+		data = plain
+	}
 	if IsEncrypted(data) {
 		plain, err := Open(data)
 		if err != nil {

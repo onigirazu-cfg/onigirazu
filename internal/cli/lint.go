@@ -8,6 +8,7 @@ import (
 
 	"github.com/onigirazu-cfg/onigirazu/internal/bridge"
 	"github.com/onigirazu-cfg/onigirazu/internal/config"
+	"github.com/onigirazu-cfg/onigirazu/internal/modules"
 
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 	"github.com/spf13/cobra"
@@ -273,19 +274,12 @@ func checkTaskListNames(tasks []types.Task, section, playName, filename string, 
 	}
 }
 
-//go:generate go run ./gen_modargs ../modules lint_module_args.go
-
-// acceptedArgs are Ansible arguments a module accepts and ignores on purpose
-var acceptedArgs = map[string][]string{
-	"docker_container": {"comparisons"},
-}
-
-// checkModuleArgs warns about arguments a module does not read (moduleArgs
-// is generated from internal/modules, so it follows the modules)
+// checkModuleArgs warns about arguments a module does not read (the table
+// is generated from internal/modules; a run fails such a task)
 func checkModuleArgs(playbook *types.Playbook, filename string, result *LintResult) {
-	knownModules := make(map[string][]string, len(moduleArgs))
-	for m, a := range moduleArgs {
-		knownModules[m] = append(append([]string{}, a...), acceptedArgs[m]...)
+	knownModules := make(map[string][]string, len(modules.ModuleArgs))
+	for m, a := range modules.ModuleArgs {
+		knownModules[m] = append(append([]string{}, a...), modules.AcceptedArgs[m]...)
 	}
 
 	for _, play := range playbook.Plays {
@@ -310,6 +304,9 @@ func checkTaskListModules(tasks []types.Task, playName, filename string, knownMo
 
 		// Check if module is known
 		validArgs, known := knownModules[task.Module]
+		if modules.FreeArgModules[task.Module] {
+			continue
+		}
 		if !known && bridge.Allowed(task.Module) {
 			checkBridgedArgs(task, playName, taskName, filename, result)
 			continue

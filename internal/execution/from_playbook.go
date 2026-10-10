@@ -2,26 +2,30 @@ package execution
 
 import (
 	"fmt"
+	"regexp"
 	"time"
 
 	"github.com/onigirazu-cfg/onigirazu/internal/logger"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
+// loopItemSuffix is what the engine appends to the name of a loop item; the
+// report has one entry for the whole loop
+var loopItemSuffix = regexp.MustCompile(` \(item \d+\)$`)
+
 // FromPlaybookResult builds the cached record of a run: tasks in run order
 // with a result per host, the number of distinct hosts and the overall status
 func FromPlaybookResult(result *types.PlaybookResult, playbookPath, playbookName string,
 	start time.Time, duration time.Duration) *ExecutionResult {
 	exec := &ExecutionResult{
-		ExecutionID:    fmt.Sprintf("exec-%d", start.UnixNano()),
-		Timestamp:      start,
-		PlaybookPath:   playbookPath,
-		PlaybookName:   playbookName,
-		StartTime:      start,
-		EndTime:        start.Add(duration),
-		Duration:       duration,
-		HostResults:    make(map[string]*HostResult),
-		PlaybookResult: result,
+		ExecutionID:  fmt.Sprintf("exec-%d", start.UnixNano()),
+		Timestamp:    start,
+		PlaybookPath: playbookPath,
+		PlaybookName: playbookName,
+		StartTime:    start,
+		EndTime:      start.Add(duration),
+		Duration:     duration,
+		HostResults:  make(map[string]*HostResult),
 	}
 
 	// Tasks are matched across hosts by their key; without one, by their
@@ -36,7 +40,7 @@ func FromPlaybookResult(result *types.PlaybookResult, playbookPath, playbookName
 				}
 				i, ok := index[key]
 				if !ok {
-					exec.Tasks = append(exec.Tasks, TaskResult{Name: t.TaskName, HostResults: map[string]HostResult{}, ErrorsByType: map[string][]string{}, StartTime: t.Timestamp})
+					exec.Tasks = append(exec.Tasks, TaskResult{Name: loopItemSuffix.ReplaceAllString(t.TaskName, ""), HostResults: map[string]HostResult{}, ErrorsByType: map[string][]string{}, StartTime: t.Timestamp})
 					i = len(exec.Tasks) - 1
 					index[key] = i
 				}
@@ -57,8 +61,16 @@ func FromPlaybookResult(result *types.PlaybookResult, playbookPath, playbookName
 				default:
 					task.Success++
 				}
-				if t.Duration > task.Duration {
-					task.Duration = t.Duration
+				// the task's wall time: from its first start to its last end
+				// over hosts and loop items
+				if !t.Timestamp.IsZero() && (task.StartTime.IsZero() || t.Timestamp.Before(task.StartTime)) {
+					task.StartTime = t.Timestamp
+				}
+				if end := t.Timestamp.Add(t.Duration); end.After(task.EndTime) {
+					task.EndTime = end
+				}
+				if !task.StartTime.IsZero() && task.EndTime.After(task.StartTime) {
+					task.Duration = task.EndTime.Sub(task.StartTime)
 				}
 				task.HostResults[host.Host] = HostResult{Hostname: host.Host, Status: status, Error: t.Error,
 					Output: logger.TaskMessage(t), Timestamp: t.Timestamp}

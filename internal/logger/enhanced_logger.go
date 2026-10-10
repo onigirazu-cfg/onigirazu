@@ -6,9 +6,12 @@ import (
 	"io"
 	"log"
 	"os"
+	"sort"
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/term"
 
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
@@ -155,10 +158,20 @@ func parseLogLevel(level string) LogLevel {
 
 // isTerminal checks if output is a terminal (simplified check)
 func isTerminal(w io.Writer) bool {
-	if w == os.Stdout || w == os.Stderr {
-		return true
+	// NO_COLOR (no-color.org); a redirected stdout/stderr is not a terminal
+	if os.Getenv("NO_COLOR") != "" {
+		return false
 	}
-	return false
+	f, ok := w.(*os.File)
+	return ok && (f == os.Stdout || f == os.Stderr) && term.IsTerminal(int(f.Fd()))
+}
+
+// SetColors turns colors on or off (apply --no-color)
+func (l *EnhancedLogger) SetColors(on bool) {
+	l.mutex.Lock()
+	l.useColors = on
+	l.mutex.Unlock()
+	l.SetMode(l.GetMode())
 }
 
 // WithField adds a field to the logger context
@@ -291,9 +304,15 @@ func (l *EnhancedLogger) logText(level LogLevel, message string) {
 
 	// Add fields if any
 	if len(l.fields) > 0 {
-		var fieldStrs []string
-		for k, v := range l.fields {
-			fieldStrs = append(fieldStrs, fmt.Sprintf("%s=%v", k, v))
+		// sorted: map order would change from line to line
+		keys := make([]string, 0, len(l.fields))
+		for k := range l.fields {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		fieldStrs := make([]string, 0, len(keys))
+		for _, k := range keys {
+			fieldStrs = append(fieldStrs, fmt.Sprintf("%s=%v", k, l.fields[k]))
 		}
 		output += fmt.Sprintf(" {%s}", strings.Join(fieldStrs, ", "))
 	}

@@ -57,7 +57,7 @@ resource "vsphere_virtual_machine" "vm" {
 
   # tmp- prefix and the folder mark these VMs as disposable; the janitor
   # deletes anything in the folder with this prefix once it is past its TTL
-  name             = "tmp-e2e-onigirazu-${var.run_id}-${each.key}"
+  name             = "${var.name_prefix}${var.run_id}-${each.key}"
   folder           = var.folder
   resource_pool_id = data.vsphere_compute_cluster.cluster.resource_pool_id
   host_system_id   = data.vsphere_host.host.id
@@ -77,8 +77,11 @@ resource "vsphere_virtual_machine" "vm" {
   ])
 
   extra_config = {
-    # Read once by the image's e2e-access unit on first boot
+    # Read once by the image's e2e-access unit on first boot: the test user's
+    # key and the host name (no guest customization: it costs a reboot)
     "guestinfo.e2e_authorized_key" = var.public_key
+    "guestinfo.e2e_hostname"       = "e2e-${each.key}"
+    "guestinfo.e2e_template"       = each.value
   }
 
   network_interface {
@@ -95,16 +98,10 @@ resource "vsphere_virtual_machine" "vm" {
 
   clone {
     template_uuid = data.vsphere_virtual_machine.template[each.key].id
-
-    customize {
-      timeout = 20
-      linux_options {
-        host_name = "e2e-${each.key}"
-        domain    = "e2e.invalid"
-      }
-      # DHCP
-      network_interface {}
-    }
+    # short-lived VMs: a delta disk on the base template's snapshot instead
+    # of a full copy (e2e/image/build.sh makes it); a golden image (nightly
+    # run) has no snapshot and is cloned in full
+    linked_clone = startswith(each.value, "e2e-base-")
   }
 
   wait_for_guest_net_timeout = 10
