@@ -132,7 +132,11 @@ func readSigner(path string) (ssh.Signer, error) {
 	if err != nil {
 		return nil, err
 	}
-	return ssh.ParsePrivateKey(key)
+	signer, err := ssh.ParsePrivateKey(key)
+	if err != nil {
+		return nil, err
+	}
+	return withCertificate(signer, path, types.Host{})
 }
 
 func expandHome(p string) string {

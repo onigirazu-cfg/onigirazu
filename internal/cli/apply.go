@@ -67,6 +67,7 @@ func newApplyCommand(onResult func(*types.PlaybookResult)) *cobra.Command {
 		extraVars      []string
 		limit          string
 		exclude        string
+		flushCache     bool
 		become         bool
 		becomeUser     string
 		remoteUser     string
@@ -197,6 +198,7 @@ Examples:
 				return fmt.Errorf("failed to load configuration: %w", err)
 			}
 			parser.SetRoleSearch(cfg.RolesPath, cfg.CollectionsPath)
+			configureFactsCache(cfg, playbookDir, flushCache)
 			bridge.Configure(cfg.AnsibleBridge)
 			secretResolver := secrets.NewResolver(cfg.Secrets)
 			expression.SecretLookup = secretResolver.Get
@@ -1236,6 +1238,7 @@ Examples:
 	cmd.Flags().StringArrayVarP(&extraVars, "extra-vars", "e", nil, "Variables that override all others: key=value ..., JSON/YAML, or @file (repeatable)")
 	cmd.Flags().StringVar(&limit, "limit", "", "Run only on hosts matching this pattern (e.g. web1, web:!web3)")
 	cmd.Flags().StringVar(&exclude, "exclude", "", "Leave out hosts matching this pattern (as --limit 'all:!PATTERN')")
+	cmd.Flags().BoolVar(&flushCache, "flush-cache", false, "Forget the cached facts of every host before the run")
 	cmd.Flags().BoolVarP(&become, "become", "b", false, "Use privilege escalation in every play")
 	cmd.Flags().StringVar(&becomeUser, "become-user", "", "User to become (implies --become)")
 	cmd.Flags().StringVarP(&remoteUser, "user", "u", "", "SSH user for every host")

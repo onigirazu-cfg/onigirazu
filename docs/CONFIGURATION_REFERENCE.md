@@ -53,6 +53,7 @@ Environment variables only change the defaults; a key in `onigirazu.yml` wins ov
 | `metrics_auth_token` | `ONIGIRAZU_METRICS_AUTH_TOKEN` | empty | If set, requests need `Authorization: Bearer <token>`. |
 | `metrics_ip_whitelist` | `ONIGIRAZU_METRICS_IP_WHITELIST` | empty | If set, only these client IPs may connect (env: comma-separated). |
 | `ssh_timeout` | `ONIGIRAZU_SSH_TIMEOUT` | `30s` | Time to connect to a host. |
+| `fact_caching` | `ONIGIRAZU_FACT_CACHING` | `memory` | `jsonfile` keeps the facts of every host across runs under `fact_caching_connection` (default `~/.onigirazu/facts`; a relative path starts at the playbook) for `fact_caching_timeout` (a duration, default `24h`). ansible.cfg's `[defaults]` `fact_caching`, `fact_caching_connection` and `fact_caching_timeout` (seconds) are read when the file sets nothing. `apply --flush-cache` forgets them. |
 | `check_mode` | `ONIGIRAZU_CHECK_MODE` | `false` | As `apply --check`. |
 | `show_diff` | — | `false` | As `apply --diff`. |
 | `default_timeout` | — | none | As `apply --timeout` (the whole run; state, audit and snapshot are still saved). `show_diff`, `default_timeout`, `verbose`, `output_format` and `interactive` take effect only from the file: their `ONIGIRAZU_*` variables are read and ignored. |

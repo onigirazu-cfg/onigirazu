@@ -37,6 +37,13 @@ type Config struct {
 	AllowShellCommands bool     `yaml:"allow_shell_commands" json:"allow_shell_commands"`
 	BlockedCommands    []string `yaml:"blocked_commands" json:"blocked_commands"`
 
+	// Facts caching across runs: fact_caching "memory" (default) or
+	// "jsonfile" under fact_caching_connection for fact_caching_timeout
+	// (Ansible's names; ansible.cfg [defaults] is read too)
+	FactCaching        string        `yaml:"fact_caching" json:"fact_caching"`
+	FactCachingDir     string        `yaml:"fact_caching_connection" json:"fact_caching_connection"`
+	FactCachingTimeout time.Duration `yaml:"fact_caching_timeout" json:"fact_caching_timeout"`
+
 	// Performance
 	EnableCaching    bool          `yaml:"enable_caching" json:"enable_caching"`
 	CacheTTL         time.Duration `yaml:"cache_ttl" json:"cache_ttl"`
@@ -187,6 +194,9 @@ func DefaultConfig() *Config {
 		LogFormat:                    getEnvString("ONIGIRAZU_LOG_FORMAT", "text"),
 		AllowShellCommands:           getEnvBool("ONIGIRAZU_ALLOW_SHELL", true),
 		BlockedCommands:              []string{"rm -rf", "format", "mkfs", "dd if=", ":(){ :|:& };:"},
+		FactCaching:                  getEnvString("ONIGIRAZU_FACT_CACHING", ""),
+		FactCachingDir:               getEnvString("ONIGIRAZU_FACT_CACHING_CONNECTION", ""),
+		FactCachingTimeout:           getEnvDuration("ONIGIRAZU_FACT_CACHING_TIMEOUT", 0),
 		EnableCaching:                getEnvBool("ONIGIRAZU_ENABLE_CACHE", true),
 		CacheTTL:                     getEnvDuration("ONIGIRAZU_CACHE_TTL", 5*time.Minute),
 		EnableChecksum:               getEnvBool("ONIGIRAZU_ENABLE_CHECKSUM", true),
