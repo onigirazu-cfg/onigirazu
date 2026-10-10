@@ -55,17 +55,64 @@ E2E_IMAGES="${E2E_IMAGES:-u2404=ubuntu-24.04 u2604=ubuntu-26.04}"
 log() { printf '\n==> %s\n' "$*"; }
 die() { echo "error: $*" >&2; exit 1; }
 
+# a failed run: what vCenter knows about each VM (power, guest IP, tools,
+# last events) and a console screenshot into $E2E_DIAG (uploaded by CI)
+diagnose() {
+  local vm dir="${E2E_DIAG:-$WORK/diag}"
+  mkdir -p "$dir"
+  log "VM state"
+  while IFS= read -r vm; do
+    [ -n "$vm" ] || continue
+    govc vm.info -json "$vm" 2>/dev/null | jq -r '(.virtualMachines // .VirtualMachines)[0] |
+      "\(.name): power=\(.runtime.powerState) guest=\(.guest.guestState) tools=\(.guest.toolsRunningStatus) ip=\(.guest.ipAddress // "-") boot=\(.runtime.bootTime // "-")"'
+    govc events -n 8 "$vm" 2>/dev/null | sed 's/^/    /'
+    govc vm.console -capture "$dir/${vm##*/}.png" "$vm" >/dev/null 2>&1 && echo "    console: ${vm##*/}.png"
+  done < <(govc find "/$TF_VAR_datacenter/vm/$TF_VAR_folder" -type m -name "tmp-e2e-onigirazu-$RUN_ID-*" 2>/dev/null)
+}
+
 cleanup() {
   local rc=$?
-  if [ -z "${KEEP_VMS:-}" ] && [ -f "$TF_DIR/terraform.tfstate" ]; then
+  if [ "$rc" != 0 ] && { [ -f "$TF_DIR/terraform.tfstate" ] || [ -f "$WORK/claimed" ]; }; then diagnose || true; fi
+  if [ -z "${KEEP_VMS:-}" ] && { [ -f "$TF_DIR/terraform.tfstate" ] || [ -f "$WORK/claimed" ]; }; then
     log "Destroying VMs"
-    terraform -chdir="$TF_DIR" destroy -auto-approve -input=false -var-file="$TFVARS" >/dev/null ||
-      echo "destroy failed; the janitor will remove the VMs"
+    # throwaway VMs: power them off hard first; terraform would wait for a
+    # clean guest shutdown (over a minute with the databases running)
+    local vm n=0 t0=$SECONDS
+    # shellcheck disable=SC2046
+    [ -n "${hosts_json:-}" ] && "$HERE/dhcp-release.sh" "$KEY" $(jq -r '.[]' <<<"$hosts_json")
+    # the folder path may have spaces: one VM per line
+    local macs=""
+    while IFS= read -r vm; do
+      [ -n "$vm" ] || continue
+      macs="$macs $("$HERE/dhcp-leases.sh" macs "$vm" | tr '\n' ' ')"
+      govc vm.power -off -force "$vm" >/dev/null 2>&1 &
+      n=$((n + 1))
+    done < <(govc find "/$TF_VAR_datacenter/vm/$TF_VAR_folder" -type m -name "tmp-e2e-onigirazu-$RUN_ID-*" 2>/dev/null)
+    wait
+    echo "powered off $n VM(s) in $((SECONDS - t0)) s"
+    t0=$SECONDS
+    if [ -f "$TF_DIR/terraform.tfstate" ]; then
+      terraform -chdir="$TF_DIR" destroy -auto-approve -input=false -var-file="$TFVARS" >/dev/null ||
+        echo "destroy failed; the janitor will remove the VMs"
+    fi
+    # pre-warmed VMs this run claimed are not in the terraform state
+    while IFS= read -r key; do
+      govc vm.destroy "/$TF_VAR_datacenter/vm/$TF_VAR_folder/tmp-e2e-onigirazu-$RUN_ID-$key" >/dev/null 2>&1 ||
+        echo "claimed VM $key not destroyed; the janitor will"
+    done < <(cat "$WORK/claimed" 2>/dev/null)
+    echo "destroyed in $((SECONDS - t0)) s"
+    # the VMs' DHCP leases go with them
+    # shellcheck disable=SC2086
+    "$HERE/dhcp-leases.sh" remove $macs
   fi
   if [ -n "${KEEP_VMS:-}" ] && [ -f "$KEY" ]; then
     # Kept VMs are only reachable with this run's key; it stays on the runner
     local keep="$HOME/.cache/onigirazu-e2e/$RUN_ID"
     mkdir -p "$keep" && cp "$KEY" "$INVENTORY" "$keep/" 2>/dev/null && chmod 700 "$keep"
+    # the janitor removes VMs of finished runs at once, kept ones after its TTL
+    while IFS= read -r vm; do
+      [ -n "$vm" ] && govc vm.change -vm "$vm" -annotation "e2e keep_vms: $RUN_URL" >/dev/null 2>&1
+    done < <(govc find "/$TF_VAR_datacenter/vm/$TF_VAR_folder" -type m -name "tmp-e2e-onigirazu-$RUN_ID-*" 2>/dev/null)
     echo "kept VMs: key and inventory in $keep on the runner"
   fi
   rm -rf "$WORK"
@@ -112,26 +159,46 @@ diagnose_permissions() {
 
 # --- build onigirazu and a one-time key ---------------------------------------
 log "Building onigirazu"
-(cd "$ROOT" && go build -o "$BIN" ./cmd/onigirazu)
+# with the agents built in, as a release has them (remote_server auto)
+(cd "$ROOT" && go generate ./internal/agentbin && go build -o "$BIN" ./cmd/onigirazu)
 ssh-keygen -q -t ed25519 -N '' -C "onigirazu-e2e-$RUN_ID" -f "$KEY"
 
-# --- create the VMs ------------------------------------------------------------
-log "Creating VMs (run $RUN_ID)"
-# the provider registry drops connections now and then
-for try in 1 2 3; do
-  terraform -chdir="$TF_DIR" init -input=false >/dev/null && break
-  [ "$try" = 3 ] && exit 1
-  sleep 15
-done
-# One vars file for apply and destroy
-jq -n --arg run_id "$RUN_ID" --arg run_url "$RUN_URL" --argjson images "$images_json" \
-  --arg public_key "$(cat "$KEY.pub")" \
-  '{run_id: $run_id, run_url: $run_url, images: $images, public_key: $public_key}' > "$TFVARS"
-if ! terraform -chdir="$TF_DIR" apply -auto-approve -input=false -var-file="$TFVARS" >/dev/null; then
-  diagnose_permissions
-  die "terraform apply failed"
+# --- pre-warmed VMs, then the rest --------------------------------------------
+# a pool VM (e2e/pool.sh) is claimed by renaming it to this run's name and
+# given this run's key; what the pool lacks is created with terraform
+claimed_json="{}"
+if [ "${E2E_POOL:-1}" = 1 ]; then
+  log "Claiming pre-warmed VMs"
+  for key in $(jq -r 'keys[]' <<<"$images_json"); do
+    ip="$("$HERE/pool.sh" claim "$key" "tmp-e2e-onigirazu-$RUN_ID-$key" "$(cat "$KEY.pub")" "e2e-$key" || true)"
+    [ -n "$ip" ] || { echo "$key: none in the pool"; continue; }
+    [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "$key: the pool claim answered with something that is not an address"
+    echo "$key: pre-warmed"
+    claimed_json="$(jq -c --arg k "$key" --arg ip "$ip" '. + {($k): $ip}' <<<"$claimed_json")"
+    echo "$key" >> "$WORK/claimed"
+  done
 fi
-hosts_json="$(terraform -chdir="$TF_DIR" output -json hosts)"
+to_create="$(jq -c --argjson c "$claimed_json" 'with_entries(select(.key as $k | $c[$k] == null))' <<<"$images_json")"
+hosts_json="$claimed_json"
+if [ "$to_create" != "{}" ]; then
+  log "Creating VMs (run $RUN_ID)"
+  # the provider registry drops connections now and then
+  for try in 1 2 3; do
+    terraform -chdir="$TF_DIR" init -input=false >/dev/null && break
+    [ "$try" = 3 ] && exit 1
+    sleep 15
+  done
+  # One vars file for apply and destroy
+  jq -n --arg run_id "$RUN_ID" --arg run_url "$RUN_URL" --argjson images "$to_create" \
+    --arg public_key "$(cat "$KEY.pub")" \
+    '{run_id: $run_id, run_url: $run_url, images: $images, public_key: $public_key}' > "$TFVARS"
+  if ! terraform -chdir="$TF_DIR" apply -auto-approve -input=false -var-file="$TFVARS" >/dev/null; then
+    diagnose_permissions
+    die "terraform apply failed"
+  fi
+  hosts_json="$(jq -s '.[0] + .[1]' <<<"$claimed_json
+$(terraform -chdir="$TF_DIR" output -json hosts)")"
+fi
 # Actions logs of a public repository are public: keep internal addresses out
 if [ -n "${GITHUB_ACTIONS:-}" ]; then
   for ip in $(jq -r '.[]' <<<"$hosts_json"); do echo "::add-mask::$ip"; done
@@ -161,9 +228,19 @@ host_ip() { jq -r --arg h "$1" '.[$h]' <<<"$hosts_json"; }
 # Every remote call is bounded: one stuck case must not hold the whole run
 on_host() { local ip; ip="$(host_ip "$1")"; shift; timeout 600 ssh "${SSH_OPTS[@]}" "e2e@$ip" "$@"; }
 
+# where the creation time went: vCenter events of each VM (clone,
+# customization, power on), oldest first
+while IFS= read -r vm; do
+  [ -n "$vm" ] || continue
+  echo "events of ${vm##*/}:"
+  govc events -n 30 "$vm" 2>/dev/null | cat |
+    sed -E 's/[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/<ip>/g' | tail -12 || true
+done < <(govc find "/$TF_VAR_datacenter/vm/$TF_VAR_folder" -type m -name "tmp-e2e-onigirazu-$RUN_ID-*" 2>/dev/null)
 log "Waiting for SSH"
 for h in $(jq -r 'keys[]' <<<"$hosts_json"); do
   for _ in $(seq 60); do on_host "$h" true 2>/dev/null && break; sleep 5; done
+  # say how the host refuses, not just that it does (key not applied, sshd down, no route)
+  on_host "$h" true 2>/dev/null || echo "$h: $(timeout 20 ssh "${SSH_OPTS[@]}" -v "e2e@$(host_ip "$h")" true 2>&1 | grep -E 'Permission denied|Connection refused|timed out|No route|Authentications that can continue|Offering|Server accepts' | tail -3 | paste -sd' | ' -)"
   on_host "$h" 'sudo -n true' || die "$h: no ssh/sudo access as e2e"
   echo "$h ready: $(on_host "$h" '. /etc/os-release; echo $PRETTY_NAME')"
 done
@@ -192,6 +269,8 @@ apply() {  # case_dir -> writes task_end events to $WORK/events.jsonl
 
 # First error lines of the last apply, for the job log
 apply_errors() {
+  # the failed tasks' own messages first (the module's reason), then the log
+  jq -r 'select(.success == false and .msg != null and .msg != "") | "      \(.host) \(.task): \(.msg)"' "$WORK/events.jsonl" 2>/dev/null | cut -c1-400 | head -4
   records | jq -r 'select(.level == "ERROR" or .level == "WARN") | "      \(.level): \(.message)"' |
     cut -c1-400 | head -"${1:-4}"
 }
@@ -250,10 +329,13 @@ for c in $cases; do
     if [ -f "$dir/verify.sh" ] && ! out="$(on_host "$h" 'sudo -n bash -s' < "$dir/verify.sh" 2>&1)"; then
       record "$c" "$h" FAIL "verify: $(echo "$out" | grep -v '^$' | tail -2 | paste -sd' ' - | cut -c1-300)"; continue
     fi
-    if [ -f "$dir/verify-local.sh" ] && ! out="$(cd "$dir" && HOST="$h" BIN="$BIN" INVENTORY="$INVENTORY" bash verify-local.sh 2>&1)"; then
+    if [ -f "$dir/verify-local.sh" ] && ! out="$(cd "$dir" && HOST="$h" HOST_IP="$(host_ip "$h")" KEY="$KEY" BIN="$BIN" INVENTORY="$INVENTORY" bash verify-local.sh 2>&1)"; then
       record "$c" "$h" FAIL "verify-local: $(echo "$out" | grep -v '^$' | tail -2 | paste -sd' ' - | cut -c1-300)"; continue
     fi
     record "$c" "$h" PASS "apply+verify"
+    # "note: ..." lines of a passing verify-local are shown (timings and such)
+    grep '^note: ' <<<"${out:-}" | sed "s/^/      $h /" || true
+    out=""
     passed="$passed $h"
   done
 

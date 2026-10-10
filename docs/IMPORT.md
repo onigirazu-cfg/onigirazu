@@ -8,6 +8,7 @@ onigirazu import web1 -i hosts.yml -o imported/
 makes each of them differ from a fresh install. Then it plans the new playbook against the same
 hosts: a faithful import has nothing to change, and the command exits 0; otherwise it lists the
 tasks that would still change something and exits 2.
+The last line gives the time of each step (collecting, writing, checking).
 
 ## What is taken
 

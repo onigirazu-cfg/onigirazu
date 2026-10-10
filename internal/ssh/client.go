@@ -40,6 +40,9 @@ type Client struct {
 	// become commands skip a sudo each
 	asMu     sync.Mutex
 	asShells map[string]*shellPool
+	agent    agentState
+	// prewarmed: the users whose command server Prewarm started
+	prewarmed sync.Map
 	// closed: Close was called (the run stops); commands still running
 	// then fail with ErrClosed instead of a bare EOF
 	closed atomic.Bool
@@ -219,7 +222,7 @@ func (c *Client) HealthCheck(timeout time.Duration) bool {
 		// Using 'true' command which always succeeds and has minimal overhead
 		session, err := c.client.NewSession()
 		if err != nil {
-			result <- false
+			result <- isChannelRefused(err)
 			return
 		}
 		defer session.Close()
@@ -249,7 +252,8 @@ func (c *Client) IsAlive() bool {
 	// Try to open a channel which will fail immediately if connection is dead
 	session, err := c.client.NewSession()
 	if err != nil {
-		return false
+		// refused (sshd's MaxSessions): the connection answered
+		return isChannelRefused(err)
 	}
 	_ = session.Close()
 	return true
@@ -304,26 +308,29 @@ func IsLocal(host types.Host) bool {
 	}
 
 	// Check if it's the local machine's IP
+	return localAddrs()[host.Address]
+}
+
+// localAddrs are this machine's non-loopback addresses, read once: listing
+// the interfaces for every task cost 40% of a 500-host run's CPU
+var localAddrs = sync.OnceValue(func() map[string]bool {
+	set := map[string]bool{}
 	addrs, err := net.InterfaceAddrs()
 	if err != nil {
-		return false
+		return set
 	}
-
 	for _, addr := range addrs {
 		if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
-			if ipnet.IP.String() == host.Address {
-				return true
-			}
+			set[ipnet.IP.String()] = true
 		}
 	}
-
-	return false
-}
+	return set
+})
 
 // WriteFile writes data to a file on the remote host using SFTP
 func (c *Client) WriteFile(remotePath string, data []byte, mode os.FileMode) error {
 	// Create SFTP client
-	sftpClient, err := sftp.NewClient(c.client)
+	sftpClient, err := c.newSFTP()
 	if err != nil {
 		return fmt.Errorf("failed to create SFTP client: %v", err)
 	}
@@ -361,7 +368,7 @@ func (c *Client) WriteFile(remotePath string, data []byte, mode os.FileMode) err
 // ReadFile reads a file from the remote host using SFTP
 func (c *Client) ReadFile(remotePath string) ([]byte, error) {
 	// Create SFTP client
-	sftpClient, err := sftp.NewClient(c.client)
+	sftpClient, err := c.newSFTP()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create SFTP client: %v", err)
 	}
@@ -386,7 +393,7 @@ func (c *Client) ReadFile(remotePath string) ([]byte, error) {
 // StatFile gets file info from the remote host using SFTP
 func (c *Client) StatFile(remotePath string) (os.FileInfo, error) {
 	// Create SFTP client
-	sftpClient, err := sftp.NewClient(c.client)
+	sftpClient, err := c.newSFTP()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create SFTP client: %v", err)
 	}
@@ -403,7 +410,7 @@ func (c *Client) StatFile(remotePath string) (os.FileInfo, error) {
 
 // Chmod changes permissions of a file on the remote host using SFTP
 func (c *Client) Chmod(remotePath string, mode os.FileMode) error {
-	sftpClient, err := sftp.NewClient(c.client)
+	sftpClient, err := c.newSFTP()
 	if err != nil {
 		return fmt.Errorf("failed to create SFTP client: %v", err)
 	}
@@ -459,4 +466,46 @@ func dialAddress(host types.Host) string {
 		port = 22
 	}
 	return net.JoinHostPort(host.Address, strconv.Itoa(port))
+}
+
+// isChannelRefused: the server refused a channel (more sessions than its
+// MaxSessions, 10 by default for OpenSSH); the connection itself is fine
+func isChannelRefused(err error) bool {
+	var refused *ssh.OpenChannelError
+	return errors.As(err, &refused)
+}
+
+// withChannelRoom opens a channel through open. Hosts that share one
+// connection (same user, address and port) share its sessions: when the
+// server refuses another one, idle command servers are closed and it is
+// tried again while busy ones finish.
+func (c *Client) withChannelRoom(open func() error) error {
+	for attempt := 1; ; attempt++ {
+		err := open()
+		if err == nil || !isChannelRefused(err) || attempt == 40 {
+			return err
+		}
+		c.closeShells()
+		time.Sleep(time.Duration(attempt) * 25 * time.Millisecond)
+	}
+}
+
+// newSession opens a session, waiting for room on the connection
+func (c *Client) newSession() (*ssh.Session, error) {
+	var session *ssh.Session
+	err := c.withChannelRoom(func() (err error) {
+		session, err = c.client.NewSession()
+		return err
+	})
+	return session, err
+}
+
+// newSFTP opens an SFTP client, waiting for room on the connection
+func (c *Client) newSFTP() (*sftp.Client, error) {
+	var client *sftp.Client
+	err := c.withChannelRoom(func() (err error) {
+		client, err = sftp.NewClient(c.client)
+		return err
+	})
+	return client, err
 }

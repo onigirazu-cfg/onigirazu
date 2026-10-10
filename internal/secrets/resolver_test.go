@@ -90,3 +90,27 @@ func TestBitwardenSessionNotOnCommandLine(t *testing.T) {
 		t.Errorf("an unlocked vault of the user must stay unlocked: %q", calls)
 	}
 }
+
+func TestResolverVaultAppRole(t *testing.T) {
+	var seen []ProviderConfig
+	r := NewResolver(Config{Vault: VaultConfig{Address: "https://vault.example:8200"}})
+	r.newProvider = func(c ProviderConfig) (SecretProvider, error) {
+		seen = append(seen, c)
+		return &fakeProvider{name: c.Type}, nil
+	}
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("VAULT_TOKEN", "")
+	t.Setenv("VAULT_ROLE_ID", "")
+	t.Setenv("VAULT_SECRET_ID", "")
+	if _, err := r.Get("vault", "app/db", "password"); err == nil || !strings.Contains(err.Error(), "VAULT_ROLE_ID") {
+		t.Errorf("without a token the error names AppRole too: %v", err)
+	}
+	t.Setenv("VAULT_ROLE_ID", "role")
+	t.Setenv("VAULT_SECRET_ID", "sid")
+	if _, err := r.Get("vault", "app/db", "password"); err != nil {
+		t.Fatal(err)
+	}
+	if len(seen) != 1 || seen[0].Config["role_id"] != "role" || seen[0].Config["secret_id"] != "sid" || seen[0].Config["auth_mount"] != "approle" || seen[0].Config["token"] != "" {
+		t.Errorf("AppRole credentials reach the provider: %+v", seen)
+	}
+}

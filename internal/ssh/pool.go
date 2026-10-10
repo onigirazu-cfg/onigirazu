@@ -370,6 +370,9 @@ func InitializeGlobalPoolWithLogger(cfg interface{}, lg Logger) {
 		strictMode = sshCfg.IsSSHStrictHostKeyEnabled()
 		knownHostsFile = sshCfg.GetSSHKnownHostsFile()
 	}
+	if r, ok := cfg.(interface{ GetRemoteServer() string }); ok {
+		SetRemoteServer(r.GetRemoteServer())
+	}
 	if t, ok := cfg.(interface{ GetSSHTimeout() time.Duration }); ok && t.GetSSHTimeout() > 0 {
 		dialTimeout = t.GetSSHTimeout()
 	}

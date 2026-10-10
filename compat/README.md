@@ -40,3 +40,16 @@ the docker-test-lab VM. A case is a plain Ansible playbook for `hosts: all`; wri
   in Ansible (the number 80, written as `80` without the newline); onigirazu keeps the text.
 - `file: state=touch` on an existing file: Ansible reports changed every run (times move); onigirazu
   reports ok, so a second run and drift checks stay clean. The case uses `preserve` for both times.
+
+## Real roles on real VMs
+
+The container corpus does not catch everything: a pilot of the ClanRed `clanred.infra` roles on two
+disposable e2e VMs (2026-10-09) found handlers lost after `meta: flush_handlers` inside a role, no retry
+of a refused SSH connection after a task restarted sshd, `find` ignoring `age`, `validate` ignored and
+unknown module arguments ignored (all fixed since; unknown arguments now fail as in Ansible). The method, per role, on the kept VMs of an e2e run
+(`keep_vms`): the role's molecule `converge.yml` with onigirazu twice (the second run must change
+nothing), its `verify.yml`, then `ansible-playbook` with the same `converge.yml` on the same hosts: every
+task Ansible still changes is something onigirazu left different, or a task that is not idempotent
+under Ansible either (tell the two apart by running Ansible alone on a fresh VM). Environment
+differences show up as verify assertions about things the molecule image has and the VM does not (and
+the other way round), not as changes.

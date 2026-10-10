@@ -1,0 +1,8 @@
+plays:
+  - name: pull mode (the host converges itself from a git repository; see verify-local.sh)
+    hosts: all
+    become: true
+    tasks:
+      - name: git for the repository on the host
+        apt: {name: git, state: present}
+        when: ansible_os_family == 'Debian'

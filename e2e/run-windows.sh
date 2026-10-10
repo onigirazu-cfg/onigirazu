@@ -44,8 +44,12 @@ cleanup() {
   if [ -n "${KEEP_VMS:-}" ] && [ -f "$INVENTORY" ]; then
     # kept VMs are reachable only with this run's password; it stays on the runner
     local keep="$HOME/.cache/onigirazu-e2e/$RUN_ID"
-    mkdir -p "$keep" && chmod 700 "$keep" && cp "$INVENTORY" "$keep/"
-    echo "kept VMs: inventory in $keep on the runner"
+    mkdir -p "$keep" && chmod 700 "$keep" && cp "$INVENTORY" "$keep/" && { [ -f "$KEY" ] && cp "$KEY" "$keep/" || true; }
+    # the janitor removes VMs of finished runs at once, kept ones after its TTL
+    while IFS= read -r vm; do
+      [ -n "$vm" ] && govc vm.change -vm "$vm" -annotation "e2e keep_vms: $RUN_URL" >/dev/null 2>&1
+    done < <(govc find "/$TF_VAR_datacenter/vm/$TF_VAR_folder" -type m -name "tmp-e2e-onigirazu-$RUN_ID-*" 2>/dev/null)
+    echo "kept VMs: inventory (and the ssh key) in $keep on the runner"
   fi
   rm -rf "$WORK"
   exit "$rc"
@@ -66,7 +70,7 @@ export GOVC_DATACENTER="$TF_VAR_datacenter"
 resolve_images || exit 1
 
 log "Building onigirazu"
-(cd "$ROOT" && go build -o "$BIN" ./cmd/onigirazu)
+(cd "$ROOT" && go generate ./internal/agentbin && go build -o "$BIN" ./cmd/onigirazu)
 
 # One-time password: random, with the four character classes Windows wants;
 # it lives only in this run's 0700 work directory

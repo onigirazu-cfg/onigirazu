@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"runtime/debug"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -27,6 +28,7 @@ func NewRegistry() *Registry {
 
 	// Register built-in modules
 	registry.RegisterModule(NewPingModule())
+	registry.RegisterModule(NewVerifyModule())
 	registry.RegisterModule(NewFileModule())
 	registry.RegisterModule(NewCopyModule())
 	registry.RegisterModule(NewFetchModule())
@@ -41,6 +43,8 @@ func NewRegistry() *Registry {
 	registry.RegisterModule(NewGitModule())
 	registry.RegisterModule(NewDebugModule())
 	registry.RegisterModule(NewSetFactModule())
+	registry.RegisterModule(NewAddHostModule())
+	registry.RegisterModule(NewGroupByModule())
 	registry.RegisterModule(NewStatModule())
 	registry.RegisterModule(NewFindModule())
 	registry.RegisterModule(NewLineinfileModule())
@@ -227,6 +231,13 @@ func (r *Registry) ExecuteTask(ctx context.Context, task *types.Task, host types
 	for key, value := range task.Args {
 		args[key] = value
 	}
+	// arguments the module would ignore fail the task, as in Ansible: an
+	// unsupported option must not widen what a task does (find without
+	// age would have deleted everything)
+	if msg := unsupportedParameters(task.Module, args); msg != "" {
+		return types.TaskResult{TaskName: task.Name, Host: host.Name, Module: task.Module, Failed: true,
+			Error: msg, Timestamp: time.Now()}, nil
+	}
 	if !dataArgModules[task.Module] {
 		normalizeArgs(args)
 	}
@@ -292,6 +303,9 @@ func (r *Registry) ExecuteTask(ctx context.Context, task *types.Task, host types
 	}
 
 	result, err := executeRecovering(ctx, module, host, args, task)
+	if result.Changed || err != nil {
+		invalidateLoopProbes(ctx)
+	}
 	if result.Changed && before != nil && before["error"] == nil {
 		result.Before = before
 	}
@@ -312,13 +326,55 @@ func (r *Registry) ExecuteTask(ctx context.Context, task *types.Task, host types
 	return result, err
 }
 
+//go:generate go run ../cli/gen_modargs . module_args.go modules
+
+// AcceptedArgs are Ansible arguments a module accepts without reading them:
+// their effect is the default here
+var AcceptedArgs = map[string][]string{
+	"docker_container": {"comparisons"},
+	// the WinRM/SSH client's own timeouts apply; the boot time is read the same way
+	"win_reboot": {"boot_time_command", "connect_timeout", "shutdown_timeout"},
+}
+
+// FreeArgModules take any argument (add_host: host variables; set_fact: facts)
+var FreeArgModules = map[string]bool{"add_host": true, "set_fact": true}
+
+// unsupportedParameters names the arguments a module does not read, in
+// Ansible's words, or "" when all are known. Modules the table does not
+// describe are not checked.
+func unsupportedParameters(module string, args map[string]interface{}) string {
+	known := ModuleArgs[module]
+	if len(known) == 0 || FreeArgModules[module] {
+		return ""
+	}
+	ok := make(map[string]bool, len(known)+len(AcceptedArgs[module]))
+	for _, a := range known {
+		ok[a] = true
+	}
+	for _, a := range AcceptedArgs[module] {
+		ok[a] = true
+	}
+	var bad []string
+	for a := range args {
+		if !strings.HasPrefix(a, "_") && !ok[a] {
+			bad = append(bad, a)
+		}
+	}
+	if len(bad) == 0 {
+		return ""
+	}
+	sort.Strings(bad)
+	return fmt.Sprintf("Unsupported parameters for (%s) module: %s. Supported parameters include: %s",
+		module, strings.Join(bad, ", "), strings.Join(known, ", "))
+}
+
 // checkModeModules support check mode: they read, or they compare and stop
 // before changing anything. Every other module is skipped in check mode.
 var checkModeModules = map[string]bool{
 	// read only
-	"ping": true, "debug": true, "set_fact": true, "stat": true, "find": true,
+	"ping": true, "debug": true, "set_fact": true, "stat": true, "find": true, "add_host": true, "group_by": true,
 	"fail": true, "wait_for": true, "assert": true, "include_vars": true,
-	"slurp": true, "docker_host_info": true, "setup": true, "gather_facts": true, "getent": true, "async_status": true,
+	"slurp": true, "docker_host_info": true, "setup": true, "gather_facts": true, "getent": true, "async_status": true, "verify": true,
 	// compare, then change
 	"file": true, "copy": true, "template": true, "lineinfile": true, "blockinfile": true,
 	"apt": true, "yum": true, "package": true, "service": true, "user": true, "group": true,
@@ -332,7 +388,7 @@ var checkModeModules = map[string]bool{
 
 // dataArgModules take their arguments as data whose types are kept:
 // set_fact stores them, config writes them into JSON/YAML/TOML files
-var dataArgModules = map[string]bool{"set_fact": true, "config": true, "debug": true, "assert": true, "include_vars": true}
+var dataArgModules = map[string]bool{"add_host": true, "set_fact": true, "config": true, "debug": true, "assert": true, "include_vars": true}
 
 // normalizeArgs turns top-level YAML numbers into strings: modules read
 // text arguments as strings (cron "minute: 0" became "*") and numeric ones

@@ -67,7 +67,46 @@ def probe(request):
     return s + b" " + h.hexdigest().encode() + b"\n"
 
 
-out.write(b"ONIGIRAZU-READY P\n")
+def write(request):
+    # "MODE OWNER GROUP\npath\ncontent": MODE octal or "-" (keep, 0644 for a
+    # new file), OWNER/GROUP a name, an id or "-" (keep); written next to the
+    # file and moved over it, as install(1) does
+    head, _, rest = request.partition(b"\n")
+    path, _, data = rest.partition(b"\n")
+    mode, owner, group = head.split(b" ")
+    d = os.path.dirname(path) or b"."
+    os.makedirs(d, exist_ok=True)
+    try:
+        st = os.stat(path)
+    except FileNotFoundError:
+        st = None
+    m = int(mode, 8) if mode != b"-" else (stat.S_IMODE(st.st_mode) if st else 0o644)
+
+    def ident(name, lookup, current):
+        if name == b"-":
+            return current
+        n = name.decode()
+        return int(n) if n.isdigit() else lookup(n)
+
+    uid = ident(owner, lambda n: pwd.getpwnam(n).pw_uid, st.st_uid if st else -1)
+    gid = ident(group, lambda n: grp.getgrnam(n).gr_gid, st.st_gid if st else -1)
+    fd, tmp = tempfile.mkstemp(prefix=b".onigirazu-", dir=d)
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(data)
+        os.chmod(tmp, m)
+        if uid != -1 or gid != -1:
+            os.chown(tmp, uid, gid)
+        os.rename(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+out.write(b"ONIGIRAZU-READY P W\n")
 out.flush()
 n = 0
 try:
@@ -81,6 +120,29 @@ try:
             command = b64decode(data, validate=True)
         except Exception:
             out.write(b"ONIGIRAZU 255 0 0\n")
+            out.flush()
+            continue
+        if mode == b"Q":
+            # several probes in one answer: "limit\npath\npath...", each
+            # record followed by "\x1e\n"
+            limit, _, paths = command.partition(b"\n")
+            parts = []
+            for path in paths.split(b"\n"):
+                try:
+                    parts.append(probe(limit + b" " + path))
+                except Exception as err:
+                    parts.append(b"error " + str(err).encode() + b"\n")
+            so = b"\x1e\n".join(parts) + b"\x1e\n"
+            out.write(b"ONIGIRAZU 0 %d 0\n" % len(so) + so)
+            out.flush()
+            continue
+        if mode == b"W":
+            try:
+                write(command)
+                so, se, rc = b"", b"", 0
+            except Exception as err:
+                so, se, rc = b"", str(err).encode() + b"\n", 1
+            out.write(b"ONIGIRAZU %d %d %d\n" % (rc, len(so), len(se)) + so + se)
             out.flush()
             continue
         if mode == b"P":

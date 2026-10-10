@@ -75,7 +75,9 @@ a faithful import has nothing to change.`,
 				return err
 			}
 			fmt.Fprintf(out, "Collecting %d host(s)...\n", len(collect))
+			t0 := time.Now()
 			snaps, err := collectHosts(cmd.Context(), collect, !noBecome, becomeUser)
+			collected := time.Since(t0)
 			if err != nil {
 				return err
 			}
@@ -83,14 +85,19 @@ a faithful import has nothing to change.`,
 			if baseline != "" {
 				opts.Baseline, snaps = snaps[len(snaps)-1], snaps[:len(snaps)-1]
 			}
+			t0 = time.Now()
 			rep, err := importer.GenerateWith(snaps, outDir, opts)
 			if err != nil {
 				return err
 			}
+			generated := time.Since(t0)
+			var checked time.Duration
 			if !noVerify || adopt {
 				// --adopt records, in the same check run, what exists as
 				// adopted in the new playbook's managed state
+				t0 = time.Now()
 				drift, err := verifyImport(outDir, hosts, importer.SecretValues(snaps), adopt)
+				checked = time.Since(t0)
 				if err != nil {
 					return fmt.Errorf("verify: %w", err)
 				}
@@ -100,6 +107,8 @@ a faithful import has nothing to change.`,
 				return err
 			}
 			importer.PrintSummary(out, rep, outDir)
+			fmt.Fprintf(out, "Time: collecting %.1fs, writing %.1fs, checking %.1fs\n",
+				collected.Seconds(), generated.Seconds(), checked.Seconds())
 			if len(rep.Drift) > 0 {
 				return &ExitError{Code: 2, Message: "the imported playbook would still change something (see IMPORT_REPORT.md)"}
 			}

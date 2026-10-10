@@ -67,8 +67,10 @@ func (m *AptModule) PreCheckState(ctx context.Context, host types.Host, args map
 	currentState := make(map[string]interface{})
 	allCorrect := true
 
+	// a failed query counts as not installed: the task then runs
+	installed, _ := installedPackages(ctx, host, args, pkgNames)
 	for _, pkgName := range pkgNames {
-		isInstalled := debPackageInstalled(ctx, host, args, pkgName)
+		isInstalled := installed[pkgName]
 		currentState[pkgName] = isInstalled
 
 		// "latest" cannot be decided without asking apt, so it always runs
@@ -281,19 +283,18 @@ func (m *AptModule) Execute(ctx context.Context, host types.Host, args map[strin
 
 // aptGet runs apt-get non-interactively on the target host
 func aptGet(ctx context.Context, host types.Host, args map[string]interface{}, aptArgs ...string) (string, error) {
-	argv := append([]string{"env", "DEBIAN_FRONTEND=noninteractive", "apt-get"}, aptArgs...)
+	argv := []string{"env", "DEBIAN_FRONTEND=noninteractive", "apt-get"}
+	// lock_timeout: wait that long for the dpkg lock (apt 1.9.11+); 60 s by
+	// default as in Ansible (apt-daily holds it after a boot)
+	if n := getIntArg(args, "lock_timeout", 60); n > 0 {
+		argv = append(argv, "-o", "DPkg::Lock::Timeout="+strconv.Itoa(n))
+	}
+	argv = append(argv, aptArgs...)
 	out, err := runOnHost(ctx, host, args, argv...)
 	if err != nil {
 		return out, fmt.Errorf("apt-get %s failed: %w", aptArgs[0], err)
 	}
 	return out, nil
-}
-
-// debPackageInstalled reports whether a package is fully installed on the host
-// (dpkg -l also lists removed packages that left config files behind)
-func debPackageInstalled(ctx context.Context, host types.Host, args map[string]interface{}, pkg string) bool {
-	out, err := runOnHost(ctx, host, args, "dpkg-query", "-W", "-f=${Status}", pkg)
-	return err == nil && strings.TrimSpace(out) == "install ok installed"
 }
 
 func (m *AptModule) updateAptCache(ctx context.Context, host types.Host, args map[string]interface{}) error {
