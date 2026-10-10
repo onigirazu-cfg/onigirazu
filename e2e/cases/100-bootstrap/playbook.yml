@@ -1,0 +1,7 @@
+# the case is in verify-local.sh: bootstrap makes a second deploy user on this host
+plays:
+  - name: bootstrap e2e prepares nothing
+    hosts: all
+    gather_facts: false
+    tasks:
+      - debug: {msg: bootstrap}

@@ -439,6 +439,8 @@ return values and examples: [docs/modules/README.md](docs/modules/README.md). Ne
 | `drift PLAYBOOK` | Check that hosts still match a playbook; `--fix` applies |
 | `verify PLAYBOOK` | Run the plays' `verify:` checks (files, packages, services, ports, http, ...) and report them ([docs/VERIFY.md](docs/VERIFY.md)) |
 | `comply --profile PROFILE` | Check hosts against a compliance profile (bundled `linux-baseline`, `ssh`, or your own CIS-style controls) and score them; `comply list`, `comply show` ([docs/COMPLY.md](docs/COMPLY.md)) |
+| `bootstrap HOST` | A fresh machine becomes a managed host: deploy user, your key, passwordless sudo, password logins off ([docs/BOOTSTRAP_AND_IMAGES.md](docs/BOOTSTRAP_AND_IMAGES.md)) |
+| `image build PLAYBOOK` | A container image from a playbook: run it in a container from `--from`, commit as `--tag`, optionally push ([docs/BOOTSTRAP_AND_IMAGES.md](docs/BOOTSTRAP_AND_IMAGES.md)) |
 | `pull --repo URL` | This host converges itself from a git repository: once, every `--interval`, or `pull install` (systemd timer); `--drift-only`, `--only-on-change`, `--notify`, `--metrics-*` ([pull mode](docs/PULL.md)) |
 | `serve -f serve.yml` | Fleet server: scheduled drift/apply/verify/comply jobs, results per host, run history, web page and REST API behind a token or a reverse proxy's identity ([docs/SERVE.md](docs/SERVE.md)) |
 | `mcp -i INVENTORY` | MCP server over stdio for AI agents: inventory, plan, drift, verify, comply, run history, module docs; `apply` only with `--allow-apply` ([docs/MCP.md](docs/MCP.md)) |
