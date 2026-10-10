@@ -1,0 +1,155 @@
+name: linux-baseline
+title: Linux server baseline
+description: >
+  A CIS-style level 1 subset for Debian/Ubuntu and RHEL-family servers: filesystem permissions,
+  kernel network parameters, accounts, logging, time, firewall presence. Distribution-neutral
+  checks only; add the ssh profile for sshd.
+controls:
+  - id: fs-1
+    title: /etc/passwd, /etc/group are 0644 root:root
+    severity: medium
+    tags: [filesystem, permissions]
+    checks:
+      - {file: {path: /etc/passwd, owner: root, group: root, mode: "0644"}}
+      - {file: {path: /etc/group, owner: root, group: root, mode: "0644"}}
+    remediation: "chown root:root /etc/passwd /etc/group; chmod 644 /etc/passwd /etc/group"
+  - id: fs-2
+    title: /etc/shadow and /etc/gshadow are not world-readable
+    severity: critical
+    tags: [filesystem, permissions]
+    check: {command: {cmd: "stat -c '%a' /etc/shadow /etc/gshadow 2>/dev/null | grep -vcE '^[0-7][0-7]0$' || true", stdout: ["/^0$/"]}}
+    remediation: "chmod o-rwx /etc/shadow /etc/gshadow"
+  - id: fs-3
+    title: No world-writable files outside /tmp, /var/tmp, /dev, /proc, /sys, /run
+    severity: medium
+    tags: [filesystem, permissions]
+    check: {command: {cmd: "find / -xdev -type f -perm -0002 -not -path '/tmp/*' -not -path '/var/tmp/*' -not -path '/proc/*' -not -path '/sys/*' -not -path '/dev/*' -not -path '/run/*' 2>/dev/null | head -5 | wc -l", stdout: ["/^0$/"], timeout: 120}}
+    remediation: "chmod o-w <file>; find the files with the command of the check"
+  - id: fs-4
+    title: /tmp is a separate mount with nodev, nosuid
+    severity: low
+    tags: [filesystem, mounts]
+    check: {mount: {path: /tmp, exists: true, opts: [nodev, nosuid]}}
+    remediation: "mount /tmp as tmpfs or its own filesystem with nodev,nosuid (systemd tmp.mount)"
+  - id: fs-5
+    title: Core dumps are restricted
+    severity: low
+    tags: [kernel]
+    checks:
+      - {kernel_param: {name: fs.suid_dumpable, value: "0"}}
+    remediation: "sysctl fs.suid_dumpable=0 in /etc/sysctl.d/"
+  - id: net-1
+    title: IP forwarding is off (unless a router)
+    severity: medium
+    tags: [network, kernel]
+    check: {kernel_param: {name: net.ipv4.ip_forward, value: "0"}}
+    remediation: "sysctl net.ipv4.ip_forward=0 (skip this control on routers and container hosts)"
+  - id: net-2
+    title: ICMP redirects are not accepted
+    severity: medium
+    tags: [network, kernel]
+    checks:
+      - {kernel_param: {name: net.ipv4.conf.all.accept_redirects, value: "0"}}
+      - {kernel_param: {name: net.ipv4.conf.default.accept_redirects, value: "0"}}
+    remediation: "sysctl net.ipv4.conf.all.accept_redirects=0 net.ipv4.conf.default.accept_redirects=0"
+  - id: net-3
+    title: Source-routed packets are not accepted
+    severity: medium
+    tags: [network, kernel]
+    checks:
+      - {kernel_param: {name: net.ipv4.conf.all.accept_source_route, value: "0"}}
+      - {kernel_param: {name: net.ipv4.conf.default.accept_source_route, value: "0"}}
+    remediation: "sysctl net.ipv4.conf.all.accept_source_route=0 net.ipv4.conf.default.accept_source_route=0"
+  - id: net-4
+    title: Reverse path filtering is on
+    severity: medium
+    tags: [network, kernel]
+    checks:
+      - {kernel_param: {name: net.ipv4.conf.all.rp_filter, value: "1"}}
+      - {kernel_param: {name: net.ipv4.conf.default.rp_filter, value: "1"}}
+    remediation: "sysctl net.ipv4.conf.all.rp_filter=1 net.ipv4.conf.default.rp_filter=1"
+  - id: net-5
+    title: TCP SYN cookies are on
+    severity: medium
+    tags: [network, kernel]
+    check: {kernel_param: {name: net.ipv4.tcp_syncookies, value: "1"}}
+    remediation: "sysctl net.ipv4.tcp_syncookies=1"
+  - id: net-6
+    title: Suspicious packets are logged (martians)
+    severity: low
+    tags: [network, kernel, logging]
+    check: {kernel_param: {name: net.ipv4.conf.all.log_martians, value: "1"}}
+    remediation: "sysctl net.ipv4.conf.all.log_martians=1"
+  - id: net-7
+    title: A host firewall is installed (ufw, firewalld or nftables)
+    severity: high
+    tags: [network, firewall]
+    check: {command: {cmd: "command -v ufw >/dev/null || command -v firewall-cmd >/dev/null || command -v nft >/dev/null; echo $?", stdout: ["/^0$/"]}}
+    remediation: "apt install ufw / dnf install firewalld"
+  - id: acct-1
+    title: No accounts other than root have UID 0
+    severity: critical
+    tags: [accounts]
+    check: {command: {cmd: "awk -F: '$3 == 0 && $1 != \"root\"' /etc/passwd | wc -l", stdout: ["/^0$/"]}}
+    remediation: "remove or renumber the extra UID 0 accounts"
+  - id: acct-2
+    title: No accounts with an empty password
+    severity: critical
+    tags: [accounts]
+    check: {command: {cmd: "awk -F: '$2 == \"\"' /etc/shadow | wc -l", stdout: ["/^0$/"]}}
+    remediation: "passwd -l <user>"
+  - id: acct-3
+    title: Default umask is 027 or stricter
+    severity: low
+    tags: [accounts]
+    check: {command: {cmd: "grep -hEi '^\\s*umask\\s+0?[2-7][2-7]7' /etc/login.defs /etc/profile /etc/bash.bashrc /etc/profile.d/*.sh 2>/dev/null | wc -l", stdout: ["/^[1-9][0-9]*$/"]}}
+    remediation: "UMASK 027 in /etc/login.defs"
+  - id: acct-4
+    title: Root's PATH has no world-writable or relative entries
+    severity: medium
+    tags: [accounts]
+    check: {command: {cmd: "echo \"$PATH\" | tr : '\\n' | grep -cE '^(\\.|$)' || true", stdout: ["/^0$/"]}}
+    remediation: "remove . and empty entries from root's PATH"
+  - id: log-1
+    title: A system logger is running (rsyslog, syslog-ng or journald)
+    severity: medium
+    tags: [logging]
+    check: {command: {cmd: "{ systemctl is-active rsyslog syslog-ng systemd-journald 2>/dev/null | grep -qx active; } && echo active || echo inactive", stdout: ["/^active$/"]}}
+    remediation: "systemctl enable --now rsyslog"
+  - id: log-2
+    title: The journal is persistent
+    severity: low
+    tags: [logging]
+    check: {file: {path: /var/log/journal, type: directory}}
+    remediation: "mkdir /var/log/journal; systemctl restart systemd-journald"
+  - id: time-1
+    title: Time is synchronised (chrony, systemd-timesyncd or ntpd)
+    severity: medium
+    tags: [time]
+    check: {command: {cmd: "{ systemctl is-active chrony chronyd systemd-timesyncd ntp ntpd 2>/dev/null | grep -qx active; } && echo active || echo inactive", stdout: ["/^active$/"]}}
+    remediation: "apt install chrony"
+  - id: pkg-1
+    title: No pending security updates (apt) / updates (dnf)
+    severity: medium
+    tags: [packages, patching]
+    check: {command: {cmd: "if command -v apt-get >/dev/null; then apt-get -s upgrade 2>/dev/null | grep -c '^Inst.*security' || true; elif command -v dnf >/dev/null; then dnf -q check-update --security 2>/dev/null | grep -cE '^[a-zA-Z0-9]' || true; else echo 0; fi", stdout: ["/^0$/"], timeout: 180}}
+    remediation: "apt-get upgrade / dnf update --security"
+  - id: pkg-2
+    title: Unattended upgrades or dnf-automatic are installed
+    severity: low
+    tags: [packages, patching]
+    check: {command: {cmd: "if command -v apt-get >/dev/null; then dpkg -s unattended-upgrades >/dev/null 2>&1 && echo yes || echo no; elif command -v dnf >/dev/null; then rpm -q dnf-automatic >/dev/null 2>&1 && echo yes || echo no; else echo yes; fi", stdout: ["/^yes$/"]}}
+    remediation: "apt install unattended-upgrades / dnf install dnf-automatic"
+  - id: svc-1
+    title: No legacy insecure services (telnet, rsh, tftp servers)
+    severity: high
+    tags: [services]
+    check: {command: {cmd: "{ systemctl is-active telnet.socket rsh.socket tftp.socket inetd xinetd 2>/dev/null | grep -qx active; } && echo active || echo none", stdout: ["/^none$/"]}}
+    remediation: "remove telnetd, rsh-server, tftpd"
+  - id: svc-2
+    title: No unexpected listening ports (only sshd and the known set may listen on 0.0.0.0)
+    severity: low
+    tags: [services, network]
+    description: Informational; the known set is sshd only here, adjust in your own profile
+    check: {command: {cmd: "ss -Hltn 2>/dev/null | awk '{print $4}' | grep -E '^(0\\.0\\.0\\.0|\\*|\\[::\\]):' | grep -vE ':22$' | wc -l", stdout: ["/^0$/"]}}
+    remediation: "bind services to localhost or firewall them"

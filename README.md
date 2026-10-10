@@ -432,6 +432,7 @@ return values and examples: [docs/modules/README.md](docs/modules/README.md). Ne
 | `plan PLAYBOOK` | Show what `apply` would change |
 | `drift PLAYBOOK` | Check that hosts still match a playbook; `--fix` applies |
 | `verify PLAYBOOK` | Run the plays' `verify:` checks (files, packages, services, ports, http, ...) and report them ([docs/VERIFY.md](docs/VERIFY.md)) |
+| `comply --profile PROFILE` | Check hosts against a compliance profile (bundled `linux-baseline`, `ssh`, or your own CIS-style controls) and score them; `comply list`, `comply show` ([docs/COMPLY.md](docs/COMPLY.md)) |
 | `pull --repo URL` | This host converges itself from a git repository: once, every `--interval`, or `pull install` (systemd timer); `--drift-only`, `--only-on-change`, `--notify`, `--metrics-*` ([pull mode](docs/PULL.md)) |
 | `listen -f listen.yml` | Run playbooks on events: Alertmanager/vmalert alerts, GitHub webhooks, Mattermost commands, any JSON POST; `listen test`, `listen install` ([docs/LISTEN.md](docs/LISTEN.md)) |
 | `plugin list` | Command plugins found (`onigirazu-NAME` executables) |
@@ -510,6 +511,8 @@ Without a terminal the normal output is used. See [docs/INTERACTIVE_MODE.md](doc
 - `listen` runs playbooks on events — an alert, a push, a chat command — with per-rule throttling
   ([docs/LISTEN.md](docs/LISTEN.md)).
 - `verify` runs the plays' `verify:` checks and reports them, also as JSON ([docs/VERIFY.md](docs/VERIFY.md)).
+- `verify` runs the plays' `verify:` checks and reports them, also as JSON ([docs/VERIFY.md](docs/VERIFY.md));
+  `comply` scores hosts against compliance profiles, with Markdown/HTML reports and metrics ([docs/COMPLY.md](docs/COMPLY.md)).
 - `apply --background` returns at once; `show-execution` reads the result later.
 - `audit` keeps the history of runs with per-host statistics.
 - `onigirazu test` runs a role's Molecule scenarios (docker/podman instances, converge,

@@ -14,6 +14,7 @@ Start with the [Quick Start](QUICK_START_CONFIGURATION.md). The project
 - [Interactive mode](INTERACTIVE_MODE.md) — `apply --interactive`
 - [Ad-hoc commands](ADHOC_GUIDE.md) — `onigirazu run` without a playbook
 - [Verify](VERIFY.md) — `verify:` checks of a play and `onigirazu verify`
+- [Compliance profiles](COMPLY.md) — `onigirazu comply`: CIS-style controls with severities, scores and fixes
 - [Safe apply](SAFE_APPLY.md) — `serial`, canary batches, health checks, automatic rollback, `strategy: free`, `throttle`
 - [Pull mode](PULL.md) — `onigirazu pull`: a host converges itself from git, on a timer, with notifications and metrics
 - [Listen mode](LISTEN.md) — `onigirazu listen`: playbooks on Alertmanager, GitHub and Mattermost events, any webhook

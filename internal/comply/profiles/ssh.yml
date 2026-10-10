@@ -1,0 +1,84 @@
+name: ssh
+title: OpenSSH server hardening
+description: >
+  The sshd settings most benchmarks (CIS Linux 5.2, Mozilla modern) agree on. Checks read
+  the effective configuration with `sshd -T`, so drop-in files count.
+controls:
+  - id: ssh-1
+    title: PermitRootLogin is no
+    severity: high
+    tags: [ssh, access]
+    check: {command: {cmd: "sshd -T 2>/dev/null | grep -i '^permitrootlogin'", stdout: ["/^permitrootlogin no$/"]}}
+    remediation: "sshd_config: PermitRootLogin no"
+  - id: ssh-2
+    title: Password authentication is disabled
+    severity: high
+    tags: [ssh, access]
+    check: {command: {cmd: "sshd -T 2>/dev/null | grep -i '^passwordauthentication'", stdout: ["/^passwordauthentication no$/"]}}
+    remediation: "sshd_config: PasswordAuthentication no (keys only)"
+  - id: ssh-3
+    title: Empty passwords are refused
+    severity: critical
+    tags: [ssh, access]
+    check: {command: {cmd: "sshd -T 2>/dev/null | grep -i '^permitemptypasswords'", stdout: ["/^permitemptypasswords no$/"]}}
+    remediation: "sshd_config: PermitEmptyPasswords no"
+  - id: ssh-4
+    title: Protocol-level forwarding of X11 is off
+    severity: low
+    tags: [ssh]
+    check: {command: {cmd: "sshd -T 2>/dev/null | grep -i '^x11forwarding'", stdout: ["/^x11forwarding no$/"]}}
+    remediation: "sshd_config: X11Forwarding no"
+  - id: ssh-5
+    title: MaxAuthTries is 4 or less
+    severity: medium
+    tags: [ssh, access]
+    check: {command: {cmd: "sshd -T 2>/dev/null | grep -i '^maxauthtries'", stdout: ["/^maxauthtries [1-4]$/"]}}
+    remediation: "sshd_config: MaxAuthTries 4"
+  - id: ssh-6
+    title: Idle sessions time out (ClientAliveInterval 1-900, CountMax 0-3)
+    severity: low
+    tags: [ssh]
+    checks:
+      - {command: {cmd: "sshd -T 2>/dev/null | grep -i '^clientaliveinterval'", stdout: ["/^clientaliveinterval ([1-9]|[1-9][0-9]|[1-8][0-9][0-9]|900)$/"]}}
+      - {command: {cmd: "sshd -T 2>/dev/null | grep -i '^clientalivecountmax'", stdout: ["/^clientalivecountmax [0-3]$/"]}}
+    remediation: "sshd_config: ClientAliveInterval 300, ClientAliveCountMax 3"
+  - id: ssh-7
+    title: LoginGraceTime is 60 seconds or less
+    severity: low
+    tags: [ssh]
+    check: {command: {cmd: "sshd -T 2>/dev/null | grep -i '^logingracetime'", stdout: ["/^logingracetime ([1-9]|[1-5][0-9]|60)$/"]}}
+    remediation: "sshd_config: LoginGraceTime 60"
+  - id: ssh-8
+    title: Host-based and rhosts authentication are off
+    severity: medium
+    tags: [ssh, access]
+    checks:
+      - {command: {cmd: "sshd -T 2>/dev/null | grep -i '^hostbasedauthentication'", stdout: ["/^hostbasedauthentication no$/"]}}
+      - {command: {cmd: "sshd -T 2>/dev/null | grep -i '^ignorerhosts'", stdout: ["/^ignorerhosts yes$/"]}}
+    remediation: "sshd_config: HostbasedAuthentication no, IgnoreRhosts yes"
+  - id: ssh-9
+    title: Logging is at INFO or VERBOSE
+    severity: low
+    tags: [ssh, logging]
+    check: {command: {cmd: "sshd -T 2>/dev/null | grep -i '^loglevel'", stdout: ["/^loglevel (info|verbose)$/"]}}
+    remediation: "sshd_config: LogLevel VERBOSE"
+  - id: ssh-10
+    title: sshd_config is owned by root and not world-readable
+    severity: medium
+    tags: [ssh, permissions]
+    check: {file: {path: /etc/ssh/sshd_config, owner: root, group: root, mode: "0600"}}
+    remediation: "chown root:root /etc/ssh/sshd_config; chmod 600 /etc/ssh/sshd_config"
+  - id: ssh-11
+    title: Host private keys are not world-readable
+    severity: high
+    tags: [ssh, permissions]
+    check: {command: {cmd: "find /etc/ssh -name 'ssh_host_*_key' -perm /o+r | wc -l", stdout: ["/^0$/"]}}
+    remediation: "chmod 600 /etc/ssh/ssh_host_*_key"
+  - id: ssh-12
+    title: sshd is running and enabled
+    severity: medium
+    tags: [ssh, service]
+    checks:
+      - {command: {cmd: "{ systemctl is-active ssh sshd 2>/dev/null | grep -qx active; } && echo active || echo inactive", stdout: ["/^active$/"]}}
+      - {command: {cmd: "{ systemctl is-enabled ssh sshd ssh.socket 2>/dev/null | grep -qxE 'enabled|static|alias|indirect'; } && echo enabled || echo disabled", stdout: ["/^enabled$/"]}}
+    remediation: "systemctl enable --now ssh (sshd on RHEL)"
