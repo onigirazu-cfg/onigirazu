@@ -12,7 +12,7 @@ Releases are automatic. Merging a pull request to `main` with a squash subject t
 
    It runs `go test -race ./...`, pushes the tag `vX.Y.Z`, creates the GitHub Release with a changelog, and starts the Release Gate.
 2. **Release Gate** (`release-gate.yml`) on the tag: gosec (report only), govulncheck, gofmt/goimports/vet/staticcheck, race tests with coverage >= 15%, builds, golangci-lint. If all pass, it starts Release.
-3. **Release** (`release.yml`): GoReleaser publishes archives, packages and `checksums.txt` to the GitHub Release; then the multi-arch image is pushed to GHCR.
+3. **Release** (`release.yml`): GoReleaser runs `go generate ./...` (embeds the Linux and Windows agents), publishes archives (with `onigirazu` and `onigirazu-test`), packages and `checksums.txt` to the GitHub Release; then the multi-arch image is pushed to GHCR.
 
 The whole chain takes about 20 minutes.
 

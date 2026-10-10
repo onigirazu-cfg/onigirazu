@@ -15,3 +15,15 @@ plays:
           uid: 4242
           group: e2egrp
           shell: /bin/bash
+      - name: User with a password
+        user:
+          name: e2epw
+          password: "$6$e2esalt$Zp9dFqF4O4GDh8zD1T3P0ybN.ZW8lSvXzM8wrmN4Nf0Nhb4rCMk6eRuJqDvA8sK/oQXUiMb37h3tOdx4T.Km1/"
+      - name: Another hash with update_password on_create changes nothing
+        user:
+          name: e2epw
+          password: "$6$other$8x9Yl2Nq4cT7vR1sK3mP5wE6uI0oA2dF4gH6jK8lZ0xC2vB4nM6qW8eR0tY2uI4oP6aS8dF0gH2jK4lZ6xC8v"
+          update_password: on_create
+        register: kept
+      - name: Kept
+        assert: {that: kept is not changed}

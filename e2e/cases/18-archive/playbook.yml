@@ -8,3 +8,8 @@ plays:
           path: /opt/onigirazu-e2e-arch
           dest: /root/onigirazu-e2e.tar.gz
           format: gz
+      - name: Compress one file
+        archive:
+          path: /opt/onigirazu-e2e-arch/a.txt
+          dest: /root/onigirazu-e2e-a.txt.gz
+          format: gz

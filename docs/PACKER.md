@@ -26,6 +26,7 @@ provisioner "shell-local" {
   builder's `ssh_private_key_file` names) and drop the extra-vars file.
 - `ANSIBLE_CONFIG` is read for `roles_path` and `collections_path`.
 - The `ansible` provisioner's `ansible_python_interpreter` and
-  `ANSIBLE_REMOTE_TMP` are not needed: onigirazu runs no Python on the host and
+  `ANSIBLE_REMOTE_TMP` are not needed: onigirazu needs no Python on the host and
   keeps its work files in `~/.onigirazu/tmp`.
-- Windows builds (WinRM) stay on the `ansible` provisioner.
+- Windows builds: onigirazu manages Windows over WinRM or OpenSSH, but it is not tested as a
+  Packer provisioner for Windows images; the `ansible` provisioner is the known path there.

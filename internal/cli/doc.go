@@ -32,7 +32,7 @@ func showDoc(w io.Writer, name string) error {
 	short := types.ShortModuleName(name)
 	if m, err := modules.NewRegistry().GetModule(short); err == nil {
 		fmt.Fprintf(w, "%s (built in): %s\n", short, m.GetDescription())
-		if args := moduleArgs[short]; len(args) > 0 {
+		if args := modules.ModuleArgs[short]; len(args) > 0 {
 			sorted := append([]string{}, args...)
 			sort.Strings(sorted)
 			fmt.Fprintf(w, "arguments: %s\n", strings.Join(sorted, ", "))

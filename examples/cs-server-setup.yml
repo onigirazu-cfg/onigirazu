@@ -42,7 +42,7 @@ plays:
       # Test the script
       - name: "Run welcome script"
         script:
-          path: "/home/usx/scripts/welcome.sh"
+          cmd: "/home/usx/scripts/welcome.sh"
         register: welcome_output
 
       - name: "Display welcome output"

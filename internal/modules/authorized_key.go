@@ -118,7 +118,7 @@ func (m *AuthorizedKeyModule) Execute(ctx context.Context, host types.Host, args
 		lines = strings.Split(strings.TrimRight(string(data), "\n"), "\n")
 	}
 	wantID := authorizedKeyID(key)
-	kept := make([]string, 0, len(lines)+1)
+	kept := make([]string, 0, len(lines))
 	found := false
 	for _, line := range lines {
 		id := authorizedKeyID(line)

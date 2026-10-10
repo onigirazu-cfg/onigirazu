@@ -29,6 +29,11 @@ ANSIBLE="${ANSIBLE_PLAYBOOK:-ansible-playbook}"
 mkdir -p "$OUT"
 RESULTS="$OUT/results.tsv"
 printf 'tool\thosts\tphase\tseconds\tcpu_user\tcpu_sys\tpeak_rss_mb\tchanged\tfailed\trc\n' > "$RESULTS"
+GOSS_RESULTS="$OUT/goss.tsv"
+printf 'tool\thosts\tphase\thost\tchecks\tfailed\n' > "$GOSS_RESULTS"
+# goss checks the state the playbook leaves on every host after each run
+GOSS_VERSION=0.4.10
+GOSS_SHA256=26e365428946294bcec0c61d867bb3c8349f39feb3d0e6f59084e98632785cc7
 
 log() { printf '\n==> %s\n' "$*"; }
 die() { echo "error: $*" >&2; exit 1; }
@@ -37,9 +42,18 @@ TFSTATE="$WORK/tf.tfstate"
 TFVARS="$WORK/run.tfvars.json"
 destroy() {
   [ -f "$TFSTATE" ] || return 0
+  # the leases of this run's VMs are removed after them (names as terraform makes them)
+  local prefix macs
+  prefix="tmp-e2e-onigirazu-$(printf '%s' "$RUN_ID" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9-')"
+  # shellcheck disable=SC2046
+  macs="$("$ROOT/e2e/dhcp-leases.sh" macs $(govc find "/$TF_VAR_datacenter/vm/$TF_VAR_folder" -type m -name "$prefix*" 2>/dev/null) | tr '\n' ' ')"
+  # shellcheck disable=SC2046
+  "$ROOT/e2e/dhcp-release.sh" "$KEY" $(terraform -chdir="$TF_DIR" output -state="$TFSTATE" -json hosts 2>/dev/null | jq -r '.[]?')
   terraform -chdir="$TF_DIR" destroy -auto-approve -input=false -state="$TFSTATE" -var-file="$TFVARS" >/dev/null ||
     echo "destroy failed; the janitor will remove the VMs"
   rm -f "$TFSTATE"
+  # shellcheck disable=SC2086
+  "$ROOT/e2e/dhcp-leases.sh" remove $macs
 }
 cleanup() { local rc=$?; destroy; rm -rf "$WORK"; exit "$rc"; }
 trap cleanup EXIT
@@ -59,13 +73,39 @@ E2E_IMAGES="u2404=ubuntu-24.04" E2E_BASE=1
 resolve_images || exit 1
 template="$(jq -r '.u2404' <<<"$images_json")"
 
+log "Fetching goss $GOSS_VERSION"
+curl -fsSL -o "$WORK/goss.tgz" "https://github.com/goss-org/goss/releases/download/v$GOSS_VERSION/goss_${GOSS_VERSION}_linux_x86_64.tar.gz"
+echo "$GOSS_SHA256  $WORK/goss.tgz" | sha256sum -c --quiet - || die "goss checksum mismatch"
+tar xzf "$WORK/goss.tgz" -C "$WORK" goss
+python3 "$HERE/goss.py" "$VARS" > "$WORK/goss.json"
+
 log "Building onigirazu"
+# the agents built into onigirazu, as in a release
+(cd "$ROOT" && go generate ./internal/agentbin)
 (cd "$ROOT" && go build -o "$BIN" ./cmd/onigirazu)
 ssh-keygen -q -t ed25519 -N '' -C "onigirazu-bench-$RUN_ID" -f "$KEY"
 for try in 1 2 3; do
   terraform -chdir="$TF_DIR" init -input=false >/dev/null && break
   [ "$try" = 3 ] && exit 1; sleep 15
 done
+
+# goss_check TOOL HOSTS PHASE: validates every host; a failed check is
+# shown and fails the bench at the end
+goss_check() {
+  local tool="$1" n="$2" phase="$3" ip name out
+  while read -r name ip; do
+    out="$(ssh -i "$KEY" -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR "e2e@$ip" \
+      'sudo -n /tmp/goss -g /tmp/goss.json validate --format tap --no-color' 2>&1)" || true
+    local total failed
+    total="$( (grep -cE '^(ok|not ok) ' <<<"$out") || true)"
+    failed="$( (grep -cE '^not ok ' <<<"$out") || true)"
+    printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$tool" "$n" "$phase" "$name" "$total" "$failed" >> "$GOSS_RESULTS"
+    if [ "$total" = 0 ] || [ "$failed" != 0 ]; then
+      echo "goss: $tool $phase on $name: $failed of $total checks failed"
+      (grep -E '^not ok ' <<<"$out" || tail -5 <<<"$out") | head -20
+    fi
+  done < <(jq -r 'to_entries[] | "\(.key) \(.value)"' <<<"$hosts_json")
+}
 
 # measure TOOL HOSTS PHASE command...: wall/CPU/peak memory of the command
 # and its children; the log is kept for the counts
@@ -119,6 +159,16 @@ for n in $HOSTS; do
       done
     done
     rm -rf "$HERE/fetched"
+    for ip in $(jq -r '.[]' <<<"$hosts_json"); do
+      scp -q -i "$KEY" -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+        "$WORK/goss" "$WORK/goss.json" "e2e@$ip:/tmp/" || die "cannot copy goss to a VM"
+    done
+    # fresh package lists before the timed runs: the base image may come
+    # with none, and cache_valid_time would then skip the update
+    for ip in $(jq -r '.[]' <<<"$hosts_json"); do
+      ssh -i "$KEY" -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR "e2e@$ip" \
+        'sudo -n apt-get -o DPkg::Lock::Timeout=300 update -qq >/dev/null' || die "apt-get update failed on a VM"
+    done
 
     if [ "$tool" = ansible ]; then
       cat > "$WORK/ansible.cfg" <<EOF
@@ -134,14 +184,20 @@ EOF
       export ANSIBLE_CONFIG="$WORK/ansible.cfg"
       cmd=("$ANSIBLE" -i "$inv" site.yml -e "$VARS")
       measure ansible "$n" converge "${cmd[@]}"
+      goss_check ansible "$n" converge
       measure ansible "$n" second "${cmd[@]}"
+      goss_check ansible "$n" second
       measure ansible "$n" check "${cmd[@]}" --check
       unset ANSIBLE_CONFIG
     else
       export ONIGIRAZU_SSH_KNOWN_HOSTS_FILE="$WORK/known_hosts" ONIGIRAZU_MAX_CONCURRENCY="$n"
       cmd=("$BIN" apply site.yml -i "$inv" -e "$VARS" --state "$WORK/state-$n" --no-color)
       measure onigirazu "$n" converge "${cmd[@]}"
+      # the run's record (per-task wall times): where the converge's time goes
+      cp "$HOME/.onigirazu/cache/executions/current.json" "$OUT/onigirazu-$n-converge.json" 2>/dev/null || true
+      goss_check onigirazu "$n" converge
       measure onigirazu "$n" second "${cmd[@]}"
+      goss_check onigirazu "$n" second
       measure onigirazu "$n" check "${cmd[@]}" --check
       # where the time goes: one more noop run with per-task durations
       (cd "$HERE" && "${cmd[@]}" -o json 2>/dev/null > "$WORK/tasks.out") || true
@@ -181,7 +237,8 @@ for h in hosts:
         print(f'| {h} | {p} | {o["seconds"]} | {a["seconds"]} | {ratio:.1f}x | {cpu(o):.1f} | {cpu(a):.1f} | '
               f'{o["peak_rss_mb"]} | {a["peak_rss_mb"]} | {o["changed"]}/{a["changed"]} | {o["failed"]}/{a["failed"]} |')
 PY
-for f in "$OUT"/onigirazu-*-tasks.json; do
+printf '\nonigirazu ran with remote_server %s.\n' "${ONIGIRAZU_REMOTE_SERVER:-auto}" >> "$OUT/summary.md"
+for f in "$OUT"/onigirazu-*-converge.json "$OUT"/onigirazu-*-tasks.json; do
   [ -s "$f" ] || continue
   python3 - "$f" >> "$OUT/summary.md" <<'PY' || true
 import datetime, json, os, sys
@@ -193,14 +250,30 @@ tasks = [t for t in d.get("tasks", []) if not t["start_time"].startswith("0001")
 ends = [t["start_time"] for t in tasks[1:]] + [d["end_time"]]
 rows = sorted(((at(e) - at(t["start_time"])).total_seconds(), t["name"], t["total"]) for t, e in zip(tasks, ends))[::-1]
 total = (at(d["end_time"]) - at(d["start_time"])).total_seconds() or 1
-print(f"\n#### {os.path.basename(sys.argv[1])[:-5]}: slowest tasks of a noop run ({total:.1f} s)\n")
+kind = "the converge" if sys.argv[1].endswith("-converge.json") else "a noop run"
+print(f"\n#### {os.path.basename(sys.argv[1])[:-5]}: slowest tasks of {kind} ({total:.1f} s)\n")
 print("| task | items | s | share |")
 print("|---|---|---|---|")
 for s, name, n in rows[:15]:
     print(f"| {name.replace(' (item 1)', '')} | {n} | {s:.2f} | {100 * s / total:.0f}% |")
 PY
 done
+python3 - "$GOSS_RESULTS" >> "$OUT/summary.md" <<'PY'
+import csv, sys
+rows = list(csv.DictReader(open(sys.argv[1]), delimiter="\t"))
+if rows:
+    print("\n#### State checks (goss): every host after each run\n")
+    print("| tool | hosts | phase | hosts passed | checks per host | failed checks |")
+    print("|---|---|---|---|---|---|")
+    groups = {}
+    for r in rows:
+        groups.setdefault((r["tool"], int(r["hosts"]), r["phase"]), []).append(r)
+    for (tool, n, phase), rs in sorted(groups.items(), key=lambda x: (x[0][1], x[0][0], x[0][2])):
+        ok = sum(1 for r in rs if r["failed"] == "0" and r["checks"] != "0")
+        print(f'| {tool} | {n} | {phase} | {ok}/{len(rs)} | {max(int(r["checks"]) for r in rs)} | {sum(int(r["failed"]) for r in rs)} |')
+PY
 cat "$OUT/summary.md"
 [ -n "${GITHUB_STEP_SUMMARY:-}" ] && cat "$OUT/summary.md" >> "$GITHUB_STEP_SUMMARY"
 # a failed task or a second run that changed something makes the numbers moot
 awk -F'\t' 'NR > 1 && ($9 > 0 || $10 != 0 || ($3 == "second" && $8 > 0)) {bad = 1; print "not clean: " $0} END {exit bad}' "$RESULTS"
+awk -F'\t' 'NR > 1 && ($5 == 0 || $6 != 0) {bad = 1; print "state check failed: " $0} END {exit bad}' "$GOSS_RESULTS"

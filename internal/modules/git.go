@@ -41,7 +41,7 @@ func (m *GitModuleFixed) Execute(ctx context.Context, host types.Host, args map[
 	startTime := time.Now()
 
 	result := types.TaskResult{
-		TaskName:  "git",
+		TaskName:  taskName(args),
 		Host:      host.Name,
 		Module:    m.name,
 		Success:   false,
@@ -101,6 +101,13 @@ func (m *GitModuleFixed) Execute(ctx context.Context, host types.Host, args map[
 	}
 
 	if !destExists || (destExists && !isGitRepo && force) {
+		// clone: false leaves a missing repository alone, as in Ansible
+		if !getBoolArg(args, "clone", true) {
+			result.Success = true
+			result.Output["message"] = "No repository at dest and clone is disabled"
+			result.Duration = time.Since(startTime)
+			return result, nil
+		}
 		// Clone repository
 		return m.cloneRepository(exec, repo, dest, version, depth, result, startTime)
 	} else if isGitRepo && update {

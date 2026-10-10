@@ -93,7 +93,12 @@ type State struct {
 	Serial    int       `json:"serial"`
 	Updated   time.Time `json:"updated"`
 	Resources []*Record `json:"resources"`
+	// index: the records by host, type and id; Find rebuilds it when the
+	// list changed under it
+	index map[string]*Record
 }
+
+func recordKey(host, typ, id string) string { return host + "\x00" + typ + "\x00" + id }
 
 // Path is where the state of a playbook lives: .onigirazu/<name>.state.json
 // next to it, so every playbook of a directory has its own, or in
@@ -159,12 +164,14 @@ func (s *State) sort() {
 
 // Find returns the record of host/type/id
 func (s *State) Find(host, typ, id string) *Record {
-	for _, r := range s.Resources {
-		if r.Host == host && r.Type == typ && r.ID == id {
-			return r
+	// a map, not a scan: a run claims every resource of every host
+	if len(s.index) != len(s.Resources) {
+		s.index = make(map[string]*Record, len(s.Resources))
+		for _, r := range s.Resources {
+			s.index[recordKey(r.Host, r.Type, r.ID)] = r
 		}
 	}
-	return nil
+	return s.index[recordKey(host, typ, id)]
 }
 
 // Remove forgets a record; false when there is none
@@ -172,6 +179,7 @@ func (s *State) Remove(host, typ, id string) bool {
 	for i, r := range s.Resources {
 		if r.Host == host && r.Type == typ && r.ID == id {
 			s.Resources = append(s.Resources[:i], s.Resources[i+1:]...)
+			s.index = nil
 			return true
 		}
 	}
@@ -192,6 +200,7 @@ func (s *State) Orphans() []*Record {
 // Clone is a deep enough copy for a dry update (plan)
 func (s *State) Clone() *State {
 	c := *s
+	c.index = nil // it points at the original's records
 	c.Resources = make([]*Record, len(s.Resources))
 	for i, r := range s.Resources {
 		rc := *r
@@ -379,6 +388,9 @@ func (s *State) claim(host string, c claim, now time.Time) {
 		r = &Record{Host: host, Type: c.res.Type, ID: c.res.ID, Origin: originOf(c.res),
 			Before: c.res.Before, FirstApplied: now}
 		s.Resources = append(s.Resources, r)
+		if s.index != nil {
+			s.index[recordKey(host, c.res.Type, c.res.ID)] = r
+		}
 	} else if r.Origin == OriginUnknown && c.res.Before != nil {
 		r.Origin, r.Before = originOf(c.res), c.res.Before
 	}

@@ -15,7 +15,7 @@ on:
         type: string
         default: ''
       keep_vms:
-        description: 'Keep the VMs for debugging (the janitor still removes them after 3h)'
+        description: 'Keep the VMs for debugging (the janitor removes them after 3h; VMs of other finished runs go at its next run)'
         required: false
         type: boolean
         default: false
@@ -25,7 +25,7 @@ on:
         type: boolean
         default: false
   schedule:
-    - cron: '0 5 * * *'   # e2e, after the 01:00 image rebuild
+    - cron: '0 5 * * *'   # e2e, after the 03:30 image rebuild
     - cron: '30 * * * *'  # janitor
 
 permissions:
@@ -34,7 +34,7 @@ permissions:
 
 jobs:
   # Which cases, on how many shards: a pull request runs the cases its changes
-  # need (e2e/select-cases.sh), one shard per ~5 min of cases, at most four
+  # need (e2e/select-cases.sh), one shard per ~150 s of cases, at most four
   plan:
     if: >-
       (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository &&
@@ -60,10 +60,12 @@ jobs:
             [ -n "$cases" ] || { echo "no e2e case needed"; echo "shards=[]" >> "$GITHUB_OUTPUT"; exit 0; }
             [ "$cases" = all ] && cases=""
           fi
-          # seconds of the chosen cases (unknown: 10 s) -> shards of ~300 s
+          # seconds of the chosen cases (unknown: 10 s) -> shards of ~150 s:
+          # creating a shard's VMs takes ~2 min whatever it runs, so more
+          # shards in parallel finish sooner
           list="${cases:-$(ls e2e/cases)}"
           secs="$(for c in $list; do awk -F'\t' -v c="$c" '$1 == c { print $2; f = 1 } END { if (!f) print 10 }' e2e/case-seconds.tsv; done | awk '{ s += $1 } END { print s + 0 }')"
-          n=$(( (secs + 299) / 300 )); [ "$n" -ge 1 ] || n=1; [ "$n" -le 4 ] || n=4
+          n=$(( (secs + 149) / 150 )); [ "$n" -ge 1 ] || n=1; [ "$n" -le 4 ] || n=4
           echo "cases: ${cases:-all} (${secs}s) on $n shard(s)"
           echo "cases=$cases" >> "$GITHUB_OUTPUT"
           echo "shards=[$(seq 1 "$n" | paste -sd, -)]" >> "$GITHUB_OUTPUT"
@@ -131,8 +133,42 @@ jobs:
           KEEP_VMS: ${{ inputs.keep_vms && '1' || '' }}
           # the nightly run tests the golden images themselves
           E2E_BASE: ${{ github.event_name == 'schedule' && '0' || '1' }}
+          E2E_POOL: ${{ github.event_name == 'schedule' && '0' || '1' }}
           E2E_SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}
+          E2E_DIAG: ${{ runner.temp }}/e2e-diag
+          MIKROTIK_API_URL: ${{ secrets.MIKROTIK_API_URL }}
+          MIKROTIK_API_USER: ${{ secrets.MIKROTIK_API_USER }}
+          MIKROTIK_API_PASSWORD: ${{ secrets.MIKROTIK_API_PASSWORD }}
+          MIKROTIK_API_INSECURE: ${{ secrets.MIKROTIK_API_INSECURE }}
         run: e2e/run.sh
+
+      # the pool is refilled for the next run (pool VMs come from the e2e base
+      # templates, which the nightly run does not use)
+      - name: Refill the pool
+        if: always() && github.event_name != 'schedule'
+        continue-on-error: true
+        env:
+          TF_VAR_vsphere_server: ${{ secrets.VSPHERE_SERVER }}
+          TF_VAR_vsphere_user: ${{ secrets.VSPHERE_USER }}
+          TF_VAR_vsphere_password: ${{ secrets.VSPHERE_PASSWORD }}
+          TF_VAR_datacenter: ${{ secrets.E2E_DATACENTER }}
+          TF_VAR_cluster: ${{ secrets.E2E_CLUSTER }}
+          TF_VAR_host: ${{ secrets.E2E_HOST }}
+          TF_VAR_datastore: ${{ secrets.E2E_DATASTORE }}
+          TF_VAR_network: ${{ secrets.E2E_NETWORK }}
+          TF_VAR_folder: ${{ secrets.E2E_FOLDER }}
+          TF_VAR_library: ${{ secrets.E2E_LIBRARY }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: e2e/pool.sh fill
+
+      - name: Upload diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-diag-${{ matrix.shard }}
+          path: ${{ runner.temp }}/e2e-diag
+          if-no-files-found: ignore
+          retention-days: 7
 
   janitor:
     if: github.event_name == 'workflow_dispatch' || github.event.schedule == '30 * * * *'
@@ -142,6 +178,10 @@ jobs:
       GOVC_VERSION: v0.56.0
     steps:
       - uses: actions/checkout@v7
+
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_wrapper: false
 
       - name: Install govc
         run: |
@@ -160,6 +200,30 @@ jobs:
           GOVC_INSECURE: '1'
           E2E_DATACENTER: ${{ secrets.E2E_DATACENTER }}
           E2E_FOLDER: ${{ secrets.E2E_FOLDER }}
+          E2E_CLUSTER: ${{ secrets.E2E_CLUSTER }}
           TTL_HOURS: ${{ inputs.purge_vms && '0' || '3' }}
+          MIKROTIK_API_URL: ${{ secrets.MIKROTIK_API_URL }}
+          MIKROTIK_API_USER: ${{ secrets.MIKROTIK_API_USER }}
+          MIKROTIK_API_PASSWORD: ${{ secrets.MIKROTIK_API_PASSWORD }}
+          MIKROTIK_API_INSECURE: ${{ secrets.MIKROTIK_API_INSECURE }}
           GH_TOKEN: ${{ github.token }}
         run: e2e/janitor.sh
+
+      - name: Pool of pre-warmed VMs
+        continue-on-error: true
+        env:
+          TF_VAR_vsphere_server: ${{ secrets.VSPHERE_SERVER }}
+          TF_VAR_vsphere_user: ${{ secrets.VSPHERE_USER }}
+          TF_VAR_vsphere_password: ${{ secrets.VSPHERE_PASSWORD }}
+          TF_VAR_datacenter: ${{ secrets.E2E_DATACENTER }}
+          TF_VAR_cluster: ${{ secrets.E2E_CLUSTER }}
+          TF_VAR_host: ${{ secrets.E2E_HOST }}
+          TF_VAR_datastore: ${{ secrets.E2E_DATASTORE }}
+          TF_VAR_network: ${{ secrets.E2E_NETWORK }}
+          TF_VAR_folder: ${{ secrets.E2E_FOLDER }}
+          TF_VAR_library: ${{ secrets.E2E_LIBRARY }}
+          MIKROTIK_API_URL: ${{ secrets.MIKROTIK_API_URL }}
+          MIKROTIK_API_USER: ${{ secrets.MIKROTIK_API_USER }}
+          MIKROTIK_API_PASSWORD: ${{ secrets.MIKROTIK_API_PASSWORD }}
+          MIKROTIK_API_INSECURE: ${{ secrets.MIKROTIK_API_INSECURE }}
+        run: e2e/pool.sh purge && e2e/pool.sh fill

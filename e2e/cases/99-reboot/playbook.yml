@@ -6,3 +6,4 @@ plays:
       - name: Reboot and wait for the host
         reboot:
           msg: onigirazu e2e reboot
+          test_command: uptime

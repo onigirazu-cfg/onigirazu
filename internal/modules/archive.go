@@ -3,6 +3,7 @@ package modules
 import (
 	"context"
 	"fmt"
+	"path"
 	"regexp"
 	"strings"
 	"time"
@@ -66,23 +67,33 @@ func (m *ArchiveModule) Execute(ctx context.Context, host types.Host, args map[s
 		return result, fmt.Errorf("%s", result.Error)
 	}
 
-	// tar/zip run on the target host; paths are stored relative to /
+	// tar/zip run on the target host; as in Ansible, the entries are
+	// relative to the common parent of the paths: /opt/x/conf is stored
+	// as conf/...
+	root := archiveRoot(paths)
 	var srcs, rels, excludes []string
 	for _, p := range paths {
 		srcs = append(srcs, shellPathOrGlob(p))
-		rels = append(rels, shellPathOrGlob(strings.TrimPrefix(p, "/")))
+		rels = append(rels, shellPathOrGlob(strings.TrimPrefix(p, root)))
 	}
 	var create string
 	if format == "zip" {
 		for _, e := range excludePaths {
-			excludes = append(excludes, "-x "+shellQuote(strings.TrimPrefix(e, "/")))
+			excludes = append(excludes, "-x "+shellQuote(strings.TrimPrefix(e, root)))
 		}
-		create = fmt.Sprintf(`cd / && zip -qr "$dest" %s %s`, strings.Join(rels, " "), strings.Join(excludes, " "))
+		create = fmt.Sprintf(`cd %s && zip -qr "$dest" %s %s`, shellQuote(root), strings.Join(rels, " "), strings.Join(excludes, " "))
 	} else {
 		for _, e := range excludePaths {
-			excludes = append(excludes, "--exclude="+shellQuote(strings.TrimPrefix(e, "/")))
+			excludes = append(excludes, "--exclude="+shellQuote(strings.TrimPrefix(e, root)))
 		}
-		create = fmt.Sprintf(`tar -c%sf "$dest" %s -C / %s`, flag, strings.Join(excludes, " "), strings.Join(rels, " "))
+		create = fmt.Sprintf(`tar -c%sf "$dest" %s -C %s %s`, flag, strings.Join(excludes, " "), shellQuote(root), strings.Join(rels, " "))
+	}
+	// one file (no glob) with a compression format: Ansible compresses the
+	// file itself, it makes no tarball
+	if compressor, ok := map[string]string{"gz": "gzip", "bz2": "bzip2", "xz": "xz"}[format]; ok &&
+		len(paths) == 1 && !strings.ContainsAny(paths[0], "*?[") {
+		create = fmt.Sprintf(`if [ -f %s ] && [ ! -L %s ]; then %s -c < %s > "$dest"; else %s; fi`,
+			srcs[0], srcs[0], compressor, srcs[0], create)
 	}
 	remove := ""
 	if removeSources {
@@ -114,6 +125,28 @@ echo changed`, shellQuote(dest), strings.Join(srcs, " "), create, remove)
 	result.Output["format"] = format
 	result.Success = true
 	return result, nil
+}
+
+// archiveRoot is what Ansible's archive stores the paths relative to: the
+// common prefix of their parent directories, cut back to a directory, with
+// a trailing slash ("/" for paths in different trees)
+func archiveRoot(paths []string) string {
+	if len(paths) == 0 {
+		return "/"
+	}
+	parents := make([]string, len(paths))
+	for i, p := range paths {
+		parents[i] = strings.TrimSuffix(path.Dir(path.Clean(p)), "/") + "/"
+	}
+	prefix := parents[0]
+	for _, p := range parents[1:] {
+		for !strings.HasPrefix(p, prefix) {
+			prefix = prefix[:len(prefix)-1]
+		}
+	}
+	// a common prefix may end inside a name (/opt/ab, /opt/ac): back to the
+	// last slash
+	return prefix[:strings.LastIndex(prefix, "/")+1]
 }
 
 // shellPathOrGlob quotes a path, but leaves simple glob patterns unquoted so

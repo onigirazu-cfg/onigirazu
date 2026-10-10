@@ -28,7 +28,7 @@ on:
         type: boolean
         default: false
   schedule:
-    - cron: '0 6 * * *'   # after the 01:00 image rebuild (Windows takes hours)
+    - cron: '0 6 * * *'   # after the 03:30 image rebuild (Windows takes hours)
 
 permissions:
   contents: read

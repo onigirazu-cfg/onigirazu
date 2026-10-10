@@ -379,6 +379,14 @@ loop: "{{ packages | select('match', '^python3-') | list }}"
 | `subelements` | `[element, subitem]` for a list of dicts and a key (`{skip_missing: true}` as third term) |
 | `indexed_items` | `[index, item]` |
 | `random_choice` | One of the terms |
+| `bitwarden` (`community.general.bitwarden`) | A field of a Bitwarden item (`field=`) |
+| `hashi_vault` (`community.hashi_vault.hashi_vault`) | A Vault KV v2 field: `secret=mount/data/path:field` |
+| `vault_kv2_get` (`community.hashi_vault.vault_kv2_get`) | A Vault KV v2 secret as a dict |
+| `sops` (`community.sops.sops`) | The plain text of a SOPS-encrypted file (`rstrip=`) |
+
+Collection prefixes `ansible.builtin.`, `community.general.`, `community.sops.` and
+`community.hashi_vault.` are accepted on the plugin name. Secrets lookups:
+[docs/BITWARDEN_INTEGRATION.md](BITWARDEN_INTEGRATION.md).
 
 `lookup(..., wantlist=True)` returns a list, as `query` does; `errors='ignore'` (or `'warn'`) makes a failing lookup return nothing instead of failing the task.
 

@@ -43,6 +43,10 @@ func captureBefore(ctx context.Context, host types.Host, module string, args map
 	if path == "" {
 		return nil
 	}
+	// taken for the whole loop already
+	if out, ok := loopProbe(ctx, path); ok {
+		return parseProbe(path, out, args)
+	}
 	// one round trip: kind, mode, owner, group, size and, for a file up to
 	// maxCaptureSize, its content (the sha256 is taken here), else its sha256
 	out, served, err := probeOnHost(ctx, host, args, path, maxCaptureSize)
@@ -57,16 +61,21 @@ func captureBefore(ctx context.Context, host types.Host, module string, args map
 
 // shellProbe prints what the server's probe prints, with shell tools
 func shellProbe(ctx context.Context, host types.Host, args map[string]interface{}, path string) (string, error) {
-	q := shellQuote(path)
-	return runShellOnHost(ctx, host, args, fmt.Sprintf(
-		`p=%s; if [ -L "$p" ]; then k=link; elif [ -d "$p" ]; then k=directory; elif [ -f "$p" ]; then k=file; elif [ -e "$p" ]; then k=other; else echo absent; exit 0; fi
+	return runShellOnHost(ctx, host, args, shellProbeFunc+"probe "+shellQuote(path))
+}
+
+// shellProbeFunc defines probe PATH: what the server's probe prints, with
+// shell tools
+var shellProbeFunc = fmt.Sprintf(`probe() {
+p=$1; if [ -L "$p" ]; then k=link; elif [ -d "$p" ]; then k=directory; elif [ -f "$p" ]; then k=file; elif [ -e "$p" ]; then k=other; else echo absent; return 0; fi
 s=$(stat -c '%%a %%U %%G %%s' "$p" 2>/dev/null || stat -f '%%Lp %%Su %%Sg %%z' "$p")
 if [ "$k" = file ]; then
   set -- $s
   if [ "$4" -le %d ]; then echo "$k $s +"; printf 'C:'; base64 < "$p"; else
   h=$( (sha256sum "$p" 2>/dev/null || shasum -a 256 "$p") | cut -d' ' -f1); echo "$k $s $h"; fi
-else echo "$k $s -"; fi`, q, maxCaptureSize))
+else echo "$k $s -"; fi
 }
+`, maxCaptureSize)
 
 // parseProbe reads the probe's answer: "absent", or "kind mode owner group
 // size sha256|+|-" and for "+" a "C:" line with the content in base64
@@ -125,6 +134,9 @@ func captureNative(ctx context.Context, host types.Host, module string, args map
 	if path == "" {
 		return nil
 	}
+	if out, ok := loopProbe(ctx, path); ok {
+		return parseProbe(path, out, args)
+	}
 	out, served, err := probeOnHost(ctx, host, args, path, maxCaptureSize)
 	if !served || err != nil {
 		return nil
@@ -167,20 +179,9 @@ func capturePackages(ctx context.Context, host types.Host, args map[string]inter
 	if len(names) == 0 {
 		return nil
 	}
-	// one round trip for all of them: the installed ones, one per line
-	quoted := make([]string, len(names))
-	for i, n := range names {
-		quoted[i] = shellQuote(n)
-	}
-	out, err := runShellOnHost(ctx, host, args, fmt.Sprintf(
-		`for n in %s; do (dpkg-query -W -f='${Status}' "$n" 2>/dev/null | grep -q 'install ok installed' || rpm -q "$n" >/dev/null 2>&1) && echo "$n"; done; true`,
-		strings.Join(quoted, " ")))
+	present, err := queryInstalled(ctx, host, args, names)
 	if err != nil {
 		return map[string]interface{}{"error": err.Error()}
-	}
-	present := map[string]bool{}
-	for _, line := range strings.Split(out, "\n") {
-		present[strings.TrimSpace(line)] = true
 	}
 	var installed []interface{}
 	for _, n := range names {
@@ -195,6 +196,59 @@ func capturePackages(ctx context.Context, host types.Host, args map[string]inter
 	return withBecome(map[string]interface{}{
 		"kind": "packages", "names": all, "installed": installed, "state": getStringArg(args, "state", "present"),
 	}, args)
+}
+
+// queryInstalled asks the host in one round trip which of the packages are
+// installed (dpkg, rpm or pacman)
+func queryInstalled(ctx context.Context, host types.Host, args map[string]interface{}, names []string) (map[string]bool, error) {
+	quoted := make([]string, len(names))
+	for i, n := range names {
+		quoted[i] = shellQuote(n)
+	}
+	out, err := runShellOnHost(ctx, host, args, fmt.Sprintf(
+		// names are single words (shellQuote); set -f keeps them from globbing
+		`set -f; if command -v dpkg-query >/dev/null 2>&1; then q() { dpkg-query -W -f='${Status}' $1 2>/dev/null | grep -q 'install ok installed'; }; `+
+			`elif command -v rpm >/dev/null 2>&1; then q() { rpm -q $1 >/dev/null 2>&1; }; `+
+			`elif command -v pacman >/dev/null 2>&1; then q() { pacman -Q $1 >/dev/null 2>&1; }; `+
+			`else q() { false; }; fi; for n in %s; do q $n && echo $n; done; true`,
+		strings.Join(quoted, " ")))
+	if err != nil {
+		return nil, err
+	}
+	present := map[string]bool{}
+	for _, line := range strings.Split(out, "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			present[line] = true
+		}
+	}
+	return present, nil
+}
+
+// installedPackages reports which of the packages are installed: from the
+// capture taken before the task when it covers them all, else in one query
+func installedPackages(ctx context.Context, host types.Host, args map[string]interface{}, names []string) (map[string]bool, error) {
+	if before, ok := args["_before"].(map[string]interface{}); ok && before["kind"] == "packages" {
+		captured := map[string]bool{}
+		if list, ok := before["names"].([]interface{}); ok {
+			for _, n := range list {
+				captured[fmt.Sprint(n)] = true
+			}
+		}
+		all := true
+		for _, n := range names {
+			all = all && captured[n]
+		}
+		if all {
+			present := map[string]bool{}
+			if list, ok := before["installed"].([]interface{}); ok {
+				for _, n := range list {
+					present[fmt.Sprint(n)] = true
+				}
+			}
+			return present, nil
+		}
+	}
+	return queryInstalled(ctx, host, args, names)
 }
 
 // captureService records whether a service was running and enabled
@@ -237,4 +291,15 @@ func captureAccount(ctx context.Context, host types.Host, module string, args ma
 	}
 	_, err := runOnHost(ctx, host, args, "getent", db, name)
 	return withBecome(map[string]interface{}{"kind": module, "name": name, "exists": err == nil}, args)
+}
+
+// capturedAccountExists is whether the account (user or group) existed when the
+// capture before the task looked; known is false without that capture
+func capturedAccountExists(args map[string]interface{}, kind, name string) (exists, known bool) {
+	before, ok := args["_before"].(map[string]interface{})
+	if !ok || before["kind"] != kind || before["name"] != name || before["error"] != nil {
+		return false, false
+	}
+	exists, known = before["exists"].(bool)
+	return exists, known
 }

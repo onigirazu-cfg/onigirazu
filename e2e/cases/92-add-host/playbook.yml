@@ -1,0 +1,35 @@
+plays:
+  - name: add hosts and groups during the run
+    hosts: all
+    gather_facts: false
+    tasks:
+      - name: An alias of every host, in a new group
+        add_host:
+          name: "{{ item }}-alias"
+          groups: added
+          onigirazu_host: "{{ hostvars[item].onigirazu_host }}"
+          onigirazu_user: e2e
+          onigirazu_ssh_private_key_file: "{{ hostvars[item].onigirazu_ssh_private_key_file }}"
+          alias_of: "{{ item }}"
+        loop: "{{ ansible_play_hosts }}"
+        changed_when: false
+      - name: Every host in a group of its own, under grouped
+        group_by:
+          key: "by_{{ inventory_hostname }}"
+          parents: grouped
+  - name: the added hosts
+    hosts: added
+    gather_facts: false
+    become: true
+    tasks:
+      - copy:
+          content: "{{ inventory_hostname }} {{ alias_of }} {{ groups['added'] | length }}\n"
+          dest: /root/onigirazu-e2e-added
+  - name: the grouped hosts
+    hosts: grouped
+    gather_facts: false
+    become: true
+    tasks:
+      - copy:
+          content: "{{ group_names | join(',') }}\n"
+          dest: /root/onigirazu-e2e-grouped

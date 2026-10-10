@@ -24,7 +24,7 @@ func NewPostgreSQLUserModule() *PostgreSQLUserModule {
 func (m *PostgreSQLUserModule) Execute(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
 	startTime := time.Now()
 	result := types.TaskResult{
-		TaskName: "postgresql_user", Host: host.Name, Module: m.GetName(),
+		TaskName: taskName(args), Host: host.Name, Module: m.GetName(),
 		Success: true, Output: make(map[string]interface{}), Timestamp: startTime,
 	}
 	fail := func(err error) (types.TaskResult, error) {
