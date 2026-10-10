@@ -98,7 +98,14 @@ type recordMeta struct {
 
 // LoadRecord loads an execution record from disk
 func (s *Storage) LoadRecord(recordID string) (*ExecutionRecord, error) {
-	recordPath := filepath.Join(s.path, recordID, "record.json")
+	// an id is one directory name under the store, never a path
+	if recordID == "" || recordID != filepath.Base(recordID) || strings.HasPrefix(recordID, ".") {
+		return nil, fmt.Errorf("invalid record id %q", recordID)
+	}
+	recordPath := filepath.Join(s.path, filepath.Base(recordID), "record.json")
+	if !strings.HasPrefix(recordPath, filepath.Clean(s.path)+string(filepath.Separator)) {
+		return nil, fmt.Errorf("invalid record id %q", recordID)
+	}
 
 	data, err := os.ReadFile(recordPath)
 	if err != nil {

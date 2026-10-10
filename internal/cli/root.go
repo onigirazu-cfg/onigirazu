@@ -92,6 +92,7 @@ across your infrastructure with a focus on simplicity and reliability.`,
 	rootCmd.AddCommand(newDriftCmd())
 	rootCmd.AddCommand(newPullCmd())
 	rootCmd.AddCommand(newListenCmd())
+	rootCmd.AddCommand(newServeCmd())
 	rootCmd.AddCommand(newVerifyCmd())
 	rootCmd.AddCommand(newComplyCmd())
 	rootCmd.AddCommand(inventoryCmd)

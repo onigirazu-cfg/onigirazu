@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{title}} — onigirazu</title>
+<style>
+:root{--bg:#f6f7f9;--fg:#1e2430;--muted:#6b7280;--card:#fff;--line:#e5e7eb;--ok:#2a9d6f;--warn:#d98f1a;--bad:#d14343;--accent:#3b5bdb}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1218;--fg:#e6e8ee;--muted:#9aa3b2;--card:#171b24;--line:#2a3140}}
+*{box-sizing:border-box}body{margin:0;font:14px/1.45 system-ui,-apple-system,Segoe UI,sans-serif;background:var(--bg);color:var(--fg)}
+header{display:flex;align-items:center;gap:16px;padding:12px 24px;border-bottom:1px solid var(--line);background:var(--card)}
+header h1{font-size:16px;margin:0}header .who{margin-left:auto;color:var(--muted)}
+nav button{background:none;border:0;padding:8px 12px;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;font:inherit}
+nav button.on{color:var(--fg);border-color:var(--accent)}
+main{padding:16px 24px;max-width:1200px;margin:0 auto}
+table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--line);vertical-align:top}th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase}
+tr:last-child td{border-bottom:0}.b{display:inline-block;padding:1px 8px;border-radius:10px;font-size:12px;color:#fff;background:var(--muted)}
+.ok{background:var(--ok)}.drift,.changed{background:var(--warn)}.failed,.error,.unreachable{background:var(--bad)}.running{background:var(--accent)}
+button.run{border:1px solid var(--line);background:var(--card);color:var(--fg);padding:4px 10px;border-radius:6px;cursor:pointer}button.run:disabled{opacity:.5}
+.muted{color:var(--muted)}pre{background:var(--card);border:1px solid var(--line);padding:12px;border-radius:8px;overflow:auto;max-height:60vh}
+.empty{padding:24px;color:var(--muted);text-align:center}
+</style>
+</head>
+<body>
+<header><h1>{{title}}</h1><nav><button data-v="jobs" class="on">Jobs</button><button data-v="hosts">Hosts</button><button data-v="runs">Runs</button></nav><span class="who" id="who"></span></header>
+<main id="main"></main>
+<script>
+const $=s=>document.querySelector(s), main=$('#main');
+const api=async(p,o)=>{const r=await fetch(p,o);if(!r.ok)throw new Error(r.status+' '+(await r.text()));return r.json()};
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const span=d=>d<90?Math.round(d)+'s':d<5400?Math.round(d/60)+'m':d<172800?Math.round(d/3600)+'h':Math.round(d/86400)+'d';
+const ago=t=>{if(!t)return'';const d=(Date.now()-new Date(t))/1000;return d<0?'in '+span(-d):span(d)+' ago'};
+const badge=s=>{s=s==='failure'?'failed':s==='success'?'ok':s;return `<span class="b ${esc(s)}">${esc(s)}</span>`};
+let me={operator:false}, view='jobs', timer;
+async function jobs(){
+  const list=await api('/api/jobs');
+  if(!list.length){main.innerHTML='<div class="empty">No jobs in serve.yml</div>';return}
+  main.innerHTML=`<table><tr><th>Job</th><th>Kind</th><th>Target</th><th>Schedule</th><th>Last run</th><th>Result</th><th></th></tr>${list.map(j=>`<tr>
+    <td><a href="#" data-job="${esc(j.name)}">${esc(j.name)}</a></td><td>${esc(j.kind)}</td><td class="muted">${esc(j.target)}</td>
+    <td>${j.every?esc(j.every)+(j.next?'<br><span class="muted">next '+ago(j.next)+'</span>':''):'<span class="muted">on demand</span>'}</td>
+    <td>${j.last?esc(ago(j.last.started))+'<br><span class="muted">'+esc(j.last.trigger)+'</span>':'<span class="muted">never</span>'}</td>
+    <td>${j.running?badge('running'):j.last?badge(j.last.status)+' <span class="muted">'+esc(j.last.summary)+'</span>':''}</td>
+    <td>${me.operator?`<button class="run" data-run="${esc(j.name)}" ${j.running?'disabled':''}>Run</button>`:''}</td></tr>`).join('')}</table>`;
+  main.querySelectorAll('[data-run]').forEach(b=>b.onclick=async()=>{b.disabled=true;try{await api('/api/jobs/'+encodeURIComponent(b.dataset.run)+'/run',{method:'POST'})}catch(e){alert(e.message)}setTimeout(jobs,500)});
+  main.querySelectorAll('[data-job]').forEach(a=>a.onclick=e=>{e.preventDefault();results(a.dataset.job)});
+}
+async function results(name){
+  const list=await api('/api/jobs/'+encodeURIComponent(name)+'/results');
+  main.innerHTML=`<p><a href="#" id="back">← jobs</a> &nbsp; <b>${esc(name)}</b></p>`+(list.length?`<table><tr><th>Started</th><th>Trigger</th><th>Status</th><th>Summary</th><th>Hosts</th><th>Duration</th></tr>${list.map(r=>`<tr>
+    <td><a href="#" data-res="${esc(r.id)}">${esc(new Date(r.started).toLocaleString())}</a></td><td class="muted">${esc(r.trigger)}</td><td>${badge(r.status)}</td><td>${esc(r.summary)}</td>
+    <td>${Object.entries(r.hosts||{}).map(([h,s])=>`${esc(h)} ${badge(s)}`).join('<br>')}</td><td>${(r.duration_seconds||0).toFixed(1)}s</td></tr>`).join('')}</table>`:'<div class="empty">No runs yet</div>');
+  $('#back').onclick=e=>{e.preventDefault();jobs()};
+  main.querySelectorAll('[data-res]').forEach(a=>a.onclick=async e=>{e.preventDefault();const r=await api('/api/jobs/'+encodeURIComponent(name)+'/results/'+encodeURIComponent(a.dataset.res));
+    main.innerHTML=`<p><a href="#" id="back">← ${esc(name)}</a></p><pre>${esc(JSON.stringify(r.report||r,null,2))}</pre>`;$('#back').onclick=e=>{e.preventDefault();results(name)}});
+}
+async function hosts(){
+  const list=await api('/api/hosts');
+  if(!list.length){main.innerHTML='<div class="empty">No host results yet — run a job</div>';return}
+  main.innerHTML=`<table><tr><th>Host</th><th>Status</th><th>Jobs</th><th>Seen</th></tr>${list.map(h=>`<tr><td><a href="#" data-host="${esc(h.host)}">${esc(h.host)}</a></td><td>${badge(h.status)}</td>
+    <td>${Object.entries(h.jobs).map(([j,s])=>`${esc(j)} ${badge(s)}`).join(' &nbsp; ')}</td><td class="muted">${esc(ago(h.seen))}</td></tr>`).join('')}</table>`;
+  main.querySelectorAll('[data-host]').forEach(a=>a.onclick=e=>{e.preventDefault();runs(a.dataset.host)});
+}
+async function runs(host){
+  const list=await api('/api/runs'+(host?'?host='+encodeURIComponent(host):''));
+  main.innerHTML=(host?`<p><a href="#" id="back">← hosts</a> &nbsp; runs touching <b>${esc(host)}</b></p>`:'')+(list.length?`<table><tr><th>Started</th><th>Playbook</th><th>User</th><th>Status</th><th>Hosts</th><th>Tasks</th><th>Failed</th><th>Duration</th></tr>${list.map(r=>`<tr>
+    <td><a href="#" data-run="${esc(r.id)}">${esc(new Date(r.start).toLocaleString())}</a></td><td class="muted">${esc(r.playbook)}</td><td>${esc(r.user)}</td><td>${badge(r.status)}</td><td>${r.hosts}</td><td>${r.tasks}</td><td>${r.failed}</td><td>${(r.duration||0).toFixed(1)}s</td></tr>`).join('')}</table>`:'<div class="empty">No runs in the audit store</div>');
+  if(host)$('#back').onclick=e=>{e.preventDefault();hosts()};
+  main.querySelectorAll('[data-run]').forEach(a=>a.onclick=async e=>{e.preventDefault();const r=await api('/api/runs/'+encodeURIComponent(a.dataset.run));main.innerHTML=`<p><a href="#" id="back">← runs</a></p><pre>${esc(JSON.stringify(r,null,2))}</pre>`;$('#back').onclick=e=>{e.preventDefault();runs(host)}});
+}
+const views={jobs,hosts,runs:()=>runs()};
+function show(v){view=v;document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));views[v]().catch(e=>main.innerHTML=`<div class="empty">${esc(e.message)}</div>`)}
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>show(b.dataset.v));
+api('/api/me').then(m=>{me=m;$('#who').textContent=m.user+(m.operator?' · operator':' · viewer');show('jobs')}).catch(e=>{main.innerHTML=`<div class="empty">${esc(e.message)}</div>`});
+timer=setInterval(()=>{if(view==='jobs'&&!main.querySelector('pre')&&!main.querySelector('#back'))jobs().catch(()=>{})},10000);
+</script>
+</body>
+</html>
