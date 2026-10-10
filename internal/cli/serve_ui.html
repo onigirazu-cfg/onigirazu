@@ -29,15 +29,16 @@ button.run{border:1px solid var(--line);background:var(--card);color:var(--fg);p
 const $=s=>document.querySelector(s), main=$('#main');
 const api=async(p,o)=>{const r=await fetch(p,o);if(!r.ok)throw new Error(r.status+' '+(await r.text()));return r.json()};
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const ago=t=>{if(!t)return'';const d=(Date.now()-new Date(t))/1000;return d<90?Math.round(d)+'s ago':d<5400?Math.round(d/60)+'m ago':d<172800?Math.round(d/3600)+'h ago':Math.round(d/86400)+'d ago'};
-const badge=s=>`<span class="b ${esc(s)}">${esc(s)}</span>`;
+const span=d=>d<90?Math.round(d)+'s':d<5400?Math.round(d/60)+'m':d<172800?Math.round(d/3600)+'h':Math.round(d/86400)+'d';
+const ago=t=>{if(!t)return'';const d=(Date.now()-new Date(t))/1000;return d<0?'in '+span(-d):span(d)+' ago'};
+const badge=s=>{s=s==='failure'?'failed':s==='success'?'ok':s;return `<span class="b ${esc(s)}">${esc(s)}</span>`};
 let me={operator:false}, view='jobs', timer;
 async function jobs(){
   const list=await api('/api/jobs');
   if(!list.length){main.innerHTML='<div class="empty">No jobs in serve.yml</div>';return}
   main.innerHTML=`<table><tr><th>Job</th><th>Kind</th><th>Target</th><th>Schedule</th><th>Last run</th><th>Result</th><th></th></tr>${list.map(j=>`<tr>
     <td><a href="#" data-job="${esc(j.name)}">${esc(j.name)}</a></td><td>${esc(j.kind)}</td><td class="muted">${esc(j.target)}</td>
-    <td>${j.every?esc(j.every)+(j.next?'<br><span class="muted">next '+ago(j.next).replace(' ago','')+'</span>':''):'<span class="muted">on demand</span>'}</td>
+    <td>${j.every?esc(j.every)+(j.next?'<br><span class="muted">next '+ago(j.next)+'</span>':''):'<span class="muted">on demand</span>'}</td>
     <td>${j.last?esc(ago(j.last.started))+'<br><span class="muted">'+esc(j.last.trigger)+'</span>':'<span class="muted">never</span>'}</td>
     <td>${j.running?badge('running'):j.last?badge(j.last.status)+' <span class="muted">'+esc(j.last.summary)+'</span>':''}</td>
     <td>${me.operator?`<button class="run" data-run="${esc(j.name)}" ${j.running?'disabled':''}>Run</button>`:''}</td></tr>`).join('')}</table>`;
@@ -63,7 +64,7 @@ async function hosts(){
 async function runs(host){
   const list=await api('/api/runs'+(host?'?host='+encodeURIComponent(host):''));
   main.innerHTML=(host?`<p><a href="#" id="back">← hosts</a> &nbsp; runs touching <b>${esc(host)}</b></p>`:'')+(list.length?`<table><tr><th>Started</th><th>Playbook</th><th>User</th><th>Status</th><th>Hosts</th><th>Tasks</th><th>Failed</th><th>Duration</th></tr>${list.map(r=>`<tr>
-    <td><a href="#" data-run="${esc(r.id)}">${esc(new Date(r.start).toLocaleString())}</a></td><td class="muted">${esc(r.playbook)}</td><td>${esc(r.user)}</td><td>${badge(r.status==='success'?'ok':r.status)}</td><td>${r.hosts}</td><td>${r.tasks}</td><td>${r.failed}</td><td>${(r.duration||0).toFixed(1)}s</td></tr>`).join('')}</table>`:'<div class="empty">No runs in the audit store</div>');
+    <td><a href="#" data-run="${esc(r.id)}">${esc(new Date(r.start).toLocaleString())}</a></td><td class="muted">${esc(r.playbook)}</td><td>${esc(r.user)}</td><td>${badge(r.status)}</td><td>${r.hosts}</td><td>${r.tasks}</td><td>${r.failed}</td><td>${(r.duration||0).toFixed(1)}s</td></tr>`).join('')}</table>`:'<div class="empty">No runs in the audit store</div>');
   if(host)$('#back').onclick=e=>{e.preventDefault();hosts()};
   main.querySelectorAll('[data-run]').forEach(a=>a.onclick=async e=>{e.preventDefault();const r=await api('/api/runs/'+encodeURIComponent(a.dataset.run));main.innerHTML=`<p><a href="#" id="back">← runs</a></p><pre>${esc(JSON.stringify(r,null,2))}</pre>`;$('#back').onclick=e=>{e.preventDefault();runs(host)}});
 }
