@@ -91,6 +91,7 @@ across your infrastructure with a focus on simplicity and reliability.`,
 	rootCmd.AddCommand(rollbackCmd)
 	rootCmd.AddCommand(newDriftCmd())
 	rootCmd.AddCommand(newPullCmd())
+	rootCmd.AddCommand(newListenCmd())
 	rootCmd.AddCommand(newVerifyCmd())
 	rootCmd.AddCommand(inventoryCmd)
 	rootCmd.AddCommand(healthcheckCmd)

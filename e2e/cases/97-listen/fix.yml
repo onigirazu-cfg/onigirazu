@@ -1,0 +1,6 @@
+plays:
+  - name: remediation run by the listener
+    hosts: all
+    become: true
+    tasks:
+      - copy: {dest: /etc/onigirazu-e2e-listen, content: "{{ alertname }} {{ severity }}\n"}

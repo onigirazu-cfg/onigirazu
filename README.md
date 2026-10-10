@@ -433,6 +433,7 @@ return values and examples: [docs/modules/README.md](docs/modules/README.md). Ne
 | `drift PLAYBOOK` | Check that hosts still match a playbook; `--fix` applies |
 | `verify PLAYBOOK` | Run the plays' `verify:` checks (files, packages, services, ports, http, ...) and report them ([docs/VERIFY.md](docs/VERIFY.md)) |
 | `pull --repo URL` | This host converges itself from a git repository: once, every `--interval`, or `pull install` (systemd timer); `--drift-only`, `--only-on-change`, `--notify`, `--metrics-*` ([pull mode](docs/PULL.md)) |
+| `listen -f listen.yml` | Run playbooks on events: Alertmanager/vmalert alerts, GitHub webhooks, Mattermost commands, any JSON POST; `listen test`, `listen install` ([docs/LISTEN.md](docs/LISTEN.md)) |
 | `plugin list` | Command plugins found (`onigirazu-NAME` executables) |
 | `diff PLAYBOOK` | Compare a playbook with the last recorded run |
 | `rollback` | List, inspect and restore snapshots of runs |
@@ -506,6 +507,8 @@ Without a terminal the normal output is used. See [docs/INTERACTIVE_MODE.md](doc
   webhooks and `--metrics-*` exports Prometheus metrics.
 - `pull` runs a playbook from git on the host itself, once or on a systemd timer, with the same
   notifications and metrics ([docs/PULL.md](docs/PULL.md)).
+- `listen` runs playbooks on events — an alert, a push, a chat command — with per-rule throttling
+  ([docs/LISTEN.md](docs/LISTEN.md)).
 - `verify` runs the plays' `verify:` checks and reports them, also as JSON ([docs/VERIFY.md](docs/VERIFY.md)).
 - `apply --background` returns at once; `show-execution` reads the result later.
 - `audit` keeps the history of runs with per-host statistics.

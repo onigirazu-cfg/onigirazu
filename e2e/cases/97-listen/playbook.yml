@@ -1,0 +1,8 @@
+# the case itself is in verify-local.sh: a listener on the runner runs the
+# remediation playbook on this host when an alert for it arrives
+plays:
+  - name: listen e2e prepares nothing
+    hosts: all
+    gather_facts: false
+    tasks:
+      - debug: {msg: "listener test"}
