@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `onigirazu serve`: a fleet server — jobs (drift, apply, verify, comply) on a schedule or on demand, results kept per job and host, the audit store's run history, a web page and a REST API; bearer token or reverse-proxy identity headers with viewer/operator roles; `/metrics`; `serve install` (docs/SERVE.md)
 - `onigirazu listen`: an HTTP listener that runs playbooks on events — Alertmanager/vmalert alerts, GitHub webhooks (signature checked), Mattermost outgoing webhooks and slash commands, any JSON POST; rules are Jinja expressions over the event, runs are serial and throttled per rule and host; `listen test`, `listen install` (systemd), `/metrics` (docs/LISTEN.md)
 - Inventory plugin `terraform`: the machines of a Terraform/OpenTofu state (a project directory via `terraform show -json`, or a state file) become hosts — 16 machine resource types known, custom `hosts` mappings, `ansible_host`/`ansible_group` resources of the ansible provider; `lookup('cloud.terraform.tf_output', ...)` reads outputs
 - `onigirazu comply`: compliance profiles — controls built on verify checks with severity, tags and a remediation hint — scored per host; bundled `linux-baseline` (23 controls) and `ssh` (12); text/JSON/Markdown/HTML reports, `--fail-on` severity, Prometheus metrics (docs/COMPLY.md)
