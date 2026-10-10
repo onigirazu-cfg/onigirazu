@@ -5,8 +5,9 @@
 set -euo pipefail
 exec 2>&1; set -x
 work=$(mktemp -d); trap 'rm -rf "$work"' EXIT
-"$BIN" comply list | grep -q '^linux-baseline '
-"$BIN" comply show ssh | grep -q 'id: ssh-1'
+# (no pipes into grep -q: the writer would die of SIGPIPE under pipefail)
+"$BIN" comply list > "$work/list"; grep -q '^linux-baseline ' "$work/list"
+"$BIN" comply show ssh > "$work/show"; grep -q 'id: ssh-1' "$work/show"
 set +e
 "$BIN" comply --profile linux-baseline -i "$INVENTORY" --limit "$HOST" --format json --output "$work/r.json" >/dev/null 2>"$work/err"
 rc=$?
@@ -45,5 +46,6 @@ controls:
     check: {file: {path: /no/such/file}}
     remediation: none
 EOF
-"$BIN" comply --profile "$work/own.yml" -i "$INVENTORY" --limit "$HOST" --control-tags identity --format json | python3 -c "
-import json,sys; r=json.load(sys.stdin); c=r['hosts']['$HOST']['controls']; assert len(c)==1 and c[0]['ok'], c"
+"$BIN" comply --profile "$work/own.yml" -i "$INVENTORY" --limit "$HOST" --control-tags identity --format json > "$work/own.json"
+python3 -c "
+import json,sys; r=json.load(open('$work/own.json')); c=r['hosts']['$HOST']['controls']; assert len(c)==1 and c[0]['ok'], c"
