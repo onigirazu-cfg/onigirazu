@@ -1134,7 +1134,9 @@ Items of a MikroTik RouterOS menu path over the REST API (`community.routeros.ap
 
 RouterOS CLI commands over SSH (`community.routeros.command`): `ansible_host`, `ansible_port`,
 `ansible_user`, `ansible_password` of the device (the user logs in as `<user>+ct`, the
-console-less terminal). Returns `stdout` and `stdout_lines` per command; say `changed_when`.
+console-less terminal); the host key is checked against `known_hosts` like any SSH host's
+(`ansible_ssh_common_args: -o StrictHostKeyChecking=no` turns it off). Returns `stdout` and
+`stdout_lines` per command; say `changed_when`.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
