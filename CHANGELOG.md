@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- MikroTik RouterOS modules: `routeros_api` (items of a menu path over the REST API, found by `find`, set to `values`, `state: absent` removes; single-object paths set in place), `routeros_command` (CLI commands over SSH), `routeros_facts`; the device is an inventory host with `ansible_connection: local`, `routeros_api_url`/`routeros_api_insecure` (`community.routeros.*` names accepted)
 - `onigirazu listen`: an HTTP listener that runs playbooks on events — Alertmanager/vmalert alerts, GitHub webhooks (signature checked), Mattermost outgoing webhooks and slash commands, any JSON POST; rules are Jinja expressions over the event, runs are serial and throttled per rule and host; `listen test`, `listen install` (systemd), `/metrics` (docs/LISTEN.md)
 - Inventory plugin `terraform`: the machines of a Terraform/OpenTofu state (a project directory via `terraform show -json`, or a state file) become hosts — 16 machine resource types known, custom `hosts` mappings, `ansible_host`/`ansible_group` resources of the ansible provider; `lookup('cloud.terraform.tf_output', ...)` reads outputs
 - `verify:` section of a play and `onigirazu verify`: goss-style checks of the hosts' state (file, package, service, port, process, user, group, command, http, mount, kernel_param, dns), one round trip per host (docs/VERIFY.md)

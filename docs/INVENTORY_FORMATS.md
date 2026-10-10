@@ -276,6 +276,7 @@ plus the mapping's `vars`. `lookup('cloud.terraform.tf_output', 'name', project_
 |----------|---------|---------|
 | `onigirazu_host` / `ansible_host` (`address` in JSON/TOML) | address to connect to | host name |
 | `onigirazu_port` / `ansible_port` (`port`) | SSH port | 22 |
+| `routeros_api_url`, `routeros_api_insecure`, `routeros_api_timeout`, `routeros_api_user`/`routeros_api_password` | RouterOS REST API of a device (`ansible_connection: local`); default `https://<ansible_host>/rest` with `ansible_user`/`ansible_password` | — |
 | `onigirazu_user` / `ansible_user` (`user`) | SSH user | the local `$USER`, as in Ansible |
 | `onigirazu_ssh_private_key_file` / `ansible_ssh_private_key_file` (`key_file`) | private key | — |
 | `onigirazu_password` / `ansible_password` (`password`) | SSH password | — |

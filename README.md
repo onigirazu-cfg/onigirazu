@@ -165,7 +165,7 @@ YAML is read as Ansible reads it: unquoted `yes`/`no`/`on`/`off` values are bool
   `community.general.ufw`/`ini_file`/`timezone`/`archive`,
   `community.docker.docker_container`/`docker_image`/`docker_compose`/`docker_compose_v2`/`docker_host_info`,
   `community.mysql.mysql_db`/`mysql_user`, `community.postgresql.postgresql_db`/`postgresql_user`,
-  `community.sops.load_vars`, `ansible.windows.*`, `community.windows.*`,
+  `community.sops.load_vars`, `community.routeros.api`/`api_modify`/`command`/`facts`, `ansible.windows.*`, `community.windows.*`,
   `chocolatey.chocolatey.win_chocolatey`); `dnf`/`dnf5` run the `yum` module
 - **Roles and collections**: `roles/` next to the playbook, `roles_path` and `collections_path`
   from `ansible.cfg`, `ANSIBLE_ROLES_PATH`, `ANSIBLE_COLLECTIONS_PATH`,
@@ -410,6 +410,7 @@ to change. Secrets become variables with an example file. See [docs/IMPORT.md](d
 | Containers | `docker_container`, `docker_image`, `docker_compose` (v1 and v2), `docker_host_info`, `podman` |
 | Databases | `mysql_db`, `mysql_user`, `postgresql_db`, `postgresql_user`, `mongodb` |
 | Source control | `git` |
+| Network devices | `routeros_api` (REST, idempotent items of a menu path), `routeros_command` (CLI over SSH), `routeros_facts` — MikroTik RouterOS 7, from the control machine (`ansible_connection: local`) |
 | Windows (WinRM or SSH) | `win_ping`, `win_command`, `win_shell`, `win_powershell`, `win_regedit`, `win_file`, `win_copy`, `win_service`, `win_timezone`, `win_firewall_rule`, `win_firewall`, `win_group_membership`, `win_feature`, `win_reboot`, `win_scheduled_task`, `win_chocolatey`, `win_optional_feature`, `win_disk_facts`, `win_initialize_disk`, `win_partition`, `win_format`; facts (`ansible_os_family: Windows`, ...) |
 | Flow and data | `debug`, `assert`, `fail`, `set_fact`, `include_vars`, `add_host`, `group_by`, `setup`/`gather_facts`, `pause`, `ping`, `meta`, `async_status`, `include_role`/`import_role`, `verify` |
 
