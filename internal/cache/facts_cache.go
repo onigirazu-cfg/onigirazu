@@ -2,6 +2,7 @@ package cache
 
 import (
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -57,8 +58,9 @@ type FactsCache struct {
 	enabled bool
 
 	// Statistics
-	hits   uint64
-	misses uint64
+	// hits and misses change under the read lock: atomic
+	hits   atomic.Uint64
+	misses atomic.Uint64
 }
 
 // FactsCacheStats contains cache statistics
@@ -112,17 +114,17 @@ func (fc *FactsCache) Get(hostname string) (*SystemFacts, bool) {
 
 	entry, exists := fc.entries[hostname]
 	if !exists {
-		fc.misses++
+		fc.misses.Add(1)
 		return nil, false
 	}
 
 	// Check if expired
 	if time.Now().After(entry.ExpiresAt) {
-		fc.misses++
+		fc.misses.Add(1)
 		return nil, false
 	}
 
-	fc.hits++
+	fc.hits.Add(1)
 	return entry.Facts, true
 }
 
@@ -162,8 +164,8 @@ func (fc *FactsCache) Clear() {
 	defer fc.mu.Unlock()
 
 	fc.entries = make(map[string]*FactsCacheEntry)
-	fc.hits = 0
-	fc.misses = 0
+	fc.hits.Store(0)
+	fc.misses.Store(0)
 }
 
 // GetStats returns cache statistics
@@ -171,15 +173,16 @@ func (fc *FactsCache) GetStats() FactsCacheStats {
 	fc.mu.RLock()
 	defer fc.mu.RUnlock()
 
-	total := fc.hits + fc.misses
+	hits, misses := fc.hits.Load(), fc.misses.Load()
+	total := hits + misses
 	hitRate := 0.0
 	if total > 0 {
-		hitRate = float64(fc.hits) / float64(total) * 100.0
+		hitRate = float64(hits) / float64(total) * 100.0
 	}
 
 	return FactsCacheStats{
-		Hits:    fc.hits,
-		Misses:  fc.misses,
+		Hits:    hits,
+		Misses:  misses,
 		Entries: len(fc.entries),
 		HitRate: hitRate,
 		Enabled: fc.enabled,

@@ -9,6 +9,7 @@ plays:
       app_name: "myapp"
       app_version: "1.0.0"
       config_dir: "/tmp/onigirazu-demo"
+      environment: "development"
 
     tasks:
       # Create directory structure
@@ -39,10 +40,6 @@ plays:
         template:
           src: "config.j2"
           dest: "{{ config_dir }}/config.yml"
-          variables:
-            app_name: "{{ app_name }}"
-            app_version: "{{ app_version }}"
-            environment: "development"
           mode: "0600"
       # Create symbolic link - NOT SUPPORTED YET (v1.40.0)
       # Planned feature for future version

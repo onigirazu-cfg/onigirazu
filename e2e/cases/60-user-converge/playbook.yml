@@ -15,3 +15,7 @@ plays:
         user: {name: onigirazu-e2e-uc, groups: adm, append: yes}
       - name: A new user whose group exists
         user: {name: onigirazu-e2e-uc2, group: onigirazu-e2e-uc}
+      - name: The group named as the new user exists already
+        group: {name: onigirazu-e2e-uc3}
+      - name: A new user without group takes that one
+        user: {name: onigirazu-e2e-uc3}

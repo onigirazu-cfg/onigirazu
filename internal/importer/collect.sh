@@ -22,7 +22,10 @@ case $os in
 debian)
   apt-mark showmanual 2>/dev/null | sed "s/^/PKG$T/"
   cat /var/lib/dpkg/info/*.list 2>/dev/null | sort -u > "$tmp/owned"
-  dpkg --verify 2>/dev/null | awk 'substr($1,3,1)=="5" && $2=="c" {print $3}' > "$tmp/changed"
+  # changed conffiles: hash only them (dpkg --verify hashes every package file, ~25 s)
+  dpkg-query -W -f='${Conffiles}\n' 2>/dev/null |
+    awk 'NF >= 2 && length($2) == 32 && $NF != "obsolete" {print $2 "  " $1}' |
+    md5sum -c 2>/dev/null | sed -n 's/: FAILED$//p' > "$tmp/changed"
   ;;
 redhat)
   (dnf repoquery --userinstalled --qf '%{name}' 2>/dev/null || yum history userinstalled 2>/dev/null | tail -n +2) |
@@ -84,7 +87,52 @@ emit() {  # path
     printf 'DATA\t'; base64 -w0 < "$p"; echo
   fi
 }
-# unowned files, then the changed conffiles
-while IFS= read -r p; do emit "$p"; done < "$tmp/unowned"
-grep -Ev "$skip" "$tmp/changed" | while IFS= read -r p; do emit "$p"; done
+# unowned files, then the changed conffiles: with python3 in one process
+# (stat and base64 for every file were thousands of processes), else emit
+emit_py='
+import base64, grp, os, pwd, stat, sys
+max_size = int(sys.argv[1])
+names = {}
+def name(kind, i):
+    if (kind, i) not in names:
+        try:
+            names[kind, i] = pwd.getpwuid(i).pw_name if kind == "u" else grp.getgrgid(i).gr_name
+        except KeyError:
+            names[kind, i] = "UNKNOWN"
+    return names[kind, i]
+out = sys.stdout.buffer
+for line in sys.stdin.buffer:
+    p = line.rstrip(b"\n")
+    try:
+        st = os.lstat(p)
+    except OSError:
+        continue
+    ps = p.decode("utf-8", "surrogateescape")
+    if stat.S_ISLNK(st.st_mode):
+        t = os.readlink(p).decode("utf-8", "surrogateescape")
+        if ps.startswith("/etc/systemd/") and (t.startswith(("/usr/lib/systemd/", "/lib/systemd/")) or t == "/dev/null"):
+            continue
+        out.write(("LINK\t%s\t%s\n" % (ps, t)).encode("utf-8", "surrogateescape"))
+        continue
+    meta = "%o\t%s\t%s\t%d\t%d" % (st.st_mode & 0o7777, name("u", st.st_uid), name("g", st.st_gid), st.st_uid, st.st_gid)
+    if stat.S_ISDIR(st.st_mode):
+        out.write(("DIR\t%s\t%s\n" % (ps, meta)).encode("utf-8", "surrogateescape"))
+    elif stat.S_ISREG(st.st_mode):
+        if st.st_size > max_size:
+            out.write(("BIG\t%s\t%d\n" % (ps, st.st_size)).encode("utf-8", "surrogateescape"))
+            continue
+        try:
+            with open(p, "rb") as f:
+                data = f.read()
+        except OSError:
+            continue
+        out.write(("FILE\t%s\t%s\n" % (ps, meta)).encode("utf-8", "surrogateescape"))
+        out.write(b"DATA\t" + base64.b64encode(data) + b"\n")
+'
+if command -v python3 >/dev/null 2>&1 && python3 -c 'import base64, grp, pwd' 2>/dev/null; then
+  { cat "$tmp/unowned"; grep -Ev "$skip" "$tmp/changed"; } | python3 -c "$emit_py" "$max_size"
+else
+  while IFS= read -r p; do emit "$p"; done < "$tmp/unowned"
+  grep -Ev "$skip" "$tmp/changed" | while IFS= read -r p; do emit "$p"; done
+fi
 echo END

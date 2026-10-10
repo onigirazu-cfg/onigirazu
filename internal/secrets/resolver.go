@@ -12,7 +12,8 @@ import (
 
 // Config is the secrets block of onigirazu.yml. Credentials never come from
 // it: Bitwarden uses the session of an unlocked vault (BW_SESSION), Vault
-// its token (VAULT_TOKEN or ~/.vault-token).
+// its token (VAULT_TOKEN or ~/.vault-token) or an AppRole (VAULT_ROLE_ID,
+// VAULT_SECRET_ID).
 type Config struct {
 	// CacheTTL is how long a value is reused within a run (default 5m)
 	CacheTTL time.Duration `yaml:"cache_ttl" json:"cache_ttl"`
@@ -24,6 +25,10 @@ type VaultConfig struct {
 	Address   string `yaml:"address" json:"address"`     // default VAULT_ADDR
 	Namespace string `yaml:"namespace" json:"namespace"` // default VAULT_NAMESPACE
 	Mount     string `yaml:"mount" json:"mount"`         // KV v2 engine, default "secret"
+	// AppRole login when there is no token: the role id here or in
+	// VAULT_ROLE_ID, the secret id only in VAULT_SECRET_ID
+	RoleID    string `yaml:"role_id" json:"role_id"`
+	AuthMount string `yaml:"auth_mount" json:"auth_mount"` // default "approle"
 }
 
 // Resolver reads secrets for templates; each provider is created when a
@@ -82,12 +87,16 @@ func (r *Resolver) provider(name string) (SecretProvider, error) {
 				}
 			}
 		}
-		if token == "" {
-			return nil, &ProviderError{Provider: "vault", Message: "no token: set VAULT_TOKEN or run vault login"}
+		roleID := firstNonEmpty(v.RoleID, os.Getenv("VAULT_ROLE_ID"))
+		secretID := strings.TrimSpace(os.Getenv("VAULT_SECRET_ID"))
+		if token == "" && (roleID == "" || secretID == "") {
+			return nil, &ProviderError{Provider: "vault",
+				Message: "no token: set VAULT_TOKEN, run vault login, or set VAULT_ROLE_ID and VAULT_SECRET_ID for AppRole"}
 		}
 		config = map[string]interface{}{"address": address, "token": token,
 			"namespace": firstNonEmpty(v.Namespace, os.Getenv("VAULT_NAMESPACE")),
-			"mount":     v.Mount, "cache_ttl": ttl.String()}
+			"mount":     v.Mount, "cache_ttl": ttl.String(),
+			"role_id": roleID, "secret_id": secretID, "auth_mount": firstNonEmpty(v.AuthMount, "approle")}
 	default:
 		return nil, fmt.Errorf("unknown secret provider %q (bitwarden, vault)", name)
 	}

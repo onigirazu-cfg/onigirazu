@@ -25,12 +25,38 @@ pull docker mongo:7
 pull docker alpine:3.20
 pull podman docker.io/library/alpine:3.20
 
-# Guest customization of a clone renames the image's netplan file and writes
-# its own DHCP config without "dhcp-identifier: mac"; on 26.04 the initramfs
-# and networkd then lease with different client ids and the address changes
-# on reboot. A networkd drop-in survives the customization.
-mkdir -p /etc/systemd/network/10-netplan-ens192.network.d
-printf '[DHCPv4]\nClientIdentifier=mac\n' > /etc/systemd/network/10-netplan-ens192.network.d/10-client-id.conf
+# A pre-warmed VM (e2e/pool.sh) gets its run's key after it booted: a timer
+# applies guestinfo.e2e_authorized_key and e2e_hostname whenever they change
+cat > /usr/local/sbin/e2e-access-refresh.sh <<'EOS'
+#!/bin/bash
+set -u
+command -v vmware-rpctool >/dev/null || exit 0
+key="$(vmware-rpctool 'info-get guestinfo.e2e_authorized_key' 2>/dev/null || true)"
+[ -n "$key" ] || exit 0
+[ "$(cat /home/e2e/.ssh/authorized_keys 2>/dev/null)" = "$key" ] && exit 0
+rm -rf /var/lib/e2e-access
+/usr/local/sbin/e2e-access.sh
+EOS
+chmod +x /usr/local/sbin/e2e-access-refresh.sh
+cat > /etc/systemd/system/e2e-access-refresh.service <<'EOS'
+[Unit]
+Description=Apply a changed e2e access key from guestinfo
+ConditionVirtualization=vmware
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/e2e-access-refresh.sh
+EOS
+cat > /etc/systemd/system/e2e-access-refresh.timer <<'EOS'
+[Unit]
+Description=Check guestinfo for a changed e2e access key
+[Timer]
+OnBootSec=15s
+OnUnitActiveSec=5s
+AccuracySec=1s
+[Install]
+WantedBy=timers.target
+EOS
+systemctl enable e2e-access-refresh.timer >/dev/null 2>&1
 
 # The database cases start their server; idle VMs do not need them
 systemctl disable --now mariadb postgresql >/dev/null 2>&1 || true

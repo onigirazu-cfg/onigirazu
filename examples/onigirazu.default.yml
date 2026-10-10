@@ -21,6 +21,7 @@
 # ssh_timeout: 30s
 # ssh_known_hosts_file: ~/.ssh/known_hosts
 # ssh_strict_host_key: false     # true: reject hosts not in the known_hosts file
+# remote_server: auto            # command server on hosts: auto (agent, Python, sh), python, sh
 
 # Roles and collections, after roles/ next to the playbook
 # roles_path: [/etc/ansible/roles]

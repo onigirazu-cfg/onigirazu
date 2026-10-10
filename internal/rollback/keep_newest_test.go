@@ -1,6 +1,8 @@
 package rollback
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -17,6 +19,9 @@ func TestKeepNewest(t *testing.T) {
 		s.ID = string(rune('a' + i))
 		s.Timestamp = base.Add(time.Duration(i) * time.Minute)
 		require.NoError(t, sm.SaveSnapshot(s))
+		// pruning goes by the files' times
+		p := filepath.Join(sm.snapshotDir, "snapshot_"+s.ID+".json")
+		require.NoError(t, os.Chtimes(p, s.Timestamp, s.Timestamp))
 	}
 	require.NoError(t, sm.KeepNewest(2))
 	left, err := sm.ListSnapshots()

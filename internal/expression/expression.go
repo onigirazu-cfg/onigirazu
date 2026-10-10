@@ -26,8 +26,9 @@ var (
 	bareFilter = regexp.MustCompile(`\|\s*(` + strings.Join(filterNames, "|") + `)\b(\s*\()?`)
 	// map(attribute='x') has a keyword argument, which expr does not
 	mapAttribute = regexp.MustCompile(`\bmap\(\s*attribute\s*=\s*`)
-	// keyword arguments of random/shuffle become "name", value pairs
-	randomKeyword = regexp.MustCompile(`\b(seed|start|step|default|field)\s*=([^=]|$)`)
+	// keyword arguments of random/shuffle and of the secrets lookups become
+	// "name", value pairs
+	randomKeyword = regexp.MustCompile(`\b(seed|start|step|default|field|secret|rstrip|engine_mount_point)\s*=([^=]|$)`)
 	// keyword arguments of sort, combine and items2dict become a marked
 	// name followed by the value (splitKwargs takes them apart)
 	filterKeyword = regexp.MustCompile(`\b(attribute|reverse|case_sensitive|recursive|list_merge|key_name|value_name|wantlist|errors)\s*=([^=]|$)`)

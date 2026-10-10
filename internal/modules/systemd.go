@@ -31,7 +31,7 @@ func (m *SystemdModule) GetDescription() string {
 func (m *SystemdModule) Execute(ctx context.Context, host types.Host, args map[string]interface{}) (types.TaskResult, error) {
 	startTime := time.Now()
 	result := types.TaskResult{
-		TaskName:  "systemd",
+		TaskName:  taskName(args),
 		Host:      host.Name,
 		Module:    m.GetName(),
 		Success:   true,
@@ -99,10 +99,15 @@ func (m *SystemdModule) handleService(ctx context.Context, exec *executor.Comman
 	masked := args["masked"]
 
 	changed := false
+	// the capture before the task asked systemctl is-active and is-enabled
+	capActive, capEnabled, captured := capturedUnit(args, name)
 
 	// Handle state changes
 	if state != "" {
-		currentState, err := m.getServiceState(exec, name)
+		currentState, err := capActive, error(nil)
+		if !captured {
+			currentState, err = m.getServiceState(exec, name)
+		}
 		if err != nil {
 			return m.failResult(result, fmt.Sprintf("failed to get service state: %v", err))
 		}
@@ -142,7 +147,11 @@ func (m *SystemdModule) handleService(ctx context.Context, exec *executor.Comman
 	// Handle enabled state
 	if enabled != nil {
 		enabledBool := getBoolArg(args, "enabled", false)
-		isEnabled, err := m.isServiceEnabled(exec, name)
+		// starting or stopping does not change the enablement
+		isEnabled, err := capEnabled == "enabled", error(nil)
+		if !captured {
+			isEnabled, err = m.isServiceEnabled(exec, name)
+		}
 		if err != nil {
 			return m.failResult(result, fmt.Sprintf("failed to check enabled state: %v", err))
 		}
@@ -165,7 +174,10 @@ func (m *SystemdModule) handleService(ctx context.Context, exec *executor.Comman
 	// Handle masked state
 	if masked != nil {
 		maskedBool := getBoolArg(args, "masked", false)
-		isMasked, err := m.isServiceMasked(exec, name)
+		isMasked, err := capEnabled == "masked", error(nil)
+		if !captured || result.Output["enabled"] != nil {
+			isMasked, err = m.isServiceMasked(exec, name)
+		}
 		if err != nil {
 			return m.failResult(result, fmt.Sprintf("failed to check masked state: %v", err))
 		}
@@ -478,4 +490,19 @@ func (m *SystemdModule) run(exec *executor.CommandExecutor, args map[string]inte
 // daemonReloadArg reads daemon_reload (or daemon-reload) as a boolean
 func daemonReloadArg(args map[string]interface{}) bool {
 	return getBoolArg(args, "daemon_reload", false) || getBoolArg(args, "daemon-reload", false)
+}
+
+// capturedUnit is what systemctl is-active and is-enabled answered for the
+// unit when the capture before the task looked (args["_before"])
+func capturedUnit(args map[string]interface{}, name string) (active, enabled string, ok bool) {
+	before, isMap := args["_before"].(map[string]interface{})
+	if !isMap || before["kind"] != "service" || before["name"] != name || before["error"] != nil {
+		return "", "", false
+	}
+	active, _ = before["active"].(string)
+	enabled, _ = before["enabled"].(string)
+	if active == "" || active == "unknown" || enabled == "" {
+		return "", "", false
+	}
+	return active, enabled, true
 }
