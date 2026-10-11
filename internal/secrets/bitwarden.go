@@ -319,7 +319,7 @@ func (bc *BitwardenClient) extractField(item *BitwardenItem, field string) (stri
 
 	return "", &ProviderError{
 		Provider: "bitwarden",
-		Message:  fmt.Sprintf("field '%s' not found in item '%s'", field, item.Name),
+		Message:  fmt.Sprintf("field %q not found in item %q", field, item.Name),
 	}
 }
 

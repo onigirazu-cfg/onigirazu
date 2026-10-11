@@ -3,6 +3,7 @@ package secrets
 import (
 	"context"
 	"fmt"
+	"github.com/onigirazu-cfg/onigirazu/internal/logger"
 	"os"
 	"path/filepath"
 	"strings"
@@ -54,7 +55,11 @@ func (r *Resolver) Get(provider, item, field string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return p.GetSecret(context.Background(), item, field)
+	value, err := p.GetSecret(context.Background(), item, field)
+	if err == nil {
+		logger.Redact(value)
+	}
+	return value, err
 }
 
 func (r *Resolver) provider(name string) (SecretProvider, error) {

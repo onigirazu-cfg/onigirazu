@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- Values read from a secret backend (Bitwarden, Vault, SOPS) and the passwords of an inventory are replaced by `***` in every log line, including `-v` variable dumps
+- gosec findings are uploaded as code-scanning alerts again (category `gosec`), with the by-design rules G304/G204/G301/G306 excluded; the stale alerts of 2025-12 close with the first upload
+- File modes from a playbook are masked to the permission bits before the conversion (G115)
+
+### Fixed
+
+- A package batch no longer dereferences a missing operation result when a manager call fails
+
+### Security
+
 - Go 1.26.9 and updated dependencies (x/crypto, x/net v0.60.0, x/text and others) close all govulncheck findings
 - Bitwarden password is passed to `bw login` through the environment instead of the command line
 

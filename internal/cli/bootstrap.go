@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"github.com/onigirazu-cfg/onigirazu/internal/logger"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -174,6 +175,7 @@ func runBootstrap(cmd *cobra.Command, target string, o *bootstrapOptions) error 
 	hostVars := map[string]interface{}{"ansible_host": host, "ansible_port": port, "ansible_user": o.user,
 		"ansible_ssh_common_args": "-o StrictHostKeyChecking=accept-new"}
 	if password != "" {
+		logger.Redact(password)
 		hostVars["ansible_password"] = password
 		hostVars["ansible_become_password"] = password
 	}

@@ -292,7 +292,7 @@ func writeFile(request []byte) error {
 		if err != nil {
 			return fmt.Errorf("bad mode %q", f[0])
 		}
-		mode = fs.FileMode(m & 0o777)
+		mode = fs.FileMode(uint32(m & 0o777)) // #nosec G115 -- masked to the permission bits
 		if m&0o4000 != 0 {
 			mode |= fs.ModeSetuid
 		}

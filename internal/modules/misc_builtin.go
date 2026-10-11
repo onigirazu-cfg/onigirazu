@@ -39,9 +39,9 @@ func modeArg(args map[string]interface{}, def os.FileMode) os.FileMode {
 			return os.FileMode(n)
 		}
 	case int:
-		return os.FileMode(v)
+		return os.FileMode(uint32(v) & 0o7777) // #nosec G115 -- masked to the permission bits
 	case float64:
-		return os.FileMode(int(v))
+		return os.FileMode(uint32(v) & 0o7777) // #nosec G115 -- masked to the permission bits
 	}
 	return def
 }
