@@ -95,6 +95,7 @@ func NewRegistry() *Registry {
 	registry.RegisterModule(NewHostnameModule())
 	registry.RegisterModule(NewIniFileModule())
 	registry.RegisterModule(NewPipModule())
+	registry.RegisterModule(NewWaitForConnectionModule())
 	registry.RegisterModule(NewUfwModule())
 	registry.RegisterModule(NewDockerHostInfoModule())
 	registry.RegisterModule(NewIncludeRoleModule("include_role"))
