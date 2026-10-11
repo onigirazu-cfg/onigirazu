@@ -140,11 +140,15 @@ func (m *RouterosAPIModule) Execute(ctx context.Context, host types.Host, args m
 			for _, k := range changed {
 				body[k] = values[k]
 			}
-			target := path
+			// an item is patched by its id; a single-object menu (ip/dns,
+			// system/identity) has none and takes the CLI's "set" command
+			method, target := http.MethodPatch, path
 			if id := match[".id"]; id != "" {
 				target += "/" + id
+			} else {
+				method, target = http.MethodPost, path+"/set"
 			}
-			if _, err := r.call(ctx, http.MethodPatch, target, nil, body); err != nil {
+			if _, err := r.call(ctx, method, target, nil, body); err != nil {
 				return fail(err.Error())
 			}
 		}
