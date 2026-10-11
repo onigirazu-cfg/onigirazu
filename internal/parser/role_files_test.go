@@ -30,6 +30,7 @@ func TestResolveRoleFiles(t *testing.T) {
 	assert.Equal(t, filepath.Join(role, "files", "b.txt"), tasks[1].Block[0].Args["src"])
 	assert.Equal(t, "b.txt", tasks[2].Args["src"], "remote_src is on the host")
 	assert.Equal(t, "missing.txt", tasks[3].Args["src"])
-	assert.Equal(t, filepath.Join(role, "templates", "{{ name }}.j2"), tasks[4].Args["src"])
+	assert.Equal(t, "{{ name }}.j2", tasks[4].Args["src"], "a templated source is placed after rendering")
+	assert.Equal(t, filepath.Join(role, "templates"), tasks[4].Args["_role_dir"])
 	assert.Equal(t, filepath.Join(role, "files", "b.txt"), tasks[5].Args["script"])
 }

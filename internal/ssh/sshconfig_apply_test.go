@@ -1,6 +1,7 @@
 package ssh
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
@@ -30,5 +31,21 @@ func TestApplySSHConfig(t *testing.T) {
 	applySSHConfig(&h, get)
 	if h.Address != "other" || h.Port != 0 {
 		t.Errorf("unknown alias: %+v", h)
+	}
+}
+
+// ansible_host may be the ssh config alias rather than the inventory name
+func TestApplySSHConfigAliasInAddress(t *testing.T) {
+	cfg := map[string]string{"mjodnet-oci1/HostName": "129.151.153.153", "mjodnet-oci1/Port": "47931", "mjodnet-oci1/User": "usx", "mjodnet-oci1/ProxyJump": "cs"}
+	get := func(alias, key string) string { return cfg[alias+"/"+key] }
+	h := &types.Host{Name: "oci1", Address: "mjodnet-oci1", Port: 22, Vars: map[string]interface{}{}}
+	applySSHConfig(h, get)
+	if h.Address != "129.151.153.153" || h.Port != 47931 || h.User != "usx" || !strings.Contains(h.SSHArgs, "-J cs") {
+		t.Errorf("alias in ansible_host: %+v", h)
+	}
+	ip := &types.Host{Name: "x", Address: "10.0.0.1", Port: 22, Vars: map[string]interface{}{}}
+	applySSHConfig(ip, get)
+	if ip.Address != "10.0.0.1" {
+		t.Errorf("an IP is never an alias: %s", ip.Address)
 	}
 }

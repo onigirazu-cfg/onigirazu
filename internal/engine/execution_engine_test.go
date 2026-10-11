@@ -1297,8 +1297,8 @@ func TestGatherFacts(t *testing.T) {
 	mockLogger.On("Debug", mock.Anything, mock.Anything).Return()
 	mockLogger.On("Warn", mock.Anything, mock.Anything, mock.Anything).Return()
 
-	err := engine.gatherFacts(ctx, hosts)
-	assert.NoError(t, err)
+	failed := engine.gatherFacts(ctx, hosts)
+	assert.Contains(t, failed, "host1", "an unreachable host is reported, not silently kept")
 
 	// Verify facts were stored (even if gathering failed, basic facts should be stored)
 	engine.mutex.RLock()

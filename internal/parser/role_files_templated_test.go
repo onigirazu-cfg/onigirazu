@@ -16,8 +16,8 @@ func TestRoleFilesKeepWholePathTemplates(t *testing.T) {
 	if tasks[0].Args["src"] != "{{ role_path }}/files/sensor.conf" {
 		t.Errorf("a whole-path template is left alone: %v", tasks[0].Args["src"])
 	}
-	if tasks[1].Args["src"] != "/roles/sensor/files/sub/{{ name }}.conf" {
-		t.Errorf("a relative template is joined to the role's files: %v", tasks[1].Args["src"])
+	if tasks[1].Args["src"] != "sub/{{ name }}.conf" || tasks[1].Args["_role_dir"] != "/roles/sensor/files" {
+		t.Errorf("a relative template keeps its text and remembers the role's files for later: %v %v", tasks[1].Args["src"], tasks[1].Args["_role_dir"])
 	}
 	if tasks[2].Args["src"] != "/abs/t.j2" {
 		t.Errorf("absolute stays: %v", tasks[2].Args["src"])

@@ -17,6 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A host whose facts cannot be gathered leaves the run like in Ansible: UNREACHABLE on a connection failure (FAILED otherwise), no further task runs on it, the play fails when no host is left or `any_errors_fatal` is set
+- A templated `src`/`script`/`file` of a role task is placed after rendering: an absolute result is used as it is, a relative one is the role's file (`files/`, `templates/`); it is no longer glued to the role directory at parse time
+- `~/.ssh/config` is also applied when `ansible_host` is the alias (HostName, Port, User, IdentityFile, ProxyJump)
 - A package batch no longer dereferences a missing operation result when a manager call fails
 
 ### Security

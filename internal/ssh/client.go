@@ -620,6 +620,10 @@ func sshconfigGet(alias, key string) string {
 // name itself
 func applySSHConfig(host *types.Host, get func(alias, key string) string) {
 	alias := host.Name
+	// ansible_host may be the alias instead of the inventory name
+	if a := host.Address; a != "" && a != alias && net.ParseIP(a) == nil && get(a, "HostName") != "" {
+		alias = a
+	}
 	if alias == "" || strings.ContainsAny(alias, " /") {
 		return
 	}
