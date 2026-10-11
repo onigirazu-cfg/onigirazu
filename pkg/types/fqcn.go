@@ -66,6 +66,14 @@ func ShortModuleName(name string) string {
 	if name == "dnf" || name == "dnf5" {
 		return "yum"
 	}
+	// systemd_service is systemd's newer name; raw runs like shell (the
+	// command server is a shell already, no Python is involved)
+	switch name {
+	case "systemd_service":
+		return "systemd"
+	case "raw":
+		return "shell"
+	}
 	// the v2 module with collections: [community.docker] or its bare name
 	if name == "docker_compose_v2" {
 		return "docker_compose"

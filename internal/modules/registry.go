@@ -97,6 +97,21 @@ func NewRegistry() *Registry {
 	registry.RegisterModule(NewPipModule())
 	registry.RegisterModule(NewDeb822RepositoryModule())
 	registry.RegisterModule(NewPackageFactsModule())
+	registry.RegisterModule(NewTempfileModule())
+	registry.RegisterModule(NewAssembleModule())
+	registry.RegisterModule(NewKnownHostsModule())
+	registry.RegisterModule(NewDebconfModule())
+	registry.RegisterModule(NewDpkgSelectionsModule())
+	registry.RegisterModule(NewServiceFactsModule())
+	registry.RegisterModule(NewMountFactsModule())
+	registry.RegisterModule(NewSetStatsModule())
+	registry.RegisterModule(NewValidateArgumentSpecModule())
+	registry.RegisterModule(NewRpmKeyModule())
+	registry.RegisterModule(NewYumRepositoryModule())
+	registry.RegisterModule(NewSysvinitModule())
+	registry.RegisterModule(NewExpectModule())
+	registry.RegisterModule(NewSubversionModule())
+	registry.RegisterModule(NewIptablesModule())
 	registry.RegisterModule(NewPipxModule())
 	registry.RegisterModule(NewFlatpakModule())
 	registry.RegisterModule(NewRouterosAPIModule())
@@ -344,6 +359,10 @@ var AcceptedArgs = map[string][]string{
 	"include_role": {"rescuable"}, "import_role": {"rescuable"},
 	// the deb822 fields are read by name from the table in deb822_repository.go
 	"deb822_repository": {"components", "architectures", "languages", "targets", "pdiffs", "by_hash", "allow_insecure", "allow_weak", "allow_downgrade_to_insecure", "trusted", "check_valid_until", "valid_until_min", "valid_until_max", "check_date", "date_max_future", "inrelease_path", "include", "exclude"},
+	// the yum options are read by name from the table in yum_repository.go
+	"yum_repository": {"enabled", "gpgcheck", "repo_gpgcheck", "gpgkey", "gpgcakey", "exclude", "includepkgs", "priority", "cost", "sslverify", "sslcacert", "sslclientcert", "sslclientkey", "proxy", "proxy_username", "proxy_password", "username", "password", "metadata_expire", "module_hotfixes", "skip_if_unavailable", "keepcache", "retries", "timeout", "throttle", "bandwidth", "countme", "enablegroups", "failovermethod", "http_caching", "ip_resolve", "protect", "s3_enabled", "ui_repoid_vars", "deltarpm_metadata_percentage", "deltarpm_percentage", "async"},
+	// iptables reads its match options by name from its table too
+	"iptables": {"protocol", "source", "destination", "in_interface", "out_interface", "fragment", "match", "source_port", "destination_port", "destination_ports", "to_ports", "to_destination", "to_source", "set_dscp_mark", "set_dscp_mark_class", "ctstate", "src_range", "dst_range", "icmp_type", "uid_owner", "gid_owner", "limit", "limit_burst", "reject_with", "log_prefix", "log_level", "tcp_flags", "syn", "set_counters", "comment"},
 	// the WinRM/SSH client's own timeouts apply; the boot time is read the same way
 	"win_reboot": {"boot_time_command", "connect_timeout", "shutdown_timeout"},
 }

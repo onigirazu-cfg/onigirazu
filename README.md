@@ -419,8 +419,16 @@ to change. Secrets become variables with an example file. See [docs/IMPORT.md](d
 | Databases | `mysql_db`, `mysql_user`, `postgresql_db`, `postgresql_user`, `mongodb` |
 | Source control | `git` |
 | Network devices | `routeros_api` (REST, idempotent items of a menu path), `routeros_command` (CLI over SSH), `routeros_facts` — MikroTik RouterOS 7, from the control machine (`ansible_connection: local`) |
+| Commands | `command`, `shell` (also `raw`), `script` |
+| Files | `file`, `copy`, `template`, `lineinfile`, `blockinfile`, `replace`, `ini_file`, `fetch`, `slurp`, `stat`, `find`, `archive`, `unarchive`, `get_url`, `assemble`, `tempfile`, `config` (JSON/YAML/TOML keys) |
+| Packages | `package`, `apt`, `yum` (also `dnf`), `apt_repository`, `apt_key`, `debconf`, `dpkg_selections`, `rpm_key`, `yum_repository`, `pip`, `pipx`, `flatpak` |
+| Services and system | `service`, `systemd` (also `systemd_service`), `sysvinit`, `service_facts`, `mount_facts`, `cron`, `sysctl`, `mount`, `hostname`, `timezone`, `reboot`, `user`, `group`, `authorized_key`, `known_hosts`, `getent`, `expect` |
+| Network and firewall | `uri`, `wait_for`, `firewall` (ufw, firewalld, iptables), `ufw`, `iptables` |
+| Containers | `docker_container`, `docker_image`, `docker_compose` (v1 and v2), `docker_host_info`, `podman` |
+| Databases | `mysql_db`, `mysql_user`, `postgresql_db`, `postgresql_user`, `mongodb` |
+| Source control | `git`, `subversion` |
 | Windows (WinRM or SSH) | `win_ping`, `win_command`, `win_shell`, `win_powershell`, `win_regedit`, `win_file`, `win_copy`, `win_service`, `win_timezone`, `win_firewall_rule`, `win_firewall`, `win_group_membership`, `win_feature`, `win_reboot`, `win_scheduled_task`, `win_chocolatey`, `win_optional_feature`, `win_disk_facts`, `win_initialize_disk`, `win_partition`, `win_format`; facts (`ansible_os_family: Windows`, ...) |
-| Flow and data | `debug`, `assert`, `fail`, `set_fact`, `include_vars`, `add_host`, `group_by`, `setup`/`gather_facts`, `pause`, `ping`, `meta`, `async_status`, `include_role`/`import_role`, `verify` |
+| Flow and data | `debug`, `assert`, `fail`, `set_fact`, `set_stats`, `validate_argument_spec`, `include_vars`, `add_host`, `group_by`, `setup`/`gather_facts`, `pause`, `ping`, `meta`, `async_status`, `include_role`/`import_role`, `verify` |
 
 Any other Ansible module (a collection module, or a `win_*` module Onigirazu does not implement) runs through an installed
 ansible-core when `ansible_bridge` in `onigirazu.yml` allows it: see
