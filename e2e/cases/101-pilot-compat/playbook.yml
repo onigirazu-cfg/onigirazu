@@ -1,0 +1,12 @@
+# the pilot's findings: wait_for_connection, apt purge, role_path, whole-path src
+plays:
+  - name: pilot compat
+    hosts: all
+    become: true
+    gather_facts: false
+    tasks:
+      - wait_for_connection: {timeout: 60, sleep: 1}
+      - apt: {name: tree, state: present}
+      - apt: {name: tree, state: absent, purge: true}
+    roles:
+      - sensor

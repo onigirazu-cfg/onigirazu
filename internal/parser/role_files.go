@@ -3,6 +3,7 @@ package parser
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
@@ -10,6 +11,9 @@ import (
 
 // roleFileDirs is where a role's tasks find their sources, as in Ansible:
 // template in templates/, copy, script and unarchive in files/
+// wholePathTemplate: a src that starts with a *_path / *_dir variable
+var wholePathTemplate = regexp.MustCompile(`^\s*\{\{\s*[A-Za-z_]*(_path|_dir)\b`)
+
 var roleFileDirs = map[string]string{"template": "templates", "copy": "files", "script": "files", "unarchive": "files", "include_vars": "vars"}
 
 // resolveRoleFiles makes the relative sources of a role's tasks point into
@@ -47,6 +51,11 @@ func resolveRoleFiles(tasks []types.Task, rolePath string) {
 			continue
 		}
 		if strings.Contains(src, "{{") {
+			// "{{ role_path }}/files/x" or "{{ playbook_dir }}/…" is a whole
+			// path, rendered later as it is; "{{ name }}.j2" is a file of the role
+			if wholePathTemplate.MatchString(src) {
+				continue
+			}
 			t.Args[key] = filepath.Join(rolePath, dir, src)
 			continue
 		}

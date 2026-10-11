@@ -1019,6 +1019,7 @@ Debian/Ubuntu packages with `apt-get`.
 | `update_cache` | boolean | `false` | Run `apt-get update` first (`update-cache` is an alias) |
 | `cache_valid_time` | int | `0` | Skip the cache update if it is younger than this many seconds |
 | `upgrade` | string | `no` | `yes`/`safe` (apt-get upgrade), `full`/`dist` (dist-upgrade); predicted in check mode |
+| `purge` | bool | `false` | With `state: absent`, remove the configuration files too (`apt-get purge`) |
 | `autoremove` | boolean | `false` | Remove unused packages |
 | `autoclean` | boolean | `false` | Clean the package cache |
 | `lock_timeout` | integer | `60` | Seconds to wait for the dpkg lock (`-o DPkg::Lock::Timeout`), as Ansible; `0` fails at once |
@@ -2303,6 +2304,18 @@ Wait on the host until a port answers or a file exists (or contains a pattern), 
     search_regex: "Server started"
     timeout: 120
 ```
+
+### wait_for_connection
+
+Waits until the host answers over its connection (after a reboot, a new VM): a short command
+is tried every `sleep` seconds until `timeout`, a dead pooled connection is dropped between tries.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `timeout` | int | 600 | Seconds to wait in all |
+| `delay` | int | 0 | Seconds before the first try |
+| `sleep` | int | 1 | Seconds between tries |
+| `connect_timeout` | int | 5 | Seconds per try |
 
 ### pause
 

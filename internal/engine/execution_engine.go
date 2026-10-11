@@ -2025,6 +2025,8 @@ func (e *ExecutionEngine) executeRole(ctx context.Context, role *types.Role, hos
 	// Merge role variables with play variables
 	// Priority: RoleVars > PlayVars > Defaults (handled by roleLoader)
 	roleVars := e.mergeRoleVariables(role, variables)
+	// role_path and role_name, as Ansible sets them inside a role
+	roleVars = e.mergeVariables(roleVars, map[string]interface{}{"role_path": role.Path, "role_name": role.Name, "ansible_role_name": role.Name})
 
 	// role handlers run with the play's at the next flush: known before the
 	// role's tasks, which may flush them themselves (meta: flush_handlers)

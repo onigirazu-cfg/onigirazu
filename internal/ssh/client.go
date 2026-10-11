@@ -9,10 +9,12 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	sshconfig "github.com/kevinburke/ssh_config"
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 
@@ -86,6 +88,10 @@ func NewClientWithHostKeyManagerAndLogger(host types.Host, hostKeyManager *HostK
 	if lg == nil {
 		lg = logger.New(false)
 	}
+
+	// ~/.ssh/config of the host's name (an alias): HostName, Port, User,
+	// IdentityFile and ProxyJump, where the inventory says nothing
+	applySSHConfig(&host, sshconfigGet)
 
 	// Apply defaults if not specified
 	if host.User == "" {
@@ -508,4 +514,62 @@ func (c *Client) newSFTP() (*sftp.Client, error) {
 		return err
 	})
 	return client, err
+}
+
+// sshconfigGet reads a key of ~/.ssh/config and /etc/ssh/ssh_config for an
+// alias, "" when unset (the library's defaults are left out)
+func sshconfigGet(alias, key string) string {
+	v, err := sshconfig.GetStrict(alias, key)
+	if err != nil {
+		return ""
+	}
+	if v == sshconfig.Default(key) {
+		return ""
+	}
+	return v
+}
+
+// applySSHConfig fills a host from the ssh config stanza of its name (an
+// alias such as "web1" with HostName, Port, User, IdentityFile, ProxyJump):
+// only what the inventory left empty, and the address only when it is the
+// name itself
+func applySSHConfig(host *types.Host, get func(alias, key string) string) {
+	alias := host.Name
+	if alias == "" || strings.ContainsAny(alias, " /") {
+		return
+	}
+	if host.Address == "" || host.Address == alias {
+		if v := get(alias, "HostName"); v != "" {
+			host.Address = v
+		}
+	}
+	// the inventory defaults the port to 22: a port is explicit only when
+	// the host says so
+	_, explicitPort := host.Vars["ansible_port"]
+	_, explicitPort2 := host.Vars["onigirazu_port"]
+	if host.Port == 0 || (host.Port == 22 && !explicitPort && !explicitPort2) {
+		if v := get(alias, "Port"); v != "" {
+			if n, err := strconv.Atoi(v); err == nil {
+				host.Port = n
+			}
+		}
+	}
+	if host.User == "" {
+		host.User = get(alias, "User")
+	}
+	if host.KeyFile == "" && host.Password == "" {
+		if v := get(alias, "IdentityFile"); v != "" && v != "~/.ssh/identity" {
+			if p := expandHome(v); fileExists(p) {
+				host.KeyFile = p
+			}
+		}
+	}
+	if v := get(alias, "ProxyJump"); v != "" && !strings.Contains(host.SSHArgs, "ProxyJump") && !strings.Contains(host.SSHArgs, "-J") {
+		host.SSHArgs = strings.TrimSpace(host.SSHArgs + " -J " + v)
+	}
+}
+
+func fileExists(p string) bool {
+	_, err := os.Stat(p)
+	return err == nil
 }

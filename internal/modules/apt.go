@@ -313,7 +313,11 @@ func (m *AptModule) installPackages(ctx context.Context, host types.Host, args m
 }
 
 func (m *AptModule) removePackages(ctx context.Context, host types.Host, args map[string]interface{}, packages []string) error {
-	_, err := aptGet(ctx, host, args, append([]string{"remove", "-y"}, packages...)...)
+	verb := "remove"
+	if getBoolArg(args, "purge", false) {
+		verb = "purge" // configuration files go too, as Ansible's purge
+	}
+	_, err := aptGet(ctx, host, args, append([]string{verb, "-y"}, packages...)...)
 	return err
 }
 

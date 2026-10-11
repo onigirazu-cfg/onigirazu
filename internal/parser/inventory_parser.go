@@ -363,6 +363,11 @@ func isAnsibleYaml(data []byte) bool {
 	if _, hasAll := rawMap["all"]; hasAll {
 		return true
 	}
+	// or groups at the top level, each a map of hosts/children/vars (Ansible
+	// reads such a file as the children of all)
+	if topLevelGroups(rawMap) {
+		return true
+	}
 
 	// Check for ansible_* variable names in host definitions
 	if hosts, ok := rawMap["hosts"].(map[string]interface{}); ok {
@@ -396,7 +401,18 @@ func (p *InventoryParser) parseAnsibleYamlInventory(data []byte) (*types.Invento
 	if yaml.Unmarshal(data, &doc) == nil && len(doc.Content) > 0 {
 		if all := mappingValue(doc.Content[0], "all"); all != nil {
 			collectKeyOrder("all", all, order, 0)
+		} else {
+			collectKeyOrder("all", doc.Content[0], order, 0)
 		}
+	}
+	if ansibleInv.All == nil {
+		// no all: wrapper — the top-level groups are the children of all
+		var raw map[string]interface{}
+		if err := yaml.Unmarshal(data, &raw); err != nil {
+			return nil, fmt.Errorf("error parsing Ansible YAML inventory: %w", err)
+		}
+		ansibleInv.All = map[string]interface{}{"children": raw}
+		order["all"] = append([]string{}, order["all"]...)
 	}
 	return p.parseAnsibleTreeOrdered(ansibleInv.All, order)
 }
@@ -1082,4 +1098,25 @@ func ansibleScriptTree(raw map[string]interface{}) map[string]interface{} {
 	}
 	all["children"] = children
 	return all
+}
+
+// topLevelGroups tells whether every top-level key is a group (a map with
+// hosts, children or vars): an Ansible inventory without the all: wrapper
+func topLevelGroups(raw map[string]interface{}) bool {
+	if len(raw) == 0 {
+		return false
+	}
+	for _, v := range raw {
+		m, ok := v.(map[string]interface{})
+		if !ok {
+			return false
+		}
+		_, h := m["hosts"]
+		_, c := m["children"]
+		_, vars := m["vars"]
+		if !h && !c && !vars {
+			return false
+		}
+	}
+	return true
 }
