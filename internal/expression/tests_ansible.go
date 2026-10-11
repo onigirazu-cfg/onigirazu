@@ -21,8 +21,78 @@ func ansibleTest(test string, v interface{}, args []interface{}) (ok, handled bo
 	}
 	result, _ := v.(map[string]interface{})
 	switch test {
-	case "success", "succeeded":
+	case "success", "succeeded", "successful":
 		return result != nil && !Truthy(result["failed"]) && !Truthy(result["unreachable"]), true, nil
+	case "reachable":
+		return result != nil && !Truthy(result["unreachable"]), true, nil
+	case "finished":
+		return result != nil && (Truthy(result["finished"]) || result["finished"] == nil && !Truthy(result["started"])), true, nil
+	case "started":
+		return result != nil && (Truthy(result["started"]) || Truthy(result["finished"])), true, nil
+	case "timedout":
+		return result != nil && (Truthy(result["timedout"]) || strings.Contains(strings.ToLower(PyStr(result["msg"])), "timed out")), true, nil
+	case "all":
+		for _, x := range toList(v) {
+			if !Truthy(x) {
+				return false, true, nil
+			}
+		}
+		return true, true, nil
+	case "any":
+		for _, x := range toList(v) {
+			if Truthy(x) {
+				return true, true, nil
+			}
+		}
+		return false, true, nil
+	case "nan", "isnan":
+		f, ok := toFloat(v)
+		return ok && f != f, true, nil
+	case "uri", "url", "urn":
+		s := fmt.Sprint(v)
+		scheme, rest, has := strings.Cut(s, ":")
+		if !has || scheme == "" || strings.ContainsAny(scheme, " /") {
+			return false, true, nil
+		}
+		schemes := toList(arg(0))
+		if len(schemes) > 0 {
+			ok := false
+			for _, x := range schemes {
+				if strings.EqualFold(fmt.Sprint(x), scheme) {
+					ok = true
+				}
+			}
+			if !ok {
+				return false, true, nil
+			}
+		}
+		switch test {
+		case "url":
+			return strings.HasPrefix(rest, "//"), true, nil
+		case "urn":
+			return strings.EqualFold(scheme, "urn") && rest != "", true, nil
+		}
+		return rest != "", true, nil
+	case "vault_encrypted":
+		return strings.HasPrefix(strings.TrimSpace(fmt.Sprint(v)), "$ANSIBLE_VAULT;"), true, nil
+	case "vaulted_file":
+		data, err := os.ReadFile(fmt.Sprint(v)) // #nosec G304 -- the playbook's own file
+		return err == nil && strings.HasPrefix(string(data), "$ANSIBLE_VAULT;"), true, nil
+	case "same_file", "is_same_file":
+		a, errA := os.Stat(fmt.Sprint(v))
+		b, errB := os.Stat(fmt.Sprint(arg(0)))
+		return errA == nil && errB == nil && os.SameFile(a, b), true, nil
+	case "mount", "is_mount":
+		p := filepath.Clean(fmt.Sprint(v))
+		info, err := os.Stat(p)
+		if err != nil {
+			return false, true, nil
+		}
+		parent, err := os.Stat(filepath.Dir(p))
+		if err != nil {
+			return false, true, nil
+		}
+		return p == "/" || !os.SameFile(info, parent) && deviceOf(info) != deviceOf(parent), true, nil
 	case "failed", "failure":
 		return result != nil && Truthy(result["failed"]), true, nil
 	case "changed", "change":
@@ -97,9 +167,9 @@ func ansibleTest(test string, v interface{}, args []interface{}) (ok, handled bo
 			return rem != 0, true, nil
 		}
 		return rem == 0, true, nil
-	case "subset", "superset":
+	case "subset", "superset", "issubset", "issuperset":
 		a, b := toList(v), toList(arg(0))
-		if test == "superset" {
+		if test == "superset" || test == "issuperset" {
 			a, b = b, a
 		}
 		for _, x := range a {
@@ -108,9 +178,9 @@ func ansibleTest(test string, v interface{}, args []interface{}) (ok, handled bo
 			}
 		}
 		return true, true, nil
-	case "exists", "file", "directory", "link", "abs":
+	case "exists", "file", "directory", "link", "abs", "is_file", "is_dir", "is_link", "is_abs", "link_exists":
 		p := fmt.Sprint(v)
-		if test == "abs" {
+		if test == "abs" || test == "is_abs" {
 			return filepath.IsAbs(p), true, nil
 		}
 		info, err := os.Lstat(p)
@@ -118,11 +188,11 @@ func ansibleTest(test string, v interface{}, args []interface{}) (ok, handled bo
 			return false, true, nil
 		}
 		switch test {
-		case "file":
+		case "file", "is_file":
 			return info.Mode().IsRegular(), true, nil
-		case "directory":
+		case "directory", "is_dir":
 			return info.IsDir(), true, nil
-		case "link":
+		case "link", "is_link", "link_exists":
 			return info.Mode()&os.ModeSymlink != 0, true, nil
 		}
 		return true, true, nil

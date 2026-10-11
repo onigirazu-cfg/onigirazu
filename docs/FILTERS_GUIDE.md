@@ -359,7 +359,20 @@ when: version is match('^2\\.')
 loop: "{{ packages | select('match', '^python3-') | list }}"
 ```
 
-### Lookups
+### The ansible-core 2.21 set
+
+Every filter and test ansible-core 2.21 documents is here, by its bare or `ansible.builtin.` name.
+Beyond the ones above: hashes `md5`, `sha1`, `sha256`, `checksum`; paths `normpath`, `realpath`,
+`relpath`, `commonpath`, `path_join`, `expanduser`, `expandvars`, `fileglob`, `win_basename`,
+`win_dirname`, `win_splitdrive`; maths `log`, `pow`, `root`; itertools `combinations`,
+`permutations`, `product`, `zip_longest`, `subelements`; `human_readable` and `human_to_bytes`;
+`comment` (`plain`, `c`, `xml`, `erlang`, `decoration=`); `rekey_on_member`; `from_yaml_all`;
+`strftime`, `to_datetime`; `to_uuid`; `type_debug`; `urlsplit`, `urldecode`; `unvault`.
+Tests: `all`, `any`, `is_file`/`is_dir`/`is_link`/`is_abs`/`link_exists`, `mount`, `same_file`, `nan`,
+`issubset`/`issuperset`, `uri`/`url`/`urn`, `vault_encrypted`/`vaulted_file`, the async-job tests
+`started`/`finished` and the result tests `successful`/`reachable`/`timedout`.
+
+## Lookups
 
 `lookup(plugin, terms...)` returns one value (plugins can be written `ansible.builtin.env` too) (several are joined with commas); `query(...)`/`q(...)` returns a list. They run on the control machine; relative paths start at the playbook directory.
 

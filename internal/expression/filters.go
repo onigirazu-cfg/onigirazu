@@ -28,6 +28,9 @@ var filterNames = []string{
 	"from_yaml", "unique", "list", "capitalize", "title", "b64encode", "b64decode", "quote", "basename", "splitext", "wordcount", "center",
 	"dirname", "sort", "sum", "max", "min", "reverse", "flatten", "join", "keys", "values", "abs", "round",
 	"select", "reject", "mandatory", "password_hash", "random", "shuffle",
+	"checksum", "md5", "sha1", "sha256", "commonpath", "comment", "expanduser", "expandvars", "from_yaml_all", "human_readable",
+	"human_to_bytes", "normpath", "path_join", "realpath", "type_debug", "unvault", "urldecode", "urlsplit", "win_basename",
+	"win_dirname", "win_splitdrive", "to_uuid", "fileglob",
 }
 
 func filterFunctions() []expr.Option {
@@ -114,6 +117,18 @@ func filterFunctions() []expr.Option {
 		fn("random", jinjaRandom),
 		fn("shuffle", jinjaShuffle),
 		fn("to_yaml", toYAML),
+		// the ansible-core 2.21 filters beyond the core set
+		fn("checksum", extraFilter("checksum")), fn("md5", extraFilter("md5")), fn("sha1", extraFilter("sha1")), fn("sha256", extraFilter("sha256")),
+		fn("combinations", extraFilter("combinations")), fn("permutations", extraFilter("permutations")), fn("product", extraFilter("product")),
+		fn("zip_longest", extraFilter("zip_longest")), fn("commonpath", extraFilter("commonpath")), fn("comment", extraFilter("comment")),
+		fn("expanduser", extraFilter("expanduser")), fn("expandvars", extraFilter("expandvars")), fn("fileglob", extraFilter("fileglob")),
+		fn("from_yaml_all", extraFilter("from_yaml_all")), fn("human_readable", extraFilter("human_readable")), fn("human_to_bytes", extraFilter("human_to_bytes")),
+		fn("log", extraFilter("log")), fn("pow", extraFilter("pow")), fn("root", extraFilter("root")), fn("normpath", extraFilter("normpath")),
+		fn("path_join", extraFilter("path_join")), fn("realpath", extraFilter("realpath")), fn("relpath", extraFilter("relpath")),
+		fn("rekey_on_member", extraFilter("rekey_on_member")), fn("strftime", extraFilter("strftime")), fn("to_datetime", extraFilter("to_datetime")),
+		fn("to_uuid", extraFilter("to_uuid")), fn("type_debug", extraFilter("type_debug")), fn("unvault", extraFilter("unvault")),
+		fn("urldecode", extraFilter("urldecode")), fn("urlsplit", extraFilter("urlsplit")), fn("win_basename", extraFilter("win_basename")),
+		fn("win_dirname", extraFilter("win_dirname")), fn("win_splitdrive", extraFilter("win_splitdrive")), fn("subelements", extraFilter("subelements")),
 		fn("to_nice_yaml", toYAML),
 		fn("from_json", func(p ...interface{}) (interface{}, error) { return fromJSON(str(p[0])) }),
 		fn("from_yaml", func(p ...interface{}) (interface{}, error) {
