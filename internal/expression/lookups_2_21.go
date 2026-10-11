@@ -322,7 +322,7 @@ func lookupStoredRandomString(resolve func(string) string, terms []interface{}) 
 	for _, t := range pos {
 		spec := strings.Fields(fmt.Sprint(t))
 		if len(spec) == 0 {
-			return nil, fmt.Errorf("lookup password: a path is needed")
+			return nil, fmt.Errorf("the stored-string lookup needs a path")
 		}
 		path := spec[0]
 		length := 20
@@ -353,10 +353,10 @@ func lookupStoredRandomString(resolve func(string) string, terms []interface{}) 
 				return nil, err
 			}
 			if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
-				return nil, fmt.Errorf("lookup password: %w", err)
+				return nil, fmt.Errorf("stored-string lookup: %w", err)
 			}
 			if err := os.WriteFile(p, []byte(made+"\n"), 0o600); err != nil {
-				return nil, fmt.Errorf("lookup password: %w", err)
+				return nil, fmt.Errorf("stored-string lookup: %w", err)
 			}
 			out = append(out, made)
 			continue
@@ -384,7 +384,7 @@ func randomStringFrom(length int, chars string) (string, error) {
 		}
 	}
 	if alphabet == "" || length <= 0 {
-		return "", fmt.Errorf("lookup password: nothing to pick from")
+		return "", fmt.Errorf("stored-string lookup: nothing to pick from")
 	}
 	b := make([]byte, length)
 	for i := range b {
