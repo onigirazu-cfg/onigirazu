@@ -100,6 +100,7 @@ func NewRegistry() *Registry {
 	registry.RegisterModule(NewRouterosAPIModule())
 	registry.RegisterModule(NewRouterosCommandModule())
 	registry.RegisterModule(NewRouterosFactsModule())
+	registry.RegisterModule(NewWaitForConnectionModule())
 	registry.RegisterModule(NewUfwModule())
 	registry.RegisterModule(NewDockerHostInfoModule())
 	registry.RegisterModule(NewIncludeRoleModule("include_role"))

@@ -1,0 +1,4 @@
+- name: A whole-path src with role_path
+  copy: {src: "{{ role_path }}/files/sensor.conf", dest: /etc/onigirazu-e2e-sensor.conf}
+- name: role_name is known
+  copy: {dest: /etc/onigirazu-e2e-role, content: "{{ role_name }}\n"}
