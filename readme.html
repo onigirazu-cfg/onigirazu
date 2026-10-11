@@ -230,7 +230,7 @@ formats can be used side by side. Examples: <a href="docs/examples/README.md">do
   <code>ansible_ssh_common_args</code>/<code>ansible_ssh_extra_args</code> (<code>ConnectTimeout</code>, <code>ProxyJump</code>/<code>-J</code>,
   <code>ProxyCommand</code>, <code>StrictHostKeyChecking=no</code>), keys of a running ssh-agent (<code>SSH_AUTH_SOCK</code>),
   OpenSSH certificates (<code>&lt;key&gt;-cert.pub</code> next to the key, or <code>ansible_ssh_certificate_file</code>),
-  <code>~/.ssh/config</code> for hosts named by an alias (HostName, Port, User, IdentityFile, ProxyJump),
+  <code>~/.ssh/config</code> for hosts named by an alias or with the alias in <code>ansible_host</code> (HostName, Port, User, IdentityFile, ProxyJump),
   <code>ansible_connection</code> <code>local</code>, <code>docker</code>, <code>podman</code>;
   templated values and <code>-e</code> overrides</li>
 <li><strong>Jinja</strong>: filters by bare or fully qualified name (<code>| ansible.builtin.to_json</code>, <code>is ansible.builtin.version</code>) — <code>default</code>, <code>map</code>, <code>select</code>/<code>selectattr</code>, <code>combine</code>, <code>regex_*</code>,
