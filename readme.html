@@ -214,7 +214,7 @@ formats can be used side by side. Examples: <a href="docs/examples/README.md">do
   <code>community.general.ufw</code>/<code>ini_file</code>/<code>timezone</code>/<code>archive</code>,
   <code>community.docker.docker_container</code>/<code>docker_image</code>/<code>docker_compose</code>/<code>docker_compose_v2</code>/<code>docker_host_info</code>,
   <code>community.mysql.mysql_db</code>/<code>mysql_user</code>, <code>community.postgresql.postgresql_db</code>/<code>postgresql_user</code>,
-  <code>community.sops.load_vars</code>, <code>community.general.pipx</code>/<code>flatpak</code>, <code>ansible.windows.*</code>, <code>community.windows.*</code>,
+  <code>community.sops.load_vars</code>, <code>community.general.pipx</code>/<code>flatpak</code>, <code>community.routeros.api</code>/<code>api_modify</code>/<code>command</code>/<code>facts</code>, <code>ansible.windows.*</code>, <code>community.windows.*</code>,
   <code>chocolatey.chocolatey.win_chocolatey</code>); <code>dnf</code>/<code>dnf5</code> run the <code>yum</code> module</li>
 <li><strong>Roles and collections</strong>: <code>roles/</code> next to the playbook, <code>roles_path</code> and <code>collections_path</code>
   from <code>ansible.cfg</code>, <code>ANSIBLE_ROLES_PATH</code>, <code>ANSIBLE_COLLECTIONS_PATH</code>,
@@ -451,6 +451,10 @@ to change. Secrets become variables with an example file. See <a href="docs/IMPO
 <tr>
 <td>Source control</td>
 <td><code>git</code></td>
+</tr>
+<tr>
+<td>Network devices</td>
+<td><code>routeros_api</code> (REST, idempotent items of a menu path), <code>routeros_command</code> (CLI over SSH), <code>routeros_facts</code> — MikroTik RouterOS 7, from the control machine (<code>ansible_connection: local</code>)</td>
 </tr>
 <tr>
 <td>Windows (WinRM or SSH)</td>
