@@ -205,7 +205,7 @@ formats can be used side by side. Examples: <a href="docs/examples/README.md">do
   <code>async</code> with <code>poll</code> (the task fails after <code>async</code> seconds); <code>poll: 0</code> starts it in the
   background and <code>async_status</code> reports on it (jobs live in the onigirazu process, which waits
   for unfinished ones at the end of the run); register projections (<code>register:</code> as a map of
-  names to expressions over <code>_task.result</code>, ansible-core 2.20) and <code>_task.result</code> in
+  names to expressions over <code>_task.result</code>, ansible-core 2.20/2.21) and <code>_task.result</code> in
   <code>changed_when</code>/<code>failed_when</code>/<code>until</code>; <code>argument_specs</code> of roles (<code>meta/argument_specs.yml</code>)
   and of plays validate variables before anything runs</li>
 <li><strong>Short forms</strong>: <code>command: make install chdir=/src</code>, <code>file: path=/etc/app state=directory</code>,
@@ -236,9 +236,10 @@ formats can be used side by side. Examples: <a href="docs/examples/README.md">do
 <li><strong>Jinja</strong>: filters by bare or fully qualified name (<code>| ansible.builtin.to_json</code>, <code>is ansible.builtin.version</code>) — <code>default</code>, <code>map</code>, <code>select</code>/<code>selectattr</code>, <code>combine</code>, <code>regex_*</code>,
   <code>to_json</code>/<code>from_yaml</code>, <code>ternary</code>, set operations, <code>password_hash</code>, ...), tests (<code>is defined</code>,
   <code>is version</code>, <code>is success</code>/<code>failed</code>/<code>changed</code>/<code>skipped</code>, <code>is match</code>/<code>search</code>, ...), <code>~</code>,
-  inline <code>if</code>, <code>omit</code>, Python string/dict/list methods (<code>.split()</code>, <code>.get()</code>), lookups
-  (<code>env</code>, <code>file</code>, <code>pipe</code>, <code>template</code>, <code>fileglob</code>, <code>first_found</code>, <code>community.general.bitwarden</code>,
-  ...), <code>{% set %}</code></li>
+  inline <code>if</code>, <code>omit</code>, Python string/dict/list methods (<code>.split()</code>, <code>.get()</code>), every lookup of
+  ansible-core 2.21 (<code>env</code>, <code>file</code>, <code>pipe</code>, <code>template</code>, <code>fileglob</code>, <code>first_found</code>, <code>vars</code>,
+  <code>inventory_hostnames</code>, <code>sequence</code>, <code>csvfile</code>, <code>ini</code>, <code>password</code>, <code>url</code>, ...) plus
+  <code>community.general.bitwarden</code>, <code>community.hashi_vault.*</code>, <code>community.sops.sops</code>, <code>{% set %}</code></li>
 <li><strong>Facts and variables</strong>: <code>ansible_facts</code> and the <code>ansible_*</code> names (distribution, OS family,
   hostname, IP, memory, virtualization, <code>ansible_pkg_mgr</code>, <code>ansible_local</code> from
   <code>/etc/ansible/facts.d</code>), <code>setup</code>, <code>hostvars</code>, <code>groups</code>, <code>group_names</code>, <code>inventory_hostname</code>,
