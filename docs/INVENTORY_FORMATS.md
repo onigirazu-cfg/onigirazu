@@ -270,6 +270,11 @@ variables: `terraform_type`, `terraform_address`, `terraform_module`, `terraform
 plus the mapping's `vars`. `lookup('cloud.terraform.tf_output', 'name', project_path='../infra')`
 (or `state_file=`) reads an output; without a name, all outputs as a dict.
 
+A YAML inventory may also start with the groups themselves (no `all:` wrapper), as Ansible
+reads it. A host whose address is its own name (`web1:` with no `ansible_host`) takes `HostName`,
+`Port`, `User`, `IdentityFile` and `ProxyJump` from its `~/.ssh/config` stanza, where the
+inventory sets nothing.
+
 ## Host variables
 
 | Variable | Meaning | Default |

@@ -183,6 +183,7 @@ YAML is read as Ansible reads it: unquoted `yes`/`no`/`on`/`off` values are bool
   `ansible_ssh_common_args`/`ansible_ssh_extra_args` (`ConnectTimeout`, `ProxyJump`/`-J`,
   `ProxyCommand`, `StrictHostKeyChecking=no`), keys of a running ssh-agent (`SSH_AUTH_SOCK`),
   OpenSSH certificates (`<key>-cert.pub` next to the key, or `ansible_ssh_certificate_file`),
+  `~/.ssh/config` for hosts named by an alias (HostName, Port, User, IdentityFile, ProxyJump),
   `ansible_connection` `local`, `docker`, `podman`;
   templated values and `-e` overrides
 - **Jinja**: filters by bare or fully qualified name (`| ansible.builtin.to_json`, `is ansible.builtin.version`) — `default`, `map`, `select`/`selectattr`, `combine`, `regex_*`,
@@ -412,7 +413,7 @@ to change. Secrets become variables with an example file. See [docs/IMPORT.md](d
 | Files | `file`, `copy`, `template`, `lineinfile`, `blockinfile`, `replace`, `ini_file`, `fetch`, `slurp`, `stat`, `find`, `archive`, `unarchive`, `get_url`, `config` (JSON/YAML/TOML keys) |
 | Packages | `package`, `apt`, `yum` (also `dnf`), `apt_repository`, `apt_key`, `pip`, `pipx`, `flatpak` |
 | Services and system | `service`, `systemd`, `cron`, `sysctl`, `mount`, `hostname`, `timezone`, `reboot`, `user`, `group`, `authorized_key`, `getent` |
-| Network and firewall | `uri`, `wait_for`, `firewall` (ufw, firewalld, iptables), `ufw` |
+| Network and firewall | `uri`, `wait_for`, `wait_for_connection`, `firewall` (ufw, firewalld, iptables), `ufw` |
 | Containers | `docker_container`, `docker_image`, `docker_compose` (v1 and v2), `docker_host_info`, `podman` |
 | Databases | `mysql_db`, `mysql_user`, `postgresql_db`, `postgresql_user`, `mongodb` |
 | Source control | `git` |
