@@ -2045,6 +2045,23 @@ func (e *ExecutionEngine) executeRole(ctx context.Context, role *types.Role, hos
 	// Merge role variables with play variables
 	// Priority: RoleVars > PlayVars > Defaults (handled by roleLoader)
 	roleVars := e.mergeRoleVariables(role, variables)
+	// the role's argument specs (meta/argument_specs.yml or parameters:)
+	// hold for the variables it will run with; defaults fill the gaps
+	if len(role.Meta.Parameters) > 0 {
+		pv := validator.NewParameterValidator(role.Meta.Parameters)
+		if res := pv.ValidateParameters(roleVars); !res.Valid {
+			msgs := make([]string, 0, len(res.Errors))
+			for _, ve := range res.Errors {
+				msgs = append(msgs, ve.Parameter+": "+ve.Error)
+			}
+			return fmt.Errorf("role '%s': argument_specs: %s", role.Name, strings.Join(msgs, "; "))
+		}
+		for name, def := range role.Meta.Parameters {
+			if _, set := roleVars[name]; !set && def.Default != nil {
+				roleVars[name] = def.Default
+			}
+		}
+	}
 
 	// role handlers run with the play's at the next flush: known before the
 	// role's tasks, which may flush them themselves (meta: flush_handlers)
