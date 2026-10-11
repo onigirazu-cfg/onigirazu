@@ -270,6 +270,11 @@ apply() {  # case_dir -> writes task_end events to $WORK/events.jsonl
   records | jq -c 'select(.fields.type == "task_end") | .fields' > "$WORK/events.jsonl" || true
 }
 
+# When no task event came back the process may have died before the engine
+# logged anything: the plain-text tail of the apply output (a Go runtime
+# "fatal error", a panic) is the only trace
+crash_tail() { grep -v '^{' "$WORK/apply.log" 2>/dev/null | grep -v '^\s*$' | tail -3 | paste -sd' ' - | cut -c1-300; }
+
 # First error lines of the last apply, for the job log
 apply_errors() {
   # the failed tasks' own messages first (the module's reason), then the log
@@ -321,7 +326,7 @@ for c in $cases; do
     failed="$(jq -r --arg h "$h" 'select(.host == $h and .success != true) | .task' "$WORK/events.jsonl" | expected_failures_out "$dir")"
     ran="$(jq -r --arg h "$h" 'select(.host == $h) | .task' "$WORK/events.jsonl" | wc -l | tr -d ' ')"
     if [ "$ran" = 0 ]; then
-      record "$c" "$h" FAIL "no task ran: $(records | jq -r 'select(.level == "ERROR") | .message' | head -1 | cut -c1-200)"
+      record "$c" "$h" FAIL "no task ran: $(records | jq -r 'select(.level == "ERROR") | .message' | head -1 | cut -c1-200) $(crash_tail)"
       continue
     fi
     if [ -n "$failed" ]; then
@@ -347,7 +352,7 @@ for c in $cases; do
   apply "$dir"
   for h in $passed; do
     ran="$(jq -r --arg h "$h" 'select(.host == $h) | .task' "$WORK/events.jsonl" | wc -l | tr -d ' ')"
-    [ "$ran" != 0 ] || { record "$c" "$h" FAIL "second apply: no task ran"; continue; }
+    [ "$ran" != 0 ] || { record "$c" "$h" FAIL "second apply: no task ran: $(crash_tail)"; continue; }
     changed="$(jq -r --arg h "$h" 'select(.host == $h and .changed == true) | .task' "$WORK/events.jsonl")"
     failed="$(jq -r --arg h "$h" 'select(.host == $h and .success != true) | .task' "$WORK/events.jsonl" | expected_failures_out "$dir")"
     if [ -n "$failed" ]; then record "$c" "$h" FAIL "second apply failed: $(echo "$failed" | paste -sd, -)$(timed_out)"; apply_errors
