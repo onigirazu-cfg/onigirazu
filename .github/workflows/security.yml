@@ -41,10 +41,23 @@ jobs:
 
     - name: Run Gosec Security Scanner
       continue-on-error: true
+      # G304 (paths from playbooks), G204 (commands from tasks), G301/G306
+      # (modes the playbook asks for) are what a configuration tool does;
+      # the rest is reported, and the SARIF below keeps the "gosec" alerts
+      # on GitHub in step with the code
       run: |
         go install github.com/securego/gosec/v2/cmd/gosec@latest
-        gosec -fmt json -out gosec-report.json ./... || true
-        gosec -fmt text -out gosec-report.txt ./... || true
+        gosec -exclude=G304,G204,G301,G306 -exclude-generated -fmt json -out gosec-report.json ./... || true
+        gosec -exclude=G304,G204,G301,G306 -exclude-generated -fmt text -out gosec-report.txt ./... || true
+        gosec -exclude=G304,G204,G301,G306 -exclude-generated -fmt sarif -out gosec.sarif ./... || true
+
+    - name: Upload Gosec results
+      if: always()
+      continue-on-error: true
+      uses: github/codeql-action/upload-sarif@v4
+      with:
+        sarif_file: 'gosec.sarif'
+        category: gosec
 
     - name: Check Gosec results
       if: always()

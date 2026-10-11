@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/onigirazu-cfg/onigirazu/internal/logger"
 )
 
 // Config is the secrets block of onigirazu.yml. Credentials never come from
@@ -54,7 +56,11 @@ func (r *Resolver) Get(provider, item, field string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return p.GetSecret(context.Background(), item, field)
+	value, err := p.GetSecret(context.Background(), item, field)
+	if err == nil {
+		logger.Redact(value)
+	}
+	return value, err
 }
 
 func (r *Resolver) provider(name string) (SecretProvider, error) {

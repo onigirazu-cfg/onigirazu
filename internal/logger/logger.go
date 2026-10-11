@@ -29,29 +29,29 @@ func NewWithWriter(verbose bool, writer io.Writer) *Logger {
 }
 
 func (l *Logger) Info(format string, args ...interface{}) {
-	message := fmt.Sprintf(format, args...)
+	message := Scrub(fmt.Sprintf(format, args...))
 	l.logger.Printf("[INFO] %s", message)
 }
 
 func (l *Logger) Debug(format string, args ...interface{}) {
 	if l.verbose {
-		message := fmt.Sprintf(format, args...)
+		message := Scrub(fmt.Sprintf(format, args...))
 		l.logger.Printf("[DEBUG] %s", message)
 	}
 }
 
 func (l *Logger) Error(format string, args ...interface{}) {
-	message := fmt.Sprintf(format, args...)
+	message := Scrub(fmt.Sprintf(format, args...))
 	l.logger.Printf("[ERROR] %s", message)
 }
 
 func (l *Logger) Warn(format string, args ...interface{}) {
-	message := fmt.Sprintf(format, args...)
+	message := Scrub(fmt.Sprintf(format, args...))
 	l.logger.Printf("[WARN] %s", message)
 }
 
 func (l *Logger) Fatal(format string, args ...interface{}) {
-	message := fmt.Sprintf(format, args...)
+	message := Scrub(fmt.Sprintf(format, args...))
 	l.logger.Printf("[FATAL] %s", message)
 	os.Exit(1)
 }

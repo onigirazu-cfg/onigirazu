@@ -317,7 +317,7 @@ func (l *EnhancedLogger) logText(level LogLevel, message string) {
 		output += fmt.Sprintf(" {%s}", strings.Join(fieldStrs, ", "))
 	}
 
-	l.logger.Println(output)
+	l.logger.Println(Scrub(output))
 }
 
 // logJSON logs in JSON format
@@ -336,11 +336,11 @@ func (l *EnhancedLogger) logJSON(level LogLevel, message string) {
 	jsonData, err := json.Marshal(entry)
 	if err != nil {
 		// Fallback to simple text logging
-		l.logger.Printf("JSON marshal error: %v, message: %s", err, message)
+		l.logger.Printf("JSON marshal error: %v, message: %s", err, Scrub(message))
 		return
 	}
 
-	l.logger.Println(string(jsonData))
+	l.logger.Println(Scrub(string(jsonData)))
 }
 
 // writeEntry writes a log entry in the appropriate format

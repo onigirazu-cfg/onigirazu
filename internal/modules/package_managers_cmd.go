@@ -135,6 +135,12 @@ func (p *cmdPackageManager) batch(specs []PackageSpec, do func(PackageSpec) (*Pa
 	var firstErr error
 	for _, s := range specs {
 		result, err := do(s)
+		if result == nil {
+			result = &PackageOperation{Package: s.Name, Success: false}
+			if err != nil {
+				result.Error = err.Error()
+			}
+		}
 		b.Operations = append(b.Operations, *result)
 		if err != nil {
 			b.Success = false

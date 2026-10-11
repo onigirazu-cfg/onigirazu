@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/onigirazu-cfg/onigirazu/internal/logger"
+
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 	"gopkg.in/yaml.v3"
@@ -174,6 +176,7 @@ func runBootstrap(cmd *cobra.Command, target string, o *bootstrapOptions) error 
 	hostVars := map[string]interface{}{"ansible_host": host, "ansible_port": port, "ansible_user": o.user,
 		"ansible_ssh_common_args": "-o StrictHostKeyChecking=accept-new"}
 	if password != "" {
+		logger.Redact(password)
 		hostVars["ansible_password"] = password
 		hostVars["ansible_become_password"] = password
 	}

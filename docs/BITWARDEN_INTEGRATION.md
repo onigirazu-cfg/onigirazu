@@ -2,7 +2,9 @@
 
 Templates, task arguments and variables read secrets when they are rendered, on the control
 machine. Nothing is written to disk; a value is reused within a run for `secrets.cache_ttl`.
-Mark tasks that show secrets with `no_log: true`.
+Mark tasks that show secrets with `no_log: true`. Every value a backend returns, and the
+passwords of the inventory, are replaced by `***` in log lines (also in `-v` variable dumps);
+`no_log` still matters for module output, results and the state.
 
 ## Bitwarden (and Vaultwarden)
 
