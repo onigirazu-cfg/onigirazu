@@ -8,6 +8,7 @@ import (
 	"math"
 	"path/filepath"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -25,6 +26,7 @@ import (
 	"github.com/onigirazu-cfg/onigirazu/internal/plugins"
 	"github.com/onigirazu-cfg/onigirazu/internal/security"
 	"github.com/onigirazu-cfg/onigirazu/internal/tagfilter"
+	"github.com/onigirazu-cfg/onigirazu/internal/validator"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
@@ -635,6 +637,21 @@ func (e *ExecutionEngine) executePlayOn(ctx context.Context, play *types.Play, h
 	// templated vars are rendered per host when a task runs (as Ansible
 	// does): "/backup/{{ inventory_hostname }}" differs per host
 	playVars = e.mergeVariables(playVars, e.extraVars)
+	if opts := types.ArgumentSpecsEntry(play.ArgumentSpecs, "main"); len(opts) > 0 {
+		pv := validator.NewParameterValidator(types.ArgumentSpecOptions(opts))
+		if res := pv.ValidateParameters(playVars); !res.Valid {
+			msgs := make([]string, 0, len(res.Errors))
+			for _, ve := range res.Errors {
+				msgs = append(msgs, ve.Parameter+": "+ve.Error)
+			}
+			return nil, fmt.Errorf("play '%s': argument_specs: %s", play.Name, strings.Join(msgs, "; "))
+		}
+		for name, def := range types.ArgumentSpecOptions(opts) {
+			if _, set := playVars[name]; !set && def.Default != nil {
+				playVars[name] = def.Default
+			}
+		}
+	}
 	playScope := e.scope
 	free, err := playStrategyFree(play.Strategy)
 	if err != nil {
@@ -1252,7 +1269,7 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 		if task.Until != "" && err == nil {
 			untilVars := taskVars
 			if task.Register != "" {
-				untilVars = e.mergeVariables(taskVars, map[string]interface{}{task.Register: registeredValue(result)})
+				untilVars = e.mergeVariables(taskVars, map[string]interface{}{task.Register: registeredValue(result), "_task": map[string]interface{}{"result": registeredValue(result)}})
 			}
 			holds, condErr := e.conditionHolds(ctx, task.Until, untilVars)
 			if condErr != nil {
@@ -1305,6 +1322,9 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 	}
 	if task.ChangedWhen != "" || task.FailedWhen != "" {
 		e.applyResultConditions(ctx, task, taskVars, &result)
+	}
+	if len(task.RegisterVars) > 0 {
+		e.applyRegisterProjections(task, *host, taskVars, &result)
 	}
 
 	e.metricsManager.AddExecutionTime(time.Since(taskStartTime))
@@ -2025,6 +2045,23 @@ func (e *ExecutionEngine) executeRole(ctx context.Context, role *types.Role, hos
 	// Merge role variables with play variables
 	// Priority: RoleVars > PlayVars > Defaults (handled by roleLoader)
 	roleVars := e.mergeRoleVariables(role, variables)
+	// the role's argument specs (meta/argument_specs.yml or parameters:)
+	// hold for the variables it will run with; defaults fill the gaps
+	if len(role.Meta.Parameters) > 0 {
+		pv := validator.NewParameterValidator(role.Meta.Parameters)
+		if res := pv.ValidateParameters(roleVars); !res.Valid {
+			msgs := make([]string, 0, len(res.Errors))
+			for _, ve := range res.Errors {
+				msgs = append(msgs, ve.Parameter+": "+ve.Error)
+			}
+			return fmt.Errorf("role '%s': argument_specs: %s", role.Name, strings.Join(msgs, "; "))
+		}
+		for name, def := range role.Meta.Parameters {
+			if _, set := roleVars[name]; !set && def.Default != nil {
+				roleVars[name] = def.Default
+			}
+		}
+	}
 
 	// role handlers run with the play's at the next flush: known before the
 	// role's tasks, which may flush them themselves (meta: flush_handlers)
@@ -2347,10 +2384,12 @@ func registeredValue(result types.TaskResult) map[string]interface{} {
 // with changed_when and failed_when; both see the result under its register name
 func (e *ExecutionEngine) applyResultConditions(ctx context.Context, task *types.Task,
 	taskVars map[string]interface{}, result *types.TaskResult) {
-	vars := taskVars
+	// _task.result is the result before any name is given to it
+	extra := map[string]interface{}{"_task": map[string]interface{}{"result": registeredValue(*result)}}
 	if task.Register != "" {
-		vars = e.mergeVariables(taskVars, map[string]interface{}{task.Register: registeredValue(*result)})
+		extra[task.Register] = registeredValue(*result)
 	}
+	vars := e.mergeVariables(taskVars, extra)
 	if task.ChangedWhen != "" {
 		holds, err := e.conditionHolds(ctx, task.ChangedWhen, vars)
 		if err != nil {
@@ -2796,4 +2835,25 @@ func (e *ExecutionEngine) prefetchLoop(ctx context.Context, task *types.Task, ho
 	}
 	return modules.PrefetchLoop(ctx, *host, &types.Task{Module: task.Module, Become: become.Become,
 		BecomeUser: become.User, BecomeMethod: become.Method}, paths)
+}
+
+// applyRegisterProjections sets the variables of a register: map, each the
+// value of its expression over _task.result and the task's variables
+// (ansible-core 2.20 register projections); a failing expression fails the
+// task
+func (e *ExecutionEngine) applyRegisterProjections(task *types.Task, host types.Host, taskVars map[string]interface{}, result *types.TaskResult) {
+	vars := e.mergeVariables(taskVars, map[string]interface{}{"_task": map[string]interface{}{"result": registeredValue(*result)}})
+	names := make([]string, 0, len(task.RegisterVars))
+	for name := range task.RegisterVars {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		value, err := expression.Eval(task.RegisterVars[name], vars)
+		if err != nil {
+			result.Failed, result.Success, result.Error = true, false, fmt.Sprintf("register %s: %v", name, err)
+			return
+		}
+		e.setHostVar(host.Name, name, value)
+	}
 }

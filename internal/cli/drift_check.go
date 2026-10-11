@@ -66,6 +66,7 @@ type driftCheckOptions struct {
 	output                   string
 	extraVars                []string
 	limit                    string
+	exclude                  string
 	tags                     string
 	skipTags                 string
 	become                   bool
@@ -88,7 +89,7 @@ func (o driftCheckOptions) applyArgs(playbook string, check bool) []string {
 	for _, e := range o.extraVars {
 		args = append(args, "-e", e)
 	}
-	for flag, value := range map[string]string{"--limit": o.limit, "--tags": o.tags, "--skip-tags": o.skipTags,
+	for flag, value := range map[string]string{"--limit": o.limit, "--exclude": o.exclude, "--tags": o.tags, "--skip-tags": o.skipTags,
 		"--become-user": o.becomeUser, "--user": o.user, "--private-key": o.privateKey} {
 		if value != "" {
 			args = append(args, flag, value)

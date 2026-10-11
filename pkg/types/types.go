@@ -183,20 +183,23 @@ type Task struct {
 	When          string                 `yaml:"when,omitempty"`
 	Loop          *Loop                  `yaml:"loop,omitempty"`
 	Register      string                 `yaml:"register,omitempty"`
-	IgnoreErrors  bool                   `yaml:"ignore_errors,omitempty"`
-	Tags          []string               `yaml:"tags,omitempty"`
-	Notify        []string               `yaml:"notify,omitempty"`
-	Listen        string                 `yaml:"listen,omitempty"`
-	Timeout       time.Duration          `yaml:"timeout,omitempty"`
-	Retries       int                    `yaml:"retries,omitempty"`
-	Delay         time.Duration          `yaml:"delay,omitempty"`
-	Until         string                 `yaml:"until,omitempty"`
-	ChangedWhen   string                 `yaml:"changed_when,omitempty"`
-	FailedWhen    string                 `yaml:"failed_when,omitempty"`
-	Include       string                 `yaml:"include,omitempty"`
-	Serial        bool                   `yaml:"serial,omitempty"`
-	RetryDelay    time.Duration          `yaml:"retry_delay,omitempty"`
-	Become        bool                   `yaml:"become,omitempty"`
+	// RegisterVars are register projections (ansible-core 2.20): variable
+	// name -> expression over _task.result and the task's variables
+	RegisterVars map[string]string `yaml:"-" json:"-"`
+	IgnoreErrors bool              `yaml:"ignore_errors,omitempty"`
+	Tags         []string          `yaml:"tags,omitempty"`
+	Notify       []string          `yaml:"notify,omitempty"`
+	Listen       string            `yaml:"listen,omitempty"`
+	Timeout      time.Duration     `yaml:"timeout,omitempty"`
+	Retries      int               `yaml:"retries,omitempty"`
+	Delay        time.Duration     `yaml:"delay,omitempty"`
+	Until        string            `yaml:"until,omitempty"`
+	ChangedWhen  string            `yaml:"changed_when,omitempty"`
+	FailedWhen   string            `yaml:"failed_when,omitempty"`
+	Include      string            `yaml:"include,omitempty"`
+	Serial       bool              `yaml:"serial,omitempty"`
+	RetryDelay   time.Duration     `yaml:"retry_delay,omitempty"`
+	Become       bool              `yaml:"become,omitempty"`
 	// BecomeSet tells become: false (run without escalation even in a play
 	// with become: true) from no become at all
 	BecomeSet bool `yaml:"-" json:"-"`
@@ -423,8 +426,14 @@ func (t *Task) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		t.Module = module
 	}
 	t.When = conditionValue(taskMap["when"])
-	if register, ok := taskMap["register"].(string); ok {
+	switch register := taskMap["register"].(type) {
+	case string:
 		t.Register = register
+	case map[string]interface{}:
+		t.RegisterVars = make(map[string]string, len(register))
+		for name, expr := range register {
+			t.RegisterVars[name] = fmt.Sprint(expr)
+		}
 	}
 	if ignoreErrors, ok := yamlBool(taskMap["ignore_errors"]); ok {
 		t.IgnoreErrors = ignoreErrors
@@ -792,6 +801,10 @@ type Play struct {
 	// Strategy: "linear" (default; every task on all hosts, then the next)
 	// or "free" (every host runs the play's tasks at its own pace)
 	Strategy string `yaml:"strategy,omitempty"`
+	// ArgumentSpecs validates the play's variables before its tasks run
+	// (ansible-core 2.20 play argument specs): options as in a role's
+	// meta/argument_specs.yml
+	ArgumentSpecs map[string]interface{} `yaml:"argument_specs,omitempty"`
 	// Throttle of the play: how many hosts run a task at once, for tasks
 	// without their own throttle
 	Throttle          string `yaml:"throttle,omitempty"`
@@ -1642,4 +1655,59 @@ func sortedKeys(set map[string]bool) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+// ArgumentSpecOptions turns the options of an Ansible argument spec
+// (meta/argument_specs.yml: type str/int/float/bool/list/dict/path,
+// required, default, choices, description) into the parameter schema the
+// validator reads
+func ArgumentSpecOptions(options map[string]interface{}) map[string]ParameterDef {
+	types := map[string]string{"str": "string", "string": "string", "path": "string", "raw": "string",
+		"int": "integer", "integer": "integer", "float": "number", "bool": "boolean", "boolean": "boolean",
+		"list": "array", "dict": "object", "jsonarg": "string", "bits": "integer", "bytes": "integer"}
+	out := make(map[string]ParameterDef, len(options))
+	for name, raw := range options {
+		spec, _ := raw.(map[string]interface{})
+		def := ParameterDef{Type: "string"}
+		if t, ok := spec["type"].(string); ok {
+			if mapped, known := types[t]; known {
+				def.Type = mapped
+			}
+		}
+		if r, ok := spec["required"].(bool); ok {
+			def.Required = r
+		}
+		if d, ok := spec["default"]; ok {
+			def.Default = d
+		}
+		if d, ok := spec["description"].(string); ok {
+			def.Description = d
+		} else if list, ok := spec["description"].([]interface{}); ok && len(list) > 0 {
+			def.Description = fmt.Sprint(list[0])
+		}
+		if choices, ok := spec["choices"].([]interface{}); ok {
+			def.Constraints.Enum = choices
+		}
+		out[name] = def
+	}
+	return out
+}
+
+// ArgumentSpecsEntry is the options of one entry point of an argument_specs
+// map ("main" by default)
+func ArgumentSpecsEntry(specs map[string]interface{}, entry string) map[string]interface{} {
+	if specs == nil {
+		return nil
+	}
+	if e, ok := specs[entry].(map[string]interface{}); ok {
+		if opts, ok := e["options"].(map[string]interface{}); ok {
+			return opts
+		}
+		return nil
+	}
+	// a bare options map (a play's argument_specs: {options: ...} or the options themselves)
+	if opts, ok := specs["options"].(map[string]interface{}); ok {
+		return opts
+	}
+	return nil
 }

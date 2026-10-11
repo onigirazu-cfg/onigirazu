@@ -321,7 +321,7 @@ func (rl *RoleLoader) loadMeta(ctx context.Context, role *types.Role) error {
 
 	data, err := vault.ReadFile(metaPath)
 	if os.IsNotExist(err) {
-		return nil
+		return rl.loadArgumentSpecs(role, nil)
 	}
 	if err != nil {
 		return err
@@ -330,7 +330,31 @@ func (rl *RoleLoader) loadMeta(ctx context.Context, role *types.Role) error {
 	if err := yaml.Unmarshal(data, &role.Meta); err != nil {
 		return fmt.Errorf("error parsing meta: %w", err)
 	}
+	return rl.loadArgumentSpecs(role, data)
+}
 
+// loadArgumentSpecs reads Ansible's role argument specs — meta/argument_specs.yml
+// or an argument_specs key of meta/main.yml — into the role's parameter
+// schema (the "main" entry point); an explicit parameters: schema wins
+func (rl *RoleLoader) loadArgumentSpecs(role *types.Role, meta []byte) error {
+	if len(role.Meta.Parameters) > 0 {
+		return nil
+	}
+	var doc struct {
+		ArgumentSpecs map[string]interface{} `yaml:"argument_specs"`
+	}
+	if data, err := vault.ReadFile(filepath.Join(role.Path, "meta", "argument_specs.yml")); err == nil {
+		if err := yaml.Unmarshal(data, &doc); err != nil {
+			return fmt.Errorf("error parsing meta/argument_specs.yml: %w", err)
+		}
+	} else if meta != nil {
+		if err := yaml.Unmarshal(meta, &doc); err != nil {
+			return nil
+		}
+	}
+	if opts := types.ArgumentSpecsEntry(doc.ArgumentSpecs, "main"); len(opts) > 0 {
+		role.Meta.Parameters = types.ArgumentSpecOptions(opts)
+	}
 	return nil
 }
 

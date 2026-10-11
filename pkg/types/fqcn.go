@@ -11,6 +11,8 @@ var collectionModules = map[string]string{
 	"community.general.archive":             "archive",
 	"community.docker.docker_container":     "docker_container",
 	"community.sops.load_vars":              "include_vars",
+	"community.general.pipx":                "pipx",
+	"community.general.flatpak":             "flatpak",
 	"community.docker.docker_image":         "docker_image",
 	"community.docker.docker_compose":       "docker_compose",
 	"community.docker.docker_compose_v2":    "docker_compose",

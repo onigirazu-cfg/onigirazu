@@ -34,6 +34,7 @@ Exit code 1 when a check fails or a host cannot be checked.`,
 	cmd.Flags().StringVar(&o.output, "output", "", "Write the report to this file")
 	cmd.Flags().StringArrayVarP(&o.extraVars, "extra-vars", "e", nil, "Extra variables, as for apply (repeatable)")
 	cmd.Flags().StringVar(&o.limit, "limit", "", "Check only hosts matching this pattern")
+	cmd.Flags().StringVar(&o.exclude, "exclude", "", "Leave out hosts matching this pattern")
 	cmd.Flags().BoolVarP(&o.become, "become", "b", false, "Use privilege escalation in every play")
 	cmd.Flags().StringVar(&o.becomeUser, "become-user", "", "User to become")
 	cmd.Flags().StringVarP(&o.user, "user", "u", "", "SSH user for every host")

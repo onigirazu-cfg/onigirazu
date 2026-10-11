@@ -29,6 +29,7 @@ when there are changes (1 when a task cannot be checked).`,
 	cmd.Flags().StringVar(&o.output, "output", "", "Write the report to this file")
 	cmd.Flags().StringArrayVarP(&o.extraVars, "extra-vars", "e", nil, "Extra variables, as for apply (repeatable)")
 	cmd.Flags().StringVar(&o.limit, "limit", "", "Plan only for hosts matching this pattern")
+	cmd.Flags().StringVar(&o.exclude, "exclude", "", "Leave out hosts matching this pattern")
 	cmd.Flags().StringVar(&o.tags, "tags", "", "Plan only tasks with these tags")
 	cmd.Flags().StringVar(&o.skipTags, "skip-tags", "", "Skip tasks with these tags")
 	cmd.Flags().BoolVarP(&o.become, "become", "b", false, "Use privilege escalation in every play")

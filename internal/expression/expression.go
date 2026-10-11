@@ -24,6 +24,9 @@ var (
 	definedTest = regexp.MustCompile(`([A-Za-z_]\w*(?:\.[A-Za-z_]\w*|\[[^\]]+\])*)\s+is\s+(not\s+defined|undefined|defined)\b`)
 	// Jinja filters without arguments that map onto expr builtins
 	bareFilter = regexp.MustCompile(`\|\s*(` + strings.Join(filterNames, "|") + `)\b(\s*\()?`)
+	// filters and tests by their fully qualified names: | ansible.builtin.to_json,
+	// is ansible.builtin.version (ansible-core 2.19)
+	builtinPrefix = regexp.MustCompile(`(\|\s*|\bis\s+(?:not\s+)?)ansible\.(?:builtin|legacy)\.`)
 	// map(attribute='x') has a keyword argument, which expr does not
 	mapAttribute = regexp.MustCompile(`\bmap\(\s*attribute\s*=\s*`)
 	// keyword arguments of random/shuffle and of the secrets lookups become
@@ -264,6 +267,7 @@ func translateCode(code string) string {
 		}
 		return "| " + name + "()"
 	})
+	code = builtinPrefix.ReplaceAllString(code, "$1")
 	code = mapAttribute.ReplaceAllString(code, "map_attribute(")
 	code = randomKeyword.ReplaceAllString(code, `"$1", $2`)
 	code = filterKeyword.ReplaceAllString(code, `"`+kwPrefix+`$1", $2`)
