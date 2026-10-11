@@ -1,0 +1,33 @@
+# the ansible.builtin modules added for 2.21 parity that a plain Ubuntu VM
+# can exercise: tempfile, assemble, known_hosts, dpkg_selections,
+# service_facts, mount_facts, set_stats, validate_argument_spec,
+# yum_repository (only a file here), raw and systemd_service by alias
+plays:
+  - name: builtin modules
+    hosts: all
+    become: true
+    gather_facts: false
+    vars: {port: 8080, mode: fast}
+    tasks:
+      - validate_argument_spec:
+          argument_spec: {port: {type: int, required: true}, mode: {type: str, choices: [fast, safe]}}
+          provided_arguments: {port: "{{ port }}", mode: "{{ mode }}"}
+      - tempfile: {state: directory, prefix: oni-e2e.}
+        register: tmpdir
+      - copy: {dest: "{{ tmpdir.path }}/parts/", src: parts/, remote_src: false}
+      - assemble: {src: "{{ tmpdir.path }}/parts", dest: /etc/onigirazu-e2e-assembled, delimiter: "# ---"}
+      - known_hosts: {name: e2e-host.example, key: "e2e-host.example ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGdlb2ZmcmV5dGhpc2lzYWZha2VrZXlmb3J0aGVlMmU0 e2e", path: /root/.ssh/known_hosts}
+      - dpkg_selections: {name: tree, selection: hold}
+      - dpkg_selections: {name: tree, selection: install}
+      - service_facts:
+      - mount_facts:
+      - yum_repository: {name: onigirazu-e2e, description: e2e, baseurl: http://repo.example/x, enabled: false, reposdir: /tmp/onigirazu-e2e-repos}
+      - set_stats: {data: {deployed: 1}}
+      - raw: echo raw-ok > /etc/onigirazu-e2e-raw
+      - systemd_service: {name: cron, state: started}
+      - copy:
+          dest: /etc/onigirazu-e2e-builtin
+          content: |
+            {{ tmpdir.path.startswith('/tmp/oni-e2e.') }}
+            {{ 'ssh.service' in services or 'ssh' in services or 'cron.service' in services }} {{ '/' in mount_points }}
+            {{ ansible_stats.deployed }}

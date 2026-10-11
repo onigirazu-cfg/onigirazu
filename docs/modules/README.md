@@ -1170,6 +1170,65 @@ console-less terminal); the host key is checked against `known_hosts` like any S
 
 `routeros_identity`, `routeros_resource`, `routeros_routerboard`, `routeros_interfaces`,
 `routeros_hostname`, `routeros_version`, `routeros_board` as host facts (`community.routeros.facts`).
+### tempfile
+
+A temporary file or directory on the host: `state` (`file`/`directory`), `path` (default the system temp dir), `prefix` (`ansible.`), `suffix`; returns `path`.
+
+### assemble
+
+Joins the files of a directory, in name order, into `dest`: `src` (on the host; `remote_src: false` reads the control machine), `delimiter`, `regexp` (only matching names), `ignore_hidden`, `mode`, `owner`, `group`, `validate`.
+
+### known_hosts
+
+An entry of a known_hosts file: `name`, `key` (the line, with or without the name), `path` (`~/.ssh/known_hosts`), `state`, `hash_host`.
+
+### debconf
+
+A debconf selection: `name` (the package), `question`, `vtype`, `value`, `unseen`; without a question only the current values are reported.
+
+### dpkg_selections
+
+`name`, `selection` (`install`, `hold`, `deinstall`, `purge`).
+
+### service_facts
+
+`ansible_facts.services`: name → `{name, state, status, source}` from systemd (units and unit files), OpenRC or SysV scripts.
+
+### mount_facts
+
+`ansible_facts.mount_points`: path → `{device, mount, fstype, options}` from `/proc/mounts`; `fstypes` and `devices` filter.
+
+### set_stats
+
+`data` (a dict) recorded under `ansible_stats` of the host; `per_host`, `aggregate` are accepted.
+
+### validate_argument_spec
+
+`argument_spec` (options with `type`, `required`, `default`, `choices`) checked against `provided_arguments`; fails with every violation listed.
+
+### rpm_key
+
+`key` (a file, an URL or a key id), `state`, `fingerprint` (checked before the import).
+
+### yum_repository
+
+A repository in `<reposdir>/<file>.repo` (default `/etc/yum.repos.d/<name>.repo`), other repositories of the file untouched: `name`, `description`, `baseurl`/`metalink`/`mirrorlist`, `enabled`, `gpgcheck`, `gpgkey`, `exclude`, `includepkgs`, `priority`, `sslverify`, `proxy`, `module_hotfixes`, `skip_if_unavailable` and the other yum options; `state: absent`.
+
+### sysvinit
+
+A SysV init service: `name`, `state` (`started`, `stopped`, `restarted`, `reloaded`), `enabled` (update-rc.d / chkconfig), `pattern` (a process to look for instead of `status`).
+
+### expect
+
+Runs `command` with the host's `expect(1)` and answers prompts: `responses` (prompt regexp → answer, or a list of answers for repeated prompts), `chdir`, `creates`, `removes`, `timeout` (30 s). Needs the `expect` package on the host.
+
+### subversion
+
+A working copy: `repo`, `dest`, `revision` (`HEAD`), `force`, `username`, `password`, `export`, `switch`, `update`, `checkout`, `in_place`, `executable`.
+
+### iptables
+
+One rule, kept with `iptables -C`: `table`, `chain`, `protocol`, `source`, `destination` (a leading `!` negates), `in_interface`, `out_interface`, `source_port`, `destination_port`, `destination_ports`, `match`, `ctstate`, `comment`, `limit`, `log_prefix`, `reject_with`, `to_destination`, `to_source`, `to_ports`, `tcp_flags`, `icmp_type`, `uid_owner`, ... , `jump`/`goto`, `state`, `action` (`append`/`insert`), `rule_num`, `ip_version`; `policy` sets a chain's policy, `flush: true` empties it.
 
 ### pip
 
