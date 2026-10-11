@@ -459,12 +459,44 @@ to change. Secrets become variables with an example file. See <a href="docs/IMPO
 <td><code>routeros_api</code> (REST, idempotent items of a menu path), <code>routeros_command</code> (CLI over SSH), <code>routeros_facts</code> — MikroTik RouterOS 7, from the control machine (<code>ansible_connection: local</code>)</td>
 </tr>
 <tr>
+<td>Commands</td>
+<td><code>command</code>, <code>shell</code> (also <code>raw</code>), <code>script</code></td>
+</tr>
+<tr>
+<td>Files</td>
+<td><code>file</code>, <code>copy</code>, <code>template</code>, <code>lineinfile</code>, <code>blockinfile</code>, <code>replace</code>, <code>ini_file</code>, <code>fetch</code>, <code>slurp</code>, <code>stat</code>, <code>find</code>, <code>archive</code>, <code>unarchive</code>, <code>get_url</code>, <code>assemble</code>, <code>tempfile</code>, <code>config</code> (JSON/YAML/TOML keys)</td>
+</tr>
+<tr>
+<td>Packages</td>
+<td><code>package</code>, <code>apt</code>, <code>yum</code> (also <code>dnf</code>), <code>apt_repository</code>, <code>apt_key</code>, <code>debconf</code>, <code>dpkg_selections</code>, <code>rpm_key</code>, <code>yum_repository</code>, <code>pip</code>, <code>pipx</code>, <code>flatpak</code></td>
+</tr>
+<tr>
+<td>Services and system</td>
+<td><code>service</code>, <code>systemd</code> (also <code>systemd_service</code>), <code>sysvinit</code>, <code>service_facts</code>, <code>mount_facts</code>, <code>cron</code>, <code>sysctl</code>, <code>mount</code>, <code>hostname</code>, <code>timezone</code>, <code>reboot</code>, <code>user</code>, <code>group</code>, <code>authorized_key</code>, <code>known_hosts</code>, <code>getent</code>, <code>expect</code></td>
+</tr>
+<tr>
+<td>Network and firewall</td>
+<td><code>uri</code>, <code>wait_for</code>, <code>firewall</code> (ufw, firewalld, iptables), <code>ufw</code>, <code>iptables</code></td>
+</tr>
+<tr>
+<td>Containers</td>
+<td><code>docker_container</code>, <code>docker_image</code>, <code>docker_compose</code> (v1 and v2), <code>docker_host_info</code>, <code>podman</code></td>
+</tr>
+<tr>
+<td>Databases</td>
+<td><code>mysql_db</code>, <code>mysql_user</code>, <code>postgresql_db</code>, <code>postgresql_user</code>, <code>mongodb</code></td>
+</tr>
+<tr>
+<td>Source control</td>
+<td><code>git</code>, <code>subversion</code></td>
+</tr>
+<tr>
 <td>Windows (WinRM or SSH)</td>
 <td><code>win_ping</code>, <code>win_command</code>, <code>win_shell</code>, <code>win_powershell</code>, <code>win_regedit</code>, <code>win_file</code>, <code>win_copy</code>, <code>win_service</code>, <code>win_timezone</code>, <code>win_firewall_rule</code>, <code>win_firewall</code>, <code>win_group_membership</code>, <code>win_feature</code>, <code>win_reboot</code>, <code>win_scheduled_task</code>, <code>win_chocolatey</code>, <code>win_optional_feature</code>, <code>win_disk_facts</code>, <code>win_initialize_disk</code>, <code>win_partition</code>, <code>win_format</code>; facts (<code>ansible_os_family: Windows</code>, ...)</td>
 </tr>
 <tr>
 <td>Flow and data</td>
-<td><code>debug</code>, <code>assert</code>, <code>fail</code>, <code>set_fact</code>, <code>include_vars</code>, <code>add_host</code>, <code>group_by</code>, <code>setup</code>/<code>gather_facts</code>, <code>pause</code>, <code>ping</code>, <code>meta</code>, <code>async_status</code>, <code>include_role</code>/<code>import_role</code>, <code>verify</code></td>
+<td><code>debug</code>, <code>assert</code>, <code>fail</code>, <code>set_fact</code>, <code>set_stats</code>, <code>validate_argument_spec</code>, <code>include_vars</code>, <code>add_host</code>, <code>group_by</code>, <code>setup</code>/<code>gather_facts</code>, <code>pause</code>, <code>ping</code>, <code>meta</code>, <code>async_status</code>, <code>include_role</code>/<code>import_role</code>, <code>verify</code></td>
 </tr>
 </tbody>
 </table>
