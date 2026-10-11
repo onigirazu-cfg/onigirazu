@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `and`, `or` and `not` follow Jinja for every value, not only booleans: `{% if not a and not b %}` works with strings, numbers and lists, `x or 'default'` returns the operand, the right side stays unevaluated when the left decides (`u is defined and u.k`); a `{% if %}` condition the evaluator rejects is reported as such instead of Go's "function x not defined"
 - A host whose facts cannot be gathered leaves the run like in Ansible: UNREACHABLE on a connection failure (FAILED otherwise), no further task runs on it, the play fails when no host is left or `any_errors_fatal` is set
 - A templated `src`/`script`/`file` of a role task is placed after rendering: an absolute result is used as it is, a relative one is the role's file (`files/`, `templates/`); it is no longer glued to the role directory at parse time
 - `~/.ssh/config` is also applied when `ansible_host` is the alias (HostName, Port, User, IdentityFile, ProxyJump)
