@@ -355,6 +355,10 @@ func evalBlocks(text string, variables map[string]interface{}) (string, []string
 		m := ifBlock.FindStringSubmatch(block)
 		holds, err := expression.Condition(m[2], variables)
 		if err != nil {
+			// the Go path would only say "function x not defined"
+			if firstErr == nil {
+				firstErr = err
+			}
 			return block
 		}
 		return fmt.Sprintf("{%% %s %t %%}", m[1], holds)

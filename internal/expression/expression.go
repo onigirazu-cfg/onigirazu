@@ -95,6 +95,7 @@ func compile(expression string) (*vm.Program, error) {
 		expr.Env(map[string]interface{}{}),
 		expr.AllowUndefinedVariables(),
 		expr.Patch(inPatch{}),
+		expr.Patch(truthPatch{}),
 		expr.Patch(methodPatch{}),
 		expr.Patch(indexPatch{}),
 		expr.Function("jinja_method", callMethod),
@@ -124,6 +125,9 @@ func compile(expression string) (*vm.Program, error) {
 			}
 			return secretValue(fmt.Sprint(params[0]), fmt.Sprint(params[1]), fmt.Sprint(params[2]))
 		}),
+		expr.Function("jinja_truthy", func(params ...interface{}) (interface{}, error) {
+			return Truthy(params[0]), nil
+		}, new(func(interface{}) bool)),
 		expr.Function("jinja_in", func(params ...interface{}) (interface{}, error) {
 			return contains(params[1], params[0]), nil
 		}),
@@ -317,6 +321,31 @@ func Truthy(v interface{}) bool {
 		return len(t) > 0
 	}
 	return true
+}
+
+// truthPatch gives and/or/not Jinja's truthiness: "" , 0, [] and none are
+// false, and the operators return an operand, not a bool ("x or 'default'").
+// Both stay lazy: "u is defined and u.y" never touches u.y of an undefined u.
+type truthPatch struct{}
+
+func truthy(n ast.Node) ast.Node {
+	return &ast.CallNode{Callee: &ast.IdentifierNode{Value: "jinja_truthy"}, Arguments: []ast.Node{n}}
+}
+
+func (truthPatch) Visit(node *ast.Node) {
+	switch n := (*node).(type) {
+	case *ast.BinaryNode:
+		switch n.Operator {
+		case "and", "&&":
+			ast.Patch(node, &ast.ConditionalNode{Cond: truthy(n.Left), Exp1: n.Right, Exp2: n.Left})
+		case "or", "||":
+			ast.Patch(node, &ast.ConditionalNode{Cond: truthy(n.Left), Exp1: n.Left, Exp2: n.Right})
+		}
+	case *ast.UnaryNode:
+		if n.Operator == "not" || n.Operator == "!" {
+			ast.Patch(node, &ast.UnaryNode{Operator: "!", Node: truthy(n.Node)})
+		}
+	}
 }
 
 // inPatch sends every "in" through jinja_in, which also tests substrings
