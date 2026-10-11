@@ -56,7 +56,9 @@ func resolveRoleFiles(tasks []types.Task, rolePath string) {
 			if wholePathTemplate.MatchString(src) {
 				continue
 			}
-			t.Args[key] = filepath.Join(rolePath, dir, src)
+			// rendered later: an absolute result is used as it is, a
+			// relative one is looked up in the role's directory
+			t.Args["_role_dir"] = filepath.Join(rolePath, dir)
 			continue
 		}
 		for _, candidate := range []string{filepath.Join(rolePath, dir, src), filepath.Join(rolePath, src)} {

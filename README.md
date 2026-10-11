@@ -184,7 +184,7 @@ YAML is read as Ansible reads it: unquoted `yes`/`no`/`on`/`off` values are bool
   `ansible_ssh_common_args`/`ansible_ssh_extra_args` (`ConnectTimeout`, `ProxyJump`/`-J`,
   `ProxyCommand`, `StrictHostKeyChecking=no`), keys of a running ssh-agent (`SSH_AUTH_SOCK`),
   OpenSSH certificates (`<key>-cert.pub` next to the key, or `ansible_ssh_certificate_file`),
-  `~/.ssh/config` for hosts named by an alias (HostName, Port, User, IdentityFile, ProxyJump),
+  `~/.ssh/config` for hosts named by an alias or with the alias in `ansible_host` (HostName, Port, User, IdentityFile, ProxyJump),
   `ansible_connection` `local`, `docker`, `podman`;
   templated values and `-e` overrides
 - **Jinja**: filters by bare or fully qualified name (`| ansible.builtin.to_json`, `is ansible.builtin.version`) — `default`, `map`, `select`/`selectattr`, `combine`, `regex_*`,

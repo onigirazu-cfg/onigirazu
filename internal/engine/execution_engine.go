@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"os"
 	"path/filepath"
 	"reflect"
 	"sort"
@@ -626,9 +627,11 @@ func (e *ExecutionEngine) executePlayOn(ctx context.Context, play *types.Play, h
 
 	// Gather facts if enabled (before setting play variables so they can use facts)
 	if play.GatherFacts {
-		if err := e.gatherFacts(ctx, hosts); err != nil {
-			e.logger.Warn("Failed to gather facts: %v", err)
+		if err := e.hostsLeftAfterFacts(e.gatherFacts(ctx, hosts), hosts, result); err != nil {
+			result.EndTime = time.Now()
+			return result, err
 		}
+		hosts = e.activeHosts(hosts)
 	}
 
 	// Set play variables - merge with facts if available
@@ -1121,6 +1124,7 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 	if err != nil {
 		return failed(fmt.Errorf("failed to render task arguments: %w", err))
 	}
+	resolveRoleSource(task.Module, renderedArgs)
 	if task.Module == "setup" || task.Module == "gather_facts" {
 		return e.runSetup(ctx, task, host, renderedArgs, playResult)
 	}
@@ -1727,7 +1731,9 @@ func (e *ExecutionEngine) SetLimit(pattern string) {
 }
 
 // gatherFacts gathers facts from hosts
-func (e *ExecutionEngine) gatherFacts(ctx context.Context, hosts []types.Host) error {
+func (e *ExecutionEngine) gatherFacts(ctx context.Context, hosts []types.Host) map[string]error {
+	var failedMu sync.Mutex
+	failed := map[string]error{}
 	e.logger.Debug("Gathering facts from %d hosts", len(hosts))
 
 	// on all hosts at once, as the tasks run: one after another, 10 hosts
@@ -1742,8 +1748,9 @@ func (e *ExecutionEngine) gatherFacts(ctx context.Context, hosts []types.Host) e
 			// Gather system facts using the facts gatherer (with caching)
 			systemFacts, err := e.factsGatherer.GatherFacts(ctx, host)
 			if err != nil {
-				e.logger.Warn("Failed to gather facts from %s: %v", host.Name, err)
-				// Continue with basic facts on error
+				failedMu.Lock()
+				failed[host.Name] = err
+				failedMu.Unlock()
 				e.setFacts(host.Name, map[string]interface{}{
 					"onigirazu_hostname": host.Name,
 					"onigirazu_host":     host.Address,
@@ -1764,7 +1771,7 @@ func (e *ExecutionEngine) gatherFacts(ctx context.Context, hosts []types.Host) e
 			stats.Hits, stats.Misses, stats.HitRate)
 	}
 
-	return nil
+	return failed
 }
 
 // hostFacts are the variables the gathered facts of a host give: the
@@ -2926,4 +2933,87 @@ func isUnreachableError(msg string) bool {
 		}
 	}
 	return false
+}
+
+// hostsLeftAfterFacts takes the hosts whose facts could not be gathered
+// out of the run, as Ansible does: a connection failure makes the host
+// UNREACHABLE, any other failure FAILED; neither runs another task. The
+// error is the play's when no host is left or any_errors_fatal is set.
+func (e *ExecutionEngine) hostsLeftAfterFacts(failed map[string]error, hosts []types.Host, result *types.PlayResult) error {
+	if len(failed) == 0 {
+		return nil
+	}
+	e.mutex.Lock()
+	if e.failedHosts == nil {
+		e.failedHosts = map[string]bool{}
+	}
+	for name := range failed {
+		if !e.failedHosts[name] {
+			e.failedHosts[name] = true
+			e.policy.batchFailed++
+			e.hostsVersion++
+		}
+	}
+	fatal := e.policy.anyErrorsFatal
+	e.mutex.Unlock()
+	result.Success = false
+	names := make([]string, 0, len(failed))
+	for name := range failed {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	var first error
+	for _, name := range names {
+		err := failed[name]
+		verdict := "failed"
+		msg := "gathering facts failed: " + err.Error()
+		if isUnreachableError(err.Error()) {
+			verdict = "unreachable"
+			msg = "unreachable: " + err.Error()
+		}
+		e.logger.Error("Host %s is %s, no task runs on it: %v", name, verdict, err)
+		result.Hosts = append(result.Hosts, types.HostResult{Host: name, Failed: true, Tasks: []types.TaskResult{{
+			TaskName: "Gathering Facts", Host: name, Module: "setup", Failed: true, Error: msg, Timestamp: time.Now(),
+		}}})
+		if first == nil {
+			first = fmt.Errorf("host %s %s: %w", name, verdict, err)
+		}
+	}
+	if fatal || len(e.activeHosts(hosts)) == 0 {
+		return first
+	}
+	return nil
+}
+
+// resolveRoleSource places a templated source of a role task after it was
+// rendered: an absolute path stays, a relative one is the role's file
+// (files/ or templates/, else the role directory)
+func resolveRoleSource(module string, args map[string]interface{}) {
+	roleDir, ok := args["_role_dir"].(string)
+	if !ok {
+		return
+	}
+	delete(args, "_role_dir")
+	if remote, _ := args["remote_src"].(bool); remote {
+		return
+	}
+	key := "src"
+	switch module {
+	case "script":
+		key = "script"
+	case "include_vars":
+		key = "file"
+	}
+	src, ok := args[key].(string)
+	if !ok || src == "" || filepath.IsAbs(src) {
+		return
+	}
+	chosen := filepath.Join(roleDir, src)
+	for _, candidate := range []string{chosen, filepath.Join(filepath.Dir(roleDir), src)} {
+		if _, err := os.Stat(candidate); err == nil {
+			chosen = candidate
+			break
+		}
+	}
+	args[key] = chosen
 }
