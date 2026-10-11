@@ -203,7 +203,10 @@ formats can be used side by side. Examples: <a href="docs/examples/README.md">do
   <code>check_mode</code>, <code>diff</code>, <code>vars</code>, <code>environment</code>, <code>action</code> (also with a templated module name),
   <code>async</code> with <code>poll</code> (the task fails after <code>async</code> seconds); <code>poll: 0</code> starts it in the
   background and <code>async_status</code> reports on it (jobs live in the onigirazu process, which waits
-  for unfinished ones at the end of the run)</li>
+  for unfinished ones at the end of the run); register projections (<code>register:</code> as a map of
+  names to expressions over <code>_task.result</code>, ansible-core 2.20) and <code>_task.result</code> in
+  <code>changed_when</code>/<code>failed_when</code>/<code>until</code>; <code>argument_specs</code> of roles (<code>meta/argument_specs.yml</code>)
+  and of plays validate variables before anything runs</li>
 <li><strong>Short forms</strong>: <code>command: make install chdir=/src</code>, <code>file: path=/etc/app state=directory</code>,
   <code>args:</code>; argument aliases such as <code>apt: pkg:</code>, <code>file: dest:</code>, <code>systemd: unit:</code></li>
 <li><strong>Module names</strong>: <code>ansible.builtin.*</code>, <code>ansible.legacy.*</code> and the collection modules
@@ -211,7 +214,7 @@ formats can be used side by side. Examples: <a href="docs/examples/README.md">do
   <code>community.general.ufw</code>/<code>ini_file</code>/<code>timezone</code>/<code>archive</code>,
   <code>community.docker.docker_container</code>/<code>docker_image</code>/<code>docker_compose</code>/<code>docker_compose_v2</code>/<code>docker_host_info</code>,
   <code>community.mysql.mysql_db</code>/<code>mysql_user</code>, <code>community.postgresql.postgresql_db</code>/<code>postgresql_user</code>,
-  <code>community.sops.load_vars</code>, <code>ansible.windows.*</code>, <code>community.windows.*</code>,
+  <code>community.sops.load_vars</code>, <code>community.general.pipx</code>/<code>flatpak</code>, <code>ansible.windows.*</code>, <code>community.windows.*</code>,
   <code>chocolatey.chocolatey.win_chocolatey</code>); <code>dnf</code>/<code>dnf5</code> run the <code>yum</code> module</li>
 <li><strong>Roles and collections</strong>: <code>roles/</code> next to the playbook, <code>roles_path</code> and <code>collections_path</code>
   from <code>ansible.cfg</code>, <code>ANSIBLE_ROLES_PATH</code>, <code>ANSIBLE_COLLECTIONS_PATH</code>,
@@ -226,7 +229,7 @@ formats can be used side by side. Examples: <a href="docs/examples/README.md">do
   <code>ansible_ssh_common_args</code>/<code>ansible_ssh_extra_args</code> (<code>ConnectTimeout</code>, <code>ProxyJump</code>/<code>-J</code>,
   <code>ProxyCommand</code>, <code>StrictHostKeyChecking=no</code>), <code>ansible_connection</code> <code>local</code>, <code>docker</code>, <code>podman</code>;
   templated values and <code>-e</code> overrides</li>
-<li><strong>Jinja</strong>: filters (<code>default</code>, <code>map</code>, <code>select</code>/<code>selectattr</code>, <code>combine</code>, <code>regex_*</code>,
+<li><strong>Jinja</strong>: filters by bare or fully qualified name (<code>| ansible.builtin.to_json</code>, <code>is ansible.builtin.version</code>) — <code>default</code>, <code>map</code>, <code>select</code>/<code>selectattr</code>, <code>combine</code>, <code>regex_*</code>,
   <code>to_json</code>/<code>from_yaml</code>, <code>ternary</code>, set operations, <code>password_hash</code>, ...), tests (<code>is defined</code>,
   <code>is version</code>, <code>is success</code>/<code>failed</code>/<code>changed</code>/<code>skipped</code>, <code>is match</code>/<code>search</code>, ...), <code>~</code>,
   inline <code>if</code>, <code>omit</code>, Python string/dict/list methods (<code>.split()</code>, <code>.get()</code>), lookups
@@ -424,7 +427,7 @@ to change. Secrets become variables with an example file. See <a href="docs/IMPO
 </tr>
 <tr>
 <td>Packages</td>
-<td><code>package</code>, <code>apt</code>, <code>yum</code> (also <code>dnf</code>), <code>apt_repository</code>, <code>apt_key</code>, <code>pip</code></td>
+<td><code>package</code>, <code>apt</code>, <code>yum</code> (also <code>dnf</code>), <code>apt_repository</code>, <code>apt_key</code>, <code>pip</code>, <code>pipx</code>, <code>flatpak</code></td>
 </tr>
 <tr>
 <td>Services and system</td>
@@ -587,7 +590,7 @@ return values and examples: <a href="docs/modules/README.md">docs/modules/README
   --check --diff -f 20
 </code></pre>
 
-<p><code>--list-hosts</code>, <code>--list-tasks</code>, <code>--list-tags</code> and <code>--syntax-check</code> print and exit;
+<p><code>--exclude PATTERN</code> leaves hosts out (also on <code>plan</code>, <code>drift</code>, <code>verify</code>); <code>--list-hosts</code>, <code>--list-tasks</code>, <code>--list-tags</code> and <code>--syntax-check</code> print and exit;
 <code>--start-at-task</code> skips to a task; <code>-o json|yaml</code> prints a machine-readable result.
 Every command has <code>--help</code>. Global flags: <code>-i</code>, <code>-c</code> (config file), <code>-s</code> (state file), <code>-v</code>, <code>--show-debug</code>,
 <code>--no-color</code>, <code>--security-policy</code>.</p>

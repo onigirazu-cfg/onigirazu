@@ -1130,6 +1130,34 @@ Python packages with pip.
 
 ## Network Modules
 
+### pipx
+
+Python applications with pipx (`community.general.pipx`).
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `name` | string | - | Application (required) |
+| `state` | string | `install` | `present`/`install`, `absent`/`uninstall`, `latest`/`upgrade`, `reinstall`, `inject` |
+| `source` | string | `name` | What to install: `black==24.1`, a git URL |
+| `inject_packages` | list | - | Packages to inject with `state: inject` |
+| `install_deps` | bool | `false` | `--include-deps` |
+| `force` | bool | `false` | `--force` |
+| `python` | string | - | Interpreter for the venv |
+| `executable` | string | `pipx` | pipx to run |
+
+### flatpak
+
+Flatpak applications (`community.general.flatpak`).
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `name` | string/list | - | Application ids or `.flatpakref` URLs (required) |
+| `state` | string | `present` | `present`, `absent`, `latest` |
+| `remote` | string | `flathub` | Remote for plain ids |
+| `method` | string | `system` | `system` or `user` installation |
+| `no_dependencies` | bool | `false` | `--no-deps` |
+| `executable` | string | `flatpak` | flatpak to run |
+
 ### uri
 
 Make an HTTP request from the host, with curl or, where curl is missing, the host's Python (`python3`, then `python`).
