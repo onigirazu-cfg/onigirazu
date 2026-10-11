@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - From a pilot on a real role: an Ansible YAML inventory without the `all:` wrapper (groups at the top level) is read; `~/.ssh/config` applies to inventory hosts named by an alias (HostName, Port, User, IdentityFile, ProxyJump) where the inventory says nothing; `wait_for_connection` module; `apt: purge`; `role_path`, `role_name` inside a role; a `src` such as `{{ role_path }}/files/x` is no longer glued to the role's files directory
+- `authorized_key` supports check mode: a `--check` run reports the key it would add instead of skipping the task
 - Modules no longer panic when `name` is a list (e.g. `apt: {name: [curl, git]}`)
 - `archive` reports errors when finalizing tar, gzip and zip files
 - `config` rejects a non-string `key` instead of panicking

@@ -80,3 +80,8 @@ func TestCheckMode_UnsupportedModuleIsSkipped(t *testing.T) {
 	assert.True(t, res.Skipped)
 	assert.NoFileExists(t, marker)
 }
+
+// authorized_key compares before it writes, so a check run reports the key it would add
+func TestCheckMode_AuthorizedKeySupported(t *testing.T) {
+	assert.True(t, checkModeModules["authorized_key"])
+}

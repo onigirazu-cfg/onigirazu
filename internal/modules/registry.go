@@ -411,7 +411,7 @@ var checkModeModules = map[string]bool{
 	"apt": true, "yum": true, "package": true, "service": true, "user": true, "group": true,
 	"cron": true, "sysctl": true, "get_url": true, "git": true, "systemd": true,
 	"mount": true, "config": true, "replace": true, "timezone": true, "unarchive": true, "apt_repository": true, "apt_key": true, "docker_container": true, "podman": true, "docker_image": true,
-	"hostname": true, "ini_file": true, "pip": true, "ufw": true,
+	"hostname": true, "ini_file": true, "pip": true, "ufw": true, "authorized_key": true,
 	"win_regedit": true, "win_powershell": true, "win_file": true, "win_copy": true, "win_service": true, "win_timezone": true,
 	"win_firewall_rule": true, "win_firewall": true, "win_group_membership": true, "win_feature": true, "win_reboot": true, "win_scheduled_task": true, "win_chocolatey": true,
 	"win_optional_feature": true, "win_disk_facts": true, "win_initialize_disk": true, "win_partition": true, "win_format": true,

@@ -144,7 +144,7 @@ func (m *AuthorizedKeyModule) Execute(ctx context.Context, host types.Host, args
 	}
 	result.Changed = content != string(data)
 
-	if result.Changed {
+	if result.Changed && !inCheckMode(args) {
 		if _, err := runShellOnHost(ctx, host, args, fmt.Sprintf("install -d -m 700 -o %s -g %s %s",
 			shellQuote(username), shellQuote(strings.TrimSpace(primaryGroup)), shellQuote(sshDir))); err != nil {
 			result.Success = false
