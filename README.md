@@ -159,7 +159,7 @@ YAML is read as Ansible reads it: unquoted `yes`/`no`/`on`/`off` values are bool
   `async` with `poll` (the task fails after `async` seconds); `poll: 0` starts it in the
   background and `async_status` reports on it (jobs live in the onigirazu process, which waits
   for unfinished ones at the end of the run); register projections (`register:` as a map of
-  names to expressions over `_task.result`, ansible-core 2.20) and `_task.result` in
+  names to expressions over `_task.result`, ansible-core 2.20/2.21) and `_task.result` in
   `changed_when`/`failed_when`/`until`; `argument_specs` of roles (`meta/argument_specs.yml`)
   and of plays validate variables before anything runs
 - **Short forms**: `command: make install chdir=/src`, `file: path=/etc/app state=directory`,
@@ -190,9 +190,10 @@ YAML is read as Ansible reads it: unquoted `yes`/`no`/`on`/`off` values are bool
 - **Jinja**: filters by bare or fully qualified name (`| ansible.builtin.to_json`, `is ansible.builtin.version`) — `default`, `map`, `select`/`selectattr`, `combine`, `regex_*`,
   `to_json`/`from_yaml`, `ternary`, set operations, `password_hash`, ...), tests (`is defined`,
   `is version`, `is success`/`failed`/`changed`/`skipped`, `is match`/`search`, ...), `~`,
-  inline `if`, `omit`, Python string/dict/list methods (`.split()`, `.get()`), lookups
-  (`env`, `file`, `pipe`, `template`, `fileglob`, `first_found`, `community.general.bitwarden`,
-  ...), `{% set %}`
+  inline `if`, `omit`, Python string/dict/list methods (`.split()`, `.get()`), every lookup of
+  ansible-core 2.21 (`env`, `file`, `pipe`, `template`, `fileglob`, `first_found`, `vars`,
+  `inventory_hostnames`, `sequence`, `csvfile`, `ini`, `password`, `url`, ...) plus
+  `community.general.bitwarden`, `community.hashi_vault.*`, `community.sops.sops`, `{% set %}`
 - **Facts and variables**: `ansible_facts` and the `ansible_*` names (distribution, OS family,
   hostname, IP, memory, virtualization, `ansible_pkg_mgr`, `ansible_local` from
   `/etc/ansible/facts.d`), `setup`, `hostvars`, `groups`, `group_names`, `inventory_hostname`,
