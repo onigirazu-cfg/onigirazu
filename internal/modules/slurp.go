@@ -40,8 +40,14 @@ func (m *SlurpModule) Execute(ctx context.Context, host types.Host, args map[str
 	case !exists:
 		result.Success, result.Error = false, fmt.Sprintf("file not found: %s", src)
 	default:
-		result.Output["content"] = base64.StdEncoding.EncodeToString(data)
-		result.Output["encoding"] = "base64"
+		// armor: false (ansible-core 2.21) gives the text itself
+		if getBoolArg(args, "armor", true) {
+			result.Output["content"] = base64.StdEncoding.EncodeToString(data)
+			result.Output["encoding"] = "base64"
+		} else {
+			result.Output["content"] = string(data)
+			result.Output["encoding"] = "none"
+		}
 		result.Output["source"] = src
 	}
 	result.Duration = time.Since(start)

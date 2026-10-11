@@ -1,0 +1,45 @@
+# ansible-core 2.21 forms: break_when, changed_when_result, templated
+# ignore_errors in a loop, slurp armor, stat disk_usage_bytes,
+# deb822_repository, package_facts
+plays:
+  - name: ansible-core 2.21 forms
+    hosts: all
+    become: true
+    gather_facts: false
+    tasks:
+      - name: a loop that stops at the second item
+        command: "echo {{ item }}"
+        changed_when: false
+        loop: [a, b, c, d]
+        break_when: item == 'b'
+        register: looped
+      - name: a failing item is ignored by its own flag
+        command: "sh -c 'exit {{ item.rc }}'"
+        changed_when: false
+        loop: [{rc: 0, optional: false}, {rc: 1, optional: true}]
+        ignore_errors: "{{ item.optional }}"
+        register: flagged
+      - name: changed_when leaves its verdict in the result
+        command: /bin/true
+        changed_when: "1 == 1"
+        register: verdict
+      - copy: {dest: /etc/onigirazu-e2e-221.txt, content: "plain text\n"}
+      - slurp: {src: /etc/onigirazu-e2e-221.txt, armor: false}
+        register: raw
+      - stat: {path: /etc/onigirazu-e2e-221.txt}
+        register: st
+      - deb822_repository:
+          name: onigirazu-e2e
+          uris: http://archive.ubuntu.com/ubuntu
+          suites: noble
+          components: [main]
+          enabled: false
+          update_cache: false
+      - package_facts:
+      - copy:
+          dest: /etc/onigirazu-e2e-221-result
+          content: |
+            {{ looped.results | length }} {{ looped.results[-1].break_when_result }} {{ 'skipped' in looped }}
+            {{ flagged.results[1].failed }} {{ verdict.changed_when_result }}
+            {{ raw.content | trim }} {{ raw.encoding }} {{ st.stat.disk_usage_bytes >= 0 }}
+            {{ 'bash' in ansible_facts.packages }} {{ ansible_facts.packages['bash'][0].source }}
