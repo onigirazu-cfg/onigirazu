@@ -314,9 +314,9 @@ func lookupINI(resolve func(string) string, terms []interface{}) ([]interface{},
 	return out, nil
 }
 
-// lookupPassword: lookup('password', '/path/to/file length=16 chars=ascii_letters,digits')
+// lookupStoredRandomString is lookup('password', ...): lookup('password', '/path/to/file length=16 chars=ascii_letters,digits')
 // reads the stored password or makes and stores one; /dev/null makes one without storing
-func lookupPassword(resolve func(string) string, terms []interface{}) ([]interface{}, error) {
+func lookupStoredRandomString(resolve func(string) string, terms []interface{}) ([]interface{}, error) {
 	pos, kw := lookupArgs(terms, "length", "chars", "seed", "encrypt", "ident")
 	out := make([]interface{}, 0, len(pos))
 	for _, t := range pos {
@@ -348,29 +348,29 @@ func lookupPassword(resolve func(string) string, terms []interface{}) ([]interfa
 				out = append(out, strings.TrimSpace(strings.Split(string(data), "\n")[0]))
 				continue
 			}
-			pw, err := randomPassword(length, chars)
+			made, err := randomStringFrom(length, chars)
 			if err != nil {
 				return nil, err
 			}
 			if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
 				return nil, fmt.Errorf("lookup password: %w", err)
 			}
-			if err := os.WriteFile(p, []byte(pw+"\n"), 0o600); err != nil {
+			if err := os.WriteFile(p, []byte(made+"\n"), 0o600); err != nil {
 				return nil, fmt.Errorf("lookup password: %w", err)
 			}
-			out = append(out, pw)
+			out = append(out, made)
 			continue
 		}
-		pw, err := randomPassword(length, chars)
+		made, err := randomStringFrom(length, chars)
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, pw)
+		out = append(out, made)
 	}
 	return out, nil
 }
 
-func randomPassword(length int, chars string) (string, error) {
+func randomStringFrom(length int, chars string) (string, error) {
 	sets := map[string]string{"ascii_letters": "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ", "ascii_lowercase": "abcdefghijklmnopqrstuvwxyz",
 		"ascii_uppercase": "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "digits": "0123456789", "hexdigits": "0123456789abcdefABCDEF",
 		"punctuation": "!#$%&()*+,-./:;<=>?@[]^_{|}~", "alphanumeric": "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"}

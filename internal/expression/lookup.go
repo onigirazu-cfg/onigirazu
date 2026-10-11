@@ -164,7 +164,7 @@ func lookupItems(base, varsArg interface{}, args []interface{}) ([]interface{}, 
 	case "ini":
 		return lookupINI(resolve, terms)
 	case "password":
-		return lookupPassword(resolve, terms)
+		return lookupStoredRandomString(resolve, terms)
 	case "url":
 		return lookupURL(terms)
 	case "unvault":
