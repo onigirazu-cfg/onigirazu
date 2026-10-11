@@ -30,18 +30,17 @@ var extraFilterNames = []string{"checksum", "md5", "sha1", "combinations", "perm
 
 type filterFunc = func(params ...interface{}) (interface{}, error)
 
-var extraFilterTable map[string]filterFunc
+// extraFilterTable is built once, at package init: the filter list is
+// assembled per evaluation and hosts evaluate in parallel, so a lazy table
+// would be written from several goroutines at once
+var extraFilterTable = func() map[string]filterFunc {
+	t := map[string]filterFunc{}
+	builtinFilters221(func(name string, f filterFunc) interface{} { t[name] = f; return nil })
+	return t
+}()
 
 // extraFilter is the named filter of the 2.21 set
-func extraFilter(name string) filterFunc {
-	if extraFilterTable == nil {
-		extraFilterTable = map[string]filterFunc{}
-		for _, e := range builtinFilters221(func(name string, f filterFunc) interface{} { extraFilterTable[name] = f; return nil }) {
-			_ = e
-		}
-	}
-	return extraFilterTable[name]
-}
+func extraFilter(name string) filterFunc { return extraFilterTable[name] }
 
 func builtinFilters221(fn func(name string, f func(params ...interface{}) (interface{}, error)) interface{}) []interface{} {
 	str := PyStr
