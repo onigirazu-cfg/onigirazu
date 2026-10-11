@@ -221,6 +221,23 @@ The whole range is expanded into a list before the loop starts.
 
 ---
 
+## Ending a loop early
+
+`break_when` (ansible-core 2.21) stops the loop after the item whose result makes it true; the
+expression sees the item's result as `_task.result` (or under the task's `register` name).
+Every item's result carries `break_when_result`:
+
+```yaml
+- command: "check-node {{ item }}"
+  loop: "{{ nodes }}"
+  break_when: _task.result.rc == 0      # the first healthy node is enough
+  register: probe
+```
+
+A templated `ignore_errors` is evaluated per item: when it is true for any item, the task's
+failures are ignored. `ignore_unreachable: true` keeps a host that could not be reached from
+failing the task.
+
 ## Loop Variables
 
 | Variable | Value |

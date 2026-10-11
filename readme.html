@@ -187,7 +187,7 @@ onigirazu apply site.yml -i hosts.ini
 <p>Onigirazu also has its own playbook format with a top-level <code>plays:</code> list and <code>vars:</code>; both
 formats can be used side by side. Examples: <a href="docs/examples/README.md">docs/examples</a>.</p>
 <h2>Coming from Ansible</h2>
-<p>Existing Ansible content runs as it is in most cases. What is supported:</p>
+<p>Existing Ansible content runs as it is in most cases; the reference is the current ansible-core (2.21). What is supported:</p>
 <p>YAML is read as Ansible reads it: unquoted <code>yes</code>/<code>no</code>/<code>on</code>/<code>off</code> values are booleans (YAML 1.1); quote them to keep text.</p>
 <ul>
 <li><strong>Playbooks</strong>: plays with <code>pre_tasks</code>, <code>tasks</code>, <code>post_tasks</code>, <code>handlers</code>, <code>roles</code>,
@@ -201,6 +201,7 @@ formats can be used side by side. Examples: <a href="docs/examples/README.md">do
   <code>delay</code>, <code>changed_when</code>, <code>failed_when</code>, <code>ignore_errors</code>, <code>notify</code>/<code>listen</code>, <code>tags</code>,
   <code>become</code>/<code>become_user</code>, <code>delegate_to</code>, <code>local_action</code>, <code>run_once</code>, <code>throttle</code>, <code>no_log</code>,
   <code>check_mode</code>, <code>diff</code>, <code>vars</code>, <code>environment</code>, <code>action</code> (also with a templated module name),
+  <code>break_when</code> in loops, <code>ignore_unreachable</code>, a templated <code>ignore_errors</code>,
   <code>async</code> with <code>poll</code> (the task fails after <code>async</code> seconds); <code>poll: 0</code> starts it in the
   background and <code>async_status</code> reports on it (jobs live in the onigirazu process, which waits
   for unfinished ones at the end of the run); register projections (<code>register:</code> as a map of
@@ -431,7 +432,7 @@ to change. Secrets become variables with an example file. See <a href="docs/IMPO
 </tr>
 <tr>
 <td>Packages</td>
-<td><code>package</code>, <code>apt</code>, <code>yum</code> (also <code>dnf</code>), <code>apt_repository</code>, <code>apt_key</code>, <code>pip</code>, <code>pipx</code>, <code>flatpak</code></td>
+<td><code>package</code>, <code>apt</code>, <code>yum</code> (also <code>dnf</code>), <code>apt_repository</code>, <code>deb822_repository</code>, <code>apt_key</code>, <code>package_facts</code>, <code>pip</code>, <code>pipx</code>, <code>flatpak</code></td>
 </tr>
 <tr>
 <td>Services and system</td>
