@@ -227,7 +227,9 @@ formats can be used side by side. Examples: <a href="docs/examples/README.md">do
   <code>ansible_password</code>, <code>ansible_ssh_private_key_file</code>, <code>ansible_become_password</code>,
   <code>ansible_connection: winrm</code> with <code>ansible_winrm_*</code> (NTLM, message encryption, https),
   <code>ansible_ssh_common_args</code>/<code>ansible_ssh_extra_args</code> (<code>ConnectTimeout</code>, <code>ProxyJump</code>/<code>-J</code>,
-  <code>ProxyCommand</code>, <code>StrictHostKeyChecking=no</code>), <code>ansible_connection</code> <code>local</code>, <code>docker</code>, <code>podman</code>;
+  <code>ProxyCommand</code>, <code>StrictHostKeyChecking=no</code>), keys of a running ssh-agent (<code>SSH_AUTH_SOCK</code>),
+  OpenSSH certificates (<code>&lt;key&gt;-cert.pub</code> next to the key, or <code>ansible_ssh_certificate_file</code>),
+  <code>ansible_connection</code> <code>local</code>, <code>docker</code>, <code>podman</code>;
   templated values and <code>-e</code> overrides</li>
 <li><strong>Jinja</strong>: filters by bare or fully qualified name (<code>| ansible.builtin.to_json</code>, <code>is ansible.builtin.version</code>) — <code>default</code>, <code>map</code>, <code>select</code>/<code>selectattr</code>, <code>combine</code>, <code>regex_*</code>,
   <code>to_json</code>/<code>from_yaml</code>, <code>ternary</code>, set operations, <code>password_hash</code>, ...), tests (<code>is defined</code>,
@@ -239,7 +241,8 @@ formats can be used side by side. Examples: <a href="docs/examples/README.md">do
   hostname, IP, memory, virtualization, <code>ansible_pkg_mgr</code>, <code>ansible_local</code> from
   <code>/etc/ansible/facts.d</code>), <code>setup</code>, <code>hostvars</code>, <code>groups</code>, <code>group_names</code>, <code>inventory_hostname</code>,
   <code>ansible_check_mode</code>, <code>ansible_play_hosts</code>, <code>ansible_limit</code>; templated variables are
-  rendered per host when used, as in Ansible</li>
+  rendered per host when used, as in Ansible; facts are cached across runs with
+  <code>fact_caching: jsonfile</code> (also from ansible.cfg) and forgotten with <code>--flush-cache</code></li>
 <li><strong>Command line</strong>: <code>-i</code>, <code>-e</code> (also <code>@file</code>), <code>--limit</code>, <code>--tags</code>/<code>--skip-tags</code>, <code>--check</code>,
   <code>--diff</code>, <code>-b</code>/<code>--become-user</code>, <code>-u</code>, <code>--private-key</code>, <code>--start-at-task</code>, <code>--list-hosts</code>,
   <code>--list-tasks</code>, <code>--list-tags</code>, <code>--syntax-check</code></li>

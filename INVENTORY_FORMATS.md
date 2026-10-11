@@ -276,6 +276,7 @@ plus the mapping's `vars`. `lookup('cloud.terraform.tf_output', 'name', project_
 |----------|---------|---------|
 | `onigirazu_host` / `ansible_host` (`address` in JSON/TOML) | address to connect to | host name |
 | `onigirazu_port` / `ansible_port` (`port`) | SSH port | 22 |
+| `onigirazu_ssh_certificate_file` / `ansible_ssh_certificate_file` | OpenSSH certificate for the key; default `<key>-cert.pub` next to it when present | — |
 | `onigirazu_user` / `ansible_user` (`user`) | SSH user | the local `$USER`, as in Ansible |
 | `onigirazu_ssh_private_key_file` / `ansible_ssh_private_key_file` (`key_file`) | private key | — |
 | `onigirazu_password` / `ansible_password` (`password`) | SSH password | — |
