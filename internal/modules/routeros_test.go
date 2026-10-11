@@ -38,7 +38,7 @@ func (f *fakeRouterOS) handler() http.HandlerFunc {
 		switch {
 		case path == "system/identity" && r.Method == http.MethodGet:
 			_ = json.NewEncoder(w).Encode(map[string]string{"name": f.ident})
-		case path == "system/identity" && r.Method == http.MethodPatch:
+		case path == "system/identity/set" && r.Method == http.MethodPost: // a single-object menu takes "set"
 			f.ident = in["name"]
 			_ = json.NewEncoder(w).Encode(map[string]string{"name": f.ident})
 		case path == "ip/firewall/address-list" && r.Method == http.MethodGet:
