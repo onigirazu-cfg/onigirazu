@@ -392,6 +392,16 @@ Tests: `all`, `any`, `is_file`/`is_dir`/`is_link`/`is_abs`/`link_exists`, `mount
 | `subelements` | `[element, subitem]` for a list of dicts and a key (`{skip_missing: true}` as third term) |
 | `indexed_items` | `[index, item]` |
 | `random_choice` | One of the terms |
+| `vars` | Variables by name (`default=`) |
+| `varnames` | Variable names matching a regular expression |
+| `inventory_hostnames` | Hosts of a pattern: `web`, `web:db`, `web:&db`, `all:!web`, globs |
+| `sequence` | `start=1 end=5 stride=2 format=host%02d`, `count=3`, or `0-4/2` |
+| `csvfile` | A column of the row whose first field is the key (`file=`, `col=`, `delimiter=`, `default=`) |
+| `ini` | A key of an INI section (`file=`, `section=`, `re=`, `default=`) or of a `type=properties` file |
+| `password` | The password stored in a file, made and stored on first use (`length=`, `chars=`); `/dev/null` for a throwaway |
+| `url` | The body of a URL, one item per line (`split_lines=`, `headers=`, `username=`/`password=`, `timeout=`) |
+| `unvault` | The plain text of a vault-encrypted file |
+| `config` | The value of an Ansible setting onigirazu has an equivalent for (`on_missing=`) |
 | `bitwarden` (`community.general.bitwarden`) | A field of a Bitwarden item (`field=`) |
 | `hashi_vault` (`community.hashi_vault.hashi_vault`) | A Vault KV v2 field: `secret=mount/data/path:field` |
 | `vault_kv2_get` (`community.hashi_vault.vault_kv2_get`) | A Vault KV v2 secret as a dict |

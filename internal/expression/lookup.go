@@ -151,6 +151,26 @@ func lookupItems(base, varsArg interface{}, args []interface{}) ([]interface{}, 
 		return []interface{}{items[rand.IntN(len(items))]}, nil // #nosec G404 -- not for security
 	case "bitwarden":
 		return bitwardenLookup(terms)
+	case "vars":
+		return lookupVarsPlugin(vars, terms)
+	case "varnames":
+		return lookupVarnames(vars, terms)
+	case "inventory_hostnames":
+		return lookupInventoryHostnames(vars, terms)
+	case "sequence":
+		return lookupSequence(terms)
+	case "csvfile":
+		return lookupCSVFile(resolve, terms)
+	case "ini":
+		return lookupINI(resolve, terms)
+	case "password":
+		return lookupPassword(resolve, terms)
+	case "url":
+		return lookupURL(terms)
+	case "unvault":
+		return lookupUnvault(resolve, terms)
+	case "config":
+		return lookupConfig(terms)
 	case "sops":
 		return sopsLookup(resolve, terms)
 	case "hashi_vault":
