@@ -501,6 +501,14 @@ return values and examples: <a href="docs/modules/README.md">docs/modules/README
 <td>Check hosts against a compliance profile (bundled <code>linux-baseline</code>, <code>ssh</code>, or your own CIS-style controls) and score them; <code>comply list</code>, <code>comply show</code> (<a href="docs/COMPLY.md">docs/COMPLY.md</a>)</td>
 </tr>
 <tr>
+<td><code>bootstrap HOST</code></td>
+<td>A fresh machine becomes a managed host: deploy user, your key, passwordless sudo, password logins off (<a href="docs/BOOTSTRAP_AND_IMAGES.md">docs/BOOTSTRAP_AND_IMAGES.md</a>)</td>
+</tr>
+<tr>
+<td><code>image build PLAYBOOK</code></td>
+<td>A container image from a playbook: run it in a container from <code>--from</code>, commit as <code>--tag</code>, optionally push (<a href="docs/BOOTSTRAP_AND_IMAGES.md">docs/BOOTSTRAP_AND_IMAGES.md</a>)</td>
+</tr>
+<tr>
 <td><code>pull --repo URL</code></td>
 <td>This host converges itself from a git repository: once, every <code>--interval</code>, or <code>pull install</code> (systemd timer); <code>--drift-only</code>, <code>--only-on-change</code>, <code>--notify</code>, <code>--metrics-*</code> (<a href="docs/PULL.md">pull mode</a>)</td>
 </tr>
