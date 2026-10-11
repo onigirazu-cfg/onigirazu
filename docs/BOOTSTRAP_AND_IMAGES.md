@@ -17,9 +17,12 @@ What runs, as one generated playbook with `become`: the admin group is found (`s
 `wheel`, or `--sudo-group`); the user is created with `--shell` (default `/bin/bash`) and added
 to it; `--pubkey` (default `~/.ssh/id_ed25519.pub`, then `id_rsa.pub`) goes to its
 `authorized_keys`; `/etc/sudoers.d/90-<user>` gives `NOPASSWD: ALL` (checked with `visudo`);
+when sshd enforces `AllowUsers`/`AllowGroups` (`sshd -T`), the user is let through by a drop-in
+`/etc/ssh/sshd_config.d/90-onigirazu-<user>.conf`, or a line in `sshd_config` without an Include;
 with `--disable-password-auth`, `PasswordAuthentication no`; with `--keep-root-login=false`,
 `PermitRootLogin prohibit-password` (both checked with `sshd -t`, sshd reloaded). Then
-onigirazu connects as the new user with the matching private key and runs `sudo -n true`;
+onigirazu connects as the new user with the matching private key and runs `sudo -n true`
+(retried for 30 s while sshd reloads);
 only when that works it prints the inventory line to add. The password is read from the
 terminal or an environment variable, never from the command line.
 

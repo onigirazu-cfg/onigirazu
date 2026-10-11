@@ -194,3 +194,20 @@ func imageFailed(result *types.PlaybookResult) bool {
 	}
 	return false
 }
+
+// imageFailure is the error of the first failed task, for a message
+func imageFailure(result *types.PlaybookResult) string {
+	if result == nil {
+		return "no result"
+	}
+	for _, play := range result.Plays {
+		for _, h := range play.Hosts {
+			for _, t := range h.Tasks {
+				if t.Failed && !t.Ignored {
+					return t.Error
+				}
+			}
+		}
+	}
+	return "a task failed"
+}

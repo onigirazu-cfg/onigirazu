@@ -25,11 +25,11 @@ func TestBootstrapPlaybook(t *testing.T) {
 		t.Fatal(err)
 	}
 	p := doc.Plays[0]
-	if !p.Become || len(p.Tasks) != 6 || len(p.Handlers) != 1 {
+	if !p.Become || len(p.Tasks) != 10 || len(p.Handlers) != 1 {
 		t.Errorf("play: become=%v tasks=%d handlers=%d", p.Become, len(p.Tasks), len(p.Handlers))
 	}
 	text := string(data)
-	for _, want := range []string{"deploy ALL=(ALL) NOPASSWD:ALL", "ssh-ed25519 AAAA test", "PasswordAuthentication no", "PermitRootLogin prohibit-password", "visudo -cf %s", "sshd -t -f %s"} {
+	for _, want := range []string{"deploy ALL=(ALL) NOPASSWD:ALL", "ssh-ed25519 AAAA test", "PasswordAuthentication no", "PermitRootLogin prohibit-password", "visudo -cf %s", "sshd -t -f %s", "90-onigirazu-deploy.conf", "AllowUsers deploy", "AllowGroups deploy"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("playbook lacks %q", want)
 		}

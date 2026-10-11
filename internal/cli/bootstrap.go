@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -65,11 +66,22 @@ func bootstrapPlaybook(o *bootstrapOptions, pubkey string) ([]byte, error) {
 	sudoers := o.newUser + " ALL=(ALL) NOPASSWD:ALL\n"
 	tasks := []map[string]interface{}{
 		{"name": "The admin group", "shell": "getent group sudo >/dev/null && echo sudo || { getent group wheel >/dev/null && echo wheel || echo none; }",
-			"register": "admin_group", "changed_when": false},
+			"register": "admin_group", "changed_when": false, "check_mode": false},
 		{"name": "The user " + o.newUser, "user": map[string]interface{}{"name": o.newUser, "shell": o.shell, "create_home": true,
 			"groups": "{{ '" + o.sudoGroup + "' if '" + o.sudoGroup + "' else (admin_group.stdout if admin_group.stdout != 'none' else omit) }}", "append": true}},
 		{"name": "Its authorized key", "authorized_key": map[string]interface{}{"user": o.newUser, "key": strings.TrimSpace(pubkey)}},
 		{"name": "Passwordless sudo", "copy": map[string]interface{}{"dest": "/etc/sudoers.d/90-" + o.newUser, "content": sudoers, "mode": "0440", "owner": "root", "group": "root", "validate": "visudo -cf %s"}},
+		// a hardened sshd lists who may log in: the new user has to be let through
+		{"name": "sshd login restrictions", "shell": sshdRestrictionsProbe, "register": "sshd_allow", "changed_when": false, "failed_when": false, "check_mode": false},
+		{"name": "Let " + o.newUser + " through AllowUsers/AllowGroups (drop-in)", "copy": map[string]interface{}{
+			"dest": "/etc/ssh/sshd_config.d/90-onigirazu-" + o.newUser + ".conf", "content": sshdAllowContent(o.newUser), "mode": "0644", "owner": "root", "group": "root"},
+			"when": "'dropin' in sshd_allow.stdout", "notify": "reload sshd"},
+		{"name": "Let " + o.newUser + " through AllowUsers (sshd_config)", "lineinfile": map[string]interface{}{
+			"path": "/etc/ssh/sshd_config", "line": "AllowUsers " + o.newUser, "regexp": "^AllowUsers " + o.newUser + "$", "validate": "sshd -t -f %s"},
+			"when": "'main' in sshd_allow.stdout and 'users' in sshd_allow.stdout", "notify": "reload sshd"},
+		{"name": "Let " + o.newUser + " through AllowGroups (sshd_config)", "lineinfile": map[string]interface{}{
+			"path": "/etc/ssh/sshd_config", "line": "AllowGroups " + o.newUser, "regexp": "^AllowGroups " + o.newUser + "$", "validate": "sshd -t -f %s"},
+			"when": "'main' in sshd_allow.stdout and 'groups' in sshd_allow.stdout", "notify": "reload sshd"},
 	}
 	if o.disablePasswordAuth {
 		tasks = append(tasks, map[string]interface{}{"name": "No password logins", "lineinfile": map[string]interface{}{
@@ -82,6 +94,22 @@ func bootstrapPlaybook(o *bootstrapOptions, pubkey string) ([]byte, error) {
 	play := map[string]interface{}{"name": "bootstrap " + o.newUser, "hosts": "all", "become": true, "gather_facts": false, "tasks": tasks,
 		"handlers": []map[string]interface{}{{"name": "reload sshd", "shell": "systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || service ssh reload"}}}
 	return yaml.Marshal(map[string]interface{}{"plays": []interface{}{play}})
+}
+
+// sshdRestrictionsProbe prints which of AllowUsers/AllowGroups sshd enforces
+// ("users", "groups") and where an addition goes: "dropin" when sshd_config
+// includes sshd_config.d, else "main". Nothing when sshd lets everyone in.
+const sshdRestrictionsProbe = `out=""; t="$(sshd -T 2>/dev/null)" || exit 0
+echo "$t" | grep -q '^allowusers ' && out="users"
+echo "$t" | grep -q '^allowgroups ' && out="$out groups"
+[ -n "$out" ] || exit 0
+if [ -d /etc/ssh/sshd_config.d ] && grep -qE '^Include +/etc/ssh/sshd_config\.d/\*\.conf' /etc/ssh/sshd_config; then out="$out dropin"; else out="$out main"; fi
+echo "$out"`
+
+// sshdAllowContent is the drop-in that lets the new user through: AllowUsers
+// lists accumulate across directives; AllowGroups by the user's own group
+func sshdAllowContent(user string) string {
+	return "{% if 'users' in sshd_allow.stdout %}AllowUsers " + user + "\n{% endif %}{% if 'groups' in sshd_allow.stdout %}AllowGroups " + user + "\n{% endif %}"
 }
 
 func splitHostPort(target string) (string, int) {
@@ -211,8 +239,20 @@ func runBootstrap(cmd *cobra.Command, target string, o *bootstrapOptions) error 
 		return err
 	}
 	inventoryPaths = []string{check}
-	if res, err := runPlaybook([]string{checkPB}); err != nil || imageFailed(res) {
-		return fmt.Errorf("bootstrap: the new user %s cannot log in with the key and sudo: %v", o.newUser, err)
+	// sshd may be re-executing after the reload: a few attempts
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		res, err := runPlaybook([]string{checkPB})
+		if err == nil && !imageFailed(res) {
+			break
+		}
+		if time.Now().After(deadline) {
+			if err == nil {
+				err = fmt.Errorf("%s", imageFailure(res))
+			}
+			return fmt.Errorf("bootstrap: the new user %s cannot log in with the key and sudo: %v", o.newUser, err)
+		}
+		time.Sleep(3 * time.Second)
 	}
 	fmt.Fprintf(out, "bootstrap: done. Inventory line:\n  %s ansible_host=%s ansible_port=%d ansible_user=%s ansible_ssh_private_key_file=%s\n", host, host, port, o.newUser, privateKey)
 	return nil
