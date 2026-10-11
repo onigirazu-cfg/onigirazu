@@ -1077,7 +1077,7 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 	}
 
 	taskVars := e.hostVariables(host, variables)
-	e.renderLazyVars(ctx, host.Name, taskVars)
+	unrendered := e.renderLazyVars(ctx, host.Name, taskVars)
 	// task vars come last; their values may use other variables, nested in
 	// lists and maps too, and "{{ a_list }}" stays a list
 	for k, v := range task.Vars {
@@ -1125,6 +1125,11 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 		return failed(fmt.Errorf("failed to render task arguments: %w", err))
 	}
 	resolveRoleSource(task.Module, renderedArgs)
+	// a variable that could not be rendered must not reach a module as its
+	// raw template text: the task that uses it fails with the real error
+	if name, err := unrenderedUsed(renderedArgs, unrendered); err != nil {
+		return failed(fmt.Errorf("variable %q: %w", name, err))
+	}
 	if task.Module == "setup" || task.Module == "gather_facts" {
 		return e.runSetup(ctx, task, host, renderedArgs, playResult)
 	}
@@ -2773,16 +2778,19 @@ var notLazy = map[string]bool{"hostvars": true, "groups": true, "ansible_facts":
 // defaults and vars, inventory and vars_files values ("{{ ssh_port |
 // default(22) }}"), nested in lists and maps too. A few passes let them refer
 // to each other. -e values and what register/set_fact stored are data and
-// never rendered; a value that does not render stays as it is.
-func (e *ExecutionEngine) renderLazyVars(ctx context.Context, host string, vars map[string]interface{}) {
+// never rendered. A value that does not render stays as it is and is
+// returned with its error: the task that uses it fails (unrenderedUsed).
+func (e *ExecutionEngine) renderLazyVars(ctx context.Context, host string, vars map[string]interface{}) map[string]unrenderedVar {
 	e.mutex.RLock()
 	runtime := make(map[string]bool, len(e.hostVars[host]))
 	for key := range e.hostVars[host] {
 		runtime[key] = true
 	}
 	e.mutex.RUnlock()
+	var failed map[string]unrenderedVar
 	for pass := 0; pass < 3; pass++ {
 		changed := false
+		failed = nil
 		for key, value := range vars {
 			if _, fromCLI := e.extraVars[key]; fromCLI || runtime[key] || notLazy[key] || !hasTemplate(value) {
 				continue
@@ -2792,12 +2800,64 @@ func (e *ExecutionEngine) renderLazyVars(ctx context.Context, host string, vars 
 			if err == nil && !reflect.DeepEqual(rendered["v"], value) {
 				vars[key] = rendered["v"]
 				changed = true
+			} else if err != nil {
+				if text, ok := value.(string); ok {
+					if failed == nil {
+						failed = map[string]unrenderedVar{}
+					}
+					failed[key] = unrenderedVar{text: text, err: err}
+				}
 			}
 		}
 		if !changed {
-			return
+			break
 		}
 	}
+	return failed
+}
+
+// unrenderedVar is a variable whose template could not be rendered for a
+// host: its raw text and the error
+type unrenderedVar struct {
+	text string
+	err  error
+}
+
+// unrenderedUsed finds a rendered argument that still carries the raw text
+// of a variable that could not be rendered
+func unrenderedUsed(args map[string]interface{}, unrendered map[string]unrenderedVar) (string, error) {
+	if len(unrendered) == 0 {
+		return "", nil
+	}
+	var found string
+	var foundErr error
+	var walk func(v interface{})
+	walk = func(v interface{}) {
+		if foundErr != nil {
+			return
+		}
+		switch t := v.(type) {
+		case string:
+			for name, u := range unrendered {
+				if strings.Contains(t, u.text) {
+					found, foundErr = name, u.err
+					return
+				}
+			}
+		case map[string]interface{}:
+			for _, x := range t {
+				walk(x)
+			}
+		case []interface{}:
+			for _, x := range t {
+				walk(x)
+			}
+		}
+	}
+	for _, v := range args {
+		walk(v)
+	}
+	return found, foundErr
 }
 
 // taskTags are a task's own tags and those it inherits from its play and
