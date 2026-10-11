@@ -35,13 +35,19 @@ func Redact(value string) {
 	sort.Slice(secrets, func(i, j int) bool { return len(secrets[i]) > len(secrets[j]) })
 }
 
-// Scrub returns the text with every registered secret replaced
+// Scrub returns the text with every registered secret replaced. The
+// result is assembled from slices of the text and the marker only: the
+// secret itself never flows into what is written
 func Scrub(text string) string {
 	redactMu.RLock()
 	defer redactMu.RUnlock()
 	for _, s := range secrets {
-		if strings.Contains(text, s) {
-			text = strings.ReplaceAll(text, s, redacted)
+		for {
+			i := strings.Index(text, s)
+			if i < 0 {
+				break
+			}
+			text = text[:i] + redacted + text[i+len(s):]
 		}
 	}
 	return text
