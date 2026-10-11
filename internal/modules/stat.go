@@ -71,8 +71,8 @@ if [ ! -e "$p" ] && [ ! -L "$p" ]; then echo exists=false; exit 0; fi
 echo exists=true
 if [ -L "$p" ]; then echo type=link; echo lnk_source="$(readlink -f "$p" 2>/dev/null || readlink "$p")"; echo lnk_target="$(readlink "$p")"
 elif [ -d "$p" ]; then echo type=directory; elif [ -f "$p" ]; then echo type=file; else echo type=other; fi
-stat --printf 'size=%%s\nmode=%%a\nmtime=%%Y\natime=%%X\nctime=%%Z\nuid=%%u\ngid=%%g\npw_name=%%U\ngr_name=%%G\ninode=%%i\nnlink=%%h\n' "$p" 2>/dev/null ||
-  stat -f 'size=%%z%%nmode=%%Lp%%nmtime=%%m%%natime=%%a%%nctime=%%c%%nuid=%%u%%ngid=%%g%%npw_name=%%Su%%ngr_name=%%Sg%%ninode=%%i%%nnlink=%%l' "$p"
+stat --printf 'size=%%s\nmode=%%a\nmtime=%%Y\natime=%%X\nctime=%%Z\nuid=%%u\ngid=%%g\npw_name=%%U\ngr_name=%%G\ninode=%%i\nnlink=%%h\nblocks=%%b\n' "$p" 2>/dev/null ||
+  stat -f 'size=%%z%%nmode=%%Lp%%nmtime=%%m%%natime=%%a%%nctime=%%c%%nuid=%%u%%ngid=%%g%%npw_name=%%Su%%ngr_name=%%Sg%%ninode=%%i%%nnlink=%%l%%nblocks=%%b' "$p"
 if [ -n "$algo" ] && [ -f "$p" ] && [ ! -L "$p" ]; then
   s=$( ("${algo}sum" "$p" 2>/dev/null || shasum -a "${algo#sha}" "$p" 2>/dev/null || md5 -q "$p") | cut -d' ' -f1)
   echo checksum="$s"
@@ -111,6 +111,9 @@ func statOnHost(ctx context.Context, host types.Host, args map[string]interface{
 		if n, err := strconv.ParseInt(data[k], 10, 64); err == nil {
 			stat[k] = n
 		}
+	}
+	if n, err := strconv.ParseInt(data["blocks"], 10, 64); err == nil {
+		stat["disk_usage_bytes"] = n * 512 // st_blocks are 512-byte units, as Ansible reports
 	}
 	if m, err := strconv.ParseUint(data["mode"], 8, 32); err == nil {
 		stat["mode"] = fmt.Sprintf("%04o", m)

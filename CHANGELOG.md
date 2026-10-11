@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- ansible-core 2.21 forms: loop `break_when` (with `break_when_result`), `changed_when_result` in results, templated `ignore_errors` (true for any loop item ignores the task), `ignore_unreachable`, `include_role: rescuable` accepted, a loop result without `skipped: false`, `slurp: armor: false`, `disk_usage_bytes` from `stat`, `to_yaml(indent=…)` with the 2.21 options accepted, modules `deb822_repository` and `package_facts`
 - `onigirazu serve`: a fleet server — jobs (drift, apply, verify, comply) on a schedule or on demand, results kept per job and host, the audit store's run history, a web page and a REST API; bearer token or reverse-proxy identity headers with viewer/operator roles; `/metrics`; `serve install` (docs/SERVE.md)
 - `onigirazu mcp`: a Model Context Protocol server over stdio for AI agents — tools inventory_list, inventory_host, plan, drift, verify, comply, audit_runs, audit_run, module_doc; `apply` only with `--allow-apply` (docs/MCP.md)
 - ansible-core 2.19/2.20 forms: filters and tests by fully qualified name (`| ansible.builtin.to_json`), register projections (`register:` as a map of names to expressions over `_task.result`) and `_task.result` in `changed_when`/`failed_when`/`until`, `argument_specs` of roles (`meta/argument_specs.yml` or `meta/main.yml`) and of plays; `--exclude PATTERN` on apply, plan, drift and verify; modules `pipx` and `flatpak` (`community.general.*`)

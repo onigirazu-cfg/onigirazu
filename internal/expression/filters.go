@@ -464,9 +464,24 @@ func filterFunctions() []expr.Option {
 	}
 }
 
+// toYAML is to_yaml / to_nice_yaml; indent= sets the indentation,
+// vault_behavior=, default_flow_style=, width= and sort_keys= are accepted
+// and ignored (ansible-core 2.21 options)
 func toYAML(p ...interface{}) (interface{}, error) {
-	out, err := yaml.Marshal(p[0])
-	return string(out), err
+	pos, kw := splitKwargs(p)
+	if len(pos) == 0 {
+		return "", fmt.Errorf("to_yaml needs a value")
+	}
+	var b strings.Builder
+	enc := yaml.NewEncoder(&b)
+	if n, ok := toFloat(kw["indent"]); ok && n >= 1 {
+		enc.SetIndent(int(n))
+	}
+	if err := enc.Encode(pos[0]); err != nil {
+		return "", err
+	}
+	_ = enc.Close()
+	return b.String(), nil
 }
 
 // attribute reads item.name, or item.a.b for a dotted name

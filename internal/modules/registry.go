@@ -95,6 +95,8 @@ func NewRegistry() *Registry {
 	registry.RegisterModule(NewHostnameModule())
 	registry.RegisterModule(NewIniFileModule())
 	registry.RegisterModule(NewPipModule())
+	registry.RegisterModule(NewDeb822RepositoryModule())
+	registry.RegisterModule(NewPackageFactsModule())
 	registry.RegisterModule(NewPipxModule())
 	registry.RegisterModule(NewFlatpakModule())
 	registry.RegisterModule(NewUfwModule())
@@ -334,6 +336,10 @@ func (r *Registry) ExecuteTask(ctx context.Context, task *types.Task, host types
 // their effect is the default here
 var AcceptedArgs = map[string][]string{
 	"docker_container": {"comparisons"},
+	// rescuable (ansible-core 2.21): a failing included role is a task failure here already
+	"include_role": {"rescuable"}, "import_role": {"rescuable"},
+	// the deb822 fields are read by name from the table in deb822_repository.go
+	"deb822_repository": {"components", "architectures", "languages", "targets", "pdiffs", "by_hash", "allow_insecure", "allow_weak", "allow_downgrade_to_insecure", "trusted", "check_valid_until", "valid_until_min", "valid_until_max", "check_date", "date_max_future", "inrelease_path", "include", "exclude"},
 	// the WinRM/SSH client's own timeouts apply; the boot time is read the same way
 	"win_reboot": {"boot_time_command", "connect_timeout", "shutdown_timeout"},
 }
