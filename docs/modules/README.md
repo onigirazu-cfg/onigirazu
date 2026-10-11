@@ -1107,6 +1107,46 @@ RHEL/Fedora packages with the `yum` command (dnf provides it). `dnf` and `dnf5` 
     enablerepo: "docker-ce-stable"
 ```
 
+### routeros_api
+
+Items of a MikroTik RouterOS menu path over the REST API (`community.routeros.api`,
+`api_modify`). The device is an inventory host with `ansible_connection: local`, `ansible_host`,
+`ansible_user`, `ansible_password` and optionally `routeros_api_url` (default
+`https://<host>/rest`), `routeros_api_insecure: true` for a self-signed certificate.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `path` | string | - | Menu path, `ip/firewall/address-list` or `ip firewall address-list` (required) |
+| `find` | dict | - | Keys that identify the item (`{list: blocked, address: 10.0.0.1}`); without it a single-object path (`system/identity`) is set |
+| `values` | dict | - | What the item should have; only differing keys are sent (`PATCH`); a missing item is added with `find` + `values` (`PUT`) |
+| `state` | string | `present` | `present` or `absent` (`DELETE` by `.id`) |
+
+```yaml
+- routeros_api:
+    path: ip/firewall/address-list
+    find: {list: blocked, address: 203.0.113.9}
+    values: {comment: "scanner", timeout: 1d}
+- routeros_api: {path: system/identity, values: {name: edge1}}
+- routeros_api: {path: ip/dns, values: {servers: "1.1.1.1,9.9.9.9", allow-remote-requests: false}}
+```
+
+### routeros_command
+
+RouterOS CLI commands over SSH (`community.routeros.command`): `ansible_host`, `ansible_port`,
+`ansible_user`, `ansible_password` of the device (the user logs in as `<user>+ct`, the
+console-less terminal); the host key is checked against `known_hosts` like any SSH host's
+(`ansible_ssh_common_args: -o StrictHostKeyChecking=no` turns it off). Returns `stdout` and
+`stdout_lines` per command; say `changed_when`.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `commands` | list | - | Commands, e.g. `/system identity print` (required) |
+
+### routeros_facts
+
+`routeros_identity`, `routeros_resource`, `routeros_routerboard`, `routeros_interfaces`,
+`routeros_hostname`, `routeros_version`, `routeros_board` as host facts (`community.routeros.facts`).
+
 ### pip
 
 Python packages with pip.

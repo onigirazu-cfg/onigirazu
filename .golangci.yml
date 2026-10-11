@@ -104,6 +104,7 @@ linters:
         - -QF*
     misspell:
       locale: US
+      ignore-rules: [routeros]
     mnd:
       checks:
         - argument
