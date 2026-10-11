@@ -1323,6 +1323,20 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 	if task.ChangedWhen != "" || task.FailedWhen != "" {
 		e.applyResultConditions(ctx, task, taskVars, &result)
 	}
+	// a templated ignore_errors outside a loop; ignore_unreachable for a
+	// host that could not be reached
+	if task.IgnoreErrorsExpr != "" && result.Failed {
+		if holds, err := e.conditionHolds(ctx, task.IgnoreErrorsExpr, taskVars); err == nil && holds {
+			copy := *task
+			copy.IgnoreErrors = true
+			task = &copy
+		}
+	}
+	if task.IgnoreUnreachable && result.Failed && isUnreachableError(result.Error) {
+		copy := *task
+		copy.IgnoreErrors = true
+		task = &copy
+	}
 	if len(task.RegisterVars) > 0 {
 		e.applyRegisterProjections(task, *host, taskVars, &result)
 	}
@@ -1480,9 +1494,18 @@ func (e *ExecutionEngine) finishTask(task *types.Task, host *types.Host, result 
 	// become host variables, as in Ansible
 	if !real.Failed {
 		if facts, ok := real.Output["ansible_facts"].(map[string]interface{}); ok {
+			// under ansible_facts.<key> too (ansible_facts.packages)
+			all := map[string]interface{}{}
+			if have, ok := e.getHostVar(host.Name, "ansible_facts").(map[string]interface{}); ok {
+				for k, v := range have {
+					all[k] = v
+				}
+			}
 			for key, value := range facts {
 				e.setHostVar(host.Name, key, value)
+				all[key] = value
 			}
+			e.setHostVar(host.Name, "ansible_facts", all)
 		}
 	}
 
@@ -1564,10 +1587,11 @@ func (e *ExecutionEngine) runLoopOnHost(ctx context.Context, task *types.Task, h
 	changed, failed := false, false
 	register := func() {
 		if task.Register != "" {
-			e.setHostVar(host.Name, task.Register, map[string]interface{}{
-				"results": results, "changed": changed, "failed": failed,
-				"skipped": len(items) == 0,
-			})
+			value := map[string]interface{}{"results": results, "changed": changed, "failed": failed}
+			if len(items) == 0 {
+				value["skipped"] = true // absent when false, as in ansible-core 2.21
+			}
+			e.setHostVar(host.Name, task.Register, value)
 		}
 	}
 	for i, item := range items {
@@ -1597,18 +1621,46 @@ func (e *ExecutionEngine) runLoopOnHost(ctx context.Context, task *types.Task, h
 			"ansible_loop":     extendedLoopVars(items, i),
 			"ansible_loop_var": itemVar,
 		})
-		err := e.executeTaskOnHost(ctx, &taskCopy, host, loopVars, playResult)
-		if task.Register != "" {
-			if r, ok := e.getHostVar(host.Name, task.Register).(map[string]interface{}); ok {
-				r[itemVar] = item
-				results = append(results, r)
-				changed = changed || r["changed"] == true
-				failed = failed || r["failed"] == true
+		// a templated ignore_errors: true for this item ignores the task
+		if task.IgnoreErrorsExpr != "" {
+			if holds, err := e.conditionHolds(ctx, task.IgnoreErrorsExpr, loopVars); err == nil && holds {
+				taskCopy.IgnoreErrors = true
 			}
+		}
+		if task.BreakWhen != "" && task.Register == "" {
+			taskCopy.Register = "_onigirazu_break_when"
+		}
+		err := e.executeTaskOnHost(ctx, &taskCopy, host, loopVars, playResult)
+		var itemResult map[string]interface{}
+		if taskCopy.Register != "" {
+			itemResult, _ = e.getHostVar(host.Name, taskCopy.Register).(map[string]interface{})
+		}
+		stop := false
+		if task.BreakWhen != "" && itemResult != nil {
+			vars := e.mergeVariables(loopVars, map[string]interface{}{"_task": map[string]interface{}{"result": itemResult}})
+			if taskCopy.Register != "" {
+				vars[taskCopy.Register] = itemResult
+			}
+			holds, berr := e.conditionHolds(ctx, task.BreakWhen, vars)
+			itemResult["break_when_result"] = holds
+			if berr != nil {
+				itemResult["break_when_suppressed_exception"] = berr.Error()
+			}
+			stop = holds
+		}
+		if task.Register != "" && itemResult != nil {
+			itemResult[itemVar] = item
+			results = append(results, itemResult)
+			changed = changed || itemResult["changed"] == true
+			failed = failed || itemResult["failed"] == true
 		}
 		if err != nil {
 			register()
 			return err
+		}
+		if stop {
+			e.logger.Debug("Loop of '%s' on %s ends at item %d: break_when holds", task.Name, host.Name, i+1)
+			break
 		}
 	}
 	register()
@@ -2392,7 +2444,12 @@ func (e *ExecutionEngine) applyResultConditions(ctx context.Context, task *types
 	vars := e.mergeVariables(taskVars, extra)
 	if task.ChangedWhen != "" {
 		holds, err := e.conditionHolds(ctx, task.ChangedWhen, vars)
+		if result.Output == nil {
+			result.Output = map[string]interface{}{}
+		}
+		result.Output["changed_when_result"] = holds
 		if err != nil {
+			result.Output["changed_when_suppressed_exception"] = err.Error()
 			result.Failed, result.Success, result.Error = true, false, "changed_when: "+err.Error()
 			return
 		}
@@ -2856,4 +2913,15 @@ func (e *ExecutionEngine) applyRegisterProjections(task *types.Task, host types.
 		}
 		e.setHostVar(host.Name, name, value)
 	}
+}
+
+// isUnreachableError tells a connection failure from a task's own failure
+func isUnreachableError(msg string) bool {
+	m := strings.ToLower(msg)
+	for _, sign := range []string{"failed to create ssh connection", "failed to connect to", "unreachable", "no route to host", "connection refused", "i/o timeout", "handshake failed"} {
+		if strings.Contains(m, sign) {
+			return true
+		}
+	}
+	return false
 }

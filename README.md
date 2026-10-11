@@ -140,7 +140,7 @@ formats can be used side by side. Examples: [docs/examples](docs/examples/README
 
 ## Coming from Ansible
 
-Existing Ansible content runs as it is in most cases. What is supported:
+Existing Ansible content runs as it is in most cases; the reference is the current ansible-core (2.21). What is supported:
 
 YAML is read as Ansible reads it: unquoted `yes`/`no`/`on`/`off` values are booleans (YAML 1.1); quote them to keep text.
 
@@ -155,6 +155,7 @@ YAML is read as Ansible reads it: unquoted `yes`/`no`/`on`/`off` values are bool
   `delay`, `changed_when`, `failed_when`, `ignore_errors`, `notify`/`listen`, `tags`,
   `become`/`become_user`, `delegate_to`, `local_action`, `run_once`, `throttle`, `no_log`,
   `check_mode`, `diff`, `vars`, `environment`, `action` (also with a templated module name),
+  `break_when` in loops, `ignore_unreachable`, a templated `ignore_errors`,
   `async` with `poll` (the task fails after `async` seconds); `poll: 0` starts it in the
   background and `async_status` reports on it (jobs live in the onigirazu process, which waits
   for unfinished ones at the end of the run); register projections (`register:` as a map of
@@ -407,7 +408,7 @@ to change. Secrets become variables with an example file. See [docs/IMPORT.md](d
 |------|---------|
 | Commands | `command`, `shell`, `script` |
 | Files | `file`, `copy`, `template`, `lineinfile`, `blockinfile`, `replace`, `ini_file`, `fetch`, `slurp`, `stat`, `find`, `archive`, `unarchive`, `get_url`, `config` (JSON/YAML/TOML keys) |
-| Packages | `package`, `apt`, `yum` (also `dnf`), `apt_repository`, `apt_key`, `pip`, `pipx`, `flatpak` |
+| Packages | `package`, `apt`, `yum` (also `dnf`), `apt_repository`, `deb822_repository`, `apt_key`, `package_facts`, `pip`, `pipx`, `flatpak` |
 | Services and system | `service`, `systemd`, `cron`, `sysctl`, `mount`, `hostname`, `timezone`, `reboot`, `user`, `group`, `authorized_key`, `getent` |
 | Network and firewall | `uri`, `wait_for`, `firewall` (ufw, firewalld, iptables), `ufw` |
 | Containers | `docker_container`, `docker_image`, `docker_compose` (v1 and v2), `docker_host_info`, `podman` |

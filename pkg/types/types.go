@@ -187,19 +187,26 @@ type Task struct {
 	// name -> expression over _task.result and the task's variables
 	RegisterVars map[string]string `yaml:"-" json:"-"`
 	IgnoreErrors bool              `yaml:"ignore_errors,omitempty"`
-	Tags         []string          `yaml:"tags,omitempty"`
-	Notify       []string          `yaml:"notify,omitempty"`
-	Listen       string            `yaml:"listen,omitempty"`
-	Timeout      time.Duration     `yaml:"timeout,omitempty"`
-	Retries      int               `yaml:"retries,omitempty"`
-	Delay        time.Duration     `yaml:"delay,omitempty"`
-	Until        string            `yaml:"until,omitempty"`
-	ChangedWhen  string            `yaml:"changed_when,omitempty"`
-	FailedWhen   string            `yaml:"failed_when,omitempty"`
-	Include      string            `yaml:"include,omitempty"`
-	Serial       bool              `yaml:"serial,omitempty"`
-	RetryDelay   time.Duration     `yaml:"retry_delay,omitempty"`
-	Become       bool              `yaml:"become,omitempty"`
+	// IgnoreErrorsExpr is a templated ignore_errors ("{{ item.optional }}"):
+	// true for any loop item ignores the whole task (ansible-core 2.21)
+	IgnoreErrorsExpr string `yaml:"-" json:"-"`
+	// IgnoreUnreachable keeps an unreachable host's failure from failing the task
+	IgnoreUnreachable bool `yaml:"ignore_unreachable,omitempty"`
+	// BreakWhen ends a loop after the item whose result makes it true
+	BreakWhen   string        `yaml:"break_when,omitempty"`
+	Tags        []string      `yaml:"tags,omitempty"`
+	Notify      []string      `yaml:"notify,omitempty"`
+	Listen      string        `yaml:"listen,omitempty"`
+	Timeout     time.Duration `yaml:"timeout,omitempty"`
+	Retries     int           `yaml:"retries,omitempty"`
+	Delay       time.Duration `yaml:"delay,omitempty"`
+	Until       string        `yaml:"until,omitempty"`
+	ChangedWhen string        `yaml:"changed_when,omitempty"`
+	FailedWhen  string        `yaml:"failed_when,omitempty"`
+	Include     string        `yaml:"include,omitempty"`
+	Serial      bool          `yaml:"serial,omitempty"`
+	RetryDelay  time.Duration `yaml:"retry_delay,omitempty"`
+	Become      bool          `yaml:"become,omitempty"`
 	// BecomeSet tells become: false (run without escalation even in a play
 	// with become: true) from no become at all
 	BecomeSet bool `yaml:"-" json:"-"`
@@ -265,48 +272,50 @@ func (t *Task) UnmarshalYAML(unmarshal func(interface{}) error) error {
 
 	// Define reserved field names that are not module arguments
 	reservedFields := map[string]bool{
-		"name":            true,
-		"module":          true,
-		"args":            true,
-		"when":            true,
-		"loop":            true,
-		"register":        true,
-		"ignore_errors":   true,
-		"tags":            true,
-		"notify":          true,
-		"listen":          true,
-		"timeout":         true,
-		"retries":         true,
-		"delay":           true,
-		"until":           true,
-		"changed_when":    true,
-		"failed_when":     true,
-		"include":         true,
-		"include_tasks":   true,
-		"import_tasks":    true,
-		"serial":          true,
-		"retry_delay":     true,
-		"become":          true,
-		"become_user":     true,
-		"become_method":   true,
-		"run_once":        true,
-		"delegate_to":     true,
-		"block":           true,
-		"rescue":          true,
-		"always":          true,
-		"check_mode":      true,
-		"environment":     true,
-		"vars":            true,
-		"no_log":          true,
-		"prevent_destroy": true,
-		"throttle":        true,
-		"async":           true,
-		"poll":            true,
-		"loop_control":    true,
-		"with_items":      true,
-		"with_list":       true,
-		"with_dict":       true,
-		"with_sequence":   true,
+		"name":               true,
+		"module":             true,
+		"args":               true,
+		"when":               true,
+		"loop":               true,
+		"register":           true,
+		"ignore_errors":      true,
+		"tags":               true,
+		"notify":             true,
+		"listen":             true,
+		"timeout":            true,
+		"retries":            true,
+		"delay":              true,
+		"until":              true,
+		"break_when":         true,
+		"ignore_unreachable": true,
+		"changed_when":       true,
+		"failed_when":        true,
+		"include":            true,
+		"include_tasks":      true,
+		"import_tasks":       true,
+		"serial":             true,
+		"retry_delay":        true,
+		"become":             true,
+		"become_user":        true,
+		"become_method":      true,
+		"run_once":           true,
+		"delegate_to":        true,
+		"block":              true,
+		"rescue":             true,
+		"always":             true,
+		"check_mode":         true,
+		"environment":        true,
+		"vars":               true,
+		"no_log":             true,
+		"prevent_destroy":    true,
+		"throttle":           true,
+		"async":              true,
+		"poll":               true,
+		"loop_control":       true,
+		"with_items":         true,
+		"with_list":          true,
+		"with_dict":          true,
+		"with_sequence":      true,
 	}
 	for key := range taskMap {
 		if strings.HasPrefix(key, "with_") {
@@ -437,7 +446,14 @@ func (t *Task) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	}
 	if ignoreErrors, ok := yamlBool(taskMap["ignore_errors"]); ok {
 		t.IgnoreErrors = ignoreErrors
+	} else if s, ok := taskMap["ignore_errors"].(string); ok && strings.Contains(s, "{{") {
+		t.IgnoreErrorsExpr = s
 	}
+	// an invalid ignore_errors value is false, as in ansible-core 2.21
+	if v, ok := yamlBool(taskMap["ignore_unreachable"]); ok {
+		t.IgnoreUnreachable = v
+	}
+	t.BreakWhen = conditionValue(taskMap["break_when"])
 	// include, include_tasks and import_tasks are expanded by the parser
 	for _, key := range []string{"include", "include_tasks", "import_tasks"} {
 		if include, ok := taskMap[key].(string); ok {

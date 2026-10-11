@@ -504,6 +504,8 @@ Read a file from the host; `content` is base64 (`{{ r.content | b64decode }}`), 
 
 ## Configuration Modules
 
+`armor: false` (ansible-core 2.21) returns the text itself with `encoding: none` instead of base64.
+
 ### config
 
 Edit keys of a JSON or YAML file on the host.
@@ -1057,6 +1059,27 @@ described in a deb822 `.sources` file (such as Ubuntu's own) also counts as pres
 (`download_docker_com_linux_ubuntu.list`); removing the last line of a `.list` file deletes it.
 PPAs go through `add-apt-repository` (package `software-properties-common`).
 
+### deb822_repository
+
+An APT source in the deb822 format: `/etc/apt/sources.list.d/<name>.sources`.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `name` | string | - | File name (required) |
+| `uris`, `suites` | string/list | - | Required with `state: present` |
+| `types` | string/list | `deb` | `deb`, `deb-src` |
+| `components`, `architectures`, `languages`, `targets` | string/list | - | deb822 fields of the same names |
+| `signed_by` | string | - | A key file on the host, an URL (fetched to `/etc/apt/keyrings/<name>.asc`) or the armored key text |
+| `enabled` | bool | `true` | `Enabled: no` keeps the file but turns the source off |
+| `update_cache` | bool | `true` | `apt-get update` after a change |
+| `state` | string | `present` | `absent` removes the file and the fetched key |
+| other deb822 fields | | | `pdiffs`, `by_hash`, `allow_insecure`, `allow_weak`, `allow_downgrade_to_insecure`, `trusted`, `check_valid_until`, `valid_until_min`, `valid_until_max`, `check_date`, `date_max_future`, `inrelease_path`, `include`, `exclude` |
+
+### package_facts
+
+The installed packages as `ansible_facts.packages`: name → list of `{name, version, arch,
+source}`; `manager`: `auto` (default: dpkg, else rpm, else apk), `apt`, `rpm`, `apk`.
+
 ### apt_key
 
 | Parameter | Type | Default | Description |
@@ -1429,6 +1452,8 @@ A link is reported as a link, not followed.
 `readable`, `writable` and `executable` are the owner's permission bits. Links also carry `lnk_source` (resolved path) and `lnk_target` (link text). For a missing path only `exists: false` and `path` are returned. The same fields are also available at the top level of the result.
 
 ## Version Control
+
+`stat.disk_usage_bytes` is the space the file takes (512-byte blocks), as ansible-core 2.21 reports.
 
 ### git
 

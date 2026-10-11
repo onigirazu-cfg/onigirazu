@@ -34,7 +34,7 @@ var (
 	randomKeyword = regexp.MustCompile(`\b(seed|start|step|default|field|secret|rstrip|engine_mount_point|project_path|state_file|binary)\s*=([^=]|$)`)
 	// keyword arguments of sort, combine and items2dict become a marked
 	// name followed by the value (splitKwargs takes them apart)
-	filterKeyword = regexp.MustCompile(`\b(attribute|reverse|case_sensitive|recursive|list_merge|key_name|value_name|wantlist|errors)\s*=([^=]|$)`)
+	filterKeyword = regexp.MustCompile(`\b(attribute|reverse|case_sensitive|recursive|list_merge|key_name|value_name|wantlist|errors|indent|vault_behavior|default_flow_style|width|sort_keys)\s*=([^=]|$)`)
 	// d.keys() and d.values() are Python methods
 	dictMethod = regexp.MustCompile(`\.(keys|values)\(\)`)
 	// lookup() and query() get the playbook directory as their first argument
