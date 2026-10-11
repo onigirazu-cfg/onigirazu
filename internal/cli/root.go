@@ -91,6 +91,8 @@ across your infrastructure with a focus on simplicity and reliability.`,
 	rootCmd.AddCommand(rollbackCmd)
 	rootCmd.AddCommand(newDriftCmd())
 	rootCmd.AddCommand(newPullCmd())
+	rootCmd.AddCommand(newBootstrapCmd())
+	rootCmd.AddCommand(newImageCmd())
 	rootCmd.AddCommand(newListenCmd())
 	rootCmd.AddCommand(newServeCmd())
 	rootCmd.AddCommand(newMCPCmd())

@@ -16,6 +16,7 @@ Start with the [Quick Start](QUICK_START_CONFIGURATION.md). The project
 - [Verify](VERIFY.md) — `verify:` checks of a play and `onigirazu verify`
 - [Compliance profiles](COMPLY.md) — `onigirazu comply`: CIS-style controls with severities, scores and fixes
 - [Safe apply](SAFE_APPLY.md) — `serial`, canary batches, health checks, automatic rollback, `strategy: free`, `throttle`
+- [Bootstrap and images](BOOTSTRAP_AND_IMAGES.md) — `onigirazu bootstrap` for a fresh machine, `onigirazu image build` for container images
 - [Pull mode](PULL.md) — `onigirazu pull`: a host converges itself from git, on a timer, with notifications and metrics
 - [Fleet server](SERVE.md) — `onigirazu serve`: scheduled jobs, results per host, run history, web page and API
 - [MCP server](MCP.md) — `onigirazu mcp`: inventory, plan, drift, verify, comply and run history as tools for AI agents
