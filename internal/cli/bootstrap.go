@@ -2,12 +2,13 @@ package cli
 
 import (
 	"fmt"
-	"github.com/onigirazu-cfg/onigirazu/internal/logger"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/onigirazu-cfg/onigirazu/internal/logger"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/term"

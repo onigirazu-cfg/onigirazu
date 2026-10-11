@@ -3,12 +3,13 @@ package secrets
 import (
 	"context"
 	"fmt"
-	"github.com/onigirazu-cfg/onigirazu/internal/logger"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/onigirazu-cfg/onigirazu/internal/logger"
 )
 
 // Config is the secrets block of onigirazu.yml. Credentials never come from
