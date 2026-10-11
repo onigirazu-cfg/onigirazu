@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.171.0] - 2026-10-11
+
 ### Security
 
 - Go 1.26.9 and updated dependencies (x/crypto, x/net v0.60.0, x/text and others) close all govulncheck findings
