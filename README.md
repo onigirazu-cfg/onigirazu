@@ -181,7 +181,9 @@ YAML is read as Ansible reads it: unquoted `yes`/`no`/`on`/`off` values are bool
   `ansible_password`, `ansible_ssh_private_key_file`, `ansible_become_password`,
   `ansible_connection: winrm` with `ansible_winrm_*` (NTLM, message encryption, https),
   `ansible_ssh_common_args`/`ansible_ssh_extra_args` (`ConnectTimeout`, `ProxyJump`/`-J`,
-  `ProxyCommand`, `StrictHostKeyChecking=no`), `ansible_connection` `local`, `docker`, `podman`;
+  `ProxyCommand`, `StrictHostKeyChecking=no`), keys of a running ssh-agent (`SSH_AUTH_SOCK`),
+  OpenSSH certificates (`<key>-cert.pub` next to the key, or `ansible_ssh_certificate_file`),
+  `ansible_connection` `local`, `docker`, `podman`;
   templated values and `-e` overrides
 - **Jinja**: filters by bare or fully qualified name (`| ansible.builtin.to_json`, `is ansible.builtin.version`) — `default`, `map`, `select`/`selectattr`, `combine`, `regex_*`,
   `to_json`/`from_yaml`, `ternary`, set operations, `password_hash`, ...), tests (`is defined`,
@@ -193,7 +195,8 @@ YAML is read as Ansible reads it: unquoted `yes`/`no`/`on`/`off` values are bool
   hostname, IP, memory, virtualization, `ansible_pkg_mgr`, `ansible_local` from
   `/etc/ansible/facts.d`), `setup`, `hostvars`, `groups`, `group_names`, `inventory_hostname`,
   `ansible_check_mode`, `ansible_play_hosts`, `ansible_limit`; templated variables are
-  rendered per host when used, as in Ansible
+  rendered per host when used, as in Ansible; facts are cached across runs with
+  `fact_caching: jsonfile` (also from ansible.cfg) and forgotten with `--flush-cache`
 - **Command line**: `-i`, `-e` (also `@file`), `--limit`, `--tags`/`--skip-tags`, `--check`,
   `--diff`, `-b`/`--become-user`, `-u`, `--private-key`, `--start-at-task`, `--list-hosts`,
   `--list-tasks`, `--list-tags`, `--syntax-check`

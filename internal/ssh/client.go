@@ -15,6 +15,7 @@ import (
 
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
+	"golang.org/x/crypto/ssh/agent"
 
 	"github.com/onigirazu-cfg/onigirazu/internal/logger"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
@@ -35,7 +36,9 @@ type Client struct {
 	jumps  []*ssh.Client
 	host   types.Host
 	logger Logger
-	shells shellPool
+	// agentConn: the ssh-agent socket the auth signs through, closed with the client
+	agentConn net.Conn
+	shells    shellPool
 	// asShells: command servers started once with sudo -n -u <user>, so
 	// become commands skip a sudo each
 	asMu     sync.Mutex
@@ -129,11 +132,22 @@ func NewClientWithHostKeyManagerAndLogger(host types.Host, hostKeyManager *HostK
 				lg.Debug("Failed to parse default private key: %v", err)
 			} else {
 				lg.Debug("Private key parsed successfully")
+				signer, err = withCertificate(signer, keyFile, host)
+				if err != nil {
+					return nil, err
+				}
 				auth = append(auth, ssh.PublicKeys(signer))
 			}
 		}
 	} else {
 		lg.Debug("No KeyFile specified for host %s", host.Name)
+	}
+
+	// the keys an ssh-agent holds (SSH_AUTH_SOCK), after the file: the
+	// agent answers for every key it has, certificates included
+	agentAuth, agentConn := agentAuthMethod(lg)
+	if agentAuth != nil {
+		auth = append(auth, agentAuth)
 	}
 
 	// Add password authentication if available
@@ -164,16 +178,20 @@ func NewClientWithHostKeyManagerAndLogger(host types.Host, hostKeyManager *HostK
 	lg.Debug("Attempting to connect to %s as user %s", address, host.User)
 	client, jumps, err := dialHost(host, address, config, auth, hostKeyManager, opts)
 	if err != nil {
+		if agentConn != nil {
+			_ = agentConn.Close()
+		}
 		lg.Debug("Connection failed: %v", err)
 		return nil, fmt.Errorf("failed to connect to %s: %v", address, err)
 	}
 	lg.Debug("Connection established successfully to %s", address)
 
 	return &Client{
-		client: client,
-		jumps:  jumps,
-		host:   host,
-		logger: lg,
+		client:    client,
+		jumps:     jumps,
+		host:      host,
+		logger:    lg,
+		agentConn: agentConn,
 	}, nil
 }
 
@@ -203,6 +221,9 @@ func (c *Client) Close() error {
 		err = c.client.Close()
 	}
 	closeAll(c.jumps)
+	if c.agentConn != nil {
+		_ = c.agentConn.Close()
+	}
 	return err
 }
 
@@ -508,4 +529,61 @@ func (c *Client) newSFTP() (*sftp.Client, error) {
 		return err
 	})
 	return client, err
+}
+
+// withCertificate wraps the signer with the OpenSSH certificate next to the
+// key (<key>-cert.pub) or the one the host names
+// (onigirazu_ssh_certificate_file / ansible_ssh_certificate_file), so the
+// host is authenticated by a CA instead of a listed key
+func withCertificate(signer ssh.Signer, keyFile string, host types.Host) (ssh.Signer, error) {
+	certFile := ""
+	for _, key := range []string{"onigirazu_ssh_certificate_file", "ansible_ssh_certificate_file"} {
+		if v, ok := host.Vars[key].(string); ok && v != "" {
+			certFile = expandHome(v)
+		}
+	}
+	explicit := certFile != ""
+	if certFile == "" {
+		certFile = keyFile + "-cert.pub"
+	}
+	data, err := os.ReadFile(certFile) // #nosec G304 -- the key's own certificate
+	if err != nil {
+		if explicit {
+			return nil, fmt.Errorf("ssh certificate %s: %w", certFile, err)
+		}
+		return signer, nil
+	}
+	pub, _, _, _, err := ssh.ParseAuthorizedKey(data)
+	if err != nil {
+		return nil, fmt.Errorf("ssh certificate %s: %w", certFile, err)
+	}
+	cert, ok := pub.(*ssh.Certificate)
+	if !ok {
+		return nil, fmt.Errorf("ssh certificate %s: not a certificate", certFile)
+	}
+	certSigner, err := ssh.NewCertSigner(cert, signer)
+	if err != nil {
+		return nil, fmt.Errorf("ssh certificate %s: %w", certFile, err)
+	}
+	return certSigner, nil
+}
+
+// agentAuthMethod is the ssh-agent of SSH_AUTH_SOCK as an auth method, nil
+// without one. The agent signs through its socket, so the connection stays
+// open as long as the client lives (the agent's signers are lazy); the
+// caller closes it.
+func agentAuthMethod(lg Logger) (ssh.AuthMethod, net.Conn) {
+	sock := os.Getenv("SSH_AUTH_SOCK")
+	if sock == "" {
+		return nil, nil
+	}
+	conn, err := net.Dial("unix", sock) // #nosec G704 -- the user's own agent socket from SSH_AUTH_SOCK
+	if err != nil {
+		if lg != nil {
+			lg.Debug("ssh-agent %s: %v", sock, err)
+		}
+		return nil, nil
+	}
+	ag := agent.NewClient(conn)
+	return ssh.PublicKeysCallback(ag.Signers), conn
 }

@@ -177,3 +177,47 @@ func InstallPaths(playbookDir string) (roles, collections string) {
 	r, c := roleSearch(playbookDir)
 	return r[0], c[0]
 }
+
+// AnsibleCfgDefault is one [defaults] key of the ansible.cfg in effect
+// (ANSIBLE_CONFIG, ./ansible.cfg, the playbook's, ~/.ansible.cfg,
+// /etc/ansible/ansible.cfg), "" when none sets it; relative paths are not
+// resolved here
+func AnsibleCfgDefault(playbookDir, key string) string {
+	var candidates []string
+	if env := os.Getenv("ANSIBLE_CONFIG"); env != "" {
+		candidates = append(candidates, env)
+	}
+	candidates = append(candidates, "ansible.cfg")
+	if playbookDir != "" {
+		candidates = append(candidates, filepath.Join(playbookDir, "ansible.cfg"), filepath.Join(playbookDir, "..", "ansible.cfg"))
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		candidates = append(candidates, filepath.Join(home, ".ansible.cfg"))
+	}
+	candidates = append(candidates, "/etc/ansible/ansible.cfg")
+	for _, c := range candidates {
+		f, err := os.Open(c) // #nosec G304 -- Ansible's config file
+		if err != nil {
+			continue
+		}
+		section, value := "", ""
+		sc := bufio.NewScanner(f)
+		for sc.Scan() {
+			line := strings.TrimSpace(sc.Text())
+			if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") {
+				continue
+			}
+			if strings.HasPrefix(line, "[") {
+				section = strings.Trim(line, "[] ")
+				continue
+			}
+			k, v, ok := strings.Cut(line, "=")
+			if ok && section == "defaults" && strings.TrimSpace(k) == key {
+				value = strings.TrimSpace(v)
+			}
+		}
+		_ = f.Close()
+		return value
+	}
+	return ""
+}

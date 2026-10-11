@@ -1,6 +1,10 @@
 package cache
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -56,6 +60,9 @@ type FactsCache struct {
 	entries map[string]*FactsCacheEntry // key: hostname
 	ttl     time.Duration
 	enabled bool
+	// dir, when set, keeps every entry as <dir>/<host>.json across runs
+	// (Ansible's jsonfile fact caching)
+	dir string
 
 	// Statistics
 	// hits and misses change under the read lock: atomic
@@ -113,19 +120,58 @@ func (fc *FactsCache) Get(hostname string) (*SystemFacts, bool) {
 	defer fc.mu.RUnlock()
 
 	entry, exists := fc.entries[hostname]
-	if !exists {
-		fc.misses.Add(1)
-		return nil, false
-	}
-
-	// Check if expired
-	if time.Now().After(entry.ExpiresAt) {
+	if !exists || time.Now().After(entry.ExpiresAt) {
+		if disk := fc.load(hostname); disk != nil {
+			fc.hits.Add(1)
+			return disk.Facts, true
+		}
 		fc.misses.Add(1)
 		return nil, false
 	}
 
 	fc.hits.Add(1)
 	return entry.Facts, true
+}
+
+// UseDir keeps the entries on disk too; "" turns it off
+func (fc *FactsCache) UseDir(dir string) {
+	fc.mu.Lock()
+	defer fc.mu.Unlock()
+	fc.dir = dir
+}
+
+func (fc *FactsCache) file(hostname string) string {
+	return filepath.Join(fc.dir, strings.NewReplacer("/", "_", "\\", "_", ":", "_").Replace(hostname)+".json")
+}
+
+// load reads a host's entry from disk when it is there and not expired;
+// the caller holds at least the read lock
+func (fc *FactsCache) load(hostname string) *FactsCacheEntry {
+	if fc.dir == "" {
+		return nil
+	}
+	data, err := os.ReadFile(fc.file(hostname)) // #nosec G304 -- our own cache directory
+	if err != nil {
+		return nil
+	}
+	var entry FactsCacheEntry
+	if json.Unmarshal(data, &entry) != nil || entry.Facts == nil || time.Now().After(entry.ExpiresAt) {
+		return nil
+	}
+	return &entry
+}
+
+// Flush forgets every entry, on disk too
+func (fc *FactsCache) Flush() {
+	fc.mu.Lock()
+	defer fc.mu.Unlock()
+	fc.entries = make(map[string]*FactsCacheEntry)
+	if fc.dir != "" {
+		files, _ := filepath.Glob(filepath.Join(fc.dir, "*.json"))
+		for _, f := range files {
+			_ = os.Remove(f)
+		}
+	}
 }
 
 // Set stores facts for a host
@@ -144,9 +190,14 @@ func (fc *FactsCache) Set(hostname string, facts *SystemFacts) {
 	facts.CachedAt = now
 	facts.ExpiresAt = expiresAt
 
-	fc.entries[hostname] = &FactsCacheEntry{
-		Facts:     facts,
-		ExpiresAt: expiresAt,
+	entry := &FactsCacheEntry{Facts: facts, ExpiresAt: expiresAt}
+	fc.entries[hostname] = entry
+	if fc.dir != "" {
+		if err := os.MkdirAll(fc.dir, 0o700); err == nil {
+			if data, err := json.Marshal(entry); err == nil {
+				_ = os.WriteFile(fc.file(hostname), data, 0o600)
+			}
+		}
 	}
 }
 
