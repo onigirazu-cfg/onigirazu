@@ -1490,6 +1490,32 @@ func TestServeInventorySources(t *testing.T) {
 	}
 }
 
+func TestServeExecuteRestoresGlobals(t *testing.T) {
+	// a job's inventory and state file are set for its run only: the next
+	// job must not inherit them (nor must a limit be validated against them)
+	prevInventory, prevState := inventoryPaths, statePath
+	defer func() { inventoryPaths, statePath = prevInventory, prevState }()
+	inventoryPaths, statePath = []string{"orig,"}, ""
+	cfg := &ServeConfig{DataDir: t.TempDir(), Retain: 5}
+	s, err := newServer(cfg, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(s.inventory, []string{"orig,"}) {
+		t.Fatalf("server inventory: %v", s.inventory)
+	}
+	j := &ServeJob{Name: "x", Kind: "apply", Playbook: filepath.Join(cfg.DataDir, "missing.yml"), Inventory: filepath.Join(cfg.DataDir, "missing-hosts.yml")}
+	if _, err := s.execute(j); err == nil {
+		t.Fatal("a missing playbook must fail")
+	}
+	if !slices.Equal(inventoryPaths, []string{"orig,"}) || statePath != "" {
+		t.Fatalf("globals not restored: %v %q", inventoryPaths, statePath)
+	}
+	if _, err := os.Stat(filepath.Join(cfg.DataDir, "state")); err != nil {
+		t.Fatalf("state dir: %v", err)
+	}
+}
+
 func TestServeExtraVarsArg(t *testing.T) {
 	// a caller's value with spaces or = must stay one variable (a k=v list is split on spaces)
 	vars, err := parseExtraVars([]string{extraVarsArg(map[string]string{"reboot": "true ansible_host=evil", "serial": "1"})})

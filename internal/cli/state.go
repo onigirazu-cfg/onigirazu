@@ -120,18 +120,18 @@ Displays:
 
 func runStateList(cmd *cobra.Command, args []string) error {
 	// Get flags
-	statePath, _ := cmd.Flags().GetString("state")
+	path, _ := cmd.Flags().GetString("state")
 	outputFormat, _ := cmd.Flags().GetString("output")
 	filter, _ := cmd.Flags().GetString("filter")
 	verbose, _ := cmd.Flags().GetBool("verbose")
 
 	// Check if state file exists
-	if _, err := os.Stat(statePath); os.IsNotExist(err) {
-		return fmt.Errorf("state file not found: %s (run 'onigirazu apply' first)", statePath)
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return fmt.Errorf("state file not found: %s (run 'onigirazu apply' first)", path)
 	}
 
 	// Load state
-	stateManager := state.New(statePath)
+	stateManager := state.New(path)
 	stateData, err := stateManager.LoadState()
 	if err != nil {
 		return fmt.Errorf("failed to load state: %w", err)
@@ -171,16 +171,16 @@ func runStateShow(cmd *cobra.Command, args []string) error {
 	resourceName := args[0]
 
 	// Get flags
-	statePath, _ := cmd.Flags().GetString("state")
+	path, _ := cmd.Flags().GetString("state")
 	outputFormat, _ := cmd.Flags().GetString("output")
 
 	// Check if state file exists
-	if _, err := os.Stat(statePath); os.IsNotExist(err) {
-		return fmt.Errorf("state file not found: %s (run 'onigirazu apply' first)", statePath)
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return fmt.Errorf("state file not found: %s (run 'onigirazu apply' first)", path)
 	}
 
 	// Load state
-	stateManager := state.New(statePath)
+	stateManager := state.New(path)
 	stateData, err := stateManager.LoadState()
 	if err != nil {
 		return fmt.Errorf("failed to load state: %w", err)
