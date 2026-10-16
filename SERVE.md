@@ -10,6 +10,7 @@ store. One process, one YAML file, no database.
 listen: ":8086"
 title: RED fleet
 data_dir: /var/lib/onigirazu/serve     # results and job state; default ~/.onigirazu/serve
+approval_timeout: 1h                   # default wait for approval
 retain: 50                             # results kept per job
 auth:
   token: ${SERVE_TOKEN}                # API bearer token: an operator
@@ -32,6 +33,11 @@ jobs:
     inventory: hosts.yml
     every: 6h
     fail_on: high
+  - name: patch-wave
+    kind: apply
+    playbook: patch.yml
+    approval: required
+    approval_timeout: 2h
   - name: deploy-web
     kind: apply
     playbook: deploy.yml
@@ -45,9 +51,20 @@ onigirazu serve --config-file serve.yml
 sudo onigirazu serve install -f /etc/onigirazu/serve.yml      # systemd service
 ```
 
-Jobs run one at a time, in the order they are due or requested; a job that is running or
-queued is not queued again. Paths in the file are relative to it. Every job's state file lives
+Jobs run one at a time, in the order they are due or requested; a job that is pending,
+queued or running is not requested again. Paths in the file are relative to it. Every job's
+state file lives
 in `data_dir/state/<job>.state`.
+
+## Guarded runs
+
+A job with `approval: required` creates a pending run when requested, including by the
+schedule. An operator approves it to queue execution, or rejects it with an optional comment.
+A pending run expires after the job's `approval_timeout`, or the server default (1h).
+The flow is requested → pending → approved/rejected/expired. Each job has at most one pending
+run; the schedule skips it while one waits. The record keeps `approval.by`, `approval.at`
+and `approval.comment`. A restart keeps pending runs and marks queued or executing runs as
+`error` with `interrupted: serve restarted`.
 
 ## Access
 
@@ -55,27 +72,36 @@ Without `auth` everyone is an operator — put the server behind a reverse proxy
 With `token`, `Authorization: Bearer <token>` is an operator (automation, curl). With
 `user_header`, the user the proxy sets (Authentik's outpost, oauth2-proxy, nginx auth_request) is
 a viewer; when one of the groups in `groups_header` (comma, pipe or space separated) is in
-`operators`, an operator. Viewers read everything; operators also start jobs.
+`operators`, an operator. Viewers read everything; operators also start jobs and approve or reject pending runs.
 
 ## API
 
 | Method and path | Returns |
 |---|---|
 | `GET /api/me` | the caller: `user`, `operator`, `title` |
-| `GET /api/jobs` | the jobs with schedule, next run, running flag and the last result (without its report) |
-| `POST /api/jobs/{name}/run` | queues the job (operators); `409` when it is already running or queued |
+| `GET /api/jobs` | the jobs with schedule, next run, running flag (queued or running), last executed result, optional `pending` record (without reports), and `approval: "required"` for guarded jobs |
+| `POST /api/jobs/{name}/run` | requests the job (operators); `202` with `{queued: name, run: id}` or `{pending: id, run: id}`; `409` when running, queued or pending; `503` when the queue is full |
 | `GET /api/jobs/{name}/results` | the kept results, newest first |
 | `GET /api/jobs/{name}/results/{id}` | one result with its full report (the drift, verify or comply report as JSON) |
-| `GET /api/hosts` | every host seen by a job's last result with its worst status (`ok`, `changed`, `drift`, `failed`, `unreachable`) and the status per job |
+| `GET /api/results/{id}` | one job result with its full report; `404` if absent |
+| `POST /api/runs/{id}/approve` | queues a pending run (operators); optional JSON `{comment: "..."}`; `200` with the record without report, `404` if absent, `409` when the run expired meanwhile (it is marked expired), `503` if the queue is full |
+| `POST /api/runs/{id}/reject` | rejects a pending run (operators); optional JSON `{comment: "..."}`; `200` with the record without report, `404` if absent |
+| `GET /api/hosts` | every host seen by a job's last executed result with its worst status (`ok`, `changed`, `drift`, `failed`, `unreachable`) and the status per job |
 | `GET /api/runs[?host=&playbook=]` | the audit store's last 100 runs (every `apply`, not only the server's) |
 | `GET /api/runs/{id}` | one audit record |
-| `GET /metrics` | `onigirazu_serve_job_last_status{job,kind}` (0 ok, 1 drift/changed, 2 failed, 3 error), `onigirazu_serve_job_last_run_timestamp_seconds{job}`, `onigirazu_serve_host_status{job,host}` |
+| `GET /metrics` | `onigirazu_serve_job_last_status{job,kind}` (0 ok, 1 drift/changed, 2 failed, 3 error), `onigirazu_serve_job_last_run_timestamp_seconds{job}`, `onigirazu_serve_host_status{job,host}`, `onigirazu_serve_job_pending{job}` (guarded jobs only: 1 pending, 0 otherwise); all include configured metric labels |
 | `GET /healthz` | `ok` |
 
 The page at `/` uses the same API: Jobs (with a Run button for operators), Hosts and Runs tabs,
 each result and audit record openable as JSON.
 
-A job result: `{id, job, kind, started, duration_seconds, status, summary, trigger, hosts,
-report}` where `trigger` is `schedule` or `api:<user>` and `status` is `ok`, `drift`, `failed`
-or `error`. `metrics.push` sends each drift job's drift metrics and each comply job's
-compliance metrics as `drift --metrics-push` and `comply --metrics-push` do.
+A job result: `{id, job, kind, requested, started, duration_seconds, status, summary, trigger,
+hosts, report, approval}`. `requested` is the request time; `started` becomes the execution
+start time when the worker begins. `trigger` is `schedule` or `api:<user>`. Status is `pending`,
+`queued`, `running`, `rejected`, `expired`, `ok`, `drift`, `changed`, `failed` or `error`.
+The optional approval object has `required`, `expires`, and, after a decision, `decision`
+(`approved`, `rejected`, `expired`), `by` (operator identity; absent for expiry), `at` and an
+optional `comment`. Job results open at `#job/<name>` and individual runs at `#run/<id>`.
+
+`metrics.push` sends each drift job's drift metrics and each comply job's compliance metrics
+as `drift --metrics-push` and `comply --metrics-push` do.
