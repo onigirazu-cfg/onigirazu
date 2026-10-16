@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -73,6 +74,29 @@ type ServeMetric struct {
 	Labels map[string]string `yaml:"labels"`
 }
 
+// ServeAdhoc is what a caller of POST /api/jobs/{name}/run may set
+type ServeAdhoc struct {
+	Limit     bool     `yaml:"limit" json:"limit"`
+	ExtraVars []string `yaml:"extra_vars" json:"extra_vars,omitempty"`
+}
+
+// RunParams is what the caller set on a run, with the limit resolved
+type RunParams struct {
+	Limit     string            `json:"limit,omitempty"`
+	ExtraVars map[string]string `json:"extra_vars,omitempty"`
+	Hosts     []string          `json:"hosts,omitempty"`
+}
+
+// values is the extra vars as k=v, sorted
+func (p *RunParams) values() []string {
+	keys := slices.Sorted(maps.Keys(p.ExtraVars))
+	values := make([]string, 0, len(keys))
+	for _, k := range keys {
+		values = append(values, k+"="+p.ExtraVars[k])
+	}
+	return values
+}
+
 // ServeJob is a scheduled run
 type ServeJob struct {
 	Name            string            `yaml:"name"`
@@ -87,6 +111,7 @@ type ServeJob struct {
 	Approval        string            `yaml:"approval"`         // required: a run waits for an operator
 	ApprovalTimeout time.Duration     `yaml:"approval_timeout"` // 0: the server's
 	Operators       []string          `yaml:"operators"`        // users or groups that may run, approve, reject; empty: every operator
+	Adhoc           ServeAdhoc        `yaml:"adhoc"`            // what a caller may set on a run
 	Notify          []NotifyTarget    `yaml:"notify"`
 	NotifyOK        bool              `yaml:"notify_always"`
 	FailOn          string            `yaml:"fail_on"` // comply
@@ -103,6 +128,7 @@ type JobResult struct {
 	Status    string            `json:"status"` // pending, queued, running, ok, drift, failed, error, rejected, expired
 	Summary   string            `json:"summary"`
 	Trigger   string            `json:"trigger"`            // schedule, api:<user>
+	Params    *RunParams        `json:"params,omitempty"`   // what the caller set
 	Hosts     map[string]string `json:"hosts,omitempty"`    // host -> ok|drift|failed|unreachable
 	Approval  *RunApproval      `json:"approval,omitempty"` // jobs with approval: required
 	Report    json.RawMessage   `json:"report,omitempty"`
@@ -131,6 +157,12 @@ func (r *JobResult) executed() bool {
 func resultCopy(r *JobResult) *JobResult {
 	copy := *r
 	copy.Hosts = maps.Clone(r.Hosts)
+	if r.Params != nil {
+		params := *r.Params
+		params.ExtraVars = maps.Clone(r.Params.ExtraVars)
+		params.Hosts = slices.Clone(r.Params.Hosts)
+		copy.Params = &params
+	}
 	copy.Report = append(json.RawMessage(nil), r.Report...)
 	if r.Approval != nil {
 		approval := *r.Approval
@@ -501,7 +533,7 @@ func (s *server) nextID(job string, now time.Time) string {
 }
 
 // request creates a run: pending when the job wants approval, else queued
-func (s *server) request(j *ServeJob, trigger string) (*JobResult, error) {
+func (s *server) request(j *ServeJob, trigger string, params *RunParams) (*JobResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.running[j.Name] {
@@ -509,7 +541,7 @@ func (s *server) request(j *ServeJob, trigger string) (*JobResult, error) {
 	}
 	now := time.Now().UTC()
 	id := s.nextID(j.Name, now)
-	r := &JobResult{ID: id, Job: j.Name, Kind: j.Kind, Requested: now, Started: now, Trigger: trigger, Status: "queued"}
+	r := &JobResult{ID: id, Job: j.Name, Kind: j.Kind, Requested: now, Started: now, Trigger: trigger, Status: "queued", Params: params}
 	if j.Approval == "required" {
 		r.Status = "pending"
 		r.Approval = &RunApproval{Required: true, Expires: now.Add(j.ApprovalTimeout)}
@@ -635,7 +667,11 @@ func (s *server) worker(ctx context.Context) {
 			s.notify(eventStart, q.job, resultCopy(r))
 			fmt.Fprintf(s.out, "serve: %s: running (%s)\n", q.job.Name, r.Trigger)
 			s.mu.Unlock()
-			result, err := s.runJob(q.job)
+			j, err := s.effectiveJob(q.job, r.Params)
+			var result *JobResult
+			if err == nil {
+				result, err = s.runJob(j)
+			}
 			s.mu.Lock()
 			if err != nil {
 				r.Status, r.Summary = "error", err.Error()
@@ -689,10 +725,134 @@ func (s *server) scheduler(ctx context.Context) {
 			}
 			s.mu.Unlock()
 			for _, j := range due {
-				_, _ = s.request(j, "schedule")
+				_, _ = s.request(j, "schedule", nil)
 			}
 		}
 	}
+}
+
+// effectiveJob is the job as a run's parameters shape it: the hosts validated
+// at request time become the limit (by name, and checked again now: an
+// inventory that changed while the run waited must not widen it), the
+// caller's extra vars go on top of the job's
+func (s *server) effectiveJob(j *ServeJob, p *RunParams) (*ServeJob, error) {
+	if p == nil {
+		return j, nil
+	}
+	jj := *j
+	if len(p.Hosts) > 0 {
+		jj.Limit = strings.Join(p.Hosts, ",")
+		names, err := s.resolveLimit(j, jj.Limit)
+		if err == nil && !slices.Equal(names, p.Hosts) { // a group now named like a host, a host gone
+			err = fmt.Errorf("%q resolves to %s now", jj.Limit, strings.Join(names, ", "))
+		}
+		if err != nil {
+			return nil, fmt.Errorf("the hosts validated for this run no longer fit: %w", err)
+		}
+	}
+	jj.ExtraVars = make(map[string]string, len(j.ExtraVars)+len(p.ExtraVars))
+	maps.Copy(jj.ExtraVars, j.ExtraVars)
+	maps.Copy(jj.ExtraVars, p.ExtraVars)
+	return &jj, nil
+}
+
+// resolveLimit names the hosts of an ad-hoc limit and checks they stay
+// inside the job's own limit
+func (s *server) resolveLimit(j *ServeJob, limit string) ([]string, error) {
+	log, err := logger.NewEnhancedLogger("error", "text", os.Stderr)
+	if err != nil {
+		return nil, err
+	}
+	s.mu.Lock()
+	paths := slices.Clone(inventoryPaths)
+	s.mu.Unlock()
+	if j.Inventory != "" {
+		paths = []string{j.Inventory}
+	}
+	manager, err := loadInventoryFrom(context.Background(), log, inventorySources(log, j.Playbook, paths))
+	if err != nil {
+		return nil, err
+	}
+	hosts, err := manager.GetHosts(limit)
+	if err != nil {
+		return nil, err
+	}
+	if len(hosts) == 0 {
+		return nil, fmt.Errorf("limit %q matches no host", limit)
+	}
+	names := make([]string, 0, len(hosts))
+	for _, h := range hosts {
+		names = append(names, h.Name)
+	}
+	sort.Strings(names)
+	if j.Limit != "" {
+		allowed, err := manager.GetHosts(j.Limit)
+		if err != nil {
+			return nil, err
+		}
+		set := make(map[string]bool, len(allowed))
+		for _, h := range allowed {
+			set[h.Name] = true
+		}
+		var outside []string
+		for _, name := range names {
+			if !set[name] {
+				outside = append(outside, name)
+			}
+		}
+		if len(outside) > 0 {
+			return nil, fmt.Errorf("limit %q reaches hosts outside the job's limit %q: %s", limit, j.Limit, strings.Join(outside, ", "))
+		}
+	}
+	return names, nil
+}
+
+// runParams reads the body of a run request: nothing, or the limit and
+// extra vars the job allows
+func (s *server) runParams(r *http.Request, j *ServeJob) (*RunParams, error) {
+	var body struct {
+		Limit     string            `json:"limit"`
+		ExtraVars map[string]string `json:"extra_vars"`
+	}
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		if errors.Is(err, io.EOF) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var trailing interface{}
+	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
+		return nil, errors.New("expected one JSON body")
+	}
+	if body.Limit != "" && !j.Adhoc.Limit {
+		return nil, errors.New("this job does not accept a limit")
+	}
+	for _, k := range slices.Sorted(maps.Keys(body.ExtraVars)) {
+		if !slices.Contains(j.Adhoc.ExtraVars, k) {
+			return nil, fmt.Errorf("extra var %q is not allowed for this job", k)
+		}
+	}
+	if body.Limit == "" && len(body.ExtraVars) == 0 {
+		return nil, nil
+	}
+	params := &RunParams{Limit: body.Limit, ExtraVars: body.ExtraVars}
+	if body.Limit != "" {
+		hosts, err := s.resolveLimit(j, body.Limit)
+		if err != nil {
+			return nil, err
+		}
+		params.Hosts = hosts
+	}
+	return params, nil
+}
+
+// extraVarsArg is the -e value for a job's variables: one JSON object, so a
+// value with spaces or = stays one variable (a k=v list is split on spaces)
+func extraVarsArg(vars map[string]string) string {
+	data, _ := json.Marshal(vars)
+	return string(data)
 }
 
 // execute runs a job in this process and summarizes it
@@ -700,20 +860,17 @@ func (s *server) execute(j *ServeJob) (*JobResult, error) {
 	started := time.Now().UTC()
 	r := &JobResult{Job: j.Name, Kind: j.Kind, Started: started, Hosts: map[string]string{}}
 	if j.Inventory != "" {
+		s.mu.Lock()
 		inventoryPaths = []string{j.Inventory}
+		s.mu.Unlock()
 	}
 	if statePath == "" || statePath == ".onigirazu-state" {
 		statePath = filepath.Join(s.cfg.DataDir, "state", j.Name+".state")
 		_ = os.MkdirAll(filepath.Dir(statePath), 0o700)
 	}
 	o := driftCheckOptions{limit: j.Limit, become: j.Become}
-	keys := make([]string, 0, len(j.ExtraVars))
-	for k := range j.ExtraVars {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	for _, k := range keys {
-		o.extraVars = append(o.extraVars, k+"="+j.ExtraVars[k])
+	if len(j.ExtraVars) > 0 {
+		o.extraVars = []string{extraVarsArg(j.ExtraVars)}
 	}
 	switch j.Kind {
 	case "comply":
@@ -984,7 +1141,14 @@ func (s *server) mux() *http.ServeMux {
 					writeJSON(w, http.StatusForbidden, map[string]string{"error": a.Reason})
 					return
 				}
-				run, err := s.request(j, "api:"+id.User)
+				params, err := s.runParams(r, j)
+				if err != nil {
+					a.Reason = err.Error()
+					s.logAction(a)
+					writeJSON(w, http.StatusBadRequest, map[string]string{"error": a.Reason})
+					return
+				}
+				run, err := s.request(j, "api:"+id.User, params)
 				if err != nil {
 					code := http.StatusServiceUnavailable
 					a.Reason = err.Error()
@@ -996,6 +1160,13 @@ func (s *server) mux() *http.ServeMux {
 					return
 				}
 				a.OK, a.Run = true, run.ID
+				if params != nil {
+					details := params.values()
+					if params.Limit != "" {
+						details = append([]string{"limit=" + params.Limit}, details...)
+					}
+					a.Reason = strings.Join(details, " ")
+				}
 				s.logAction(a)
 				if run.Status == "pending" {
 					writeJSON(w, http.StatusAccepted, map[string]string{"pending": run.ID, "run": run.ID})
@@ -1152,18 +1323,19 @@ func (s *server) mux() *http.ServeMux {
 }
 
 type jobView struct {
-	Name      string     `json:"name"`
-	Kind      string     `json:"kind"`
-	Target    string     `json:"target"`
-	Approval  string     `json:"approval,omitempty"`  // required
-	Operators []string   `json:"operators,omitempty"` // the job's own list
-	Allowed   bool       `json:"allowed"`             // the caller may run, approve, reject
-	Every     string     `json:"every,omitempty"`
-	Next      *time.Time `json:"next,omitempty"`
-	Queued    bool       `json:"queued"`
-	Running   bool       `json:"running"`           // queued or running
-	Pending   *JobResult `json:"pending,omitempty"` // the run that waits for approval
-	Last      *JobResult `json:"last,omitempty"`    // the last executed run
+	Name      string      `json:"name"`
+	Kind      string      `json:"kind"`
+	Target    string      `json:"target"`
+	Approval  string      `json:"approval,omitempty"`  // required
+	Operators []string    `json:"operators,omitempty"` // the job's own list
+	Allowed   bool        `json:"allowed"`             // the caller may run, approve, reject
+	Adhoc     *ServeAdhoc `json:"adhoc,omitempty"`     // what a run may set, when anything
+	Every     string      `json:"every,omitempty"`
+	Next      *time.Time  `json:"next,omitempty"`
+	Queued    bool        `json:"queued"`
+	Running   bool        `json:"running"`           // queued or running
+	Pending   *JobResult  `json:"pending,omitempty"` // the run that waits for approval
+	Last      *JobResult  `json:"last,omitempty"`    // the last executed run
 }
 
 func (s *server) jobsView(id serveIdentity) []jobView {
@@ -1173,6 +1345,9 @@ func (s *server) jobsView(id serveIdentity) []jobView {
 	for i := range s.cfg.Jobs {
 		j := &s.cfg.Jobs[i]
 		v := jobView{Operators: j.Operators, Allowed: s.allowed(id, j), Name: j.Name, Kind: j.Kind, Target: j.Playbook, Running: s.running[j.Name] && s.pending[j.Name] == nil, Approval: j.Approval}
+		if j.Adhoc.Limit || len(j.Adhoc.ExtraVars) > 0 {
+			v.Adhoc = &j.Adhoc
+		}
 		if list := s.results[j.Name]; v.Running && len(list) > 0 {
 			v.Queued = list[0].Status == "queued"
 		}

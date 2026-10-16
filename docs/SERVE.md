@@ -47,6 +47,7 @@ jobs:
   - name: patch-wave
     kind: apply
     playbook: patch.yml
+    adhoc: {limit: true, extra_vars: [reboot]}
     operators: [tier0-admins, denys]
     approval: required
     approval_timeout: 2h
@@ -78,6 +79,25 @@ run; the schedule skips it while one waits. The record keeps `approval.by`, `app
 and `approval.comment`. A restart keeps pending runs and marks queued or executing runs as
 `error` with `interrupted: serve restarted`.
 
+Limited runs: `POST /api/jobs/{name}/run` accepts an optional JSON body
+`{"limit":"web1","extra_vars":{"reboot":"true"}}`. The job must allow `limit` with
+`adhoc.limit: true` and list each caller-set variable in `adhoc.extra_vars`. Unfilled
+parameters keep the job's values; caller variables override its defaults. The limit is
+resolved against the job's inventory (or the global inventory); no matching host or any
+host outside the job's own `limit` returns `400`. Unknown fields and invalid bodies also
+return `400`. The record keeps `params.limit`, `params.extra_vars` and sorted
+`params.hosts`; the page and messages show the parameters and resolved hosts. The run
+executes on those host names, not on the pattern, and checks them against the job's limit
+again when it starts: an inventory that changed while the run waited for approval cannot
+widen it (the run ends as `error` instead). Variables reach the playbook as one JSON `-e`
+value, so a value with spaces stays one variable.
+For an approval-required patch job this requests a safe reboot of web1:
+
+```bash
+curl -X POST -H 'Authorization: Bearer ...' -H 'Content-Type: application/json' \
+  localhost:8086/api/jobs/patch-wave/run -d '{"limit":"web1","extra_vars":{"reboot":"true"}}'
+```
+
 Notifications: server-wide `notify:` targets and a job's targets add up. Targets accept a
 plain URL or a mapping with `url`, `format` (`mattermost`, the default, or `json`) and `on`.
 Webhook URLs expand `${VAR}` from the environment. Events are `pending`, `start`, `success`,
@@ -88,7 +108,8 @@ without `on`. An explicit `on: []` sends nothing.
 Mattermost messages include a headline, a colored attachment with the job kind, target,
 hosts, trigger, duration and, for pending runs, expiry. For example:
 `:white_check_mark: **patch-wave** ok — 12 in sync, 0 changed, 0 failed`.
-Pending/start messages show the job's limit (or "all hosts"); final messages group host
+Pending/start messages show resolved ad-hoc hosts (up to 10, then `… (+N)`), else
+the job's limit (or "all hosts"); caller variables appear as `vars: k=v`; final messages group host
 statuses, for example `3 ok, 1 drift, 1 failed`. Generic JSON has the shape
 `{"event":"success","job":{"name":"patch-wave","kind":"apply","target":"patch.yml","limit":"web"},"run":{...},"url":"https://fleet.example.com/#run/<id>","text":"patch-wave ok — ..."}`;
 `run` is the job result without `report`, and `text` is the headline without formatting.
@@ -138,11 +159,11 @@ reopened for every entry, so logrotate can move it aside (no `copytruncate` need
 | `GET /api/pause` | pause state: `paused`, optional `reason`, `by`, `at` (viewers too) |
 | `POST /api/pause` | pauses execution (operators); optional JSON `{reason: "..."}`; `200` with the state; pausing again updates reason and identity; `500` with the state and `error` when `pause.json` could not be written (the pause still holds in this process) |
 | `POST /api/resume` | resumes execution (operators); `200` with the state; already resumed is a no-op; `500` as for pause |
-| `GET /api/jobs` | the jobs with schedule, next run, `running` flag (queued or running), `queued` flag (waiting for the worker), last executed result, optional `pending` record (without reports), and `approval: "required"` for guarded jobs; optional `operators` list and caller-specific `allowed` bool |
-| `POST /api/jobs/{name}/run` | requests the job (operators); `202` with `{queued: name, run: id}` or `{pending: id, run: id}`; `409` when running, queued or pending; `503` when the queue is full; `403` with `{"error":"not an operator of this job"}` when the job disallows the operator |
+| `GET /api/jobs` | the jobs with schedule, next run, `running` flag (queued or running), `queued` flag (waiting for the worker), last executed result, optional `pending` record (without reports), and `approval: "required"` for guarded jobs; optional `operators` list and caller-specific `allowed` bool; `adhoc: {limit, extra_vars}` when enabled |
+| `POST /api/jobs/{name}/run` | requests the job (operators); optional JSON `{limit: "host pattern", extra_vars: {k: "v"}}` as allowed by `adhoc`; `400` for invalid parameters or a limit with no hosts or hosts outside the job's limit; `202` with `{queued: name, run: id}` or `{pending: id, run: id}`; `409` when running, queued or pending; `503` when the queue is full; `403` with `{"error":"not an operator of this job"}` when the job disallows the operator |
 | `GET /api/jobs/{name}/results` | the kept results, newest first |
 | `GET /api/jobs/{name}/results/{id}` | one result with its full report (the drift, verify or comply report as JSON) |
-| `GET /api/results/{id}` | one job result with its full report; `404` if absent |
+| `GET /api/results/{id}` | one job result with its full report and optional `params` (`limit`, `extra_vars`, sorted `hosts`); `404` if absent |
 | `POST /api/runs/{id}/approve` | queues a pending run (operators); optional JSON `{comment: "..."}`; `200` with the record without report, `404` if absent, `409` when the run expired meanwhile (it is marked expired), `503` if the queue is full; `403` with `{"error":"not an operator of this job"}` when the job disallows the operator |
 | `POST /api/runs/{id}/reject` | rejects a pending run (operators); optional JSON `{comment: "..."}`; `200` with the record without report, `404` if absent; `403` with `{"error":"not an operator of this job"}` when the job disallows the operator |
 | `GET /api/hosts` | every host seen by a job's last executed result with its worst status (`ok`, `changed`, `drift`, `failed`, `unreachable`) and the status per job |
@@ -160,7 +181,7 @@ The page at `/` uses the same API: Jobs (with Run/Approve/Reject buttons when `a
 each result and audit record openable as JSON.
 
 A job result: `{id, job, kind, requested, started, duration_seconds, status, summary, trigger,
-hosts, report, approval}`. `requested` is the request time; `started` becomes the execution
+hosts, report, approval, params}`. `requested` is the request time; `started` becomes the execution
 start time when the worker begins. `trigger` is `schedule` or `api:<user>`. Status is `pending`,
 `queued`, `running`, `rejected`, `expired`, `ok`, `drift`, `changed`, `failed` or `error`.
 The optional approval object has `required`, `expires`, and, after a decision, `decision`

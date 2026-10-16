@@ -156,6 +156,9 @@ func (s *server) notifyBody(event string, j *ServeJob, r *JobResult, format stri
 	if hosts != "" {
 		details += " · hosts: " + hosts
 	}
+	if r.Params != nil && len(r.Params.ExtraVars) > 0 {
+		details += "\nvars: " + strings.Join(r.Params.values(), ", ")
+	}
 	details += "\ntrigger: " + r.Trigger
 	if event == eventPending && r.Approval != nil {
 		details += "\nexpires: " + r.Approval.Expires.Format(time.RFC3339)
@@ -212,6 +215,13 @@ func notifyHeadline(event, name string, r *JobResult) (text, emoji, color string
 
 func notifyHosts(event string, j *ServeJob, r *JobResult) string {
 	if event == eventPending || event == eventStart {
+		if r.Params != nil && len(r.Params.Hosts) > 0 {
+			hosts := r.Params.Hosts
+			if len(hosts) > 10 {
+				return strings.Join(hosts[:10], ", ") + fmt.Sprintf(" … (+%d)", len(hosts)-10)
+			}
+			return strings.Join(hosts, ", ")
+		}
 		if j.Limit == "" {
 			return "all hosts"
 		}
