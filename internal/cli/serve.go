@@ -33,13 +33,14 @@ import (
 
 // ServeConfig is the serve.yml file
 type ServeConfig struct {
-	Listen  string      `yaml:"listen"` // default :8086
-	Title   string      `yaml:"title"`
-	DataDir string      `yaml:"data_dir"` // default ~/.onigirazu/serve
-	Auth    ServeAuth   `yaml:"auth"`
-	Jobs    []ServeJob  `yaml:"jobs"`
-	Retain  int         `yaml:"retain"` // results kept per job, default 50
-	Metrics ServeMetric `yaml:"metrics"`
+	Listen          string        `yaml:"listen"` // default :8086
+	Title           string        `yaml:"title"`
+	DataDir         string        `yaml:"data_dir"` // default ~/.onigirazu/serve
+	Auth            ServeAuth     `yaml:"auth"`
+	Jobs            []ServeJob    `yaml:"jobs"`
+	Retain          int           `yaml:"retain"` // results kept per job, default 50
+	Metrics         ServeMetric   `yaml:"metrics"`
+	ApprovalTimeout time.Duration `yaml:"approval_timeout"` // how long a pending run waits, default 1h
 }
 
 // ServeAuth: a bearer token is an operator; a reverse proxy's user header is
@@ -60,32 +61,65 @@ type ServeMetric struct {
 
 // ServeJob is a scheduled run
 type ServeJob struct {
-	Name      string            `yaml:"name"`
-	Kind      string            `yaml:"kind"` // drift (default), apply, verify, comply
-	Playbook  string            `yaml:"playbook"`
-	Profile   string            `yaml:"profile"` // comply
-	Inventory string            `yaml:"inventory"`
-	Limit     string            `yaml:"limit"`
-	ExtraVars map[string]string `yaml:"extra_vars"`
-	Become    bool              `yaml:"become"`
-	Every     time.Duration     `yaml:"every"` // 0: only on demand
-	Notify    []string          `yaml:"notify"`
-	NotifyOK  bool              `yaml:"notify_always"`
-	FailOn    string            `yaml:"fail_on"` // comply
+	Name            string            `yaml:"name"`
+	Kind            string            `yaml:"kind"` // drift (default), apply, verify, comply
+	Playbook        string            `yaml:"playbook"`
+	Profile         string            `yaml:"profile"` // comply
+	Inventory       string            `yaml:"inventory"`
+	Limit           string            `yaml:"limit"`
+	ExtraVars       map[string]string `yaml:"extra_vars"`
+	Become          bool              `yaml:"become"`
+	Every           time.Duration     `yaml:"every"`            // 0: only on demand
+	Approval        string            `yaml:"approval"`         // required: a run waits for an operator
+	ApprovalTimeout time.Duration     `yaml:"approval_timeout"` // 0: the server's
+	Notify          []string          `yaml:"notify"`
+	NotifyOK        bool              `yaml:"notify_always"`
+	FailOn          string            `yaml:"fail_on"` // comply
 }
 
 // JobResult is one run of a job, as stored
 type JobResult struct {
-	ID       string            `json:"id"`
-	Job      string            `json:"job"`
-	Kind     string            `json:"kind"`
-	Started  time.Time         `json:"started"`
-	Duration float64           `json:"duration_seconds"`
-	Status   string            `json:"status"` // ok, drift, failed, error
-	Summary  string            `json:"summary"`
-	Trigger  string            `json:"trigger"`         // schedule, api:<user>
-	Hosts    map[string]string `json:"hosts,omitempty"` // host -> ok|drift|failed|unreachable
-	Report   json.RawMessage   `json:"report,omitempty"`
+	ID        string            `json:"id"`
+	Job       string            `json:"job"`
+	Kind      string            `json:"kind"`
+	Requested time.Time         `json:"requested"` // when it was asked for
+	Started   time.Time         `json:"started"`   // the request time until the run starts
+	Duration  float64           `json:"duration_seconds"`
+	Status    string            `json:"status"` // pending, queued, running, ok, drift, failed, error, rejected, expired
+	Summary   string            `json:"summary"`
+	Trigger   string            `json:"trigger"`            // schedule, api:<user>
+	Hosts     map[string]string `json:"hosts,omitempty"`    // host -> ok|drift|failed|unreachable
+	Approval  *RunApproval      `json:"approval,omitempty"` // jobs with approval: required
+	Report    json.RawMessage   `json:"report,omitempty"`
+}
+
+// RunApproval is the approval state of a guarded run
+type RunApproval struct {
+	Required bool       `json:"required"`
+	Expires  time.Time  `json:"expires"`
+	Decision string     `json:"decision,omitempty"`
+	By       string     `json:"by,omitempty"`
+	At       *time.Time `json:"at,omitempty"`
+	Comment  string     `json:"comment,omitempty"`
+}
+
+// executed: the run ran (as opposed to waiting, rejected or expired)
+func (r *JobResult) executed() bool {
+	switch r.Status {
+	case "ok", "drift", "changed", "failed", "error":
+		return true
+	}
+	return false
+}
+
+// resultCopy is a copy safe to hand out of the lock
+func resultCopy(r *JobResult) *JobResult {
+	copy := *r
+	if r.Approval != nil {
+		approval := *r.Approval
+		copy.Approval = &approval
+	}
+	return &copy
 }
 
 type serveOptions struct {
@@ -148,6 +182,9 @@ func loadServeConfig(path string) (*ServeConfig, error) {
 	if cfg.Title == "" {
 		cfg.Title = "onigirazu"
 	}
+	if cfg.ApprovalTimeout == 0 {
+		cfg.ApprovalTimeout = time.Hour
+	}
 	if cfg.Retain <= 0 {
 		cfg.Retain = 50
 	}
@@ -170,6 +207,12 @@ func loadServeConfig(path string) (*ServeConfig, error) {
 			return nil, fmt.Errorf("%s: job %s is defined twice", path, j.Name)
 		}
 		names[j.Name] = true
+		if j.Approval != "" && j.Approval != "required" {
+			return nil, fmt.Errorf("job %s: approval %q (required or empty)", j.Name, j.Approval)
+		}
+		if j.ApprovalTimeout == 0 {
+			j.ApprovalTimeout = cfg.ApprovalTimeout
+		}
 		switch j.Kind {
 		case "":
 			j.Kind = "drift"
@@ -203,7 +246,10 @@ type server struct {
 	out     io.Writer
 	mu      sync.Mutex
 	results map[string][]*JobResult // job -> newest first
-	running map[string]bool
+	running map[string]bool         // job is pending, queued or running
+	pending map[string]*JobResult
+	lastID  map[string]string // job -> the base of the last id given (ids stay unique when records are pruned)
+	lastSeq map[string]int
 	nextRun map[string]time.Time
 	queue   chan queued
 	// runJob runs a job; tests replace it
@@ -212,17 +258,18 @@ type server struct {
 }
 
 type queued struct {
-	job     *ServeJob
-	trigger string
+	job *ServeJob
+	run *JobResult
 }
 
 func newServer(cfg *ServeConfig, out io.Writer) (*server, error) {
-	s := &server{cfg: cfg, out: out, results: map[string][]*JobResult{}, running: map[string]bool{}, nextRun: map[string]time.Time{}, queue: make(chan queued, 64)}
+	s := &server{cfg: cfg, out: out, results: map[string][]*JobResult{}, running: map[string]bool{}, pending: map[string]*JobResult{}, lastID: map[string]string{}, lastSeq: map[string]int{}, nextRun: map[string]time.Time{}, queue: make(chan queued, 64)}
 	s.runJob = s.execute
 	if err := os.MkdirAll(filepath.Join(cfg.DataDir, "results"), 0o700); err != nil {
 		return nil, err
 	}
 	s.loadResults()
+	s.expirePending(time.Now())
 	lg, err := logger.NewEnhancedLogger("warn", "text", os.Stderr)
 	if err == nil {
 		if st, err := audit.NewStorage(getAuditPath(), lg); err == nil {
@@ -248,18 +295,49 @@ func (s *server) loadResults() {
 		}
 		var r JobResult
 		if json.Unmarshal(data, &r) == nil && r.Job != "" {
+			if r.Requested.IsZero() {
+				r.Requested = r.Started
+			}
 			s.results[r.Job] = append(s.results[r.Job], &r)
 		}
 	}
 	for job := range s.results {
-		sort.Slice(s.results[job], func(i, k int) bool { return s.results[job][i].Started.After(s.results[job][k].Started) })
+		sort.Slice(s.results[job], func(i, k int) bool { return s.results[job][i].Requested.After(s.results[job][k].Requested) })
+	}
+	for _, list := range s.results {
+		for _, r := range append([]*JobResult(nil), list...) {
+			switch r.Status {
+			case "pending":
+				if s.job(r.Job) == nil { // removed from serve.yml meanwhile
+					r.Status, r.Summary = "error", "interrupted: job removed from serve.yml"
+					s.store(r)
+					continue
+				}
+				s.pending[r.Job] = r
+				s.running[r.Job] = true
+			case "queued", "running":
+				r.Status = "error"
+				r.Summary = "interrupted: serve restarted"
+				s.store(r)
+			}
+		}
 	}
 }
 
+// store upserts a result; the caller holds mu.
 func (s *server) store(r *JobResult) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	list := append([]*JobResult{r}, s.results[r.Job]...)
+	list := s.results[r.Job]
+	found := false
+	for i, old := range list {
+		if old.ID == r.ID {
+			list[i] = r
+			found = true
+			break
+		}
+	}
+	if !found {
+		list = append([]*JobResult{r}, list...)
+	}
 	dir := filepath.Join(s.cfg.DataDir, "results")
 	for len(list) > s.cfg.Retain {
 		old := list[len(list)-1]
@@ -281,20 +359,133 @@ func (s *server) job(name string) *ServeJob {
 	return nil
 }
 
-// enqueue queues a job unless it is queued or running already
-func (s *server) enqueue(j *ServeJob, trigger string) bool {
+var (
+	errJobBusy      = errors.New("already running, queued or pending")
+	errNoPendingRun = errors.New("no such pending run")
+	errRunExpired   = errors.New("the run expired before the decision")
+	errQueueFull    = errors.New("queue full")
+)
+
+// resultByID finds a record of a job; the caller holds mu
+func (s *server) resultByID(job, id string) *JobResult {
+	for _, r := range s.results[job] {
+		if r.ID == id {
+			return r
+		}
+	}
+	return nil
+}
+
+// nextID: <job>-<second>, with a sequence number for further requests in
+// the same second — counted in memory, so a pruned record cannot free an id
+// (an approval of an old id must never reach a new run); the caller holds mu
+func (s *server) nextID(job string, now time.Time) string {
+	base := fmt.Sprintf("%s-%s", job, now.Format("20060102T150405Z"))
+	if s.lastID[job] == base {
+		s.lastSeq[job]++
+	} else {
+		s.lastID[job], s.lastSeq[job] = base, 1
+	}
+	id := base
+	for n := s.lastSeq[job]; n > 1 || s.resultByID(job, id) != nil; n++ { // records of an earlier process too
+		id = fmt.Sprintf("%s-%d", base, n)
+		s.lastSeq[job] = n
+		if s.resultByID(job, id) == nil {
+			break
+		}
+	}
+	return id
+}
+
+// request creates a run: pending when the job wants approval, else queued
+func (s *server) request(j *ServeJob, trigger string) (*JobResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.running[j.Name] {
-		return false
+		return nil, errJobBusy
 	}
-	select {
-	case s.queue <- queued{job: j, trigger: trigger}:
-		s.running[j.Name] = true
-		return true
-	default:
-		return false
+	now := time.Now().UTC()
+	id := s.nextID(j.Name, now)
+	r := &JobResult{ID: id, Job: j.Name, Kind: j.Kind, Requested: now, Started: now, Trigger: trigger, Status: "queued"}
+	if j.Approval == "required" {
+		r.Status = "pending"
+		r.Approval = &RunApproval{Required: true, Expires: now.Add(j.ApprovalTimeout)}
+		s.pending[j.Name] = r
+	} else {
+		select {
+		case s.queue <- queued{job: j, run: r}:
+		default:
+			return nil, errQueueFull
+		}
 	}
+	s.running[j.Name] = true
+	s.store(r)
+	return resultCopy(r), nil
+}
+
+func (s *server) approve(id, by, comment string) (*JobResult, error) {
+	return s.decide(id, by, comment, "approved")
+}
+
+func (s *server) reject(id, by, comment string) (*JobResult, error) {
+	return s.decide(id, by, comment, "rejected")
+}
+
+// decide settles a pending run: approved runs queue, rejected ones free the job
+func (s *server) decide(id, by, comment, decision string) (*JobResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for job, r := range s.pending {
+		if r.ID != id {
+			continue
+		}
+		now := time.Now().UTC()
+		if r.Approval.Expires.Before(now) { // the scheduler has not noticed yet
+			s.expire(job, r, now)
+			return nil, errRunExpired
+		}
+		if decision == "approved" {
+			select {
+			case s.queue <- queued{job: s.job(job), run: r}:
+			default:
+				return nil, errQueueFull
+			}
+			r.Status = "queued"
+		} else {
+			r.Status = "rejected"
+			s.running[job] = false
+		}
+		r.Approval.Decision, r.Approval.By, r.Approval.At, r.Approval.Comment = decision, by, &now, comment
+		delete(s.pending, job)
+		s.store(r)
+		return resultCopy(r), nil
+	}
+	return nil, errNoPendingRun
+}
+
+// expire ends one pending run; the caller holds mu
+func (s *server) expire(job string, r *JobResult, now time.Time) {
+	r.Approval.Decision, r.Approval.At = "expired", &now
+	r.Status = "expired"
+	delete(s.pending, job)
+	s.running[job] = false
+	s.store(r)
+}
+
+// expirePending ends the pending runs whose wait is over
+func (s *server) expirePending(now time.Time) []*JobResult {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var expired []*JobResult
+	now = now.UTC()
+	for job, r := range s.pending {
+		if r.Approval == nil || !r.Approval.Expires.Before(now) {
+			continue
+		}
+		s.expire(job, r, now)
+		expired = append(expired, resultCopy(r))
+	}
+	return expired
 }
 
 // worker runs queued jobs one at a time
@@ -304,18 +495,23 @@ func (s *server) worker(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case q := <-s.queue:
-			fmt.Fprintf(s.out, "serve: %s: running (%s)\n", q.job.Name, q.trigger)
-			r, err := s.runJob(q.job)
-			if err != nil {
-				r = &JobResult{Job: q.job.Name, Kind: q.job.Kind, Started: time.Now().UTC(), Status: "error", Summary: err.Error()}
-			}
-			r.ID = fmt.Sprintf("%s-%s", q.job.Name, r.Started.Format("20060102T150405Z"))
-			r.Trigger = q.trigger
-			s.store(r)
 			s.mu.Lock()
-			delete(s.running, q.job.Name)
+			r := q.run
+			r.Status, r.Started = "running", time.Now().UTC()
+			s.store(r)
 			s.mu.Unlock()
+			fmt.Fprintf(s.out, "serve: %s: running (%s)\n", q.job.Name, r.Trigger)
+			result, err := s.runJob(q.job)
+			s.mu.Lock()
+			if err != nil {
+				r.Status, r.Summary = "error", err.Error()
+			} else {
+				r.Started, r.Duration, r.Status, r.Summary, r.Hosts, r.Report = result.Started, result.Duration, result.Status, result.Summary, result.Hosts, result.Report
+			}
+			s.store(r)
+			s.running[q.job.Name] = false
 			fmt.Fprintf(s.out, "serve: %s: %s — %s (%.1fs)\n", q.job.Name, r.Status, r.Summary, r.Duration)
+			s.mu.Unlock()
 		}
 	}
 }
@@ -339,6 +535,7 @@ func (s *server) scheduler(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case now := <-t.C:
+			s.expirePending(now)
 			s.mu.Lock()
 			var due []*ServeJob
 			for i := range s.cfg.Jobs {
@@ -350,7 +547,7 @@ func (s *server) scheduler(ctx context.Context) {
 			}
 			s.mu.Unlock()
 			for _, j := range due {
-				s.enqueue(j, "schedule")
+				_, _ = s.request(j, "schedule")
 			}
 		}
 	}
@@ -557,14 +754,26 @@ func (s *server) mux() *http.ServeMux {
 				writeJSON(w, http.StatusForbidden, map[string]string{"error": "operators only"})
 				return
 			}
-			if !s.enqueue(j, "api:"+id.User) {
-				writeJSON(w, http.StatusConflict, map[string]string{"error": "already running or queued"})
+			run, err := s.request(j, "api:"+id.User)
+			if err != nil {
+				code := http.StatusServiceUnavailable
+				if errors.Is(err, errJobBusy) {
+					code = http.StatusConflict
+				}
+				writeJSON(w, code, map[string]string{"error": err.Error()})
 				return
 			}
-			writeJSON(w, http.StatusAccepted, map[string]string{"queued": j.Name})
+			if run.Status == "pending" {
+				writeJSON(w, http.StatusAccepted, map[string]string{"pending": run.ID, "run": run.ID})
+			} else {
+				writeJSON(w, http.StatusAccepted, map[string]string{"queued": j.Name, "run": run.ID})
+			}
 		case action == "results" || action == "":
 			s.mu.Lock()
-			list := append([]*JobResult{}, s.results[j.Name]...)
+			list := make([]*JobResult, 0, len(s.results[j.Name]))
+			for _, r := range s.results[j.Name] {
+				list = append(list, resultCopy(r))
+			}
 			s.mu.Unlock()
 			writeJSON(w, http.StatusOK, list)
 		case strings.HasPrefix(action, "results/"):
@@ -581,6 +790,20 @@ func (s *server) mux() *http.ServeMux {
 		default:
 			http.NotFound(w, r)
 		}
+	}))
+	mux.HandleFunc("/api/results/", auth(false, func(w http.ResponseWriter, r *http.Request, _ serveIdentity) {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		id := strings.TrimPrefix(r.URL.Path, "/api/results/")
+		for _, list := range s.results {
+			for _, result := range list {
+				if result.ID == id {
+					writeJSON(w, http.StatusOK, result)
+					return
+				}
+			}
+		}
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no such result"})
 	}))
 	mux.HandleFunc("/api/hosts", auth(false, func(w http.ResponseWriter, _ *http.Request, _ serveIdentity) {
 		writeJSON(w, http.StatusOK, s.hostsView())
@@ -618,7 +841,38 @@ func (s *server) mux() *http.ServeMux {
 		}
 		writeJSON(w, http.StatusOK, rows)
 	}))
-	mux.HandleFunc("/api/runs/", auth(false, func(w http.ResponseWriter, r *http.Request, _ serveIdentity) {
+	mux.HandleFunc("/api/runs/", auth(false, func(w http.ResponseWriter, r *http.Request, id serveIdentity) {
+		path := strings.TrimPrefix(r.URL.Path, "/api/runs/")
+		runID, action, _ := strings.Cut(path, "/")
+		if r.Method == http.MethodPost && (action == "approve" || action == "reject") {
+			auth(true, func(w http.ResponseWriter, r *http.Request, _ serveIdentity) {
+				var body struct {
+					Comment string `json:"comment"`
+				}
+				if json.NewDecoder(r.Body).Decode(&body) != nil {
+					body.Comment = ""
+				}
+				decide := s.approve
+				if action == "reject" {
+					decide = s.reject
+				}
+				result, err := decide(runID, id.User, body.Comment)
+				if err != nil {
+					code := http.StatusServiceUnavailable
+					switch {
+					case errors.Is(err, errNoPendingRun):
+						code = http.StatusNotFound
+					case errors.Is(err, errRunExpired):
+						code = http.StatusConflict
+					}
+					writeJSON(w, code, map[string]string{"error": err.Error()})
+					return
+				}
+				result.Report = nil
+				writeJSON(w, http.StatusOK, result)
+			})(w, r)
+			return
+		}
 		if s.audit == nil {
 			http.NotFound(w, r)
 			return
@@ -634,13 +888,15 @@ func (s *server) mux() *http.ServeMux {
 }
 
 type jobView struct {
-	Name    string     `json:"name"`
-	Kind    string     `json:"kind"`
-	Target  string     `json:"target"`
-	Every   string     `json:"every,omitempty"`
-	Next    *time.Time `json:"next,omitempty"`
-	Running bool       `json:"running"`
-	Last    *JobResult `json:"last,omitempty"`
+	Name     string     `json:"name"`
+	Kind     string     `json:"kind"`
+	Target   string     `json:"target"`
+	Approval string     `json:"approval,omitempty"` // required
+	Every    string     `json:"every,omitempty"`
+	Next     *time.Time `json:"next,omitempty"`
+	Running  bool       `json:"running"`           // queued or running
+	Pending  *JobResult `json:"pending,omitempty"` // the run that waits for approval
+	Last     *JobResult `json:"last,omitempty"`    // the last executed run
 }
 
 func (s *server) jobsView() []jobView {
@@ -649,7 +905,7 @@ func (s *server) jobsView() []jobView {
 	out := make([]jobView, 0, len(s.cfg.Jobs))
 	for i := range s.cfg.Jobs {
 		j := &s.cfg.Jobs[i]
-		v := jobView{Name: j.Name, Kind: j.Kind, Target: j.Playbook, Running: s.running[j.Name]}
+		v := jobView{Name: j.Name, Kind: j.Kind, Target: j.Playbook, Running: s.running[j.Name] && s.pending[j.Name] == nil, Approval: j.Approval}
 		if j.Kind == "comply" {
 			v.Target = j.Profile
 		}
@@ -660,14 +916,28 @@ func (s *server) jobsView() []jobView {
 				v.Next = &next
 			}
 		}
-		if list := s.results[j.Name]; len(list) > 0 {
-			last := *list[0]
+		if pending := s.pending[j.Name]; pending != nil {
+			v.Pending = resultCopy(pending)
+			v.Pending.Report = nil
+		}
+		if result := s.lastExecuted(j.Name); result != nil {
+			last := resultCopy(result)
 			last.Report = nil
-			v.Last = &last
+			v.Last = last
 		}
 		out = append(out, v)
 	}
 	return out
+}
+
+// lastExecuted returns the newest executed result; the caller holds mu.
+func (s *server) lastExecuted(job string) *JobResult {
+	for _, r := range s.results[job] {
+		if r.executed() {
+			return r
+		}
+	}
+	return nil
 }
 
 type hostView struct {
@@ -682,11 +952,12 @@ func (s *server) hostsView() []hostView {
 	defer s.mu.Unlock()
 	rank := map[string]int{"ok": 0, "changed": 1, "drift": 2, "failed": 3, "unreachable": 4}
 	hosts := map[string]*hostView{}
-	for job, list := range s.results {
-		if len(list) == 0 {
+	for job := range s.results {
+		last := s.lastExecuted(job)
+		if last == nil {
 			continue
 		}
-		for host, st := range list[0].Hosts {
+		for host, st := range last.Hosts {
 			h := hosts[host]
 			if h == nil {
 				h = &hostView{Host: host, Status: "ok", Jobs: map[string]string{}}
@@ -696,8 +967,8 @@ func (s *server) hostsView() []hostView {
 			if rank[st] > rank[h.Status] {
 				h.Status = st
 			}
-			if list[0].Started.After(h.Seen) {
-				h.Seen = list[0].Started
+			if last.Started.After(h.Seen) {
+				h.Seen = last.Started
 			}
 		}
 	}
@@ -715,6 +986,16 @@ func (s *server) metricsHandler(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; version=0.0.4")
 	var b strings.Builder
 	b.WriteString("# TYPE onigirazu_serve_job_last_status gauge\n# TYPE onigirazu_serve_job_last_run_timestamp_seconds gauge\n# TYPE onigirazu_serve_host_status gauge\n")
+	b.WriteString("# TYPE onigirazu_serve_job_pending gauge\n")
+	for _, j := range s.cfg.Jobs {
+		if j.Approval == "required" {
+			value := float64(0)
+			if s.pending[j.Name] != nil {
+				value = 1
+			}
+			promLine(&b, "onigirazu_serve_job_pending", withLabels(map[string]string{"job": j.Name}, s.cfg.Metrics.Labels), value)
+		}
+	}
 	codes := map[string]float64{"ok": 0, "drift": 1, "changed": 1, "failed": 2, "error": 3, "unreachable": 3}
 	names := make([]string, 0, len(s.results))
 	for n := range s.results {
@@ -722,10 +1003,10 @@ func (s *server) metricsHandler(w http.ResponseWriter, _ *http.Request) {
 	}
 	sort.Strings(names)
 	for _, n := range names {
-		if len(s.results[n]) == 0 {
+		last := s.lastExecuted(n)
+		if last == nil {
 			continue
 		}
-		last := s.results[n][0]
 		promLine(&b, "onigirazu_serve_job_last_status", withLabels(map[string]string{"job": n, "kind": last.Kind}, s.cfg.Metrics.Labels), codes[last.Status])
 		promLine(&b, "onigirazu_serve_job_last_run_timestamp_seconds", withLabels(map[string]string{"job": n}, s.cfg.Metrics.Labels), float64(last.Started.Unix()))
 		hosts := make([]string, 0, len(last.Hosts))

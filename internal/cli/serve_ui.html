@@ -16,7 +16,8 @@ main{padding:16px 24px;max-width:1200px;margin:0 auto}
 table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:8px;overflow:hidden}
 th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--line);vertical-align:top}th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase}
 tr:last-child td{border-bottom:0}.b{display:inline-block;padding:1px 8px;border-radius:10px;font-size:12px;color:#fff;background:var(--muted)}
-.ok{background:var(--ok)}.drift,.changed{background:var(--warn)}.failed,.error,.unreachable{background:var(--bad)}.running{background:var(--accent)}
+.ok{background:var(--ok)}.drift,.changed{background:var(--warn)}.failed,.error,.unreachable{background:var(--bad)}.pending{background:var(--warn)}.queued,.running{background:var(--accent)}.rejected,.expired{background:var(--muted)}
+.approval-card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:12px}
 button.run{border:1px solid var(--line);background:var(--card);color:var(--fg);padding:4px 10px;border-radius:6px;cursor:pointer}button.run:disabled{opacity:.5}
 .muted{color:var(--muted)}pre{background:var(--card);border:1px solid var(--line);padding:12px;border-radius:8px;overflow:auto;max-height:60vh}
 .empty{padding:24px;color:var(--muted);text-align:center}
@@ -33,26 +34,41 @@ const span=d=>d<90?Math.round(d)+'s':d<5400?Math.round(d/60)+'m':d<172800?Math.r
 const ago=t=>{if(!t)return'';const d=(Date.now()-new Date(t))/1000;return d<0?'in '+span(-d):span(d)+' ago'};
 const badge=s=>{s=s==='failure'?'failed':s==='success'?'ok':s;return `<span class="b ${esc(s)}">${esc(s)}</span>`};
 let me={operator:false}, view='jobs', timer;
+function hash(value){if(location.hash!==value)history.pushState(null,'',value||location.pathname+location.search)}
 async function jobs(){
+  view='jobs';hash('');
   const list=await api('/api/jobs');
   if(!list.length){main.innerHTML='<div class="empty">No jobs in serve.yml</div>';return}
-  main.innerHTML=`<table><tr><th>Job</th><th>Kind</th><th>Target</th><th>Schedule</th><th>Last run</th><th>Result</th><th></th></tr>${list.map(j=>`<tr>
-    <td><a href="#" data-job="${esc(j.name)}">${esc(j.name)}</a></td><td>${esc(j.kind)}</td><td class="muted">${esc(j.target)}</td>
+  const pending=list.filter(j=>j.pending);
+  main.innerHTML=(pending.length?`<h2>Pending approval</h2>${pending.map(j=>`<div class="approval-card"><b>${esc(j.name)}</b> · ${esc(j.kind)} · ${esc(j.target)}<br><span class="muted">requested by ${esc(j.pending.trigger)} ${esc(ago(j.pending.requested))} · expires in ${span(Math.max(0,(new Date(j.pending.approval.expires)-Date.now())/1000))}</span>${me.operator?`<p><button class="run" data-decision="approve" data-id="${esc(j.pending.id)}">Approve</button> <button class="run" data-decision="reject" data-id="${esc(j.pending.id)}">Reject</button></p>`:''}</div>`).join('')}`:'')+`<table><tr><th>Job</th><th>Kind</th><th>Target</th><th>Schedule</th><th>Last run</th><th>Result</th><th></th></tr>${list.map(j=>`<tr>
+    <td><a href="#job/${encodeURIComponent(j.name)}" data-job="${esc(j.name)}">${esc(j.name)}</a></td><td>${esc(j.kind)}</td><td class="muted">${esc(j.target)}</td>
     <td>${j.every?esc(j.every)+(j.next?'<br><span class="muted">next '+ago(j.next)+'</span>':''):'<span class="muted">on demand</span>'}</td>
     <td>${j.last?esc(ago(j.last.started))+'<br><span class="muted">'+esc(j.last.trigger)+'</span>':'<span class="muted">never</span>'}</td>
-    <td>${j.running?badge('running'):j.last?badge(j.last.status)+' <span class="muted">'+esc(j.last.summary)+'</span>':''}</td>
-    <td>${me.operator?`<button class="run" data-run="${esc(j.name)}" ${j.running?'disabled':''}>Run</button>`:''}</td></tr>`).join('')}</table>`;
+    <td>${j.pending?badge('pending'):j.running?badge('running'):j.last?badge(j.last.status)+' <span class="muted">'+esc(j.last.summary)+'</span>':''}</td>
+    <td>${me.operator?`<button class="run" data-run="${esc(j.name)}" ${j.pending||j.running?'disabled':''}>Run</button>`:''}</td></tr>`).join('')}</table>`;
+  main.querySelectorAll('[data-decision]').forEach(b=>b.onclick=async()=>{
+    let comment='';
+    if(b.dataset.decision==='reject'){comment=prompt('Comment (optional)');if(comment===null)return}
+    b.disabled=true;
+    try{await api('/api/runs/'+encodeURIComponent(b.dataset.id)+'/'+b.dataset.decision,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({comment})});await jobs()}catch(e){alert(e.message);b.disabled=false}
+  });
   main.querySelectorAll('[data-run]').forEach(b=>b.onclick=async()=>{b.disabled=true;try{await api('/api/jobs/'+encodeURIComponent(b.dataset.run)+'/run',{method:'POST'})}catch(e){alert(e.message)}setTimeout(jobs,500)});
   main.querySelectorAll('[data-job]').forEach(a=>a.onclick=e=>{e.preventDefault();results(a.dataset.job)});
 }
 async function results(name){
+  view='results';hash('#job/'+encodeURIComponent(name));
   const list=await api('/api/jobs/'+encodeURIComponent(name)+'/results');
   main.innerHTML=`<p><a href="#" id="back">← jobs</a> &nbsp; <b>${esc(name)}</b></p>`+(list.length?`<table><tr><th>Started</th><th>Trigger</th><th>Status</th><th>Summary</th><th>Hosts</th><th>Duration</th></tr>${list.map(r=>`<tr>
-    <td><a href="#" data-res="${esc(r.id)}">${esc(new Date(r.started).toLocaleString())}</a></td><td class="muted">${esc(r.trigger)}</td><td>${badge(r.status)}</td><td>${esc(r.summary)}</td>
+    <td><a href="#run/${encodeURIComponent(r.id)}" data-res="${esc(r.id)}">${esc(new Date(r.started).toLocaleString())}</a></td><td class="muted">${esc(r.trigger)}${r.approval?.decision?'<br>'+esc(r.approval.decision==='expired'?'expired':r.approval.decision+' by '+r.approval.by):''}</td><td>${badge(r.status)}</td><td>${esc(r.summary)}</td>
     <td>${Object.entries(r.hosts||{}).map(([h,s])=>`${esc(h)} ${badge(s)}`).join('<br>')}</td><td>${(r.duration_seconds||0).toFixed(1)}s</td></tr>`).join('')}</table>`:'<div class="empty">No runs yet</div>');
   $('#back').onclick=e=>{e.preventDefault();jobs()};
-  main.querySelectorAll('[data-res]').forEach(a=>a.onclick=async e=>{e.preventDefault();const r=await api('/api/jobs/'+encodeURIComponent(name)+'/results/'+encodeURIComponent(a.dataset.res));
-    main.innerHTML=`<p><a href="#" id="back">← ${esc(name)}</a></p><pre>${esc(JSON.stringify(r.report||r,null,2))}</pre>`;$('#back').onclick=e=>{e.preventDefault();results(name)}});
+  main.querySelectorAll('[data-res]').forEach(a=>a.onclick=e=>{e.preventDefault();run(a.dataset.res).catch(showError)});
+}
+async function run(id){
+  view='result';hash('#run/'+encodeURIComponent(id));
+  const r=await api('/api/results/'+encodeURIComponent(id));
+  main.innerHTML=`<p><a href="#job/${encodeURIComponent(r.job)}" id="back">← ${esc(r.job)}</a></p><pre>${esc(JSON.stringify(r,null,2))}</pre>`;
+  $('#back').onclick=e=>{e.preventDefault();results(r.job).catch(showError)};
 }
 async function hosts(){
   const list=await api('/api/hosts');
@@ -69,9 +85,17 @@ async function runs(host){
   main.querySelectorAll('[data-run]').forEach(a=>a.onclick=async e=>{e.preventDefault();const r=await api('/api/runs/'+encodeURIComponent(a.dataset.run));main.innerHTML=`<p><a href="#" id="back">← runs</a></p><pre>${esc(JSON.stringify(r,null,2))}</pre>`;$('#back').onclick=e=>{e.preventDefault();runs(host)}});
 }
 const views={jobs,hosts,runs:()=>runs()};
-function show(v){view=v;document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));views[v]().catch(e=>main.innerHTML=`<div class="empty">${esc(e.message)}</div>`)}
+function show(v){view=v;if(v!=='jobs')hash('');document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));views[v]().catch(e=>main.innerHTML=`<div class="empty">${esc(e.message)}</div>`)}
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>show(b.dataset.v));
-api('/api/me').then(m=>{me=m;$('#who').textContent=m.user+(m.operator?' · operator':' · viewer');show('jobs')}).catch(e=>{main.innerHTML=`<div class="empty">${esc(e.message)}</div>`});
+function showError(e){main.innerHTML=`<div class="empty">${esc(e.message)}</div>`}
+function route(){
+  const [type,...parts]=location.hash.slice(1).split('/'), id=decodeURIComponent(parts.join('/'));
+  if(type==='job'&&id)results(id).catch(showError);
+  else if(type==='run'&&id)run(id).catch(showError);
+  else if(view==='result'||view==='results'||view==='jobs')show('jobs');
+}
+window.addEventListener('hashchange',route);
+api('/api/me').then(m=>{me=m;$('#who').textContent=m.user+(m.operator?' · operator':' · viewer');route()}).catch(e=>{main.innerHTML=`<div class="empty">${esc(e.message)}</div>`});
 timer=setInterval(()=>{if(view==='jobs'&&!main.querySelector('pre')&&!main.querySelector('#back'))jobs().catch(()=>{})},10000);
 </script>
 </body>
