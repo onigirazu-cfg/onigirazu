@@ -47,10 +47,32 @@ func (t *NotifyTarget) UnmarshalYAML(node *yaml.Node) error {
 	return node.Decode((*target)(t))
 }
 
+// expandEnvStrict is os.ExpandEnv that refuses a variable that is not set
+// (a webhook URL with a typo'd ${SECRET} would otherwise pass validation and
+// fail at every delivery)
+func expandEnvStrict(s string) (string, error) {
+	var missing []string
+	out := os.Expand(s, func(name string) string {
+		v, ok := os.LookupEnv(name)
+		if !ok {
+			missing = append(missing, name)
+		}
+		return v
+	})
+	if len(missing) > 0 {
+		return out, fmt.Errorf("environment variable %s is not set", strings.Join(missing, ", "))
+	}
+	return out, nil
+}
+
 func validateNotifyTargets(targets []NotifyTarget) error {
 	for i := range targets {
 		t := &targets[i]
-		t.URL = os.ExpandEnv(t.URL)
+		url, err := expandEnvStrict(t.URL)
+		if err != nil {
+			return fmt.Errorf("target %d: %w", i+1, err)
+		}
+		t.URL = url
 		if strings.TrimSpace(t.URL) == "" {
 			return fmt.Errorf("target %d: URL is empty", i+1)
 		}

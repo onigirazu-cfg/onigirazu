@@ -975,6 +975,7 @@ func TestServeNotifyConfig(t *testing.T) {
 		{"format", `[{url: "http://notify.test/secret", format: xml}]`, false},
 		{"empty", `[{url: ""}]`, false},
 		{"missing environment", `["${SERVE_TEST_HOOK_MISSING}"]`, false},
+		{"missing environment inside the url", `["http://notify.test/hooks/${SERVE_TEST_HOOK_MISSING}"]`, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "serve.yml")
