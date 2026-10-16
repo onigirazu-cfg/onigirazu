@@ -251,10 +251,19 @@ type server struct {
 	lastID  map[string]string // job -> the base of the last id given (ids stay unique when records are pruned)
 	lastSeq map[string]int
 	nextRun map[string]time.Time
+	pause   servePause
+	resumed chan struct{}
 	queue   chan queued
 	// runJob runs a job; tests replace it
 	runJob func(j *ServeJob) (*JobResult, error)
 	audit  *audit.Storage
+}
+
+type servePause struct {
+	Paused bool      `json:"paused"`
+	Reason string    `json:"reason,omitempty"`
+	By     string    `json:"by,omitempty"`
+	At     time.Time `json:"at,omitempty"`
 }
 
 type queued struct {
@@ -263,11 +272,12 @@ type queued struct {
 }
 
 func newServer(cfg *ServeConfig, out io.Writer) (*server, error) {
-	s := &server{cfg: cfg, out: out, results: map[string][]*JobResult{}, running: map[string]bool{}, pending: map[string]*JobResult{}, lastID: map[string]string{}, lastSeq: map[string]int{}, nextRun: map[string]time.Time{}, queue: make(chan queued, 64)}
+	s := &server{cfg: cfg, out: out, results: map[string][]*JobResult{}, running: map[string]bool{}, pending: map[string]*JobResult{}, lastID: map[string]string{}, lastSeq: map[string]int{}, nextRun: map[string]time.Time{}, queue: make(chan queued, 64), resumed: make(chan struct{})}
 	s.runJob = s.execute
 	if err := os.MkdirAll(filepath.Join(cfg.DataDir, "results"), 0o700); err != nil {
 		return nil, err
 	}
+	s.loadPause()
 	s.loadResults()
 	s.expirePending(time.Now())
 	lg, err := logger.NewEnhancedLogger("warn", "text", os.Stderr)
@@ -277,6 +287,59 @@ func newServer(cfg *ServeConfig, out io.Writer) (*server, error) {
 		}
 	}
 	return s, nil
+}
+
+// loadPause reads data_dir/pause.json; a file that is there but cannot be
+// read pauses the server (fail closed: an operator resumes it explicitly)
+func (s *server) loadPause() {
+	path := filepath.Join(s.cfg.DataDir, "pause.json")
+	data, err := os.ReadFile(path) // #nosec G304 -- our own data directory
+	if err == nil {
+		err = json.Unmarshal(data, &s.pause)
+	}
+	if err != nil && !os.IsNotExist(err) {
+		s.pause = servePause{Paused: true, Reason: fmt.Sprintf("%s unreadable (%v): resume explicitly", path, err), By: "serve", At: time.Now().UTC()}
+		fmt.Fprintf(os.Stderr, "serve: %s\n", s.pause.Reason)
+	}
+}
+
+// setPause pauses or resumes and writes the state; when the file cannot be
+// written the new state still holds in this process and the error says so
+func (s *server) setPause(paused bool, by, reason string) (servePause, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !paused && !s.pause.Paused {
+		return s.pause, nil
+	}
+	if !paused {
+		reason = ""
+		close(s.resumed)
+		s.resumed = make(chan struct{})
+	}
+	s.pause = servePause{Paused: paused, Reason: reason, By: by, At: time.Now().UTC()}
+	if paused {
+		fmt.Fprintf(s.out, "serve: paused by %s: %s\n", by, reason)
+	} else {
+		fmt.Fprintf(s.out, "serve: resumed by %s\n", by)
+	}
+	path := filepath.Join(s.cfg.DataDir, "pause.json")
+	data, err := json.Marshal(s.pause)
+	if err == nil { // whole or not at all: a crash mid-write must not leave half a file
+		if err = os.WriteFile(path+".tmp", data, 0o600); err == nil {
+			err = os.Rename(path+".tmp", path)
+		}
+	}
+	if err != nil {
+		err = fmt.Errorf("pause state not saved, it holds until a restart: %w", err)
+		fmt.Fprintf(os.Stderr, "serve: %v\n", err)
+	}
+	return s.pause, err
+}
+
+func (s *server) paused() (servePause, <-chan struct{}) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.pause, s.resumed
 }
 
 func (s *server) loadResults() {
@@ -495,12 +558,35 @@ func (s *server) worker(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case q := <-s.queue:
-			s.mu.Lock()
+			waiting := false
+			for {
+				p, ch := s.paused()
+				if !p.Paused {
+					s.mu.Lock()
+					if !s.pause.Paused {
+						// Hold mu until the run is marked running.
+						break
+					}
+					s.mu.Unlock()
+					continue
+				}
+				if !waiting {
+					s.mu.Lock()
+					fmt.Fprintf(s.out, "serve: %s: waiting, paused\n", q.job.Name)
+					s.mu.Unlock()
+					waiting = true
+				}
+				select {
+				case <-ctx.Done():
+					return
+				case <-ch:
+				}
+			}
 			r := q.run
 			r.Status, r.Started = "running", time.Now().UTC()
 			s.store(r)
-			s.mu.Unlock()
 			fmt.Fprintf(s.out, "serve: %s: running (%s)\n", q.job.Name, r.Trigger)
+			s.mu.Unlock()
 			result, err := s.runJob(q.job)
 			s.mu.Lock()
 			if err != nil {
@@ -699,6 +785,16 @@ func (s *server) identify(r *http.Request) (serveIdentity, error) {
 	return serveIdentity{}, errServeAuth
 }
 
+// writePause answers a pause/resume: the state, with 500 and the error
+// when it could not be written to disk
+func writePause(w http.ResponseWriter, p servePause, err error) {
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{"error": err.Error(), "paused": p.Paused, "reason": p.Reason, "by": p.By, "at": p.At})
+		return
+	}
+	writeJSON(w, http.StatusOK, p)
+}
+
 func writeJSON(w http.ResponseWriter, code int, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
@@ -735,7 +831,37 @@ func (s *server) mux() *http.ServeMux {
 		_, _ = io.WriteString(w, strings.ReplaceAll(serveUI, "{{title}}", s.cfg.Title))
 	})
 	mux.HandleFunc("/api/me", auth(false, func(w http.ResponseWriter, _ *http.Request, id serveIdentity) {
-		writeJSON(w, http.StatusOK, map[string]interface{}{"user": id.User, "operator": id.Operator, "title": s.cfg.Title})
+		p, _ := s.paused()
+		writeJSON(w, http.StatusOK, map[string]interface{}{"user": id.User, "operator": id.Operator, "title": s.cfg.Title, "paused": p.Paused})
+	}))
+	mux.HandleFunc("/api/pause", auth(false, func(w http.ResponseWriter, r *http.Request, id serveIdentity) {
+		switch r.Method {
+		case http.MethodGet:
+			p, _ := s.paused()
+			writeJSON(w, http.StatusOK, p)
+		case http.MethodPost:
+			auth(true, func(w http.ResponseWriter, r *http.Request, _ serveIdentity) {
+				var body struct {
+					Reason string `json:"reason"`
+				}
+				if err := json.NewDecoder(r.Body).Decode(&body); err != nil && !errors.Is(err, io.EOF) {
+					writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+					return
+				}
+				p, err := s.setPause(true, id.User, body.Reason)
+				writePause(w, p, err)
+			})(w, r)
+		default:
+			w.WriteHeader(http.StatusMethodNotAllowed)
+		}
+	}))
+	mux.HandleFunc("/api/resume", auth(true, func(w http.ResponseWriter, r *http.Request, id serveIdentity) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		p, err := s.setPause(false, id.User, "")
+		writePause(w, p, err)
 	}))
 	mux.HandleFunc("/api/jobs", auth(false, func(w http.ResponseWriter, _ *http.Request, _ serveIdentity) {
 		writeJSON(w, http.StatusOK, s.jobsView())
@@ -894,6 +1020,7 @@ type jobView struct {
 	Approval string     `json:"approval,omitempty"` // required
 	Every    string     `json:"every,omitempty"`
 	Next     *time.Time `json:"next,omitempty"`
+	Queued   bool       `json:"queued"`
 	Running  bool       `json:"running"`           // queued or running
 	Pending  *JobResult `json:"pending,omitempty"` // the run that waits for approval
 	Last     *JobResult `json:"last,omitempty"`    // the last executed run
@@ -906,6 +1033,9 @@ func (s *server) jobsView() []jobView {
 	for i := range s.cfg.Jobs {
 		j := &s.cfg.Jobs[i]
 		v := jobView{Name: j.Name, Kind: j.Kind, Target: j.Playbook, Running: s.running[j.Name] && s.pending[j.Name] == nil, Approval: j.Approval}
+		if list := s.results[j.Name]; v.Running && len(list) > 0 {
+			v.Queued = list[0].Status == "queued"
+		}
 		if j.Kind == "comply" {
 			v.Target = j.Profile
 		}
@@ -986,7 +1116,12 @@ func (s *server) metricsHandler(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; version=0.0.4")
 	var b strings.Builder
 	b.WriteString("# TYPE onigirazu_serve_job_last_status gauge\n# TYPE onigirazu_serve_job_last_run_timestamp_seconds gauge\n# TYPE onigirazu_serve_host_status gauge\n")
-	b.WriteString("# TYPE onigirazu_serve_job_pending gauge\n")
+	b.WriteString("# TYPE onigirazu_serve_job_pending gauge\n# TYPE onigirazu_serve_paused gauge\n")
+	paused := float64(0)
+	if s.pause.Paused {
+		paused = 1
+	}
+	promLine(&b, "onigirazu_serve_paused", s.cfg.Metrics.Labels, paused)
 	for _, j := range s.cfg.Jobs {
 		if j.Approval == "required" {
 			value := float64(0)

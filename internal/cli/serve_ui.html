@@ -12,6 +12,7 @@ header{display:flex;align-items:center;gap:16px;padding:12px 24px;border-bottom:
 header h1{font-size:16px;margin:0}header .who{margin-left:auto;color:var(--muted)}
 nav button{background:none;border:0;padding:8px 12px;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;font:inherit}
 nav button.on{color:var(--fg);border-color:var(--accent)}
+.banner{padding:8px 24px;background:var(--warn);color:#fff}
 main{padding:16px 24px;max-width:1200px;margin:0 auto}
 table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:8px;overflow:hidden}
 th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--line);vertical-align:top}th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase}
@@ -24,7 +25,8 @@ button.run{border:1px solid var(--line);background:var(--card);color:var(--fg);p
 </style>
 </head>
 <body>
-<header><h1>{{title}}</h1><nav><button data-v="jobs" class="on">Jobs</button><button data-v="hosts">Hosts</button><button data-v="runs">Runs</button></nav><span class="who" id="who"></span></header>
+<header><h1>{{title}}</h1><nav><button data-v="jobs" class="on">Jobs</button><button data-v="hosts">Hosts</button><button data-v="runs">Runs</button></nav><button class="run" id="pause" hidden>Pause</button><span class="who" id="who"></span></header>
+<div class="banner" id="pause-banner" hidden></div>
 <main id="main"></main>
 <script>
 const $=s=>document.querySelector(s), main=$('#main');
@@ -34,17 +36,30 @@ const span=d=>d<90?Math.round(d)+'s':d<5400?Math.round(d/60)+'m':d<172800?Math.r
 const ago=t=>{if(!t)return'';const d=(Date.now()-new Date(t))/1000;return d<0?'in '+span(-d):span(d)+' ago'};
 const badge=s=>{s=s==='failure'?'failed':s==='success'?'ok':s;return `<span class="b ${esc(s)}">${esc(s)}</span>`};
 let me={operator:false}, view='jobs', timer;
+function pauseView(p){
+  me.paused=p.paused;
+  $('#pause').hidden=!me.operator;
+  $('#pause').textContent=p.paused?'Resume':'Pause';
+  $('#pause-banner').hidden=!p.paused;
+  $('#pause-banner').textContent=`Paused by ${p.by||''} ${ago(p.at)}: ${p.reason||''}`;
+}
+$('#pause').onclick=async()=>{
+  let reason='';
+  if(!me.paused){reason=prompt('Reason (optional)');if(reason===null)return}
+  try{pauseView(await api(me.paused?'/api/resume':'/api/pause',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reason})}));if(view==='jobs')await jobs()}catch(e){alert(e.message)}
+};
 function hash(value){if(location.hash!==value)history.pushState(null,'',value||location.pathname+location.search)}
 async function jobs(){
   view='jobs';hash('');
-  const list=await api('/api/jobs');
+  const [list,p]=await Promise.all([api('/api/jobs'),api('/api/pause')]);
+  pauseView(p);
   if(!list.length){main.innerHTML='<div class="empty">No jobs in serve.yml</div>';return}
   const pending=list.filter(j=>j.pending);
   main.innerHTML=(pending.length?`<h2>Pending approval</h2>${pending.map(j=>`<div class="approval-card"><b>${esc(j.name)}</b> · ${esc(j.kind)} · ${esc(j.target)}<br><span class="muted">requested by ${esc(j.pending.trigger)} ${esc(ago(j.pending.requested))} · expires in ${span(Math.max(0,(new Date(j.pending.approval.expires)-Date.now())/1000))}</span>${me.operator?`<p><button class="run" data-decision="approve" data-id="${esc(j.pending.id)}">Approve</button> <button class="run" data-decision="reject" data-id="${esc(j.pending.id)}">Reject</button></p>`:''}</div>`).join('')}`:'')+`<table><tr><th>Job</th><th>Kind</th><th>Target</th><th>Schedule</th><th>Last run</th><th>Result</th><th></th></tr>${list.map(j=>`<tr>
     <td><a href="#job/${encodeURIComponent(j.name)}" data-job="${esc(j.name)}">${esc(j.name)}</a></td><td>${esc(j.kind)}</td><td class="muted">${esc(j.target)}</td>
     <td>${j.every?esc(j.every)+(j.next?'<br><span class="muted">next '+ago(j.next)+'</span>':''):'<span class="muted">on demand</span>'}</td>
     <td>${j.last?esc(ago(j.last.started))+'<br><span class="muted">'+esc(j.last.trigger)+'</span>':'<span class="muted">never</span>'}</td>
-    <td>${j.pending?badge('pending'):j.running?badge('running'):j.last?badge(j.last.status)+' <span class="muted">'+esc(j.last.summary)+'</span>':''}</td>
+    <td>${j.pending?badge('pending'):j.running?badge(j.queued?'queued':'running'):j.last?badge(j.last.status)+' <span class="muted">'+esc(j.last.summary)+'</span>':''}</td>
     <td>${me.operator?`<button class="run" data-run="${esc(j.name)}" ${j.pending||j.running?'disabled':''}>Run</button>`:''}</td></tr>`).join('')}</table>`;
   main.querySelectorAll('[data-decision]').forEach(b=>b.onclick=async()=>{
     let comment='';
@@ -95,7 +110,7 @@ function route(){
   else if(view==='result'||view==='results'||view==='jobs')show('jobs');
 }
 window.addEventListener('hashchange',route);
-api('/api/me').then(m=>{me=m;$('#who').textContent=m.user+(m.operator?' · operator':' · viewer');route()}).catch(e=>{main.innerHTML=`<div class="empty">${esc(e.message)}</div>`});
+api('/api/me').then(m=>{me=m;pauseView(m);api('/api/pause').then(pauseView).catch(()=>{});$('#who').textContent=m.user+(m.operator?' · operator':' · viewer');route()}).catch(e=>{main.innerHTML=`<div class="empty">${esc(e.message)}</div>`});
 timer=setInterval(()=>{if(view==='jobs'&&!main.querySelector('pre')&&!main.querySelector('#back'))jobs().catch(()=>{})},10000);
 </script>
 </body>

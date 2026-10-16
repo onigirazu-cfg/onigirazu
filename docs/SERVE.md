@@ -66,6 +66,15 @@ run; the schedule skips it while one waits. The record keeps `approval.by`, `app
 and `approval.comment`. A restart keeps pending runs and marks queued or executing runs as
 `error` with `interrupted: serve restarted`.
 
+Pause: operators pause execution with a reason from the page or `POST /api/pause`, and
+resume with `POST /api/resume`. No new run starts while paused; an executing run finishes.
+The state is persisted in `data_dir/pause.json` (written whole, then renamed). When the
+file cannot be written the new state still holds in this process and the API answers `500`
+with the error: fix `data_dir` before trusting a restart. A `pause.json` that is there but
+unreadable pauses the server at start (fail closed) until an operator resumes it. The
+schedule and approvals keep working, runs queue up in order, and pending runs still expire.
+`onigirazu_serve_paused` is 1 while paused, 0 otherwise.
+
 ## Access
 
 Without `auth` everyone is an operator — put the server behind a reverse proxy or a firewall.
@@ -78,8 +87,11 @@ a viewer; when one of the groups in `groups_header` (comma, pipe or space separa
 
 | Method and path | Returns |
 |---|---|
-| `GET /api/me` | the caller: `user`, `operator`, `title` |
-| `GET /api/jobs` | the jobs with schedule, next run, running flag (queued or running), last executed result, optional `pending` record (without reports), and `approval: "required"` for guarded jobs |
+| `GET /api/me` | the caller: `user`, `operator`, `title`, `paused` (bool) |
+| `GET /api/pause` | pause state: `paused`, optional `reason`, `by`, `at` (viewers too) |
+| `POST /api/pause` | pauses execution (operators); optional JSON `{reason: "..."}`; `200` with the state; pausing again updates reason and identity; `500` with the state and `error` when `pause.json` could not be written (the pause still holds in this process) |
+| `POST /api/resume` | resumes execution (operators); `200` with the state; already resumed is a no-op; `500` as for pause |
+| `GET /api/jobs` | the jobs with schedule, next run, `running` flag (queued or running), `queued` flag (waiting for the worker), last executed result, optional `pending` record (without reports), and `approval: "required"` for guarded jobs |
 | `POST /api/jobs/{name}/run` | requests the job (operators); `202` with `{queued: name, run: id}` or `{pending: id, run: id}`; `409` when running, queued or pending; `503` when the queue is full |
 | `GET /api/jobs/{name}/results` | the kept results, newest first |
 | `GET /api/jobs/{name}/results/{id}` | one result with its full report (the drift, verify or comply report as JSON) |
@@ -89,7 +101,7 @@ a viewer; when one of the groups in `groups_header` (comma, pipe or space separa
 | `GET /api/hosts` | every host seen by a job's last executed result with its worst status (`ok`, `changed`, `drift`, `failed`, `unreachable`) and the status per job |
 | `GET /api/runs[?host=&playbook=]` | the audit store's last 100 runs (every `apply`, not only the server's) |
 | `GET /api/runs/{id}` | one audit record |
-| `GET /metrics` | `onigirazu_serve_job_last_status{job,kind}` (0 ok, 1 drift/changed, 2 failed, 3 error), `onigirazu_serve_job_last_run_timestamp_seconds{job}`, `onigirazu_serve_host_status{job,host}`, `onigirazu_serve_job_pending{job}` (guarded jobs only: 1 pending, 0 otherwise); all include configured metric labels |
+| `GET /metrics` | `onigirazu_serve_job_last_status{job,kind}` (0 ok, 1 drift/changed, 2 failed, 3 error), `onigirazu_serve_job_last_run_timestamp_seconds{job}`, `onigirazu_serve_host_status{job,host}`, `onigirazu_serve_job_pending{job}` (guarded jobs only: 1 pending, 0 otherwise); `onigirazu_serve_paused` (1 paused, 0 otherwise); all include configured metric labels |
 | `GET /healthz` | `ok` |
 
 The page at `/` uses the same API: Jobs (with a Run button for operators), Hosts and Runs tabs,
