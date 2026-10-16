@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"os"
 	"os/exec"
@@ -33,14 +34,16 @@ import (
 
 // ServeConfig is the serve.yml file
 type ServeConfig struct {
-	Listen          string        `yaml:"listen"` // default :8086
-	Title           string        `yaml:"title"`
-	DataDir         string        `yaml:"data_dir"` // default ~/.onigirazu/serve
-	Auth            ServeAuth     `yaml:"auth"`
-	Jobs            []ServeJob    `yaml:"jobs"`
-	Retain          int           `yaml:"retain"` // results kept per job, default 50
-	Metrics         ServeMetric   `yaml:"metrics"`
-	ApprovalTimeout time.Duration `yaml:"approval_timeout"` // how long a pending run waits, default 1h
+	Listen          string         `yaml:"listen"` // default :8086
+	Title           string         `yaml:"title"`
+	URL             string         `yaml:"url"`      // where the page is reached, for links in notifications
+	DataDir         string         `yaml:"data_dir"` // default ~/.onigirazu/serve
+	Auth            ServeAuth      `yaml:"auth"`
+	Jobs            []ServeJob     `yaml:"jobs"`
+	Retain          int            `yaml:"retain"` // results kept per job, default 50
+	Metrics         ServeMetric    `yaml:"metrics"`
+	Notify          []NotifyTarget `yaml:"notify"`           // targets for every job
+	ApprovalTimeout time.Duration  `yaml:"approval_timeout"` // how long a pending run waits, default 1h
 }
 
 // ServeAuth: a bearer token is an operator; a reverse proxy's user header is
@@ -72,7 +75,7 @@ type ServeJob struct {
 	Every           time.Duration     `yaml:"every"`            // 0: only on demand
 	Approval        string            `yaml:"approval"`         // required: a run waits for an operator
 	ApprovalTimeout time.Duration     `yaml:"approval_timeout"` // 0: the server's
-	Notify          []string          `yaml:"notify"`
+	Notify          []NotifyTarget    `yaml:"notify"`
 	NotifyOK        bool              `yaml:"notify_always"`
 	FailOn          string            `yaml:"fail_on"` // comply
 }
@@ -115,6 +118,8 @@ func (r *JobResult) executed() bool {
 // resultCopy is a copy safe to hand out of the lock
 func resultCopy(r *JobResult) *JobResult {
 	copy := *r
+	copy.Hosts = maps.Clone(r.Hosts)
+	copy.Report = append(json.RawMessage(nil), r.Report...)
 	if r.Approval != nil {
 		approval := *r.Approval
 		copy.Approval = &approval
@@ -196,10 +201,16 @@ func loadServeConfig(path string) (*ServeConfig, error) {
 		cfg.DataDir = filepath.Join(home, ".onigirazu", "serve")
 	}
 	cfg.Auth.Token = os.ExpandEnv(cfg.Auth.Token)
+	if err := validateNotifyTargets(cfg.Notify); err != nil {
+		return nil, fmt.Errorf("notify: %w", err)
+	}
 	base := filepath.Dir(path)
 	names := map[string]bool{}
 	for i := range cfg.Jobs {
 		j := &cfg.Jobs[i]
+		if err := validateNotifyTargets(j.Notify); err != nil {
+			return nil, fmt.Errorf("job %s: notify: %w", j.Name, err)
+		}
 		if j.Name == "" {
 			return nil, fmt.Errorf("%s: job %d has no name", path, i+1)
 		}
@@ -257,6 +268,9 @@ type server struct {
 	// runJob runs a job; tests replace it
 	runJob func(j *ServeJob) (*JobResult, error)
 	audit  *audit.Storage
+	// notifications go out in goroutines; tests set the client and wait
+	notifyClient *http.Client
+	notifyWait   sync.WaitGroup
 }
 
 type servePause struct {
@@ -483,6 +497,9 @@ func (s *server) request(j *ServeJob, trigger string) (*JobResult, error) {
 	}
 	s.running[j.Name] = true
 	s.store(r)
+	if r.Status == "pending" {
+		s.notify(eventPending, j, resultCopy(r))
+	}
 	return resultCopy(r), nil
 }
 
@@ -521,6 +538,9 @@ func (s *server) decide(id, by, comment, decision string) (*JobResult, error) {
 		r.Approval.Decision, r.Approval.By, r.Approval.At, r.Approval.Comment = decision, by, &now, comment
 		delete(s.pending, job)
 		s.store(r)
+		if decision == "rejected" {
+			s.notify(eventRejected, s.job(job), resultCopy(r))
+		}
 		return resultCopy(r), nil
 	}
 	return nil, errNoPendingRun
@@ -533,6 +553,7 @@ func (s *server) expire(job string, r *JobResult, now time.Time) {
 	delete(s.pending, job)
 	s.running[job] = false
 	s.store(r)
+	s.notify(eventExpired, s.job(job), resultCopy(r))
 }
 
 // expirePending ends the pending runs whose wait is over
@@ -585,6 +606,7 @@ func (s *server) worker(ctx context.Context) {
 			r := q.run
 			r.Status, r.Started = "running", time.Now().UTC()
 			s.store(r)
+			s.notify(eventStart, q.job, resultCopy(r))
 			fmt.Fprintf(s.out, "serve: %s: running (%s)\n", q.job.Name, r.Trigger)
 			s.mu.Unlock()
 			result, err := s.runJob(q.job)
@@ -595,6 +617,14 @@ func (s *server) worker(ctx context.Context) {
 				r.Started, r.Duration, r.Status, r.Summary, r.Hosts, r.Report = result.Started, result.Duration, result.Status, result.Summary, result.Hosts, result.Report
 			}
 			s.store(r)
+			switch r.Status {
+			case "ok":
+				s.notify(eventSuccess, q.job, resultCopy(r))
+			case "drift":
+				s.notify(eventDrift, q.job, resultCopy(r))
+			case "failed", "error":
+				s.notify(eventFailure, q.job, resultCopy(r))
+			}
 			s.running[q.job.Name] = false
 			fmt.Fprintf(s.out, "serve: %s: %s — %s (%.1fs)\n", q.job.Name, r.Status, r.Summary, r.Duration)
 			s.mu.Unlock()
@@ -650,7 +680,7 @@ func (s *server) execute(j *ServeJob) (*JobResult, error) {
 		statePath = filepath.Join(s.cfg.DataDir, "state", j.Name+".state")
 		_ = os.MkdirAll(filepath.Dir(statePath), 0o700)
 	}
-	o := driftCheckOptions{limit: j.Limit, become: j.Become, notify: j.Notify, notifyOK: j.NotifyOK}
+	o := driftCheckOptions{limit: j.Limit, become: j.Become}
 	keys := make([]string, 0, len(j.ExtraVars))
 	for k := range j.ExtraVars {
 		keys = append(keys, k)
@@ -722,13 +752,6 @@ func (s *server) execute(j *ServeJob) (*JobResult, error) {
 		}
 		r.Summary = fmt.Sprintf("%d in sync, %d %s, %d failed", len(report.InSync), len(report.Drift), map[bool]string{true: "drifting", false: "changed"}[check], len(report.Errors))
 		r.Report, _ = json.Marshal(report)
-		if len(j.Notify) > 0 && (len(report.Errors) > 0 || (check && len(report.Drift) > 0) || j.NotifyOK) {
-			for _, url := range j.Notify {
-				if err := notifyWebhook(url, report); err != nil {
-					fmt.Fprintf(os.Stderr, "notify %s: %v\n", redactURL(url), err)
-				}
-			}
-		}
 		if check {
 			s.pushMetrics(driftMetrics(report, s.cfg.Metrics.Labels))
 		}

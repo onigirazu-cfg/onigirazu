@@ -9,6 +9,10 @@ store. One process, one YAML file, no database.
 # serve.yml
 listen: ":8086"
 title: RED fleet
+url: https://fleet.example.com
+notify:
+  - url: https://mattermost.example.com/hooks/${FLEET_HOOK}
+    on: [pending, failure]
 data_dir: /var/lib/onigirazu/serve     # results and job state; default ~/.onigirazu/serve
 approval_timeout: 1h                   # default wait for approval
 retain: 50                             # results kept per job
@@ -26,7 +30,10 @@ jobs:
     playbook: site.yml
     inventory: hosts.yml
     every: 30m                         # 0 / absent: on demand only
-    notify: [https://mattermost.example.com/hooks/xxx]
+    notify:
+      - https://mattermost.example.com/hooks/${DRIFT_HOOK}
+      - url: https://events.example.com/${EVENTS_HOOK}
+        format: json
   - name: ssh-compliance
     kind: comply
     profile: ssh                       # bundled or a file
@@ -65,6 +72,24 @@ The flow is requested → pending → approved/rejected/expired. Each job has at
 run; the schedule skips it while one waits. The record keeps `approval.by`, `approval.at`
 and `approval.comment`. A restart keeps pending runs and marks queued or executing runs as
 `error` with `interrupted: serve restarted`.
+
+Notifications: server-wide `notify:` targets and a job's targets add up. Targets accept a
+plain URL or a mapping with `url`, `format` (`mattermost`, the default, or `json`) and `on`.
+Webhook URLs expand `${VAR}` from the environment. Events are `pending`, `start`, `success`,
+`drift`, `failure` (failed or error), `rejected` and `expired`. Without `on`, targets receive
+`pending`, `drift` and `failure`; `notify_always: true` on the job adds `success` to targets
+without `on`. An explicit `on: []` sends nothing.
+
+Mattermost messages include a headline, a colored attachment with the job kind, target,
+hosts, trigger, duration and, for pending runs, expiry. For example:
+`:white_check_mark: **patch-wave** ok — 12 in sync, 0 changed, 0 failed`.
+Pending/start messages show the job's limit (or "all hosts"); final messages group host
+statuses, for example `3 ok, 1 drift, 1 failed`. Generic JSON has the shape
+`{"event":"success","job":{"name":"patch-wave","kind":"apply","target":"patch.yml","limit":"web"},"run":{...},"url":"https://fleet.example.com/#run/<id>","text":"patch-wave ok — ..."}`;
+`run` is the job result without `report`, and `text` is the headline without formatting.
+Set the server's `url` to include a link to `#run/<id>`; without it, JSON `url` is empty
+and Mattermost has no link. Delivery is asynchronous with a 10s timeout. Failures are logged
+with the webhook URL redacted and never fail the run.
 
 Pause: operators pause execution with a reason from the page or `POST /api/pause`, and
 resume with `POST /api/resume`. No new run starts while paused; an executing run finishes.

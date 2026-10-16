@@ -4,12 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -650,4 +653,348 @@ func TestServePause(t *testing.T) {
 	}
 	do("POST", "/api/resume", "", "admins", 200)
 	waitRun("drift-site")
+}
+
+func TestServeNotify(t *testing.T) {
+	var mu sync.Mutex
+	var messages, failedMessages [][]byte
+	record := func(dst *[][]byte, code int) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				t.Error(err)
+			}
+			if r.Method != http.MethodPost || r.Header.Get("Content-Type") != "application/json" || !json.Valid(body) {
+				t.Errorf("invalid notification: %s %s %s", r.Method, r.Header.Get("Content-Type"), body)
+			}
+			mu.Lock()
+			*dst = append(*dst, body)
+			mu.Unlock()
+			w.WriteHeader(code)
+		}
+	}
+	recorder := httptest.NewServer(record(&messages, 200))
+	defer recorder.Close()
+	broken := httptest.NewServer(record(&failedMessages, 500))
+	defer broken.Close()
+	t.Setenv("SERVE_NOTIFY_URL", recorder.URL+"/secret")
+	config := fmt.Sprintf(`
+url: http://fleet.test/
+auth:
+  user_header: X-User
+  groups_header: X-Groups
+  operators: [admins]
+notify:
+  - url: %s
+    format: json
+    on: [start, success, failure]
+jobs:
+  - name: patch
+    kind: apply
+    playbook: patch.yml
+    limit: web
+    approval: required
+    notify:
+      - url: ${SERVE_NOTIFY_URL}
+        on: [pending, start, success, rejected, expired]
+  - name: drift-site
+    playbook: site.yml
+    notify: ["%s"]
+`, broken.URL, recorder.URL)
+	dir := t.TempDir()
+	path := filepath.Join(dir, "serve.yml")
+	if err := os.WriteFile(path, []byte(config), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := loadServeConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Jobs[0].Notify[0].URL != recorder.URL+"/secret" || cfg.Jobs[1].Notify[0].Format != "mattermost" {
+		t.Fatalf("notification defaults/expansion: %+v", cfg.Jobs)
+	}
+	cfg.DataDir = filepath.Join(dir, "data")
+	s, err := newServer(cfg, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.notifyClient = &http.Client{Timeout: time.Second}
+	ctx, cancel := contextTimeout(t)
+	defer cancel()
+	started := make(chan struct{}, 1)
+	finish := make(chan struct{}, 1)
+	s.runJob = func(j *ServeJob) (*JobResult, error) {
+		started <- struct{}{}
+		select {
+		case <-finish:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+		status := "ok"
+		if j.Kind == "drift" {
+			status = "drift"
+		}
+		return &JobResult{Started: time.Now().UTC(), Duration: 12.3, Status: status, Summary: "1 in sync, 0 changed, 0 failed", Hosts: map[string]string{"web1": status}, Report: json.RawMessage(`{"large":"report"}`)}, nil
+	}
+	done := make(chan struct{})
+	go func() { defer close(done); s.worker(ctx) }()
+	defer func() { cancel(); <-done; s.notifyWait.Wait() }()
+	handler := s.mux()
+	do := func(method, path, body string, want int) []byte {
+		t.Helper()
+		req := httptest.NewRequest(method, path, strings.NewReader(body))
+		req.Header.Set("X-User", "denys")
+		req.Header.Set("X-Groups", "admins")
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+		if w.Code != want {
+			t.Fatalf("%s %s: %d %s", method, path, w.Code, w.Body.String())
+		}
+		return w.Body.Bytes()
+	}
+	request := func(job string) string {
+		t.Helper()
+		body := do("POST", "/api/jobs/"+job+"/run", "", 202)
+		var response map[string]string
+		if err := json.Unmarshal(body, &response); err != nil || response["run"] == "" {
+			t.Fatalf("request: %s (%v)", body, err)
+		}
+		return response["run"]
+	}
+	waitStart := func() {
+		t.Helper()
+		select {
+		case <-started:
+		case <-time.After(3 * time.Second):
+			t.Fatal("worker did not start")
+		}
+		s.notifyWait.Wait()
+	}
+	waitFinal := func(id, status string) {
+		t.Helper()
+		deadline := time.Now().Add(3 * time.Second)
+		for {
+			body := do("GET", "/api/results/"+id, "", 200)
+			var result JobResult
+			if err := json.Unmarshal(body, &result); err != nil {
+				t.Fatal(err)
+			}
+			if result.Status == status {
+				s.notifyWait.Wait()
+				return
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("unfinished run: %s", body)
+			}
+			time.Sleep(time.Millisecond)
+		}
+	}
+	checkMessage := func(index int, event, id, want string) {
+		t.Helper()
+		s.notifyWait.Wait()
+		mu.Lock()
+		defer mu.Unlock()
+		if len(messages) <= index {
+			t.Fatalf("missing %s notification: %q", event, messages)
+		}
+		var msg struct {
+			Username    string `json:"username"`
+			Text        string `json:"text"`
+			Attachments []struct {
+				Title string `json:"title"`
+				Link  string `json:"title_link"`
+				Text  string `json:"text"`
+				Color string `json:"color"`
+			} `json:"attachments"`
+		}
+		body := messages[index]
+		if err := json.Unmarshal(body, &msg); err != nil || msg.Username != "onigirazu" || !strings.Contains(msg.Text, want) || len(msg.Attachments) != 1 {
+			t.Fatalf("message: %s (%v)", body, err)
+		}
+		a := msg.Attachments[0]
+		if !strings.HasSuffix(a.Title, " — "+event) || a.Link != "http://fleet.test/#run/"+id || !strings.Contains(a.Text, "trigger: api:denys") || a.Color == "" {
+			t.Fatalf("attachment: %s", body)
+		}
+		if event == eventSuccess && (!strings.Contains(a.Text, "hosts: 1 ok") || !strings.Contains(a.Text, "duration: 12.3s") || !strings.Contains(a.Text, "run: "+a.Link)) {
+			t.Fatalf("success details: %s", body)
+		}
+		if event == eventPending && (!strings.Contains(msg.Text, "**patch**") || !strings.Contains(a.Text, "hosts: web") || !strings.Contains(a.Text, "expires:")) {
+			t.Fatalf("pending details: %s", body)
+		}
+	}
+	id := request("patch")
+	checkMessage(0, eventPending, id, "waits for approval")
+	do("POST", "/api/runs/"+id+"/approve", "", 200)
+	waitStart()
+	checkMessage(1, eventStart, id, "started")
+	finish <- struct{}{}
+	waitFinal(id, "ok")
+	checkMessage(2, eventSuccess, id, "ok —")
+	mu.Lock()
+	failed := append([][]byte(nil), failedMessages...)
+	mu.Unlock()
+	if len(failed) != 2 {
+		t.Fatalf("500 target: %q", failed)
+	}
+	for i, event := range []string{eventStart, eventSuccess} {
+		var msg struct {
+			Event string                                     `json:"event"`
+			Job   struct{ Name, Kind, Target, Limit string } `json:"job"`
+			Run   JobResult                                  `json:"run"`
+			URL   string                                     `json:"url"`
+			Text  string                                     `json:"text"`
+		}
+		if err := json.Unmarshal(failed[i], &msg); err != nil || msg.Event != event || msg.Job.Name != "patch" || msg.Job.Kind != "apply" || msg.Job.Limit != "web" || msg.Job.Target != cfg.Jobs[0].Playbook || msg.URL != "http://fleet.test/#run/"+id || msg.Run.ID != id || msg.Run.Report != nil || strings.Contains(msg.Text, "**") || strings.Contains(msg.Text, ":white_check_mark:") {
+			t.Fatalf("generic JSON: %s (%v)", failed[i], err)
+		}
+	}
+	id = request("patch")
+	checkMessage(3, eventPending, id, "waits for approval")
+	do("POST", "/api/runs/"+id+"/reject", `{"comment":"maintenance"}`, 200)
+	checkMessage(4, eventRejected, id, "rejected by denys: maintenance")
+	id = request("drift-site")
+	waitStart()
+	finish <- struct{}{}
+	waitFinal(id, "drift")
+	checkMessage(5, eventDrift, id, "**drift-site** drift")
+	s.notifyWait.Wait()
+	mu.Lock()
+	count := len(messages)
+	mu.Unlock()
+	if count != 6 {
+		t.Fatalf("default events sent extra messages: %d", count)
+	}
+	id = request("patch")
+	checkMessage(6, eventPending, id, "waits for approval")
+	s.expirePending(time.Now().Add(2 * time.Hour))
+	checkMessage(7, eventExpired, id, "expired without approval")
+	for _, invalid := range []string{"on: [sometimes]", "format: xml", `url: ""`} {
+		t.Run(invalid, func(t *testing.T) {
+			data := "notify:\n  - url: " + recorder.URL + "\n    " + invalid + "\n"
+			if invalid == `url: ""` {
+				data = "notify: [{url: \"\"}]\n"
+			}
+			if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := loadServeConfig(path); err == nil {
+				t.Fatalf("accepted %s", invalid)
+			}
+		})
+	}
+}
+
+func TestServeNotifyRouting(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		status string
+		err    error
+		always bool
+		on     []string
+		want   string
+	}{
+		{name: "default success", status: "ok"},
+		{name: "legacy success", status: "ok", always: true, want: eventSuccess},
+		{name: "explicit empty", status: "ok", always: true, on: []string{}},
+		{name: "explicit failure", status: "ok", always: true, on: []string{eventFailure}},
+		{name: "failed", status: "failed", want: eventFailure},
+		{name: "error", err: errors.New("execution failed"), want: eventFailure},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var mu sync.Mutex
+			var received []string
+			transport := serveNotifyTransport(func(r *http.Request) (*http.Response, error) {
+				var msg struct {
+					Event string    `json:"event"`
+					URL   string    `json:"url"`
+					Run   JobResult `json:"run"`
+				}
+				if err := json.NewDecoder(r.Body).Decode(&msg); err != nil {
+					t.Error(err)
+				}
+				if msg.URL != "" || msg.Run.Report != nil {
+					t.Errorf("unexpected link or report: %+v", msg)
+				}
+				mu.Lock()
+				received = append(received, r.URL.Path+":"+msg.Event)
+				mu.Unlock()
+				return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader("")), Header: make(http.Header)}, nil
+			})
+			cfg := &ServeConfig{DataDir: t.TempDir(), Retain: 5,
+				Notify: []NotifyTarget{{URL: "http://notify.test/global", Format: "json", On: tc.on}},
+				Jobs: []ServeJob{{Name: "patch", Kind: "apply", NotifyOK: tc.always,
+					Notify: []NotifyTarget{{URL: "http://notify.test/job", Format: "json", On: tc.on}}}},
+			}
+			s, err := newServer(cfg, io.Discard)
+			if err != nil {
+				t.Fatal(err)
+			}
+			s.notifyClient = &http.Client{Timeout: time.Second, Transport: transport}
+			ctx, cancel := contextTimeout(t)
+			defer cancel()
+			s.runJob = func(_ *ServeJob) (*JobResult, error) {
+				cancel()
+				return &JobResult{Status: tc.status, Report: json.RawMessage(`{"secret":"report"}`)}, tc.err
+			}
+			if _, err := s.request(&cfg.Jobs[0], "schedule"); err != nil {
+				t.Fatal(err)
+			}
+			s.worker(ctx)
+			s.notifyWait.Wait()
+			mu.Lock()
+			defer mu.Unlock()
+			if tc.want == "" {
+				if len(received) != 0 {
+					t.Fatalf("unexpected notifications: %v", received)
+				}
+			} else if len(received) != 2 || !slices.Contains(received, "/global:"+tc.want) || !slices.Contains(received, "/job:"+tc.want) {
+				t.Fatalf("targets did not add up: %v", received)
+			}
+		})
+	}
+}
+
+type serveNotifyTransport func(*http.Request) (*http.Response, error)
+
+func (f serveNotifyTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	return f(r)
+}
+
+func TestServeNotifyConfig(t *testing.T) {
+	t.Setenv("SERVE_TEST_HOOK", "http://notify.test/secret")
+	for _, tc := range []struct {
+		name, notify string
+		valid        bool
+	}{
+		{"string", `["${SERVE_TEST_HOOK}"]`, true},
+		{"mapping", `[{url: "${SERVE_TEST_HOOK}", format: json, on: [start, success]}]`, true},
+		{"event", `[{url: "http://notify.test/secret", on: [sometimes]}]`, false},
+		{"format", `[{url: "http://notify.test/secret", format: xml}]`, false},
+		{"empty", `[{url: ""}]`, false},
+		{"missing environment", `["${SERVE_TEST_HOOK_MISSING}"]`, false},
+		{"missing environment inside the url", `["http://notify.test/hooks/${SERVE_TEST_HOOK_MISSING}"]`, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "serve.yml")
+			config := "notify: " + tc.notify + "\njobs:\n  - name: patch\n    playbook: patch.yml\n    notify: " + tc.notify + "\n"
+			if err := os.WriteFile(path, []byte(config), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			cfg, err := loadServeConfig(path)
+			if !tc.valid {
+				if err == nil {
+					t.Fatal("accepted invalid target")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, target := range []NotifyTarget{cfg.Notify[0], cfg.Jobs[0].Notify[0]} {
+				if target.URL != "http://notify.test/secret" || target.Format == "" {
+					t.Fatalf("target defaults: %+v", target)
+				}
+			}
+		})
+	}
 }
