@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `onigirazu serve`: a job with `approval: required` creates a pending run that executes only after `POST /api/runs/{id}/approve` by an operator, or is rejected, or expires after `approval_timeout`; the web page shows pending runs with Approve/Reject; the run record keeps who decided and when
+
 ## [1.171.0] - 2026-10-11
 
 ### Security
