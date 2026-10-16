@@ -18,9 +18,13 @@ approval_timeout: 1h                   # default wait for approval
 retain: 50                             # results kept per job
 auth:
   token: ${SERVE_TOKEN}                # API bearer token: an operator
+  tokens:
+    - name: ci
+      token: ${CI_TOKEN}
+      groups: [tier2]
   user_header: X-Authentik-Username    # a reverse proxy's identity: a viewer ...
   groups_header: X-Authentik-Groups    # ... an operator when one of the groups is listed
-  operators: [admins]
+  operators: [admins, tier0-admins]
 metrics:
   push: http://victoria:8428/api/v1/import/prometheus   # every job's metrics, optional
   labels: {env: prod}
@@ -43,6 +47,7 @@ jobs:
   - name: patch-wave
     kind: apply
     playbook: patch.yml
+    operators: [tier0-admins, denys]
     approval: required
     approval_timeout: 2h
   - name: deploy-web
@@ -108,28 +113,50 @@ With `token`, `Authorization: Bearer <token>` is an operator (automation, curl).
 a viewer; when one of the groups in `groups_header` (comma, pipe or space separated) is in
 `operators`, an operator. Viewers read everything; operators also start jobs and approve or reject pending runs.
 
+Named bearer tokens in `auth.tokens` have a `name`, a `token` value (expands `${VAR}`),
+and optional `groups`. Each is a server-level operator. Names must be unique and values
+must be nonempty. Tokens are checked before proxy headers.
+
+A job's optional `operators` list narrows run, approve and reject access: the caller must
+be a server-level operator and match a listed user name or group, case-insensitively.
+Without the list, every server-level operator is allowed. The legacy `auth.token` has the
+user name `token`; include `token` in a job's list to admit it. Pause and resume require
+only a server-level operator.
+
+Every run, approve, reject, pause and resume action and refused attempt is recorded in
+`data_dir/audit.log` as JSON lines, with identity, job, run ID, result, comment or reason,
+and client address. Unauthenticated probes are omitted. Viewers can read the entries,
+newest first, through `GET /api/audit` or the Audit tab. The file is append-only and
+reopened for every entry, so logrotate can move it aside (no `copytruncate` needed).
+
 ## API
 
 | Method and path | Returns |
 |---|---|
+| `GET /api/audit?limit=N` | action log, newest first; default 100 entries, max 1000 (viewers too) |
 | `GET /api/me` | the caller: `user`, `operator`, `title`, `paused` (bool) |
 | `GET /api/pause` | pause state: `paused`, optional `reason`, `by`, `at` (viewers too) |
 | `POST /api/pause` | pauses execution (operators); optional JSON `{reason: "..."}`; `200` with the state; pausing again updates reason and identity; `500` with the state and `error` when `pause.json` could not be written (the pause still holds in this process) |
 | `POST /api/resume` | resumes execution (operators); `200` with the state; already resumed is a no-op; `500` as for pause |
-| `GET /api/jobs` | the jobs with schedule, next run, `running` flag (queued or running), `queued` flag (waiting for the worker), last executed result, optional `pending` record (without reports), and `approval: "required"` for guarded jobs |
-| `POST /api/jobs/{name}/run` | requests the job (operators); `202` with `{queued: name, run: id}` or `{pending: id, run: id}`; `409` when running, queued or pending; `503` when the queue is full |
+| `GET /api/jobs` | the jobs with schedule, next run, `running` flag (queued or running), `queued` flag (waiting for the worker), last executed result, optional `pending` record (without reports), and `approval: "required"` for guarded jobs; optional `operators` list and caller-specific `allowed` bool |
+| `POST /api/jobs/{name}/run` | requests the job (operators); `202` with `{queued: name, run: id}` or `{pending: id, run: id}`; `409` when running, queued or pending; `503` when the queue is full; `403` with `{"error":"not an operator of this job"}` when the job disallows the operator |
 | `GET /api/jobs/{name}/results` | the kept results, newest first |
 | `GET /api/jobs/{name}/results/{id}` | one result with its full report (the drift, verify or comply report as JSON) |
 | `GET /api/results/{id}` | one job result with its full report; `404` if absent |
-| `POST /api/runs/{id}/approve` | queues a pending run (operators); optional JSON `{comment: "..."}`; `200` with the record without report, `404` if absent, `409` when the run expired meanwhile (it is marked expired), `503` if the queue is full |
-| `POST /api/runs/{id}/reject` | rejects a pending run (operators); optional JSON `{comment: "..."}`; `200` with the record without report, `404` if absent |
+| `POST /api/runs/{id}/approve` | queues a pending run (operators); optional JSON `{comment: "..."}`; `200` with the record without report, `404` if absent, `409` when the run expired meanwhile (it is marked expired), `503` if the queue is full; `403` with `{"error":"not an operator of this job"}` when the job disallows the operator |
+| `POST /api/runs/{id}/reject` | rejects a pending run (operators); optional JSON `{comment: "..."}`; `200` with the record without report, `404` if absent; `403` with `{"error":"not an operator of this job"}` when the job disallows the operator |
 | `GET /api/hosts` | every host seen by a job's last executed result with its worst status (`ok`, `changed`, `drift`, `failed`, `unreachable`) and the status per job |
 | `GET /api/runs[?host=&playbook=]` | the audit store's last 100 runs (every `apply`, not only the server's) |
 | `GET /api/runs/{id}` | one audit record |
 | `GET /metrics` | `onigirazu_serve_job_last_status{job,kind}` (0 ok, 1 drift/changed, 2 failed, 3 error), `onigirazu_serve_job_last_run_timestamp_seconds{job}`, `onigirazu_serve_host_status{job,host}`, `onigirazu_serve_job_pending{job}` (guarded jobs only: 1 pending, 0 otherwise); `onigirazu_serve_paused` (1 paused, 0 otherwise); all include configured metric labels |
 | `GET /healthz` | `ok` |
 
-The page at `/` uses the same API: Jobs (with a Run button for operators), Hosts and Runs tabs,
+Run, approve and reject return `403` with `{"error":"not an operator of this job"}` when
+a server-level operator does not match the job's list. Viewers receive `403` with
+`{"error":"operators only"}`; missing identity receives `401`. An unknown pending run
+returns `404` before the per-job check.
+
+The page at `/` uses the same API: Jobs (with Run/Approve/Reject buttons when `allowed`), Hosts, Runs and Audit tabs,
 each result and audit record openable as JSON.
 
 A job result: `{id, job, kind, requested, started, duration_seconds, status, summary, trigger,

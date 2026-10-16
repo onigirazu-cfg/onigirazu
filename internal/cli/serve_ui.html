@@ -17,7 +17,7 @@ main{padding:16px 24px;max-width:1200px;margin:0 auto}
 table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:8px;overflow:hidden}
 th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--line);vertical-align:top}th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase}
 tr:last-child td{border-bottom:0}.b{display:inline-block;padding:1px 8px;border-radius:10px;font-size:12px;color:#fff;background:var(--muted)}
-.ok{background:var(--ok)}.drift,.changed{background:var(--warn)}.failed,.error,.unreachable{background:var(--bad)}.pending{background:var(--warn)}.queued,.running{background:var(--accent)}.rejected,.expired{background:var(--muted)}
+.ok{background:var(--ok)}.drift,.changed{background:var(--warn)}.refused,.failed,.error,.unreachable{background:var(--bad)}.pending{background:var(--warn)}.queued,.running{background:var(--accent)}.rejected,.expired{background:var(--muted)}
 .approval-card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:12px}
 button.run{border:1px solid var(--line);background:var(--card);color:var(--fg);padding:4px 10px;border-radius:6px;cursor:pointer}button.run:disabled{opacity:.5}
 .muted{color:var(--muted)}pre{background:var(--card);border:1px solid var(--line);padding:12px;border-radius:8px;overflow:auto;max-height:60vh}
@@ -25,7 +25,7 @@ button.run{border:1px solid var(--line);background:var(--card);color:var(--fg);p
 </style>
 </head>
 <body>
-<header><h1>{{title}}</h1><nav><button data-v="jobs" class="on">Jobs</button><button data-v="hosts">Hosts</button><button data-v="runs">Runs</button></nav><button class="run" id="pause" hidden>Pause</button><span class="who" id="who"></span></header>
+<header><h1>{{title}}</h1><nav><button data-v="jobs" class="on">Jobs</button><button data-v="hosts">Hosts</button><button data-v="runs">Runs</button><button data-v="audit">Audit</button></nav><button class="run" id="pause" hidden>Pause</button><span class="who" id="who"></span></header>
 <div class="banner" id="pause-banner" hidden></div>
 <main id="main"></main>
 <script>
@@ -55,12 +55,12 @@ async function jobs(){
   pauseView(p);
   if(!list.length){main.innerHTML='<div class="empty">No jobs in serve.yml</div>';return}
   const pending=list.filter(j=>j.pending);
-  main.innerHTML=(pending.length?`<h2>Pending approval</h2>${pending.map(j=>`<div class="approval-card"><b>${esc(j.name)}</b> · ${esc(j.kind)} · ${esc(j.target)}<br><span class="muted">requested by ${esc(j.pending.trigger)} ${esc(ago(j.pending.requested))} · expires in ${span(Math.max(0,(new Date(j.pending.approval.expires)-Date.now())/1000))}</span>${me.operator?`<p><button class="run" data-decision="approve" data-id="${esc(j.pending.id)}">Approve</button> <button class="run" data-decision="reject" data-id="${esc(j.pending.id)}">Reject</button></p>`:''}</div>`).join('')}`:'')+`<table><tr><th>Job</th><th>Kind</th><th>Target</th><th>Schedule</th><th>Last run</th><th>Result</th><th></th></tr>${list.map(j=>`<tr>
+  main.innerHTML=(pending.length?`<h2>Pending approval</h2>${pending.map(j=>`<div class="approval-card"><b>${esc(j.name)}</b> · ${esc(j.kind)} · ${esc(j.target)}<br><span class="muted">requested by ${esc(j.pending.trigger)} ${esc(ago(j.pending.requested))} · expires in ${span(Math.max(0,(new Date(j.pending.approval.expires)-Date.now())/1000))}</span>${j.allowed?`<p><button class="run" data-decision="approve" data-id="${esc(j.pending.id)}">Approve</button> <button class="run" data-decision="reject" data-id="${esc(j.pending.id)}">Reject</button></p>`:''}</div>`).join('')}`:'')+`<table><tr><th>Job</th><th>Kind</th><th>Target</th><th>Schedule</th><th>Last run</th><th>Result</th><th></th></tr>${list.map(j=>`<tr>
     <td><a href="#job/${encodeURIComponent(j.name)}" data-job="${esc(j.name)}">${esc(j.name)}</a></td><td>${esc(j.kind)}</td><td class="muted">${esc(j.target)}</td>
     <td>${j.every?esc(j.every)+(j.next?'<br><span class="muted">next '+ago(j.next)+'</span>':''):'<span class="muted">on demand</span>'}</td>
     <td>${j.last?esc(ago(j.last.started))+'<br><span class="muted">'+esc(j.last.trigger)+'</span>':'<span class="muted">never</span>'}</td>
     <td>${j.pending?badge('pending'):j.running?badge(j.queued?'queued':'running'):j.last?badge(j.last.status)+' <span class="muted">'+esc(j.last.summary)+'</span>':''}</td>
-    <td>${me.operator?`<button class="run" data-run="${esc(j.name)}" ${j.pending||j.running?'disabled':''}>Run</button>`:''}</td></tr>`).join('')}</table>`;
+    <td>${j.allowed?`<button class="run" data-run="${esc(j.name)}" ${j.pending||j.running?'disabled':''}>Run</button>`:''}</td></tr>`).join('')}</table>`;
   main.querySelectorAll('[data-decision]').forEach(b=>b.onclick=async()=>{
     let comment='';
     if(b.dataset.decision==='reject'){comment=prompt('Comment (optional)');if(comment===null)return}
@@ -99,7 +99,11 @@ async function runs(host){
   if(host)$('#back').onclick=e=>{e.preventDefault();hosts()};
   main.querySelectorAll('[data-run]').forEach(a=>a.onclick=async e=>{e.preventDefault();const r=await api('/api/runs/'+encodeURIComponent(a.dataset.run));main.innerHTML=`<p><a href="#" id="back">← runs</a></p><pre>${esc(JSON.stringify(r,null,2))}</pre>`;$('#back').onclick=e=>{e.preventDefault();runs(host)}});
 }
-const views={jobs,hosts,runs:()=>runs()};
+async function audit(){
+  const list=await api('/api/audit');
+  main.innerHTML=list.length?`<table><tr><th>Time</th><th>User</th><th>Action</th><th>Job</th><th>Run</th><th>Result</th><th>Reason</th><th>Addr</th></tr>${list.map(a=>`<tr><td>${esc(new Date(a.time).toLocaleString())}</td><td>${esc(a.user)}</td><td>${esc(a.action)}</td><td>${esc(a.job)}</td><td>${a.run?`<a href="#run/${encodeURIComponent(a.run)}">${esc(a.run)}</a>`:''}</td><td>${badge(a.ok?'ok':'refused')}</td><td>${esc(a.reason)}</td><td>${esc(a.addr)}</td></tr>`).join('')}</table>`:'<div class="empty">No actions yet</div>';
+}
+const views={jobs,hosts,runs:()=>runs(),audit};
 function show(v){view=v;if(v!=='jobs')hash('');document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));views[v]().catch(e=>main.innerHTML=`<div class="empty">${esc(e.message)}</div>`)}
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>show(b.dataset.v));
 function showError(e){main.innerHTML=`<div class="empty">${esc(e.message)}</div>`}

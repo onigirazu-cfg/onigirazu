@@ -645,6 +645,9 @@ func TestServePause(t *testing.T) {
 	body = do("POST", "/api/pause", `{"reason":"disk"}`, "admins", 500)
 	contains(body, `"paused":true`)
 	contains(body, `not saved`)
+	if entries := s.actions(1); len(entries) != 1 || entries[0].OK || entries[0].Action != "pause" || !strings.Contains(entries[0].Reason, "not saved") {
+		t.Fatalf("a pause that was not saved is logged as such: %+v", entries)
+	}
 	contains(do("GET", "/api/pause", "", "users", 200), `"paused":true`)
 	do("POST", "/api/jobs/drift-site/run", "", "admins", 202)
 	noRun()
@@ -996,5 +999,254 @@ func TestServeNotifyConfig(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestServeOperatorsPerJob(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "serve.yml")
+	config := `auth:
+  token: tok
+  tokens: [{name: ci, token: "${SERVE_CI_TOKEN}", groups: [tier2]}]
+  user_header: X-User
+  groups_header: X-Groups
+  operators: [admins, tier0]
+jobs:
+  - name: cattle
+    playbook: cattle.yml
+  - name: dc
+    playbook: dc.yml
+    approval: required
+    operators: [tier0]
+  - name: web
+    playbook: web.yml
+    operators: [ci, alice]
+`
+	t.Setenv("SERVE_CI_TOKEN", "citok")
+	if err := os.WriteFile(path, []byte(config), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := loadServeConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.DataDir = filepath.Join(dir, "data")
+	s, err := newServer(cfg, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := contextTimeout(t)
+	s.runJob = func(_ *ServeJob) (*JobResult, error) { return &JobResult{Status: "ok"}, nil }
+	done := make(chan struct{})
+	go func() { defer close(done); s.worker(ctx) }()
+	defer func() { cancel(); <-done }()
+	handler := s.mux()
+	var want []serveAction
+	do := func(method, route, user, groups, token, body string, code int) []byte {
+		t.Helper()
+		req := httptest.NewRequest(method, route, strings.NewReader(body))
+		req.RemoteAddr = "[2001:db8::1]:1234"
+		req.Header.Set("X-User", user)
+		req.Header.Set("X-Groups", groups)
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+		if w.Code != code {
+			t.Fatalf("%s %s as %s/%s: %d %s", method, route, user, token, w.Code, w.Body.String())
+		}
+		return w.Body.Bytes()
+	}
+	post := func(route, user, groups, token, body string, code int) string {
+		t.Helper()
+		data := do("POST", route, user, groups, token, body, code)
+		var response struct {
+			Run   string `json:"run"`
+			ID    string `json:"id"`
+			Error string `json:"error"`
+		}
+		if err := json.Unmarshal(data, &response); err != nil {
+			t.Fatal(err)
+		}
+		a := serveAction{User: user, Action: route[strings.LastIndex(route, "/")+1:], Run: response.Run, OK: code < 400, Reason: response.Error, Addr: "2001:db8::1"}
+		if token == "tok" {
+			a.User = "token"
+		} else if token == "citok" {
+			a.User = "ci"
+		}
+		if strings.HasPrefix(route, "/api/jobs/") {
+			a.Job = strings.Split(route, "/")[3]
+		}
+		if strings.HasPrefix(route, "/api/runs/") {
+			a.Run, a.Job = strings.Split(route, "/")[3], "dc"
+		}
+		if code != 401 {
+			want = append(want, a)
+		}
+		if code < 400 && ((response.Run != "" && !strings.Contains(string(data), `"pending":`)) || strings.HasSuffix(route, "/approve")) {
+			deadline := time.Now().Add(3 * time.Second)
+			for {
+				s.mu.Lock()
+				r := s.resultByID(a.Job, a.Run)
+				finished := r != nil && r.Status == "ok"
+				s.mu.Unlock()
+				if finished {
+					break
+				}
+				if time.Now().After(deadline) {
+					t.Fatal("run did not finish")
+				}
+				time.Sleep(time.Millisecond)
+			}
+		}
+		return response.Run
+	}
+	req := httptest.NewRequest("GET", "/api/jobs", nil)
+	req.Header.Set("X-User", "alice")
+	req.Header.Set("X-Groups", "admins|Team, users")
+	id, err := s.identify(req)
+	if err != nil || id.User != "alice" || !id.Operator || !slices.Equal(id.Groups, []string{"admins", "Team", "users"}) || !id.matches([]string{"TEAM"}) || !id.matches([]string{"ALICE"}) {
+		t.Fatalf("proxy identity: %+v %v", id, err)
+	}
+	post("/api/jobs/cattle/run", "alice", "admins", "", "", 202)
+	post("/api/jobs/dc/run", "alice", "admins", "", "", 403)
+	post("/api/jobs/web/run", "alice", "admins", "", "", 202)
+	run := post("/api/jobs/dc/run", "bob", "tier0,admins", "", "", 202)
+	post("/api/runs/"+run+"/approve", "alice", "admins", "", "", 403)
+	post("/api/runs/"+run+"/approve", "bob", "tier0,admins", "", `{"comment":"go"}`, 200)
+	want[len(want)-1].Reason = "go"
+	post("/api/jobs/cattle/run", "", "", "tok", "", 202)
+	post("/api/jobs/web/run", "", "", "tok", "", 403)
+	post("/api/jobs/web/run", "", "", "citok", "", 202)
+	post("/api/jobs/dc/run", "", "", "citok", "", 403)
+	data := do("GET", "/api/jobs", "alice", "admins", "", "", 200)
+	var jobs []jobView
+	if err := json.Unmarshal(data, &jobs); err != nil {
+		t.Fatal(err)
+	}
+	if len(jobs) != 3 || !jobs[0].Allowed || jobs[1].Allowed || !jobs[2].Allowed || !slices.Equal(jobs[1].Operators, []string{"tier0"}) {
+		t.Fatalf("jobs: %s", data)
+	}
+	// A named token's groups can match a job, but a viewer's user name cannot grant operator access.
+	if !s.allowed(serveIdentity{User: "ci", Groups: []string{"TIER0"}, Operator: true}, &cfg.Jobs[1]) || s.allowed(serveIdentity{User: "alice"}, &cfg.Jobs[2]) {
+		t.Fatal("job matching")
+	}
+	// Token identities take precedence over proxy headers.
+	req.Header.Set("Authorization", "Bearer citok")
+	id, err = s.identify(req)
+	if err != nil || id.User != "ci" || !slices.Equal(id.Groups, []string{"tier2"}) {
+		t.Fatalf("token identity: %+v %v", id, err)
+	}
+	run = post("/api/jobs/dc/run", "bob", "tier0", "", "", 202)
+	post("/api/runs/"+run+"/reject", "alice", "admins", "", "", 403)
+	post("/api/runs/"+run+"/reject", "bob", "tier0", "", `{"comment":"wait"}`, 200)
+	want[len(want)-1].Reason = "wait"
+	post("/api/jobs/web/run", "viewer", "users", "", "", 403)
+	post("/api/pause", "viewer", "users", "", "", 403)
+	post("/api/resume", "viewer", "users", "", "", 403)
+	post("/api/runs/"+run+"/approve", "viewer", "users", "", "", 403)
+	want[len(want)-1].Job = ""
+	post("/api/runs/"+run+"/reject", "viewer", "users", "", "", 403)
+	want[len(want)-1].Job = ""
+	post("/api/pause", "alice", "admins", "", `{"reason":"maintenance"}`, 200)
+	want[len(want)-1].Reason = "maintenance"
+	post("/api/resume", "alice", "admins", "", "", 200)
+	post("/api/jobs/web/run", "", "", "", "", 401)
+	data = do("GET", "/api/audit", "viewer", "users", "", "", 200)
+	var actions []serveAction
+	if err := json.Unmarshal(data, &actions); err != nil {
+		t.Fatal(err)
+	}
+	if len(actions) != len(want) {
+		t.Fatalf("audit count %d, want %d: %s", len(actions), len(want), data)
+	}
+	for i, a := range actions {
+		expected := want[len(want)-1-i]
+		if a.Time.IsZero() || a.Time.Location() != time.UTC {
+			t.Fatalf("audit time: %v", a.Time)
+		}
+		if i > 0 && actions[i-1].Time.Before(a.Time) {
+			t.Fatal("audit order")
+		}
+		a.Time = time.Time{}
+		if a != expected {
+			t.Fatalf("audit %d: %+v, want %+v", i, a, expected)
+		}
+	}
+	data = do("GET", "/api/audit?limit=2", "viewer", "users", "", "", 200)
+	if err := json.Unmarshal(data, &actions); err != nil || len(actions) != 2 {
+		t.Fatalf("audit limit: %s (%v)", data, err)
+	}
+	data, err = os.ReadFile(filepath.Join(cfg.DataDir, "audit.log"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	if len(lines) != len(want) {
+		t.Fatalf("audit lines: %d", len(lines))
+	}
+	for _, line := range lines {
+		if !json.Valid([]byte(line)) {
+			t.Fatalf("invalid line: %s", line)
+		}
+	}
+	info, err := os.Stat(filepath.Join(cfg.DataDir, "audit.log"))
+	if err != nil || info.Mode().Perm() != 0o600 {
+		t.Fatalf("audit mode: %v %v", info, err)
+	}
+	do("POST", "/api/runs/unknown/approve", "alice", "admins", "", "", 404)
+	for _, tokens := range []string{`[{token: tok}]`, `[{name: ci}]`, `[{name: ci, token: tok}, {name: ci, token: other}]`, `[{name: ci, token: "${SERVE_MISSING_TOKEN}"}]`} {
+		t.Run(tokens, func(t *testing.T) {
+			if err := os.WriteFile(path, []byte("auth:\n  tokens: "+tokens+"\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := loadServeConfig(path); err == nil {
+				t.Fatal("accepted invalid named token")
+			}
+		})
+	}
+	// A configuration with only named tokens still requires an identity.
+	s.cfg.Auth = ServeAuth{Tokens: []ServeToken{{Name: "ci", Token: "citok"}}}
+	if _, err := s.identify(httptest.NewRequest("GET", "/api/jobs", nil)); !errors.Is(err, errServeAuth) {
+		t.Fatalf("named-only auth: %v", err)
+	}
+}
+
+func TestServeAudit(t *testing.T) {
+	var out strings.Builder
+	s, err := newServer(&ServeConfig{DataDir: t.TempDir()}, &out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := s.actions(100); len(got) != 0 {
+		t.Fatalf("empty audit: %v", got)
+	}
+	for i := range 1005 {
+		s.logAction(serveAction{User: "ci", Action: "run", Job: "web", Run: fmt.Sprint(i), OK: true, Reason: strings.Repeat("x", 2000)}) // long lines: the tail read cuts the first one
+	}
+	if out.Len() != 0 {
+		t.Fatalf("successful actions printed: %s", out.String())
+	}
+	s.logAction(serveAction{User: "alice", Action: "run", Job: "dc", Reason: "not an operator of this job"})
+	if out.String() != "serve: audit: alice run dc refused: not an operator of this job\n" {
+		t.Fatalf("refusal output: %s", out.String())
+	}
+	handler := s.mux()
+	for _, tc := range []struct {
+		query string
+		count int
+	}{
+		{"", 100}, {"?limit=2", 2}, {"?limit=5000", 1000}, {"?limit=bad", 100}, {"?limit=-1", 100},
+	} {
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, httptest.NewRequest("GET", "/api/audit"+tc.query, nil))
+		var actions []serveAction
+		if err := json.Unmarshal(w.Body.Bytes(), &actions); err != nil || w.Code != 200 || len(actions) != tc.count {
+			t.Fatalf("audit %s: %d %s (%v)", tc.query, w.Code, w.Body.String(), err)
+		}
+		if actions[0].OK || actions[0].User != "alice" || actions[1].Run != "1004" {
+			t.Fatalf("audit tail: %v", actions[:2])
+		}
 	}
 }

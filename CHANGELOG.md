@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `onigirazu serve`: `operators:` on a job narrows who may run, approve or reject it (by user or group; bearer tokens can be named with groups in `auth.tokens`); every operator action and every refused attempt is written to `data_dir/audit.log` and shown by `GET /api/audit` and the Audit tab
 - `onigirazu serve`: `notify:` targets per job and for the whole server post a Mattermost message (or generic JSON) when a run waits for approval, starts, succeeds, finds drift, fails, is rejected or expires — job, hosts, summary and a link to the run page (`url:`)
 - `onigirazu serve`: a global pause (`POST /api/pause` with a reason, `POST /api/resume`, a button on the page): no run starts while paused, queued and approved runs wait, the state survives a restart (an unreadable `pause.json` starts the server paused) and is exposed as `onigirazu_serve_paused`
 - `onigirazu serve`: a job with `approval: required` creates a pending run that executes only after `POST /api/runs/{id}/approve` by an operator, or is rejected, or expires after `approval_timeout`; the web page shows pending runs with Approve/Reject; the run record keeps who decided and when
