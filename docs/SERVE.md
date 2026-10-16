@@ -84,8 +84,9 @@ Limited runs: `POST /api/jobs/{name}/run` accepts an optional JSON body
 `adhoc.limit: true` and list each caller-set variable in `adhoc.extra_vars`. Unfilled
 parameters keep the job's values; caller variables override its defaults. The limit is
 resolved against the job's inventory (or the global inventory); no matching host or any
-host outside the job's own `limit` returns `400`. Unknown fields and invalid bodies also
-return `400`. The record keeps `params.limit`, `params.extra_vars` and sorted
+host outside the job's own `limit` returns `400`, as does a pattern with characters a host
+pattern cannot have (letters, digits and `. _ - * : , ! & ~ [ ] @` are allowed). Unknown
+fields and invalid bodies also return `400`. The record keeps `params.limit`, `params.extra_vars` and sorted
 `params.hosts`; the page and messages show the parameters and resolved hosts. The run
 executes on those host names, not on the pattern, and checks them against the job's limit
 again when it starts: an inventory that changed while the run waited for approval cannot

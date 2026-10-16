@@ -1372,6 +1372,8 @@ func TestServeAdhocRun(t *testing.T) {
 		{"patch", `{"extra_vars":{"serial":"1"}}`, "not allowed"},
 		{"patch", `{"limit":5}`, ""},
 		{"patch", `{"hosts":["web1"]}`, "unknown field"},
+		{"patch", `{"limit":"web1\nforged log line"}`, "characters a host pattern cannot have"},
+		{"patch", `{"limit":"web1; rm -rf /"}`, "characters a host pattern cannot have"},
 		{"patch", `{} {}`, "one JSON body"},
 		{"patch", `{"extra_vars":{"reboot":true}}`, ""},
 		{"fixed", `{"limit":"web1"}`, "does not accept a limit"},

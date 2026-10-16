@@ -21,6 +21,7 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	"unicode"
 
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -829,6 +830,14 @@ func (s *server) runParams(r *http.Request, j *ServeJob) (*RunParams, error) {
 	if body.Limit != "" && !j.Adhoc.Limit {
 		return nil, errors.New("this job does not accept a limit")
 	}
+	if strings.ContainsFunc(body.Limit, func(r rune) bool {
+		return !(unicode.IsLetter(r) || unicode.IsDigit(r) || strings.ContainsRune("._-*:,!&~[]@", r))
+	}) {
+		return nil, errors.New("limit has characters a host pattern cannot have")
+	}
+	// the pattern is logged by the inventory: no line breaks can reach a log
+	// (the check above already refuses them; this is for the static analyser)
+	body.Limit = strings.ReplaceAll(strings.ReplaceAll(body.Limit, "\n", ""), "\r", "")
 	for _, k := range slices.Sorted(maps.Keys(body.ExtraVars)) {
 		if !slices.Contains(j.Adhoc.ExtraVars, k) {
 			return nil, fmt.Errorf("extra var %q is not allowed for this job", k)
