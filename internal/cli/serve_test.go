@@ -15,6 +15,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/onigirazu-cfg/onigirazu/internal/logger"
 )
 
 const testServeYML = `
@@ -339,10 +341,10 @@ func TestServeApprovalQueueFull(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.queue = make(chan queued)
-	if _, err := s.request(&cfg.Jobs[1], "schedule"); err != errQueueFull || len(s.results["drift"]) != 0 || s.running["drift"] {
+	if _, err := s.request(&cfg.Jobs[1], "schedule", nil); err != errQueueFull || len(s.results["drift"]) != 0 || s.running["drift"] {
 		t.Fatalf("full queue stored a request: %v", err)
 	}
-	pending, err := s.request(&cfg.Jobs[0], "schedule")
+	pending, err := s.request(&cfg.Jobs[0], "schedule", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -363,7 +365,7 @@ func TestServeApprovalQueueFull(t *testing.T) {
 	if _, err := s.approve(pending.ID, "denys", "late"); !errors.Is(err, errRunExpired) || s.pending["patch"] != nil || s.running["patch"] || s.results["patch"][0].Status != "expired" {
 		t.Fatalf("late approval: %v %+v", err, s.results["patch"][0])
 	}
-	pending, err = s.request(&cfg.Jobs[0], "schedule")
+	pending, err = s.request(&cfg.Jobs[0], "schedule", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -400,7 +402,7 @@ func TestServeRunIDsUnique(t *testing.T) {
 	}
 	seen := map[string]bool{}
 	for i := 0; i < 5; i++ { // request + reject within one second, retain 1 prunes the rejected records
-		r, err := s.request(&cfg.Jobs[0], "schedule")
+		r, err := s.request(&cfg.Jobs[0], "schedule", nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -423,7 +425,7 @@ func TestServeWorkerError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	requested, err := s.request(&cfg.Jobs[0], "schedule")
+	requested, err := s.request(&cfg.Jobs[0], "schedule", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -601,12 +603,12 @@ func TestServePause(t *testing.T) {
 	waitRun("patch")
 	// Pending runs still expire during a pause, including scheduled requests.
 	do("POST", "/api/pause", "", "admins", 200)
-	pending, err := s.request(s.job("ssh"), "schedule")
+	pending, err := s.request(s.job("ssh"), "schedule", nil)
 	if err != nil || pending.Status != "queued" {
 		t.Fatalf("scheduled while paused: %+v %v", pending, err)
 	}
 	noRun()
-	pending, err = s.request(s.job("patch"), "schedule")
+	pending, err = s.request(s.job("patch"), "schedule", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -939,7 +941,7 @@ func TestServeNotifyRouting(t *testing.T) {
 				cancel()
 				return &JobResult{Status: tc.status, Report: json.RawMessage(`{"secret":"report"}`)}, tc.err
 			}
-			if _, err := s.request(&cfg.Jobs[0], "schedule"); err != nil {
+			if _, err := s.request(&cfg.Jobs[0], "schedule", nil); err != nil {
 				t.Fatal(err)
 			}
 			s.worker(ctx)
@@ -1248,5 +1250,279 @@ func TestServeAudit(t *testing.T) {
 		if actions[0].OK || actions[0].User != "alice" || actions[1].Run != "1004" {
 			t.Fatalf("audit tail: %v", actions[:2])
 		}
+	}
+}
+
+func TestServeAdhocRun(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "serve.yml")
+	config := `jobs:
+  - name: patch
+    kind: apply
+    playbook: patch.yml
+    inventory: hosts.yml
+    limit: web
+    extra_vars: {reboot: "false", keep: default}
+    adhoc: {limit: true, extra_vars: [reboot]}
+  - name: fixed
+    kind: apply
+    playbook: patch.yml
+  - name: wave
+    kind: apply
+    playbook: patch.yml
+    inventory: hosts.yml
+    adhoc: {limit: true}
+    approval: required
+  - name: local
+    kind: apply
+    playbook: patch.yml
+    adhoc: {limit: true}
+`
+	inventory := "web:\n  hosts:\n    web1: {}\n    web2: {}\ndb:\n  hosts:\n    db1: {}\n"
+	for name, data := range map[string]string{"serve.yml": config, "hosts.yml": inventory, "inventory.yml": inventory, "patch.yml": "- hosts: all\n  tasks: []\n"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(data), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cfg, err := loadServeConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.DataDir = filepath.Join(dir, "data")
+	s, err := newServer(cfg, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ran := make(chan ServeJob, 8)
+	s.runJob = func(j *ServeJob) (*JobResult, error) {
+		ran <- *j
+		return &JobResult{Started: time.Now().UTC(), Status: "ok"}, nil
+	}
+	ctx, cancel := contextTimeout(t)
+	done := make(chan struct{})
+	go func() { defer close(done); s.worker(ctx) }()
+	defer func() { cancel(); <-done; s.notifyWait.Wait() }()
+	handler := s.mux()
+	do := func(method, path, body string, code int) []byte {
+		t.Helper()
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, httptest.NewRequest(method, path, strings.NewReader(body)))
+		if w.Code != code {
+			t.Fatalf("%s %s: %d %s, want %d", method, path, w.Code, w.Body.String(), code)
+		}
+		return w.Body.Bytes()
+	}
+	post := func(job, body string) string {
+		t.Helper()
+		data := do("POST", "/api/jobs/"+job+"/run", body, 202)
+		var response map[string]string
+		if err := json.Unmarshal(data, &response); err != nil {
+			t.Fatal(err)
+		}
+		return response["run"]
+	}
+	wait := func(name string) ServeJob {
+		t.Helper()
+		var job ServeJob
+		select {
+		case job = <-ran:
+			if job.Name != name {
+				t.Fatalf("ran %s, want %s", job.Name, name)
+			}
+		case <-ctx.Done():
+			t.Fatal("job did not run")
+		}
+		for {
+			s.mu.Lock()
+			busy := s.running[name]
+			s.mu.Unlock()
+			if !busy {
+				return job
+			}
+			select {
+			case <-ctx.Done():
+				t.Fatal("job did not finish")
+			case <-time.After(time.Millisecond):
+			}
+		}
+	}
+	id := post("patch", `{"limit":"web1","extra_vars":{"reboot":"true"}}`)
+	job := wait("patch")
+	if job.Limit != "web1" || job.ExtraVars["reboot"] != "true" || job.ExtraVars["keep"] != "default" {
+		t.Fatalf("effective job: %+v", job)
+	}
+	if cfg.Jobs[0].Limit != "web" || cfg.Jobs[0].ExtraVars["reboot"] != "false" {
+		t.Fatalf("configured job changed: %+v", cfg.Jobs[0])
+	}
+	data := do("GET", "/api/results/"+id, "", 200)
+	var result JobResult
+	if err := json.Unmarshal(data, &result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Params == nil || result.Params.Limit != "web1" || result.Params.ExtraVars["reboot"] != "true" || !slices.Equal(result.Params.Hosts, []string{"web1"}) {
+		t.Fatalf("params: %s", data)
+	}
+	actions := s.actions(100)
+	if len(actions) != 1 || actions[0].Run != id || actions[0].Reason != "limit=web1 reboot=true" {
+		t.Fatalf("actions: %+v", actions)
+	}
+	for _, tc := range []struct{ job, body, message string }{
+		{"patch", `{"limit":"db1"}`, "outside the job's limit"},
+		{"patch", `{"limit":"nope"}`, "matches no host"},
+		{"patch", `{"extra_vars":{"serial":"1"}}`, "not allowed"},
+		{"patch", `{"limit":5}`, ""},
+		{"patch", `{"hosts":["web1"]}`, "unknown field"},
+		{"patch", `{"limit":"web1\nforged log line"}`, "characters a host pattern cannot have"},
+		{"patch", `{"limit":"web1; rm -rf /"}`, "characters a host pattern cannot have"},
+		{"patch", `{} {}`, "one JSON body"},
+		{"patch", `{"extra_vars":{"reboot":true}}`, ""},
+		{"fixed", `{"limit":"web1"}`, "does not accept a limit"},
+	} {
+		data = do("POST", "/api/jobs/"+tc.job+"/run", tc.body, 400)
+		if !strings.Contains(string(data), tc.message) {
+			t.Fatalf("%s: %s", tc.body, data)
+		}
+	}
+	post("fixed", "")
+	wait("fixed")
+	id = post("wave", `{"limit":"db1"}`)
+	data = do("GET", "/api/jobs", "", 200)
+	var jobs []jobView
+	if err := json.Unmarshal(data, &jobs); err != nil {
+		t.Fatal(err)
+	}
+	if jobs[0].Adhoc == nil || !jobs[0].Adhoc.Limit || !slices.Equal(jobs[0].Adhoc.ExtraVars, []string{"reboot"}) || jobs[1].Adhoc != nil {
+		t.Fatalf("adhoc view: %s", data)
+	}
+	if jobs[2].Pending == nil || jobs[2].Pending.Params == nil || !slices.Equal(jobs[2].Pending.Params.Hosts, []string{"db1"}) {
+		t.Fatalf("pending view: %s", data)
+	}
+	select {
+	case j := <-ran:
+		t.Fatalf("pending ran: %s", j.Name)
+	default:
+	}
+	do("POST", "/api/runs/"+id+"/approve", "", 200)
+	if job := wait("wave"); job.Limit != "db1" {
+		t.Fatalf("approved limit: %s", job.Limit)
+	}
+	// A group resolves to sorted hosts; variables alone keep the job's limit.
+	hosts, err := s.resolveLimit(&cfg.Jobs[0], "web")
+	if err != nil || !slices.Equal(hosts, []string{"web1", "web2"}) {
+		t.Fatalf("group hosts: %v %v", hosts, err)
+	}
+	post("patch", `{"extra_vars":{"reboot":"true"}}`)
+	if job := wait("patch"); job.Limit != "web" || job.ExtraVars["reboot"] != "true" {
+		t.Fatalf("variables only: %+v", job)
+	}
+	post("patch", "{}")
+	if job := wait("patch"); job.Limit != "web" || job.ExtraVars["reboot"] != "false" {
+		t.Fatalf("plain run: %+v", job)
+	}
+	for _, event := range []string{eventPending, eventStart} {
+		body, err := s.notifyBody(event, &cfg.Jobs[0], &result, "mattermost")
+		if err != nil || !strings.Contains(string(body), "hosts: web1") || !strings.Contains(string(body), "vars: reboot=true") {
+			t.Fatalf("notification: %s %v", body, err)
+		}
+	}
+	// a group runs as the validated host names, not as the pattern
+	post("patch", `{"limit":"web"}`)
+	if job := wait("patch"); job.Limit != "web1,web2" {
+		t.Fatalf("group limit: %s", job.Limit)
+	}
+	// a job without an inventory finds the one next to its playbook, as apply does
+	post("local", `{"limit":"db1"}`)
+	if job := wait("local"); job.Limit != "db1" {
+		t.Fatalf("discovered inventory: %s", job.Limit)
+	}
+	// an inventory that changed while the run waited cannot widen it: the hosts are checked again at start
+	for _, tc := range []struct{ limit, inventory string }{
+		{"web2", "web:\n  hosts:\n    web1: {}\n"},                                         // the host is gone
+		{"web1", "web1:\n  hosts:\n    web1: {}\n    db1: {}\n"},                           // a group now carries the host's name
+		{"db1", "db:\n  hosts:\n    db1: {}\n    db2: {}\nweb:\n  hosts:\n    web1: {}\n"}, // unchanged for db1: runs
+	} {
+		if err := os.WriteFile(filepath.Join(dir, "hosts.yml"), []byte(inventory), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		id = post("wave", `{"limit":"`+tc.limit+`"}`)
+		if err := os.WriteFile(filepath.Join(dir, "hosts.yml"), []byte(tc.inventory), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		do("POST", "/api/runs/"+id+"/approve", "", 200)
+		if tc.limit == "db1" {
+			if job := wait("wave"); job.Limit != "db1" {
+				t.Fatalf("unchanged host: %s", job.Limit)
+			}
+			continue
+		}
+		for {
+			s.mu.Lock()
+			r := s.resultByID("wave", id)
+			status, summary := r.Status, r.Summary
+			s.mu.Unlock()
+			if status == "error" {
+				if !strings.Contains(summary, "no longer fit") {
+					t.Fatalf("changed inventory: %s", summary)
+				}
+				break
+			}
+			select {
+			case j := <-ran:
+				t.Fatalf("ran on a changed inventory (%s): %+v", tc.limit, j)
+			case <-ctx.Done():
+				t.Fatal("run did not end")
+			case <-time.After(time.Millisecond):
+			}
+		}
+	}
+}
+
+func TestServeInventorySources(t *testing.T) {
+	lg, err := logger.NewEnhancedLogger("error", "text", io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := inventorySources(lg, "", nil); !slices.Equal(got, []string{"localhost,"}) { // a comply job without inventory
+		t.Fatalf("no playbook, no paths: %v", got)
+	}
+	if got := inventorySources(lg, "/nowhere/x.yml", []string{"a", "b"}); !slices.Equal(got, []string{"a", "b"}) {
+		t.Fatalf("paths win: %v", got)
+	}
+	if got := inventorySources(lg, filepath.Join(t.TempDir(), "x.yml"), nil); !slices.Equal(got, []string{"localhost,"}) {
+		t.Fatalf("nothing next to the playbook: %v", got)
+	}
+}
+
+func TestServeExecuteRestoresGlobals(t *testing.T) {
+	// a job's inventory and state file are set for its run only: the next
+	// job must not inherit them (nor must a limit be validated against them)
+	prevInventory, prevState := inventoryPaths, statePath
+	defer func() { inventoryPaths, statePath = prevInventory, prevState }()
+	inventoryPaths, statePath = []string{"orig,"}, ""
+	cfg := &ServeConfig{DataDir: t.TempDir(), Retain: 5}
+	s, err := newServer(cfg, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(s.inventory, []string{"orig,"}) {
+		t.Fatalf("server inventory: %v", s.inventory)
+	}
+	j := &ServeJob{Name: "x", Kind: "apply", Playbook: filepath.Join(cfg.DataDir, "missing.yml"), Inventory: filepath.Join(cfg.DataDir, "missing-hosts.yml")}
+	if _, err := s.execute(j); err == nil {
+		t.Fatal("a missing playbook must fail")
+	}
+	if !slices.Equal(inventoryPaths, []string{"orig,"}) || statePath != "" {
+		t.Fatalf("globals not restored: %v %q", inventoryPaths, statePath)
+	}
+	if _, err := os.Stat(filepath.Join(cfg.DataDir, "state")); err != nil {
+		t.Fatalf("state dir: %v", err)
+	}
+}
+
+func TestServeExtraVarsArg(t *testing.T) {
+	// a caller's value with spaces or = must stay one variable (a k=v list is split on spaces)
+	vars, err := parseExtraVars([]string{extraVarsArg(map[string]string{"reboot": "true ansible_host=evil", "serial": "1"})})
+	if err != nil || len(vars) != 2 || vars["reboot"] != "true ansible_host=evil" || vars["serial"] != "1" {
+		t.Fatalf("extra vars: %v %v", vars, err)
 	}
 }
