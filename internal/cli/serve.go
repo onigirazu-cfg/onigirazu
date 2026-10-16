@@ -15,6 +15,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -46,14 +47,24 @@ type ServeConfig struct {
 	ApprovalTimeout time.Duration  `yaml:"approval_timeout"` // how long a pending run waits, default 1h
 }
 
-// ServeAuth: a bearer token is an operator; a reverse proxy's user header is
-// a viewer, an operator when one of its groups is in operators. Without any
-// of them everything is open — put a proxy in front.
+// ServeAuth: a bearer token is an operator (the plain one is the user
+// "token", named ones carry a name and groups a job's operators list can
+// match); a reverse proxy's user header is a viewer, an operator when one of
+// its groups is in operators. Without any of them everything is open — put a
+// proxy in front.
 type ServeAuth struct {
-	Token        string   `yaml:"token"` // ${VAR} expanded
-	UserHeader   string   `yaml:"user_header"`
-	GroupsHeader string   `yaml:"groups_header"`
-	Operators    []string `yaml:"operators"`
+	Token        string       `yaml:"token"` // ${VAR} expanded
+	Tokens       []ServeToken `yaml:"tokens"`
+	UserHeader   string       `yaml:"user_header"`
+	GroupsHeader string       `yaml:"groups_header"`
+	Operators    []string     `yaml:"operators"`
+}
+
+// ServeToken is a named bearer identity
+type ServeToken struct {
+	Name   string   `yaml:"name"`
+	Token  string   `yaml:"token"`
+	Groups []string `yaml:"groups"`
 }
 
 // ServeMetric is an optional push of every job's metrics
@@ -75,6 +86,7 @@ type ServeJob struct {
 	Every           time.Duration     `yaml:"every"`            // 0: only on demand
 	Approval        string            `yaml:"approval"`         // required: a run waits for an operator
 	ApprovalTimeout time.Duration     `yaml:"approval_timeout"` // 0: the server's
+	Operators       []string          `yaml:"operators"`        // users or groups that may run, approve, reject; empty: every operator
 	Notify          []NotifyTarget    `yaml:"notify"`
 	NotifyOK        bool              `yaml:"notify_always"`
 	FailOn          string            `yaml:"fail_on"` // comply
@@ -201,6 +213,19 @@ func loadServeConfig(path string) (*ServeConfig, error) {
 		cfg.DataDir = filepath.Join(home, ".onigirazu", "serve")
 	}
 	cfg.Auth.Token = os.ExpandEnv(cfg.Auth.Token)
+	tokenNames := map[string]bool{}
+	for i := range cfg.Auth.Tokens {
+		t := &cfg.Auth.Tokens[i]
+		t.Token = os.ExpandEnv(t.Token)
+		if strings.TrimSpace(t.Name) == "" || t.Token == "" {
+			return nil, fmt.Errorf("auth.tokens: entry %d needs a name and a value", i+1)
+		}
+		name := strings.ToLower(t.Name)
+		if tokenNames[name] {
+			return nil, fmt.Errorf("auth.tokens: duplicate name %q", t.Name)
+		}
+		tokenNames[name] = true
+	}
 	if err := validateNotifyTargets(cfg.Notify); err != nil {
 		return nil, fmt.Errorf("notify: %w", err)
 	}
@@ -255,6 +280,7 @@ func loadServeConfig(path string) (*ServeConfig, error) {
 type server struct {
 	cfg     *ServeConfig
 	out     io.Writer
+	auditMu sync.Mutex
 	mu      sync.Mutex
 	results map[string][]*JobResult // job -> newest first
 	running map[string]bool         // job is pending, queued or running
@@ -770,6 +796,7 @@ func (s *server) pushMetrics(text string) {
 
 type serveIdentity struct {
 	User     string
+	Groups   []string
 	Operator bool
 }
 
@@ -780,21 +807,26 @@ var errServeAuth = errors.New("unauthorized")
 // configured (everything allowed)
 func (s *server) identify(r *http.Request) (serveIdentity, error) {
 	a := s.cfg.Auth
-	if a.Token == "" && a.UserHeader == "" {
+	if a.Token == "" && len(a.Tokens) == 0 && a.UserHeader == "" {
 		return serveIdentity{User: "anonymous", Operator: true}, nil
 	}
-	if a.Token != "" {
+	if a.Token != "" || len(a.Tokens) > 0 {
 		got := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 		if got != "" && subtle.ConstantTimeCompare([]byte(got), []byte(a.Token)) == 1 {
 			return serveIdentity{User: "token", Operator: true}, nil
+		}
+		for _, t := range a.Tokens {
+			if got != "" && subtle.ConstantTimeCompare([]byte(got), []byte(t.Token)) == 1 {
+				return serveIdentity{User: t.Name, Groups: t.Groups, Operator: true}, nil
+			}
 		}
 	}
 	if a.UserHeader != "" {
 		if user := r.Header.Get(a.UserHeader); user != "" {
 			id := serveIdentity{User: user}
 			if a.GroupsHeader != "" {
-				groups := strings.FieldsFunc(r.Header.Get(a.GroupsHeader), func(c rune) bool { return c == ',' || c == '|' || c == ' ' })
-				for _, g := range groups {
+				id.Groups = strings.FieldsFunc(r.Header.Get(a.GroupsHeader), func(c rune) bool { return c == ',' || c == '|' || c == ' ' })
+				for _, g := range id.Groups {
 					for _, op := range a.Operators {
 						if strings.EqualFold(g, op) {
 							id.Operator = true
@@ -806,6 +838,26 @@ func (s *server) identify(r *http.Request) (serveIdentity, error) {
 		}
 	}
 	return serveIdentity{}, errServeAuth
+}
+
+// matches: the user name or one of the groups is in names
+func (id serveIdentity) matches(names []string) bool {
+	for _, name := range names {
+		if strings.EqualFold(id.User, name) {
+			return true
+		}
+		for _, group := range id.Groups {
+			if strings.EqualFold(group, name) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// allowed: an operator, and one the job's operators list admits
+func (s *server) allowed(id serveIdentity, j *ServeJob) bool {
+	return id.Operator && (len(j.Operators) == 0 || id.matches(j.Operators))
 }
 
 // writePause answers a pause/resume: the state, with 500 and the error
@@ -837,6 +889,11 @@ func (s *server) mux() *http.ServeMux {
 				return
 			}
 			if operator && !id.Operator {
+				if r.Method == http.MethodPost {
+					a := s.requestAction(r, id)
+					a.Reason = "operators only"
+					s.logAction(a)
+				}
 				writeJSON(w, http.StatusForbidden, map[string]string{"error": "operators only"})
 				return
 			}
@@ -868,10 +925,19 @@ func (s *server) mux() *http.ServeMux {
 					Reason string `json:"reason"`
 				}
 				if err := json.NewDecoder(r.Body).Decode(&body); err != nil && !errors.Is(err, io.EOF) {
+					a := s.requestAction(r, id)
+					a.Reason = "invalid JSON"
+					s.logAction(a)
 					writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
 					return
 				}
 				p, err := s.setPause(true, id.User, body.Reason)
+				a := s.requestAction(r, id)
+				a.OK, a.Reason = err == nil, body.Reason
+				if err != nil { // the pause holds in memory only: the log says so
+					a.Reason = err.Error()
+				}
+				s.logAction(a)
 				writePause(w, p, err)
 			})(w, r)
 		default:
@@ -884,39 +950,59 @@ func (s *server) mux() *http.ServeMux {
 			return
 		}
 		p, err := s.setPause(false, id.User, "")
+		a := s.requestAction(r, id)
+		a.OK = err == nil
+		if err != nil {
+			a.Reason = err.Error()
+		}
+		s.logAction(a)
 		writePause(w, p, err)
 	}))
-	mux.HandleFunc("/api/jobs", auth(false, func(w http.ResponseWriter, _ *http.Request, _ serveIdentity) {
-		writeJSON(w, http.StatusOK, s.jobsView())
+	mux.HandleFunc("/api/jobs", auth(false, func(w http.ResponseWriter, _ *http.Request, id serveIdentity) {
+		writeJSON(w, http.StatusOK, s.jobsView(id))
 	}))
 	mux.HandleFunc("/api/jobs/", auth(false, func(w http.ResponseWriter, r *http.Request, id serveIdentity) {
 		rest := strings.TrimPrefix(r.URL.Path, "/api/jobs/")
 		name, action, _ := strings.Cut(rest, "/")
 		j := s.job(name)
 		if j == nil {
+			if action == "run" && r.Method == http.MethodPost {
+				a := s.requestAction(r, id)
+				a.Reason = "no such job"
+				s.logAction(a)
+			}
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "no such job"})
 			return
 		}
 		switch {
 		case action == "run" && r.Method == http.MethodPost:
-			if !id.Operator {
-				writeJSON(w, http.StatusForbidden, map[string]string{"error": "operators only"})
-				return
-			}
-			run, err := s.request(j, "api:"+id.User)
-			if err != nil {
-				code := http.StatusServiceUnavailable
-				if errors.Is(err, errJobBusy) {
-					code = http.StatusConflict
+			auth(true, func(w http.ResponseWriter, r *http.Request, id serveIdentity) {
+				a := s.requestAction(r, id)
+				if !s.allowed(id, j) {
+					a.Reason = "not an operator of this job"
+					s.logAction(a)
+					writeJSON(w, http.StatusForbidden, map[string]string{"error": a.Reason})
+					return
 				}
-				writeJSON(w, code, map[string]string{"error": err.Error()})
-				return
-			}
-			if run.Status == "pending" {
-				writeJSON(w, http.StatusAccepted, map[string]string{"pending": run.ID, "run": run.ID})
-			} else {
-				writeJSON(w, http.StatusAccepted, map[string]string{"queued": j.Name, "run": run.ID})
-			}
+				run, err := s.request(j, "api:"+id.User)
+				if err != nil {
+					code := http.StatusServiceUnavailable
+					a.Reason = err.Error()
+					s.logAction(a)
+					if errors.Is(err, errJobBusy) {
+						code = http.StatusConflict
+					}
+					writeJSON(w, code, map[string]string{"error": err.Error()})
+					return
+				}
+				a.OK, a.Run = true, run.ID
+				s.logAction(a)
+				if run.Status == "pending" {
+					writeJSON(w, http.StatusAccepted, map[string]string{"pending": run.ID, "run": run.ID})
+				} else {
+					writeJSON(w, http.StatusAccepted, map[string]string{"queued": j.Name, "run": run.ID})
+				}
+			})(w, r)
 		case action == "results" || action == "":
 			s.mu.Lock()
 			list := make([]*JobResult, 0, len(s.results[j.Name]))
@@ -995,6 +1081,20 @@ func (s *server) mux() *http.ServeMux {
 		runID, action, _ := strings.Cut(path, "/")
 		if r.Method == http.MethodPost && (action == "approve" || action == "reject") {
 			auth(true, func(w http.ResponseWriter, r *http.Request, _ serveIdentity) {
+				a := s.requestAction(r, id)
+				if a.Job == "" {
+					a.Reason = errNoPendingRun.Error()
+					s.logAction(a)
+					writeJSON(w, http.StatusNotFound, map[string]string{"error": a.Reason})
+					return
+				}
+				job := s.job(a.Job)
+				if job == nil || !s.allowed(id, job) {
+					a.Reason = "not an operator of this job"
+					s.logAction(a)
+					writeJSON(w, http.StatusForbidden, map[string]string{"error": a.Reason})
+					return
+				}
 				var body struct {
 					Comment string `json:"comment"`
 				}
@@ -1006,6 +1106,11 @@ func (s *server) mux() *http.ServeMux {
 					decide = s.reject
 				}
 				result, err := decide(runID, id.User, body.Comment)
+				a.OK, a.Reason = err == nil, body.Comment
+				if err != nil {
+					a.Reason = err.Error()
+				}
+				s.logAction(a)
 				if err != nil {
 					code := http.StatusServiceUnavailable
 					switch {
@@ -1033,29 +1138,41 @@ func (s *server) mux() *http.ServeMux {
 		}
 		writeJSON(w, http.StatusOK, rec)
 	}))
+	mux.HandleFunc("GET /api/audit", auth(false, func(w http.ResponseWriter, r *http.Request, _ serveIdentity) {
+		limit, err := strconv.Atoi(r.URL.Query().Get("limit"))
+		if err != nil || limit <= 0 {
+			limit = 100
+		}
+		if limit > 1000 {
+			limit = 1000
+		}
+		writeJSON(w, http.StatusOK, s.actions(limit))
+	}))
 	return mux
 }
 
 type jobView struct {
-	Name     string     `json:"name"`
-	Kind     string     `json:"kind"`
-	Target   string     `json:"target"`
-	Approval string     `json:"approval,omitempty"` // required
-	Every    string     `json:"every,omitempty"`
-	Next     *time.Time `json:"next,omitempty"`
-	Queued   bool       `json:"queued"`
-	Running  bool       `json:"running"`           // queued or running
-	Pending  *JobResult `json:"pending,omitempty"` // the run that waits for approval
-	Last     *JobResult `json:"last,omitempty"`    // the last executed run
+	Name      string     `json:"name"`
+	Kind      string     `json:"kind"`
+	Target    string     `json:"target"`
+	Approval  string     `json:"approval,omitempty"`  // required
+	Operators []string   `json:"operators,omitempty"` // the job's own list
+	Allowed   bool       `json:"allowed"`             // the caller may run, approve, reject
+	Every     string     `json:"every,omitempty"`
+	Next      *time.Time `json:"next,omitempty"`
+	Queued    bool       `json:"queued"`
+	Running   bool       `json:"running"`           // queued or running
+	Pending   *JobResult `json:"pending,omitempty"` // the run that waits for approval
+	Last      *JobResult `json:"last,omitempty"`    // the last executed run
 }
 
-func (s *server) jobsView() []jobView {
+func (s *server) jobsView(id serveIdentity) []jobView {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	out := make([]jobView, 0, len(s.cfg.Jobs))
 	for i := range s.cfg.Jobs {
 		j := &s.cfg.Jobs[i]
-		v := jobView{Name: j.Name, Kind: j.Kind, Target: j.Playbook, Running: s.running[j.Name] && s.pending[j.Name] == nil, Approval: j.Approval}
+		v := jobView{Operators: j.Operators, Allowed: s.allowed(id, j), Name: j.Name, Kind: j.Kind, Target: j.Playbook, Running: s.running[j.Name] && s.pending[j.Name] == nil, Approval: j.Approval}
 		if list := s.results[j.Name]; v.Running && len(list) > 0 {
 			v.Queued = list[0].Status == "queued"
 		}
@@ -1192,7 +1309,7 @@ func runServe(ctx context.Context, cfg *ServeConfig, out io.Writer) error {
 	errc := make(chan error, 1)
 	go func() { errc <- srv.ListenAndServe() }()
 	open := ""
-	if cfg.Auth.Token == "" && cfg.Auth.UserHeader == "" {
+	if cfg.Auth.Token == "" && len(cfg.Auth.Tokens) == 0 && cfg.Auth.UserHeader == "" {
 		open = " — no auth configured, everyone is an operator"
 	}
 	fmt.Fprintf(out, "serve: %s on %s: %d job(s), results in %s%s\n", cfg.Title, cfg.Listen, len(cfg.Jobs), cfg.DataDir, open)
