@@ -445,3 +445,209 @@ func TestServeWorkerError(t *testing.T) {
 		t.Fatalf("failed record: %+v", list)
 	}
 }
+
+func TestServePause(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "serve.yml")
+	config := testServeYML + `
+  - name: patch
+    kind: apply
+    playbook: patch.yml
+    approval: required
+`
+	if err := os.WriteFile(path, []byte(config), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := loadServeConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.DataDir = filepath.Join(dir, "data")
+	s, err := newServer(cfg, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ran := make(chan string, 4)
+	s.runJob = func(j *ServeJob) (*JobResult, error) {
+		ran <- j.Name
+		return &JobResult{Started: time.Now().UTC(), Status: "drift", Summary: "1 drifting", Hosts: map[string]string{"web1": "drift"}}, nil
+	}
+	ctx, cancel := contextTimeout(t)
+	done := make(chan struct{})
+	go func() { defer close(done); s.worker(ctx) }()
+	defer func() { cancel(); <-done }()
+	handler := s.mux()
+	do := func(method, path, body, role string, code int) []byte {
+		t.Helper()
+		req := httptest.NewRequest(method, path, strings.NewReader(body))
+		req.Header.Set("X-User", "denys")
+		req.Header.Set("X-Groups", role)
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+		if w.Code != code {
+			t.Fatalf("%s %s: %d %s", method, path, w.Code, w.Body.String())
+		}
+		return w.Body.Bytes()
+	}
+	contains := func(body []byte, want string) {
+		t.Helper()
+		if !strings.Contains(string(body), want) {
+			t.Fatalf("want %s in %s", want, body)
+		}
+	}
+	waitRun := func(want string) {
+		t.Helper()
+		select {
+		case name := <-ran:
+			if name != want {
+				t.Fatalf("ran %s, want %s", name, want)
+			}
+		case <-time.After(3 * time.Second):
+			t.Fatalf("%s did not run", want)
+		}
+		deadline := time.Now().Add(3 * time.Second)
+		for {
+			s.mu.Lock()
+			busy := s.running[want]
+			s.mu.Unlock()
+			if !busy {
+				return
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("%s did not finish", want)
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	noRun := func() {
+		t.Helper()
+		select {
+		case name := <-ran:
+			t.Fatalf("%s ran while paused", name)
+		case <-time.After(300 * time.Millisecond):
+		}
+	}
+	do("POST", "/api/pause", "", "users", 403)
+	do("POST", "/api/resume", "", "users", 403)
+	body := do("POST", "/api/pause", `{"reason":"maintenance"}`, "admins", 200)
+	contains(body, `"paused":true`)
+	contains(body, `"reason":"maintenance"`)
+	contains(do("GET", "/api/pause", "", "users", 200), `"reason":"maintenance"`)
+	contains(do("GET", "/api/me", "", "users", 200), `"paused":true`)
+	contains(do("GET", "/metrics", "", "", 200), "# TYPE onigirazu_serve_paused gauge\nonigirazu_serve_paused 1\n")
+	file := filepath.Join(cfg.DataDir, "pause.json")
+	data, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	contains(data, `"paused":true`)
+	info, err := os.Stat(file)
+	if err != nil || info.Mode().Perm() != 0o600 {
+		t.Fatalf("pause file permissions: %v %v", info, err)
+	}
+	do("POST", "/api/jobs/drift-site/run", "", "admins", 202)
+	noRun()
+	var jobs []jobView
+	body = do("GET", "/api/jobs", "", "users", 200)
+	if err := json.Unmarshal(body, &jobs); err != nil || !jobs[0].Running || !jobs[0].Queued || jobs[0].Name != "drift-site" {
+		t.Fatalf("queued jobs: %s (%v)", body, err)
+	}
+	s2, err := newServer(cfg, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/api/pause", nil)
+	req.Header.Set("Authorization", "Bearer tok")
+	s2.mux().ServeHTTP(w, req)
+	if w.Code != 200 {
+		t.Fatalf("restart pause: %d", w.Code)
+	}
+	contains(w.Body.Bytes(), `"paused":true`)
+	contains(w.Body.Bytes(), `"reason":"maintenance"`)
+	// Updating a pause must not strand a worker on the old channel.
+	body = do("POST", "/api/pause", `{"reason":"updated"}`, "admins", 200)
+	contains(body, `"reason":"updated"`)
+	body = do("POST", "/api/resume", "", "admins", 200)
+	contains(body, `"paused":false`)
+	contains(body, `"by":"denys"`)
+	if strings.Contains(string(body), `"reason"`) {
+		t.Fatalf("resume kept reason: %s", body)
+	}
+	waitRun("drift-site")
+	contains(do("GET", "/metrics", "", "", 200), "onigirazu_serve_paused 0\n")
+	if again := do("POST", "/api/resume", "", "admins", 200); string(again) != string(body) {
+		t.Fatalf("resume was not a no-op: %s -> %s", body, again)
+	}
+	data, err = os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	contains(data, `"paused":false`)
+	do("POST", "/api/pause", "", "admins", 200)
+	body = do("POST", "/api/jobs/patch/run", "", "admins", 202)
+	var response map[string]string
+	if err := json.Unmarshal(body, &response); err != nil || response["pending"] == "" {
+		t.Fatalf("pending request: %s (%v)", body, err)
+	}
+	id := response["pending"]
+	do("POST", "/api/runs/"+id+"/approve", "", "admins", 200)
+	noRun()
+	contains(do("GET", "/api/results/"+id, "", "users", 200), `"status":"queued"`)
+	do("POST", "/api/resume", "", "admins", 200)
+	waitRun("patch")
+	// Pending runs still expire during a pause, including scheduled requests.
+	do("POST", "/api/pause", "", "admins", 200)
+	pending, err := s.request(s.job("ssh"), "schedule")
+	if err != nil || pending.Status != "queued" {
+		t.Fatalf("scheduled while paused: %+v %v", pending, err)
+	}
+	noRun()
+	pending, err = s.request(s.job("patch"), "schedule")
+	if err != nil {
+		t.Fatal(err)
+	}
+	expired := s.expirePending(time.Now().Add(2 * time.Hour))
+	if len(expired) != 1 || expired[0].ID != pending.ID || expired[0].Status != "expired" {
+		t.Fatalf("expired while paused: %+v", expired)
+	}
+	cfg.Metrics.Labels = map[string]string{"env": "test"}
+	contains(do("GET", "/metrics", "", "", 200), `onigirazu_serve_paused{env="test"} 1`)
+	// a pause file that cannot be read pauses the server at start, until an operator resumes
+	if err := os.WriteFile(file, []byte("{broken"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s3, err := newServer(cfg, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p, _ := s3.paused(); !p.Paused || !strings.Contains(p.Reason, "unreadable") || p.By != "serve" {
+		t.Fatalf("unreadable pause file: %+v", p)
+	}
+	if _, err := s3.setPause(false, "denys", ""); err != nil {
+		t.Fatal(err)
+	}
+	if p, _ := s3.paused(); p.Paused {
+		t.Fatalf("resume after a broken file: %+v", p)
+	}
+	// a pause that cannot be written still holds in this process, with the error
+	do("POST", "/api/resume", "", "admins", 200)
+	waitRun("ssh") // queued while paused above
+	if err := os.Remove(file); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(file, 0o700); err != nil { // the rename onto a directory fails
+		t.Fatal(err)
+	}
+	body = do("POST", "/api/pause", `{"reason":"disk"}`, "admins", 500)
+	contains(body, `"paused":true`)
+	contains(body, `not saved`)
+	contains(do("GET", "/api/pause", "", "users", 200), `"paused":true`)
+	do("POST", "/api/jobs/drift-site/run", "", "admins", 202)
+	noRun()
+	if err := os.Remove(file); err != nil {
+		t.Fatal(err)
+	}
+	do("POST", "/api/resume", "", "admins", 200)
+	waitRun("drift-site")
+}
