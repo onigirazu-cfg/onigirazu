@@ -30,6 +30,8 @@ type ConnectionPool struct {
 	stopCleanup chan struct{}
 	hostKeyMgr  *HostKeyManager
 	logger      Logger
+	// dialTimeout limits connecting to a host (ssh_timeout in the config)
+	dialTimeout time.Duration
 }
 
 // PoolConfig holds configuration for the connection pool
@@ -88,6 +90,7 @@ func NewConnectionPoolWithHostKeyManagerAndLogger(config PoolConfig, hostKeyMgr 
 		stopCleanup: make(chan struct{}),
 		hostKeyMgr:  hostKeyMgr,
 		logger:      lg,
+		dialTimeout: DefaultDialTimeout,
 	}
 
 	go pool.cleanupLoop()
@@ -121,7 +124,7 @@ func (p *ConnectionPool) GetConnection(host types.Host) (*Client, error) {
 		return client, nil
 	}
 
-	client, err := NewClientWithHostKeyManagerAndLogger(host, p.hostKeyMgr, p.logger)
+	client, err := newClient(host, p.hostKeyMgr, p.logger, p.DialTimeout())
 	if err != nil {
 		return nil, fmt.Errorf("failed to create SSH connection: %w", err)
 	}
@@ -329,23 +332,57 @@ func (p *ConnectionPool) cleanup() {
 	}
 }
 
-// Global connection pool instance
-var globalPool *ConnectionPool
-var poolOnce sync.Once
+// DefaultDialTimeout limits connecting to a host when the configuration
+// says nothing (ssh_timeout)
+const DefaultDialTimeout = 30 * time.Second
+
+// DialTimeout is how long this pool waits for a connection
+func (p *ConnectionPool) DialTimeout() time.Duration {
+	p.mutex.RLock()
+	defer p.mutex.RUnlock()
+	if p.dialTimeout <= 0 {
+		return DefaultDialTimeout
+	}
+	return p.dialTimeout
+}
+
+// The global pool is shared by every run in the process: its settings
+// (strict host key checking, known_hosts file, dial timeout, remote server)
+// come from the first run and are not changed afterwards. A later
+// run asking for different settings keeps the pool it found and gets one
+// warning naming the setting: connections are shared, so the settings
+// cannot differ per run.
+var (
+	poolMu       sync.Mutex
+	globalPool   *ConnectionPool
+	poolSettings *globalPoolSettings
+)
+
+// globalPoolSettings are the settings the global pool was initialized with
+type globalPoolSettings struct {
+	strictMode     bool
+	knownHostsFile string
+	dialTimeout    time.Duration
+	remoteServer   string
+}
 
 // GetGlobalPool returns the global connection pool instance
 func GetGlobalPool() *ConnectionPool {
-	poolOnce.Do(func() {
+	poolMu.Lock()
+	defer poolMu.Unlock()
+	if globalPool == nil {
 		globalPool = NewConnectionPool(DefaultPoolConfig())
-	})
+	}
 	return globalPool
 }
 
 // SetGlobalPool sets a custom global connection pool; GetGlobalPool keeps
 // it (it used to replace a pool set before its first call)
 func SetGlobalPool(pool *ConnectionPool) {
-	poolOnce.Do(func() {})
+	poolMu.Lock()
+	defer poolMu.Unlock()
 	globalPool = pool
+	poolSettings = nil
 }
 
 // InitializeGlobalPool initializes the global pool with config-based host key manager
@@ -353,13 +390,11 @@ func InitializeGlobalPool(cfg interface{}) {
 	InitializeGlobalPoolWithLogger(cfg, logger.New(false))
 }
 
-// dialTimeout limits connecting to a host (ssh_timeout in the config)
-var dialTimeout = 30 * time.Second
-
-// InitializeGlobalPoolWithLogger initializes the global pool with config-based host key manager and custom logger
+// InitializeGlobalPoolWithLogger initializes the global pool once per
+// process from cfg. A later call with the same settings does nothing; a
+// later call with different settings keeps the existing pool and warns.
 func InitializeGlobalPoolWithLogger(cfg interface{}, lg Logger) {
-	strictMode := false
-	knownHostsFile := ""
+	want := globalPoolSettings{dialTimeout: DefaultDialTimeout, remoteServer: "auto"}
 
 	type SSHConfig interface {
 		IsSSHStrictHostKeyEnabled() bool
@@ -367,21 +402,59 @@ func InitializeGlobalPoolWithLogger(cfg interface{}, lg Logger) {
 	}
 
 	if sshCfg, ok := cfg.(SSHConfig); ok {
-		strictMode = sshCfg.IsSSHStrictHostKeyEnabled()
-		knownHostsFile = sshCfg.GetSSHKnownHostsFile()
+		want.strictMode = sshCfg.IsSSHStrictHostKeyEnabled()
+		want.knownHostsFile = sshCfg.GetSSHKnownHostsFile()
 	}
 	if r, ok := cfg.(interface{ GetRemoteServer() string }); ok {
-		SetRemoteServer(r.GetRemoteServer())
+		if mode := r.GetRemoteServer(); mode != "" {
+			want.remoteServer = mode
+		}
 	}
 	if t, ok := cfg.(interface{ GetSSHTimeout() time.Duration }); ok && t.GetSSHTimeout() > 0 {
-		dialTimeout = t.GetSSHTimeout()
+		want.dialTimeout = t.GetSSHTimeout()
 	}
 
 	if lg == nil {
 		lg = logger.New(false)
 	}
 
-	hostKeyMgr := NewHostKeyManager(knownHostsFile, strictMode)
+	poolMu.Lock()
+	defer poolMu.Unlock()
+	if globalPool != nil && poolSettings != nil {
+		for _, d := range poolSettings.differences(want) {
+			lg.Warn("SSH connection pool: %s is shared by every run in this process; keeping %s", d.name, d.kept)
+		}
+		return
+	}
+
+	SetRemoteServer(want.remoteServer)
+	hostKeyMgr := NewHostKeyManager(want.knownHostsFile, want.strictMode)
 	pool := NewConnectionPoolWithHostKeyManagerAndLogger(DefaultPoolConfig(), hostKeyMgr, lg)
-	SetGlobalPool(pool)
+	pool.dialTimeout = want.dialTimeout
+	globalPool, poolSettings = pool, &want
+}
+
+// difference is one setting a later initialization asked to change
+type difference struct{ name, kept string }
+
+// differences names the settings of want the pool cannot take any more
+func (s *globalPoolSettings) differences(want globalPoolSettings) []difference {
+	var out []difference
+	if s.strictMode != want.strictMode {
+		out = append(out, difference{"strict host key checking", fmt.Sprintf("%v", s.strictMode)})
+	}
+	if s.knownHostsFile != want.knownHostsFile {
+		kept := s.knownHostsFile
+		if kept == "" {
+			kept = "the default known_hosts file"
+		}
+		out = append(out, difference{"known_hosts file", kept})
+	}
+	if s.dialTimeout != want.dialTimeout {
+		out = append(out, difference{"ssh_timeout", s.dialTimeout.String()})
+	}
+	if s.remoteServer != want.remoteServer {
+		out = append(out, difference{"remote_server", s.remoteServer})
+	}
+	return out
 }

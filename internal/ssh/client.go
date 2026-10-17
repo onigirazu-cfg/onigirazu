@@ -64,9 +64,11 @@ func NewClient(host types.Host) (*Client, error) {
 
 // NewClientWithLogger creates a new SSH client with a custom logger
 func NewClientWithLogger(host types.Host, lg Logger) (*Client, error) {
-	// the known_hosts file and strict mode of the configuration, as for
-	// pooled connections (hostKeyCallback honors the host's insecure flag)
-	return NewClientWithHostKeyManagerAndLogger(host, GetGlobalPool().hostKeyMgr, lg)
+	// the known_hosts file, strict mode and dial timeout of the
+	// configuration, as for pooled connections (hostKeyCallback honors the
+	// host's insecure flag)
+	pool := GetGlobalPool()
+	return newClient(host, pool.hostKeyMgr, lg, pool.DialTimeout())
 }
 
 // hostKeyCallback checks the host key with the manager, unless the host
@@ -95,6 +97,14 @@ func NewClientWithHostKeyManager(host types.Host, hostKeyManager *HostKeyManager
 
 // NewClientWithHostKeyManagerAndLogger creates a new SSH client with custom host key manager and logger
 func NewClientWithHostKeyManagerAndLogger(host types.Host, hostKeyManager *HostKeyManager, lg Logger) (*Client, error) {
+	return newClient(host, hostKeyManager, lg, DefaultDialTimeout)
+}
+
+// newClient is the client of a pool: dial is how long connecting may take
+func newClient(host types.Host, hostKeyManager *HostKeyManager, lg Logger, dial time.Duration) (*Client, error) {
+	if dial <= 0 {
+		dial = DefaultDialTimeout
+	}
 	if lg == nil {
 		lg = logger.New(false)
 	}
@@ -180,7 +190,7 @@ func NewClientWithHostKeyManagerAndLogger(host types.Host, hostKeyManager *HostK
 		User:            host.User,
 		Auth:            auth,
 		HostKeyCallback: hostKeyCallback(host, hostKeyManager),
-		Timeout:         dialTimeout,
+		Timeout:         dial,
 	}
 
 	opts := parseSSHArgs(host.SSHArgs)

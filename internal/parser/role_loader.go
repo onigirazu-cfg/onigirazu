@@ -21,6 +21,7 @@ type RoleLoader struct {
 	rolesPath   string
 	cache       map[string]*types.Role
 	loadedRoles map[string]bool // For dependency tracking
+	search      func(string) ([]string, []string)
 }
 
 // NewRoleLoader creates a new RoleLoader instance
@@ -30,6 +31,16 @@ func NewRoleLoader(logger interfaces.Logger, rolesPath string) *RoleLoader {
 		rolesPath:   rolesPath,
 		cache:       make(map[string]*types.Role),
 		loadedRoles: make(map[string]bool),
+		search:      roleSearch,
+	}
+}
+
+// SetRoleSearch sets the role and collection paths for this loader.
+func (rl *RoleLoader) SetRoleSearch(roles, collections []string) {
+	roles = append([]string(nil), roles...)
+	collections = append([]string(nil), collections...)
+	rl.search = func(dir string) ([]string, []string) {
+		return roleSearchPaths(dir, roles, collections)
 	}
 }
 
@@ -43,7 +54,7 @@ func (rl *RoleLoader) LoadRole(ctx context.Context, roleRef types.RoleReference)
 	// Determine role path
 	rolePath := roleRef.Path
 	if rolePath == "" {
-		found, tried := findRole(roleRef.Name, rl.rolesPath)
+		found, tried := findRoleWithSearch(roleRef.Name, rl.rolesPath, rl.search)
 		if found == "" {
 			return nil, fmt.Errorf("role not found: %s (searched in %s)", roleRef.Name, strings.Join(tried, ", "))
 		}

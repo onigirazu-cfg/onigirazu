@@ -18,11 +18,21 @@ func (e *ExecutionEngine) conditionHolds(ctx context.Context, condition string, 
 		return true, nil
 	}
 	if _, whole := expression.Unwrap(condition); whole || !strings.Contains(condition, "{{") {
-		return expression.Condition(condition, variables)
+		return expression.Condition(condition, e.expressionVariables(variables))
 	}
 	rendered, err := e.templateEngine.Render(ctx, condition, variables)
 	if err != nil {
 		return false, fmt.Errorf("condition %q: %w", condition, err)
 	}
 	return expression.Truthy(strings.TrimSpace(rendered)), nil
+}
+
+// expressionVariables adds per-run services to a transient evaluation map.
+func (e *ExecutionEngine) expressionVariables(vars map[string]interface{}) map[string]interface{} {
+	if engine, ok := e.templateEngine.(interface {
+		ExpressionVariables(map[string]interface{}) map[string]interface{}
+	}); ok {
+		return engine.ExpressionVariables(vars)
+	}
+	return vars
 }

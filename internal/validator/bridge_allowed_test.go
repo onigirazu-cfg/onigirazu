@@ -19,3 +19,21 @@ func TestBridgedModulesAreKnown(t *testing.T) {
 		t.Errorf("an allowed module is known: %v", err)
 	}
 }
+
+func TestBridgeSettingsArePerValidator(t *testing.T) {
+	first := NewModuleSyntaxValidatorWithBridge(nil, bridge.Config{Modules: []string{"first.*"}})
+	second := NewModuleSyntaxValidatorWithBridge(nil, bridge.Config{Modules: []string{"second.*"}})
+	for _, tc := range []struct {
+		validator       *ModuleSyntaxValidator
+		allowed, denied string
+	}{
+		{first, "first.task", "second.task"}, {second, "second.task", "first.task"},
+	} {
+		if err := tc.validator.ValidateTaskModule(&types.Task{Module: tc.allowed}, 0, 0); err != nil {
+			t.Fatal(err)
+		}
+		if err := tc.validator.ValidateTaskModule(&types.Task{Module: tc.denied}, 0, 0); err == nil {
+			t.Fatal("validator used another run's bridge settings")
+		}
+	}
+}

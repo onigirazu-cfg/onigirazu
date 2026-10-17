@@ -1,7 +1,10 @@
 package ssh
 
 import (
+	"fmt"
 	"os"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -604,5 +607,125 @@ func TestConnectionPool_ReleaseConnection_Existing(t *testing.T) {
 	// lastUsed should be updated
 	if released.lastUsed.Before(wrapper.lastUsed) {
 		t.Error("Expected lastUsed to be updated")
+	}
+}
+
+type poolInitConfig struct {
+	strict       bool
+	knownHosts   string
+	timeout      time.Duration
+	remoteServer string
+}
+
+func (c poolInitConfig) IsSSHStrictHostKeyEnabled() bool { return c.strict }
+func (c poolInitConfig) GetSSHKnownHostsFile() string    { return c.knownHosts }
+func (c poolInitConfig) GetSSHTimeout() time.Duration    { return c.timeout }
+func (c poolInitConfig) GetRemoteServer() string         { return c.remoteServer }
+
+type poolInitLogger struct {
+	mu       sync.Mutex
+	warnings []string
+}
+
+func (*poolInitLogger) Debug(string, ...interface{}) {}
+func (*poolInitLogger) Info(string, ...interface{})  {}
+func (*poolInitLogger) Error(string, ...interface{}) {}
+func (l *poolInitLogger) Warn(format string, args ...interface{}) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.warnings = append(l.warnings, fmt.Sprintf(format, args...))
+}
+
+func isolateGlobalPool(t *testing.T) {
+	t.Helper()
+	poolMu.Lock()
+	previous, settings := globalPool, poolSettings
+	globalPool, poolSettings = nil, nil
+	poolMu.Unlock()
+	previousMode, _ := remoteServer.Load().(string)
+	t.Cleanup(func() {
+		poolMu.Lock()
+		current := globalPool
+		globalPool, poolSettings = previous, settings
+		poolMu.Unlock()
+		if current != nil {
+			_ = current.CloseAll()
+		}
+		SetRemoteServer(previousMode)
+	})
+}
+
+func TestInitializeGlobalPoolSameSettings(t *testing.T) {
+	isolateGlobalPool(t)
+	cfg := poolInitConfig{timeout: 4 * time.Second, remoteServer: "python"}
+	log := &poolInitLogger{}
+	InitializeGlobalPoolWithLogger(cfg, log)
+	first := GetGlobalPool()
+	var wg sync.WaitGroup
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			InitializeGlobalPoolWithLogger(cfg, log)
+		}()
+	}
+	wg.Wait()
+	if got := GetGlobalPool(); got != first {
+		t.Fatal("same settings replaced the global pool")
+	}
+	if len(log.warnings) != 0 {
+		t.Fatalf("same settings produced warnings: %v", log.warnings)
+	}
+}
+
+func TestInitializeGlobalPoolDifferentSettings(t *testing.T) {
+	for _, name := range []string{"strict host key checking", "known_hosts file", "ssh_timeout", "remote_server"} {
+		t.Run(name, func(t *testing.T) {
+			isolateGlobalPool(t)
+			cfg := poolInitConfig{timeout: 4 * time.Second, remoteServer: "python"}
+			log := &poolInitLogger{}
+			InitializeGlobalPoolWithLogger(cfg, log)
+			first := GetGlobalPool()
+			changed := cfg
+			switch name {
+			case "strict host key checking":
+				changed.strict = true
+			case "known_hosts file":
+				changed.knownHosts = "different_known_hosts"
+			case "ssh_timeout":
+				changed.timeout = time.Second
+			case "remote_server":
+				changed.remoteServer = "sh"
+			}
+			InitializeGlobalPoolWithLogger(changed, log)
+			if GetGlobalPool() != first {
+				t.Fatal("different settings replaced the global pool")
+			}
+			if len(log.warnings) != 1 || !strings.Contains(log.warnings[0], name) {
+				t.Fatalf("expected one warning naming %q, got %v", name, log.warnings)
+			}
+			if first.DialTimeout() != cfg.timeout {
+				t.Fatal("later initialization changed the dial timeout")
+			}
+			if mode, _ := remoteServer.Load().(string); mode != cfg.remoteServer {
+				t.Fatalf("later initialization changed remote_server: %q", mode)
+			}
+		})
+	}
+}
+
+func TestConnectionPoolDialTimeoutIsPerPool(t *testing.T) {
+	first := NewConnectionPool(DefaultPoolConfig())
+	second := NewConnectionPool(DefaultPoolConfig())
+	defer first.CloseAll()
+	defer second.CloseAll()
+	first.dialTimeout = time.Second
+	second.dialTimeout = 2 * time.Second
+	if first.DialTimeout() != time.Second || second.DialTimeout() != 2*time.Second {
+		t.Fatal("pools did not retain independent dial timeouts")
+	}
+	first.dialTimeout = 0
+	if first.DialTimeout() != DefaultDialTimeout {
+		t.Fatal("zero dial timeout must use the default")
 	}
 }

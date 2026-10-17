@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"os"
 	"path/filepath"
@@ -44,6 +45,7 @@ type ExecutionObserverI interface {
 
 // ExecutionEngine is the main engine for executing playbooks
 type ExecutionEngine struct {
+	output io.Writer
 	// extra vars (-e) override every other variable; limit (--limit)
 	// narrows the hosts of every play
 	extraVars map[string]interface{}
@@ -226,6 +228,7 @@ func NewExecutionEngine(
 		hostSlots = make(chan struct{}, config.GetMaxConcurrency())
 	}
 	return &ExecutionEngine{
+		output:            os.Stdout,
 		hostSlots:         hostSlots,
 		config:            config,
 		logger:            logger,
@@ -249,6 +252,19 @@ func NewExecutionEngine(
 		},
 		observers: make([]ExecutionObserverI, 0),
 	}
+}
+
+// SetFactsCache sets the cache shared by runs with matching cache settings.
+func (e *ExecutionEngine) SetFactsCache(fc *cache.FactsCache) {
+	e.factsGatherer = facts.NewGathererWithCache(fc)
+}
+
+// SetOutput sets the writer for task output.
+func (e *ExecutionEngine) SetOutput(out io.Writer) {
+	if out == nil {
+		out = os.Stdout
+	}
+	e.output = out
 }
 
 // SetTagFilter sets the tag filter for this execution engine
@@ -1257,7 +1273,7 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 		if task.Async > 0 {
 			runCtx, cancelRun = context.WithTimeout(ctx, time.Duration(task.Async)*time.Second)
 		}
-		result, err = e.moduleRegistry.ExecuteTask(runCtx, moduleTask, target, taskVars)
+		result, err = e.moduleRegistry.ExecuteTask(modules.WithOutput(runCtx, e.output), moduleTask, target, e.expressionVariables(taskVars))
 		if task.Async > 0 {
 			err = asyncOutcome(&result, err, runCtx, ctx, task.Async)
 		}
@@ -1465,9 +1481,9 @@ func (e *ExecutionEngine) finishTask(task *types.Task, host *types.Host, result 
 	if task.Module == "debug" && !result.Failed {
 		if msg, ok := result.Output["msg"]; ok {
 			if text, isText := msg.(string); isText {
-				fmt.Printf("    %s\n", text)
+				fmt.Fprintf(e.output, "    %s\n", text)
 			} else if b, err := json.Marshal(msg); err == nil {
-				fmt.Printf("    %s\n", b)
+				fmt.Fprintf(e.output, "    %s\n", b)
 			}
 		}
 	}
@@ -1879,7 +1895,7 @@ func (e *ExecutionEngine) loopItems(ctx context.Context, loop *types.Loop, varia
 	}
 
 	if loop.Expr != "" {
-		value, err := expression.Eval(loop.Expr, variables)
+		value, err := expression.Eval(loop.Expr, e.expressionVariables(variables))
 		if err != nil {
 			return nil, fmt.Errorf("%q: %w", loop.Expr, err)
 		}
@@ -1912,7 +1928,7 @@ func (e *ExecutionEngine) lookupLoopItems(ctx context.Context, loop *types.Loop,
 		terms = []interface{}{rendered["terms"]}
 	}
 	dir, _ := variables["playbook_dir"].(string)
-	items, err := expression.LookupItems(dir, variables, loop.Lookup, terms)
+	items, err := expression.LookupItems(dir, e.expressionVariables(variables), loop.Lookup, terms)
 	if err != nil {
 		return nil, fmt.Errorf("with_%s: %w", loop.Lookup, err)
 	}
@@ -2696,6 +2712,11 @@ func (e *ExecutionEngine) SetPlaybookDir(dir string) {
 	e.mutex.Unlock()
 }
 
+// SetRoleSearch sets the role and collection paths for this run.
+func (e *ExecutionEngine) SetRoleSearch(roles, collections []string) {
+	e.roleLoader.SetRoleSearch(roles, collections)
+}
+
 // SetRolesPath sets where roles and their dependencies are looked up: the
 // roles directory next to the playbook
 func (e *ExecutionEngine) SetRolesPath(dir string) {
@@ -2975,7 +2996,7 @@ func (e *ExecutionEngine) applyRegisterProjections(task *types.Task, host types.
 	}
 	sort.Strings(names)
 	for _, name := range names {
-		value, err := expression.Eval(task.RegisterVars[name], vars)
+		value, err := expression.Eval(task.RegisterVars[name], e.expressionVariables(vars))
 		if err != nil {
 			result.Failed, result.Success, result.Error = true, false, fmt.Sprintf("register %s: %v", name, err)
 			return

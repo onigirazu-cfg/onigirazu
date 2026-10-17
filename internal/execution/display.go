@@ -3,6 +3,8 @@ package execution
 import (
 	"encoding/json"
 	"fmt"
+	"io"
+	"os"
 	"sort"
 	"strings"
 
@@ -20,13 +22,23 @@ const (
 
 // Displayer formats and displays execution results
 type Displayer struct {
+	output    io.Writer
 	mode      DisplayMode
 	useColors bool
 }
 
 // NewDisplayer creates a new result displayer
 func NewDisplayer(mode DisplayMode, useColors bool) *Displayer {
+	return NewDisplayerWithWriter(mode, useColors, os.Stdout)
+}
+
+// NewDisplayerWithWriter creates a displayer using output.
+func NewDisplayerWithWriter(mode DisplayMode, useColors bool, output io.Writer) *Displayer {
+	if output == nil {
+		output = os.Stdout
+	}
 	return &Displayer{
+		output:    output,
 		mode:      mode,
 		useColors: useColors,
 	}
@@ -34,6 +46,9 @@ func NewDisplayer(mode DisplayMode, useColors bool) *Displayer {
 
 // DisplayExecution formats and displays a complete execution result
 func (d *Displayer) DisplayExecution(result *ExecutionResult) {
+	if d.output == nil {
+		d.output = os.Stdout
+	}
 	switch d.mode {
 	case DisplayNormal:
 		d.displayNormal(result)
@@ -46,7 +61,7 @@ func (d *Displayer) DisplayExecution(result *ExecutionResult) {
 
 // displayNormal shows normal mode output
 func (d *Displayer) displayNormal(result *ExecutionResult) {
-	fmt.Println()
+	fmt.Fprintln(d.output)
 	d.printHeader("Execution Summary", "═")
 
 	// Status line
@@ -62,31 +77,31 @@ func (d *Displayer) displayNormal(result *ExecutionResult) {
 		}
 	}
 
-	fmt.Printf("Status:          %s\n", statusStr)
-	fmt.Printf("Playbook:        %s\n", result.PlaybookName)
-	fmt.Printf("Total Hosts:     %d\n", result.TotalHosts)
-	fmt.Printf("Execution ID:    %s\n", result.ExecutionID)
-	fmt.Printf("Started:         %s\n", result.StartTime.Format("2006-01-02 15:04:05"))
-	fmt.Printf("Duration:        %v\n", result.Duration.Round(0))
-	fmt.Println()
+	fmt.Fprintf(d.output, "Status:          %s\n", statusStr)
+	fmt.Fprintf(d.output, "Playbook:        %s\n", result.PlaybookName)
+	fmt.Fprintf(d.output, "Total Hosts:     %d\n", result.TotalHosts)
+	fmt.Fprintf(d.output, "Execution ID:    %s\n", result.ExecutionID)
+	fmt.Fprintf(d.output, "Started:         %s\n", result.StartTime.Format("2006-01-02 15:04:05"))
+	fmt.Fprintf(d.output, "Duration:        %v\n", result.Duration.Round(0))
+	fmt.Fprintln(d.output)
 
 	// Summary stats
-	fmt.Printf("Results:         ")
+	fmt.Fprintf(d.output, "Results:         ")
 	if d.useColors {
-		fmt.Printf("%s / %s / %s / %s\n",
+		fmt.Fprintf(d.output, "%s / %s / %s / %s\n",
 			utils.Colors.Success(fmt.Sprintf("✓ %d success", result.TotalSuccess)),
 			utils.Colors.Warning(fmt.Sprintf("⟳ %d changed", result.TotalChanged)),
 			utils.Colors.Error(fmt.Sprintf("✗ %d failed", result.TotalFailed)),
 			fmt.Sprintf("⊝ %d skipped", result.TotalSkipped),
 		)
 	} else {
-		fmt.Printf("✓ %d success / ⟳ %d changed / ✗ %d failed / ⊝ %d skipped\n",
+		fmt.Fprintf(d.output, "✓ %d success / ⟳ %d changed / ✗ %d failed / ⊝ %d skipped\n",
 			result.TotalSuccess, result.TotalChanged, result.TotalFailed, result.TotalSkipped)
 	}
 	if result.TotalIgnored > 0 {
-		fmt.Printf("                 %d failed task(s) handled by ignore_errors or rescue\n", result.TotalIgnored)
+		fmt.Fprintf(d.output, "                 %d failed task(s) handled by ignore_errors or rescue\n", result.TotalIgnored)
 	}
-	fmt.Println()
+	fmt.Fprintln(d.output)
 
 	// Per-task summary
 	d.printHeader("Tasks", "─")
@@ -103,7 +118,7 @@ func (d *Displayer) displayNormal(result *ExecutionResult) {
 			}
 		}
 
-		fmt.Printf("%d. %s %s [%d/%d] (%d%% success)\n",
+		fmt.Fprintf(d.output, "%d. %s %s [%d/%d] (%d%% success)\n",
 			i+1, statusIcon, task.Name, task.Success, task.Total, successRate)
 
 		// Show error types if any failed
@@ -112,7 +127,7 @@ func (d *Displayer) displayNormal(result *ExecutionResult) {
 		}
 	}
 
-	fmt.Println()
+	fmt.Fprintln(d.output)
 }
 
 // displayVerbose shows verbose mode output with error details
@@ -122,23 +137,23 @@ func (d *Displayer) displayVerbose(result *ExecutionResult) {
 	d.printHeader("Detailed Results by Task", "═")
 
 	for i, task := range result.Tasks {
-		fmt.Printf("\n[Task %d] %s\n", i+1, task.Name)
-		fmt.Println(strings.Repeat("─", 80))
+		fmt.Fprintf(d.output, "\n[Task %d] %s\n", i+1, task.Name)
+		fmt.Fprintln(d.output, strings.Repeat("─", 80))
 
 		// Show aggregated stats
-		fmt.Printf("  Total: %d  Success: %d  Changed: %d  Failed: %d  Skipped: %d\n",
+		fmt.Fprintf(d.output, "  Total: %d  Success: %d  Changed: %d  Failed: %d  Skipped: %d\n",
 			task.Total, task.Success, task.Changed, task.Failed, task.Skipped)
-		fmt.Printf("  Duration: %v\n", task.Duration.Round(0))
+		fmt.Fprintf(d.output, "  Duration: %v\n", task.Duration.Round(0))
 
 		// Show errors with examples
 		if task.Failed > 0 {
-			fmt.Println("\n  Errors by Type:")
+			fmt.Fprintln(d.output, "\n  Errors by Type:")
 			for errorType, hosts := range task.ErrorsByType {
 				d.printErrorTypeDetails(task, errorType, hosts, 5)
 			}
 		}
 
-		fmt.Println()
+		fmt.Fprintln(d.output)
 	}
 }
 
@@ -147,13 +162,13 @@ func (d *Displayer) displayDebug(result *ExecutionResult) {
 	d.displayVerbose(result)
 
 	d.printHeader("Complete Execution Data (JSON)", "═")
-	fmt.Println()
+	fmt.Fprintln(d.output)
 
 	// Print as JSON
-	encoder := NewJSONPrinter()
+	encoder := NewJSONPrinterWithWriter(d.output)
 	encoder.PrintJSON(result)
 
-	fmt.Println()
+	fmt.Fprintln(d.output)
 }
 
 // printErrorsByType displays errors grouped by type (normal mode - compact)
@@ -172,13 +187,13 @@ func (d *Displayer) printErrorsByType(task TaskResult, maxExamples int) {
 		}
 
 		if d.useColors {
-			fmt.Printf("   %s [%d hosts]: %s\n",
+			fmt.Fprintf(d.output, "   %s [%d hosts]: %s\n",
 				utils.Colors.Error(errorType),
 				len(hosts),
 				hostStr,
 			)
 		} else {
-			fmt.Printf("   %s [%d hosts]: %s\n", errorType, len(hosts), hostStr)
+			fmt.Fprintf(d.output, "   %s [%d hosts]: %s\n", errorType, len(hosts), hostStr)
 		}
 	}
 }
@@ -191,32 +206,32 @@ func (d *Displayer) printErrorTypeDetails(task TaskResult, errorType string, hos
 		remaining := count - maxExamples
 
 		if d.useColors {
-			fmt.Printf("    %s [%d hosts]:\n", utils.Colors.Error(errorType), count)
+			fmt.Fprintf(d.output, "    %s [%d hosts]:\n", utils.Colors.Error(errorType), count)
 		} else {
-			fmt.Printf("    %s [%d hosts]:\n", errorType, count)
+			fmt.Fprintf(d.output, "    %s [%d hosts]:\n", errorType, count)
 		}
 
 		// Show examples with error details
 		for _, hostname := range displayed {
 			if result, exists := task.HostResults[hostname]; exists {
-				fmt.Printf("      ├─ %s: %s\n", hostname, result.Error)
+				fmt.Fprintf(d.output, "      ├─ %s: %s\n", hostname, result.Error)
 			}
 		}
 
-		fmt.Printf("      └─ [%d more hosts with same error...]\n", remaining)
+		fmt.Fprintf(d.output, "      └─ [%d more hosts with same error...]\n", remaining)
 	} else {
 		if d.useColors {
-			fmt.Printf("    %s [%d hosts]:\n", utils.Colors.Error(errorType), count)
+			fmt.Fprintf(d.output, "    %s [%d hosts]:\n", utils.Colors.Error(errorType), count)
 		} else {
-			fmt.Printf("    %s [%d hosts]:\n", errorType, count)
+			fmt.Fprintf(d.output, "    %s [%d hosts]:\n", errorType, count)
 		}
 
 		for i, hostname := range hosts {
 			if result, exists := task.HostResults[hostname]; exists {
 				if i < len(hosts)-1 {
-					fmt.Printf("      ├─ %s: %s\n", hostname, result.Error)
+					fmt.Fprintf(d.output, "      ├─ %s: %s\n", hostname, result.Error)
 				} else {
-					fmt.Printf("      └─ %s: %s\n", hostname, result.Error)
+					fmt.Fprintf(d.output, "      └─ %s: %s\n", hostname, result.Error)
 				}
 			}
 		}
@@ -227,18 +242,26 @@ func (d *Displayer) printErrorTypeDetails(task TaskResult, errorType string, hos
 func (d *Displayer) printHeader(title string, charType string) {
 	width := 80
 	if charType == "═" {
-		fmt.Printf("\n%s %s\n", title, strings.Repeat(charType, width-len(title)-1))
+		fmt.Fprintf(d.output, "\n%s %s\n", title, strings.Repeat(charType, width-len(title)-1))
 	} else {
-		fmt.Printf("\n%s\n%s\n", title, strings.Repeat(charType, len(title)))
+		fmt.Fprintf(d.output, "\n%s\n%s\n", title, strings.Repeat(charType, len(title)))
 	}
 }
 
 // JSONPrinter handles JSON output
-type JSONPrinter struct{}
+type JSONPrinter struct{ output io.Writer }
 
 // NewJSONPrinter creates a new JSON printer
 func NewJSONPrinter() *JSONPrinter {
-	return &JSONPrinter{}
+	return NewJSONPrinterWithWriter(os.Stdout)
+}
+
+// NewJSONPrinterWithWriter creates a JSON printer using output.
+func NewJSONPrinterWithWriter(output io.Writer) *JSONPrinter {
+	if output == nil {
+		output = os.Stdout
+	}
+	return &JSONPrinter{output: output}
 }
 
 // PrintJSON prints the complete execution result as JSON
@@ -265,5 +288,9 @@ func (jp *JSONPrinter) PrintJSON(result *ExecutionResult) {
 
 	// Pretty print JSON
 	data, _ := json.MarshalIndent(output, "", "  ")
-	fmt.Println(string(data))
+	out := jp.output
+	if out == nil {
+		out = os.Stdout
+	}
+	fmt.Fprintln(out, string(data))
 }

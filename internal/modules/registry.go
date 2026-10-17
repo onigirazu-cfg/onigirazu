@@ -18,7 +18,8 @@ import (
 
 // Registry manages available modules
 type Registry struct {
-	modules map[string]types.Module
+	modules      map[string]types.Module
+	bridgeConfig *bridge.Config
 }
 
 func NewRegistry() *Registry {
@@ -223,6 +224,12 @@ func (r *Registry) Unregister(name string) error {
 	return nil
 }
 
+// SetBridgeConfig gives this registry independent bridge settings.
+func (r *Registry) SetBridgeConfig(cfg bridge.Config) {
+	c := cfg.Clone()
+	r.bridgeConfig = &c
+}
+
 // ExecuteTask executes task using appropriate module
 func (r *Registry) ExecuteTask(ctx context.Context, task *types.Task, host types.Host, variables map[string]interface{}) (types.TaskResult, error) {
 	if task.Module == types.DynamicAction {
@@ -241,8 +248,8 @@ func (r *Registry) ExecuteTask(ctx context.Context, task *types.Task, host types
 			Error: winModuleError(task.Module), Timestamp: time.Now()}, nil
 	}
 	if err != nil {
-		if bridge.Allowed(task.Module) {
-			return runBridged(ctx, task, host), nil
+		if r.bridgeAllowed(task.Module) {
+			return r.runBridged(ctx, task, host), nil
 		}
 		return types.TaskResult{}, err
 	}
@@ -492,13 +499,24 @@ func resolveDynamicAction(task *types.Task) (*types.Task, error) {
 	return &resolved, nil
 }
 
+func (r *Registry) bridgeAllowed(module string) bool {
+	if r.bridgeConfig != nil {
+		return r.bridgeConfig.Allowed(module)
+	}
+	return bridge.Allowed(module)
+}
+
 // runBridged runs a module onigirazu lacks through ansible-core
-func runBridged(ctx context.Context, task *types.Task, host types.Host) types.TaskResult {
+func (r *Registry) runBridged(ctx context.Context, task *types.Task, host types.Host) types.TaskResult {
 	env := make(map[string]interface{}, len(task.Environment))
 	for k, v := range task.Environment {
 		env[k] = v
 	}
-	return bridge.Run(ctx, bridge.Task{
+	run := bridge.Run
+	if r.bridgeConfig != nil {
+		run = r.bridgeConfig.Run
+	}
+	return run(ctx, bridge.Task{
 		Name: task.Name, Module: task.Module, Args: task.Args,
 		Check: task.CheckMode != nil && *task.CheckMode, Diff: task.Diff,
 		Become: task.Become, BecomeUser: task.BecomeUser, BecomeMethod: task.BecomeMethod,

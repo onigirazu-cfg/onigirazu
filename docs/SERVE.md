@@ -69,7 +69,8 @@ queued or running is not requested again. Paths in the file are relative to it. 
 state file lives
 in `data_dir/state/<job>.state`. A job's inventory and state file are passed to the run as
 its own arguments, not through the process's global `-i`/`--state`, so they never leak into
-another job (still one job at a time in this release).
+another job. Jobs can safely overlap at the engine level; `serve` still runs one at a time
+until it gets a `concurrency` option.
 
 ## Guarded runs
 

@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/onigirazu-cfg/onigirazu/internal/cache"
@@ -11,12 +12,22 @@ import (
 	"github.com/onigirazu-cfg/onigirazu/internal/parser"
 )
 
+type factsCacheSettings struct {
+	kind    string
+	dir     string
+	timeout time.Duration
+}
+
+var runFactsCaches = struct {
+	sync.Mutex
+	caches map[factsCacheSettings]*cache.FactsCache
+}{caches: make(map[factsCacheSettings]*cache.FactsCache)}
+
 // configureFactsCache applies the fact caching settings: onigirazu.yml's
 // fact_caching keys, else ansible.cfg's [defaults] fact_caching,
 // fact_caching_connection and fact_caching_timeout (seconds); jsonfile keeps
 // the facts of every host under the directory across runs
-func configureFactsCache(cfg *config.Config, playbookDir string, flush bool) {
-	fc := cache.GetGlobalFactsCache()
+func configureFactsCache(cfg *config.Config, playbookDir string, flush bool) *cache.FactsCache {
 	kind, dir, timeout := cfg.FactCaching, cfg.FactCachingDir, cfg.FactCachingTimeout
 	if kind == "" {
 		kind = parser.AnsibleCfgDefault(playbookDir, "fact_caching")
@@ -38,15 +49,27 @@ func configureFactsCache(cfg *config.Config, playbookDir string, flush bool) {
 		if !filepath.IsAbs(dir) && playbookDir != "" {
 			dir = filepath.Join(playbookDir, dir)
 		}
-		fc.UseDir(dir)
 		if timeout == 0 {
 			timeout = 24 * time.Hour
 		}
 	}
-	if timeout > 0 {
-		fc.SetTTL(timeout)
+	if timeout == 0 {
+		timeout = 10 * time.Minute
 	}
+	if kind != "jsonfile" {
+		dir = ""
+	}
+	settings := factsCacheSettings{kind: kind, dir: dir, timeout: timeout}
+	runFactsCaches.Lock()
+	fc := runFactsCaches.caches[settings]
+	if fc == nil {
+		fc = cache.NewFactsCache(timeout)
+		fc.UseDir(dir)
+		runFactsCaches.caches[settings] = fc
+	}
+	runFactsCaches.Unlock()
 	if flush {
 		fc.Flush()
 	}
+	return fc
 }

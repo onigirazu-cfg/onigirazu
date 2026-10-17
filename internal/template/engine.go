@@ -22,10 +22,12 @@ import (
 
 // Engine provides template rendering capabilities similar to Jinja2
 type Engine struct {
-	funcMap       template.FuncMap
-	pluginManager *plugins.Manager
-	templateCache *cache.TemplateCache
-	secretManager *secrets.TemplateSecretManager
+	funcMap           template.FuncMap
+	pluginManager     *plugins.Manager
+	templateCache     *cache.TemplateCache
+	secretManager     *secrets.TemplateSecretManager
+	secretLookup      func(string, string, string) (string, error)
+	expressionFilters map[string]func(...interface{}) (interface{}, error)
 }
 
 // NewEngine creates a new template engine
@@ -127,7 +129,10 @@ func (e *Engine) loadFilterPlugins(ctx context.Context) {
 			}
 			e.funcMap[filterName] = call
 			if toExpressions {
-				expression.RegisterFilter(filterName, call)
+				if e.expressionFilters == nil {
+					e.expressionFilters = make(map[string]func(...interface{}) (interface{}, error))
+				}
+				e.expressionFilters[filterName] = call
 			}
 		}
 	}
@@ -138,6 +143,19 @@ func (e *Engine) SetPluginManager(pluginManager *plugins.Manager) {
 	e.pluginManager = pluginManager
 	ctx := context.Background()
 	e.loadFilterPlugins(ctx)
+}
+
+// SetSecretLookup sets the resolver used by this engine's expressions.
+func (e *Engine) SetSecretLookup(lookup func(string, string, string) (string, error)) {
+	e.secretLookup = lookup
+}
+
+// ExpressionVariables returns transient evaluation variables with this engine's resolver.
+func (e *Engine) ExpressionVariables(variables map[string]interface{}) map[string]interface{} {
+	if e == nil {
+		return variables
+	}
+	return expression.WithFilters(expression.WithSecretLookup(variables, e.secretLookup), e.expressionFilters)
 }
 
 // SetSecretManager sets the secret manager for the engine
@@ -159,6 +177,7 @@ func (e *Engine) GetSecretManager() *secrets.TemplateSecretManager {
 
 // Render renders a template string with variables
 func (e *Engine) Render(ctx context.Context, templateStr string, variables map[string]interface{}) (string, error) {
+	variables = e.ExpressionVariables(variables)
 	// no template syntax at all: most arguments; the passes below are
 	// regular expressions over the whole text
 	if !strings.Contains(templateStr, "{") {
@@ -442,6 +461,7 @@ func (e *Engine) ValidateTemplate(templateStr string) error {
 
 // RenderTaskArgs renders template variables in task arguments
 func (e *Engine) RenderTaskArgs(ctx context.Context, args map[string]interface{}, variables map[string]interface{}) (map[string]interface{}, error) {
+	variables = e.ExpressionVariables(variables)
 	result := make(map[string]interface{})
 
 	for key, value := range args {

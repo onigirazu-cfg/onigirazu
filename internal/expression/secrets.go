@@ -10,19 +10,44 @@ import (
 )
 
 // SecretLookup reads a field of a secret from a provider (bitwarden,
-// vault); the CLI sets it. Without it, templates that use secrets fail.
+// vault); used as a fallback when evaluation variables have no resolver.
 var SecretLookup func(provider, item, field string) (string, error)
 
-func secretValue(provider, item, field string) (string, error) {
-	if SecretLookup == nil {
+// WithSecretLookup copies variables and attaches a resolver for this evaluation.
+func WithSecretLookup(variables map[string]interface{}, lookup func(string, string, string) (string, error)) map[string]interface{} {
+	out := make(map[string]interface{}, len(variables))
+	for k, v := range variables {
+		out[k] = v
+	}
+	if lookup != nil {
+		out[secretLookupKey] = secretResolver{lookup: lookup}
+	}
+	return out
+}
+
+// the variable the run's lookup travels under; a name, not a credential
+const secretLookupKey = "__onigirazu_secret_lookup" // #nosec G101
+
+type secretResolver struct {
+	lookup func(string, string, string) (string, error)
+}
+
+func secretValue(provider, item, field string, variables ...map[string]interface{}) (string, error) {
+	if len(variables) != 0 {
+		if local, ok := variables[0][secretLookupKey].(secretResolver); ok {
+			return local.lookup(provider, item, field)
+		}
+	}
+	lookup := SecretLookup
+	if lookup == nil {
 		return "", fmt.Errorf("secrets are not available here")
 	}
-	return SecretLookup(provider, item, field)
+	return lookup(provider, item, field)
 }
 
 // bitwardenLookup is lookup('community.general.bitwarden', 'item', ...,
 // field='password'): one value per item, the password when no field is given
-func bitwardenLookup(terms []interface{}) ([]interface{}, error) {
+func bitwardenLookup(terms []interface{}, variables ...map[string]interface{}) ([]interface{}, error) {
 	field := "password"
 	var items []string
 	for i := 0; i < len(terms); i++ {
@@ -37,7 +62,7 @@ func bitwardenLookup(terms []interface{}) ([]interface{}, error) {
 	}
 	out := make([]interface{}, 0, len(items))
 	for _, item := range items {
-		v, err := secretValue("bitwarden", item, field)
+		v, err := secretValue("bitwarden", item, field, variables...)
 		if err != nil {
 			return nil, err
 		}
@@ -93,7 +118,7 @@ var SOPSFile func(path string) (string, error)
 // hashiVaultLookup is lookup('community.hashi_vault.hashi_vault',
 // 'secret=secret/data/app/db:password'): the field, or the whole secret as
 // a dict; the mount's data/ prefix of KV v2 paths is accepted and dropped
-func hashiVaultLookup(terms []interface{}) ([]interface{}, error) {
+func hashiVaultLookup(terms []interface{}, variables ...map[string]interface{}) ([]interface{}, error) {
 	pos, kw := lookupArgs(terms, "secret", "url", "auth_method", "token", "namespace", "engine_mount_point")
 	var specs []string
 	if s, ok := kw["secret"]; ok {
@@ -107,7 +132,7 @@ func hashiVaultLookup(terms []interface{}) ([]interface{}, error) {
 	out := make([]interface{}, 0, len(specs))
 	for _, spec := range specs {
 		path, field, _ := strings.Cut(spec, ":")
-		v, err := vaultSecret(kvPath(path), field)
+		v, err := vaultSecret(kvPath(path), field, variables...)
 		if err != nil {
 			return nil, err
 		}
@@ -119,11 +144,11 @@ func hashiVaultLookup(terms []interface{}) ([]interface{}, error) {
 // vaultKV2GetLookup is lookup('community.hashi_vault.vault_kv2_get',
 // 'app/db'): the secret's data as a dict (under "secret", as the plugin
 // returns it, with "data" beside it)
-func vaultKV2GetLookup(terms []interface{}) ([]interface{}, error) {
+func vaultKV2GetLookup(terms []interface{}, variables ...map[string]interface{}) ([]interface{}, error) {
 	paths, _ := lookupArgs(terms, "engine_mount_point", "url", "auth_method", "token", "namespace")
 	out := make([]interface{}, 0, len(paths))
 	for _, p := range paths {
-		v, err := vaultSecret(kvPath(fmt.Sprint(p)), "")
+		v, err := vaultSecret(kvPath(fmt.Sprint(p)), "", variables...)
 		if err != nil {
 			return nil, err
 		}
@@ -142,8 +167,8 @@ func kvPath(path string) string {
 }
 
 // vaultSecret is the field of a Vault secret, or the whole secret as a dict
-func vaultSecret(path, field string) (interface{}, error) {
-	v, err := secretValue("vault", path, field)
+func vaultSecret(path, field string, variables ...map[string]interface{}) (interface{}, error) {
+	v, err := secretValue("vault", path, field, variables...)
 	if err != nil {
 		return nil, err
 	}

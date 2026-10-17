@@ -66,6 +66,12 @@ command-line flag wins.
 
 Durations are written as `30s`, `5m`, `1h`.
 
+`ssh_strict_host_key`, `ssh_known_hosts_file`, `ssh_timeout` and `remote_server` configure the
+SSH connection pool, which one process shares between its runs (`serve`, `listen`, `mcp`
+run playbooks in-process). The first run fixes them; a later run whose configuration asks
+for other values keeps the pool as it is and logs one warning naming the setting. Give
+such jobs the same SSH settings, or run them from separate processes.
+
 `check_mode: true` and `dry_run: true` (or their `ONIGIRAZU_*` variables) are the
 same as `apply --check`: no task changes anything.
 

@@ -44,14 +44,29 @@ var (
 func Configure(c Config) {
 	mu.Lock()
 	defer mu.Unlock()
-	cfg = c
+	cfg = c.Clone()
 }
 
-// Allowed reports whether module may run through the bridge
-func Allowed(module string) bool {
+// Clone copies the configuration for an independent run.
+func (c Config) Clone() Config {
+	c.Modules = append([]string(nil), c.Modules...)
+	return c
+}
+
+func currentConfig() Config {
 	mu.RLock()
 	defer mu.RUnlock()
-	for _, p := range cfg.Modules {
+	return cfg.Clone()
+}
+
+// Allowed reports whether module may run through the bridge.
+func Allowed(module string) bool {
+	return currentConfig().Allowed(module)
+}
+
+// Allowed reports whether this configuration allows the module.
+func (c Config) Allowed(module string) bool {
+	for _, p := range c.Modules {
 		if ok, _ := path.Match(p, module); ok || p == module {
 			return true
 		}
@@ -78,6 +93,11 @@ var callbackPlugin []byte
 
 // Run runs the task on host with ansible-playbook
 func Run(ctx context.Context, t Task, host types.Host) types.TaskResult {
+	return currentConfig().Run(ctx, t, host)
+}
+
+// Run runs the task with this configuration.
+func (c Config) Run(ctx context.Context, t Task, host types.Host) types.TaskResult {
 	start := time.Now()
 	res := types.TaskResult{TaskName: t.Name, Host: host.Name, Module: t.Module, Timestamp: start,
 		Output: map[string]interface{}{}}
@@ -87,9 +107,7 @@ func Run(ctx context.Context, t Task, host types.Host) types.TaskResult {
 		res.Duration = time.Since(start)
 		return res
 	}
-	mu.RLock()
-	bin := cfg.AnsiblePlaybook
-	mu.RUnlock()
+	bin := c.AnsiblePlaybook
 	if bin == "" {
 		bin = "ansible-playbook"
 	}

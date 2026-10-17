@@ -2,7 +2,10 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -57,10 +60,7 @@ func TestDriftApplyArgsInventoryAndState(t *testing.T) {
 }
 
 func TestRunPlaybookOwnInventoryAndState(t *testing.T) {
-	// two runPlaybook calls with their own inventory and state file see only
-	// their own hosts and write nothing to the package globals; the runs are
-	// sequential: apply still swaps os.Stdout, the SSH pool and the secret
-	// lookup per run, so overlapping runs are not safe yet
+	// Each run uses its own flags without changing the command defaults.
 	playbook := `- hosts: all
   gather_facts: false
   tasks:
@@ -95,6 +95,104 @@ func TestRunPlaybookOwnInventoryAndState(t *testing.T) {
 	assert.Equal(t, []string{"hostB"}, hostsOf(run("hostB")))
 	assert.Equal(t, []string{"sentinel,"}, inventoryPaths)
 	assert.Equal(t, "sentinel-state", statePath)
+}
+
+func TestRunPlaybookContextConcurrent(t *testing.T) {
+	type run struct {
+		host, state string
+		args        []string
+	}
+	runs := make([]run, 3)
+	for i := range runs {
+		dir := t.TempDir()
+		host := fmt.Sprintf("overlap%d", i)
+		pb, inv := filepath.Join(dir, "site.yml"), filepath.Join(dir, "hosts.yml")
+		task := "    - command: \"true\"\n"
+		if i == 1 {
+			task = "    - debug:\n        msg: isolated debug output\n"
+		}
+		require.NoError(t, os.WriteFile(pb, []byte("- hosts: all\n  gather_facts: false\n  tasks:\n"+task), 0o600))
+		require.NoError(t, os.WriteFile(inv, []byte("all:\n  hosts:\n    "+host+":\n      ansible_connection: local\n"), 0o600))
+		state := filepath.Join(dir, "state.json")
+		runs[i] = run{host: host, state: state, args: []string{pb, "-i", inv, "--state", state}}
+	}
+
+	read, write, err := os.Pipe()
+	require.NoError(t, err)
+	stdout := os.Stdout
+	os.Stdout = write
+	defer func() { os.Stdout = stdout }()
+	captured := make(chan []byte, 1)
+	go func() {
+		data, _ := io.ReadAll(read)
+		captured <- data
+	}()
+	defer read.Close()
+	defer write.Close()
+
+	type outcome struct {
+		i      int
+		result *types.PlaybookResult
+		err    error
+	}
+	results := make(chan outcome, len(runs))
+	start := make(chan struct{})
+	for i, r := range runs {
+		go func(i int, args []string) {
+			<-start
+			result, err := runPlaybookContext(context.Background(), args)
+			results <- outcome{i: i, result: result, err: err}
+		}(i, r.args)
+	}
+	close(start)
+	for range runs {
+		got := <-results
+		if !assert.NoError(t, got.err, "run %d", got.i) || !assert.NotNil(t, got.result) {
+			continue
+		}
+		var hosts []string
+		for _, play := range got.result.Plays {
+			for _, host := range play.Hosts {
+				hosts = append(hosts, host.Host)
+				if assert.Len(t, host.Tasks, 1) {
+					task := host.Tasks[0]
+					assert.True(t, task.Success, "run %d: %s", got.i, task.Error)
+					assert.False(t, task.Failed)
+					if got.i == 1 {
+						assert.Equal(t, "debug", task.Module)
+						assert.Equal(t, "isolated debug output", task.Output["msg"])
+					}
+				}
+			}
+		}
+		assert.Equal(t, []string{runs[got.i].host}, hosts)
+		_, err := os.Stat(runs[got.i].state)
+		assert.NoError(t, err, "state file of run %d", got.i)
+	}
+	require.NoError(t, write.Close())
+	assert.Empty(t, string(<-captured), "in-process runs must leave process stdout empty")
+}
+
+func TestRunPlaybookContextCancellation(t *testing.T) {
+	dir := t.TempDir()
+	pb, inv := filepath.Join(dir, "site.yml"), filepath.Join(dir, "hosts.yml")
+	require.NoError(t, os.WriteFile(pb, []byte("- hosts: all\n  gather_facts: false\n  tasks:\n    - pause:\n        seconds: 5\n"), 0o600))
+	require.NoError(t, os.WriteFile(inv, []byte("all:\n  hosts:\n    localhost:\n      ansible_connection: local\n"), 0o600))
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	finished := make(chan error, 1)
+	go func() {
+		_, err := runPlaybookContext(ctx, []string{pb, "-i", inv, "--state", filepath.Join(dir, "state.json")})
+		finished <- err
+	}()
+	time.Sleep(200 * time.Millisecond)
+	cancel()
+	select {
+	case err := <-finished:
+		require.ErrorIs(t, err, context.Canceled)
+	case <-time.After(2 * time.Second):
+		t.Fatal("canceled playbook did not stop within two seconds")
+	}
 }
 
 func TestPlanWording(t *testing.T) {

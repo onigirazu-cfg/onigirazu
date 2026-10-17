@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/onigirazu-cfg/onigirazu/internal/asyncjob"
+	"github.com/onigirazu-cfg/onigirazu/internal/modules"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
@@ -33,7 +34,7 @@ func (e *ExecutionEngine) startAsyncJob(ctx context.Context, task, moduleTask *t
 	jid := asyncjob.Start(host.Name, func() types.TaskResult {
 		runCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Duration(async)*time.Second)
 		defer cancel()
-		result, err := e.moduleRegistry.ExecuteTask(runCtx, moduleTask, target, taskVars)
+		result, err := e.moduleRegistry.ExecuteTask(modules.WithOutput(runCtx, e.output), moduleTask, target, e.expressionVariables(taskVars))
 		err = asyncOutcome(&result, err, runCtx, ctx, async)
 		if err != nil && result.Error == "" {
 			result.Failed, result.Success, result.Error = true, false, err.Error()

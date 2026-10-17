@@ -37,6 +37,8 @@ var (
 	filterKeyword = regexp.MustCompile(`\b(attribute|reverse|case_sensitive|recursive|list_merge|key_name|value_name|wantlist|errors|indent|vault_behavior|default_flow_style|width|sort_keys|utc|fillvalue|duplicates|namespace|isbits|unit|decoration|prefix|postfix)\s*=([^=]|$)`)
 	// d.keys() and d.values() are Python methods
 	dictMethod = regexp.MustCompile(`\.(keys|values)\(\)`)
+	// Secret functions receive the evaluation variables before their arguments.
+	secretCall = regexp.MustCompile(`\b(bitwarden|vault|secret)\s*\(`)
 	// lookup() and query() get the playbook directory as their first argument
 	lookupCall = regexp.MustCompile(`\b(lookup|query|q)\(`)
 	jinjaWord  = regexp.MustCompile(`\b(True|False|None)\b`)
@@ -69,7 +71,7 @@ func Eval(expression string, variables map[string]interface{}) (interface{}, err
 	if inner, ok := Unwrap(expression); ok {
 		expression = inner
 	}
-	program, err := compile(expression)
+	program, err := compileWithFilters(expression, evaluationFilters(variables))
 	if err != nil {
 		return nil, err
 	}
@@ -85,8 +87,14 @@ func Eval(expression string, variables map[string]interface{}) (interface{}, err
 // programs caches compiled expressions; playbooks repeat the same few
 var programs sync.Map // string -> *vm.Program
 
-func compile(expression string) (*vm.Program, error) {
-	if cached, ok := programs.Load(expression); ok {
+func compileWithFilters(expression string, filters map[string]func(...interface{}) (interface{}, error)) (*vm.Program, error) {
+	names := make([]string, 0, len(filters))
+	for name := range filters {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	key := fmt.Sprintf("%q:%s", names, expression)
+	if cached, ok := programs.Load(key); ok {
 		if program, ok := cached.(*vm.Program); ok {
 			return program, nil
 		}
@@ -94,12 +102,16 @@ func compile(expression string) (*vm.Program, error) {
 	options := append([]expr.Option{
 		expr.Env(map[string]interface{}{}),
 		expr.AllowUndefinedVariables(),
+		expr.Patch(scopedFilterPatch{names: filters}),
+		expr.Function("jinja_scoped_filter", callScopedFilter),
 		expr.Patch(inPatch{}),
 		expr.Patch(truthPatch{}),
 		expr.Patch(methodPatch{}),
 		expr.Patch(indexPatch{}),
 		expr.Function("jinja_method", callMethod),
 		expr.Function("bitwarden", func(params ...interface{}) (interface{}, error) {
+			variables, _ := params[0].(map[string]interface{})
+			params = params[1:]
 			if len(params) == 0 {
 				return nil, fmt.Errorf("bitwarden(item, field) needs an item")
 			}
@@ -107,9 +119,11 @@ func compile(expression string) (*vm.Program, error) {
 			if len(params) > 1 {
 				field = fmt.Sprint(params[1])
 			}
-			return secretValue("bitwarden", fmt.Sprint(params[0]), field)
+			return secretValue("bitwarden", fmt.Sprint(params[0]), field, variables)
 		}),
 		expr.Function("vault", func(params ...interface{}) (interface{}, error) {
+			variables, _ := params[0].(map[string]interface{})
+			params = params[1:]
 			if len(params) == 0 {
 				return nil, fmt.Errorf("vault(path, field) needs a path")
 			}
@@ -117,13 +131,15 @@ func compile(expression string) (*vm.Program, error) {
 			if len(params) > 1 {
 				field = fmt.Sprint(params[1])
 			}
-			return secretValue("vault", fmt.Sprint(params[0]), field)
+			return secretValue("vault", fmt.Sprint(params[0]), field, variables)
 		}),
 		expr.Function("secret", func(params ...interface{}) (interface{}, error) {
+			variables, _ := params[0].(map[string]interface{})
+			params = params[1:]
 			if len(params) < 3 {
 				return nil, fmt.Errorf("secret(provider, item, field) needs three arguments")
 			}
-			return secretValue(fmt.Sprint(params[0]), fmt.Sprint(params[1]), fmt.Sprint(params[2]))
+			return secretValue(fmt.Sprint(params[0]), fmt.Sprint(params[1]), fmt.Sprint(params[2]), variables)
 		}),
 		expr.Function("jinja_truthy", func(params ...interface{}) (interface{}, error) {
 			return Truthy(params[0]), nil
@@ -191,7 +207,7 @@ func compile(expression string) (*vm.Program, error) {
 	if err != nil {
 		return nil, err
 	}
-	programs.Store(expression, program)
+	programs.Store(key, program)
 	return program, nil
 }
 
@@ -276,6 +292,7 @@ func translateCode(code string) string {
 	code = randomKeyword.ReplaceAllString(code, `"$1", $2`)
 	code = filterKeyword.ReplaceAllString(code, `"`+kwPrefix+`$1", $2`)
 	code = dictMethod.ReplaceAllString(code, " | $1()")
+	code = secretCall.ReplaceAllString(code, "${1}("+lookupVars+", ")
 	code = lookupCall.ReplaceAllStringFunc(code, func(m string) string {
 		if strings.HasPrefix(m, "lookup") {
 			return "jinja_lookup(playbook_dir, " + lookupVars + ", "

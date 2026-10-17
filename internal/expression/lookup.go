@@ -150,7 +150,7 @@ func lookupItems(base, varsArg interface{}, args []interface{}) ([]interface{}, 
 		}
 		return []interface{}{items[rand.IntN(len(items))]}, nil // #nosec G404 -- not for security
 	case "bitwarden":
-		return bitwardenLookup(terms)
+		return bitwardenLookup(terms, vars)
 	case "vars":
 		return lookupVarsPlugin(vars, terms)
 	case "varnames":
@@ -174,9 +174,9 @@ func lookupItems(base, varsArg interface{}, args []interface{}) ([]interface{}, 
 	case "sops":
 		return sopsLookup(resolve, terms)
 	case "hashi_vault":
-		return hashiVaultLookup(terms)
+		return hashiVaultLookup(terms, vars)
 	case "vault_kv2_get":
-		return vaultKV2GetLookup(terms)
+		return vaultKV2GetLookup(terms, vars)
 	case "tf_output":
 		return tfOutputLookup(resolve, terms)
 	default:
