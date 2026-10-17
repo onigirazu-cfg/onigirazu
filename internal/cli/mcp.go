@@ -220,7 +220,7 @@ func (o *mcpOptions) tools() []mcpTool {
 				if t := argString(args, "control_tags"); t != "" {
 					co.tags = strings.Split(t, ",")
 				}
-				report, err := complyReport(co)
+				report, err := complyReport(context.Background(), co)
 				if err != nil {
 					return "", err
 				}

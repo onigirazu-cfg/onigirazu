@@ -26,7 +26,7 @@ button.run{border:1px solid var(--line);background:var(--card);color:var(--fg);p
 </style>
 </head>
 <body>
-<header><h1>{{title}}</h1><nav><button data-v="jobs" class="on">Jobs</button><button data-v="hosts">Hosts</button><button data-v="runs">Runs</button><button data-v="audit">Audit</button></nav><button class="run" id="pause" hidden>Pause</button><span class="who" id="who"></span></header>
+<header><h1>{{title}}</h1><nav><button data-v="jobs" class="on">Jobs</button><button data-v="hosts">Hosts</button><button data-v="runs">Runs</button><button data-v="audit">Audit</button></nav><span class="who" id="activity" hidden></span><button class="run" id="pause" hidden>Pause</button><span class="who" id="who"></span></header>
 <div class="banner" id="pause-banner" hidden></div>
 <main id="main"></main>
 <script>
@@ -37,6 +37,10 @@ const span=d=>d<90?Math.round(d)+'s':d<5400?Math.round(d/60)+'m':d<172800?Math.r
 const ago=t=>{if(!t)return'';const d=(Date.now()-new Date(t))/1000;return d<0?'in '+span(-d):span(d)+' ago'};
 const badge=s=>{s=s==='failure'?'failed':s==='success'?'ok':s;return `<span class="b ${esc(s)}">${esc(s)}</span>`};
 let me={operator:false}, view='jobs', timer;
+function activityView(m){
+  $('#activity').hidden=!(m.running+m.queued);
+  $('#activity').textContent=`${m.running} running / ${m.queued} queued`;
+}
 function pauseView(p){
   me.paused=p.paused;
   $('#pause').hidden=!me.operator;
@@ -54,8 +58,8 @@ const hasAdhoc=j=>j.adhoc?.limit||j.adhoc?.extra_vars?.length;
 function hash(value){if(location.hash!==value)history.pushState(null,'',value||location.pathname+location.search)}
 async function jobs(){
   view='jobs';hash('');
-  const [list,p]=await Promise.all([api('/api/jobs'),api('/api/pause')]);
-  pauseView(p);
+  const [list,p,m]=await Promise.all([api('/api/jobs'),api('/api/pause'),api('/api/me')]);
+  pauseView(p);activityView(m);
   if(!list.length){main.innerHTML='<div class="empty">No jobs in serve.yml</div>';return}
   const pending=list.filter(j=>j.pending);
   main.innerHTML=(pending.length?`<h2>Pending approval</h2>${pending.map(j=>`<div class="approval-card"><b>${esc(j.name)}</b> · ${esc(j.kind)} · ${esc(j.target)}<br><span class="muted">requested by ${esc(j.pending.trigger)} ${esc(ago(j.pending.requested))} · expires in ${span(Math.max(0,(new Date(j.pending.approval.expires)-Date.now())/1000))}</span>${paramsView(j.pending)}${j.allowed?`<p><button class="run" data-decision="approve" data-id="${esc(j.pending.id)}">Approve</button> <button class="run" data-decision="reject" data-id="${esc(j.pending.id)}">Reject</button></p>`:''}</div>`).join('')}`:'')+`<table><tr><th>Job</th><th>Kind</th><th>Target</th><th>Schedule</th><th>Last run</th><th>Result</th><th></th></tr>${list.map(j=>`<tr>
@@ -132,8 +136,8 @@ function route(){
   else if(view==='result'||view==='results'||view==='jobs')show('jobs');
 }
 window.addEventListener('hashchange',route);
-api('/api/me').then(m=>{me=m;pauseView(m);api('/api/pause').then(pauseView).catch(()=>{});$('#who').textContent=m.user+(m.operator?' · operator':' · viewer');route()}).catch(e=>{main.innerHTML=`<div class="empty">${esc(e.message)}</div>`});
-timer=setInterval(()=>{if(view==='jobs'&&!main.querySelector('[data-form-row]:not([hidden])')&&!main.querySelector('pre')&&!main.querySelector('#back'))jobs().catch(()=>{})},10000);
+api('/api/me').then(m=>{me=m;activityView(m);pauseView(m);api('/api/pause').then(pauseView).catch(()=>{});$('#who').textContent=m.user+(m.operator?' · operator':' · viewer');route()}).catch(e=>{main.innerHTML=`<div class="empty">${esc(e.message)}</div>`});
+timer=setInterval(()=>{api('/api/me').then(activityView).catch(()=>{});if(view==='jobs'&&!main.querySelector('[data-form-row]:not([hidden])')&&!main.querySelector('pre')&&!main.querySelector('#back'))jobs().catch(()=>{})},10000);
 </script>
 </body>
 </html>

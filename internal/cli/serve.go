@@ -37,7 +37,8 @@ import (
 
 // ServeConfig is the serve.yml file
 type ServeConfig struct {
-	Listen          string         `yaml:"listen"` // default :8086
+	Concurrency     int            `yaml:"concurrency"` // default 1
+	Listen          string         `yaml:"listen"`      // default :8086
 	Title           string         `yaml:"title"`
 	URL             string         `yaml:"url"`      // where the page is reached, for links in notifications
 	DataDir         string         `yaml:"data_dir"` // default ~/.onigirazu/serve
@@ -226,6 +227,12 @@ func loadServeConfig(path string) (*ServeConfig, error) {
 	if err := yaml.Unmarshal(data, cfg); err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
+	if cfg.Concurrency < 0 {
+		return nil, fmt.Errorf("concurrency must be >= 1")
+	}
+	if cfg.Concurrency == 0 {
+		cfg.Concurrency = 1
+	}
 	if cfg.Listen == "" {
 		cfg.Listen = ":8086"
 	}
@@ -311,21 +318,22 @@ func loadServeConfig(path string) (*ServeConfig, error) {
 
 // server holds the jobs, their results and the audit store
 type server struct {
-	cfg     *ServeConfig
-	out     io.Writer
-	auditMu sync.Mutex
-	mu      sync.Mutex
-	results map[string][]*JobResult // job -> newest first
-	running map[string]bool         // job is pending, queued or running
-	pending map[string]*JobResult
-	lastID  map[string]string // job -> the base of the last id given (ids stay unique when records are pruned)
-	lastSeq map[string]int
-	nextRun map[string]time.Time
-	pause   servePause
-	resumed chan struct{}
-	queue   chan queued
+	cfg      *ServeConfig
+	out      io.Writer
+	auditMu  sync.Mutex
+	pickupMu sync.Mutex // dequeue through the running transition, in FIFO order
+	mu       sync.Mutex
+	results  map[string][]*JobResult // job -> newest first
+	running  map[string]bool         // job is pending, queued or running
+	pending  map[string]*JobResult
+	lastID   map[string]string // job -> the base of the last id given (ids stay unique when records are pruned)
+	lastSeq  map[string]int
+	nextRun  map[string]time.Time
+	pause    servePause
+	resumed  chan struct{}
+	queue    chan queued
 	// runJob runs a job; tests replace it
-	runJob func(j *ServeJob) (*JobResult, error)
+	runJob func(ctx context.Context, j *ServeJob) (*JobResult, error)
 	audit  *audit.Storage
 	// notifications go out in goroutines; tests set the client and wait
 	notifyClient *http.Client
@@ -346,6 +354,9 @@ type queued struct {
 }
 
 func newServer(cfg *ServeConfig, out io.Writer) (*server, error) {
+	if cfg.Concurrency == 0 {
+		cfg.Concurrency = 1
+	}
 	s := &server{cfg: cfg, out: out, results: map[string][]*JobResult{}, running: map[string]bool{}, pending: map[string]*JobResult{}, lastID: map[string]string{}, lastSeq: map[string]int{}, nextRun: map[string]time.Time{}, queue: make(chan queued, 64), resumed: make(chan struct{})}
 	s.runJob = s.execute
 	s.inventory = slices.Clone(inventoryPaths)
@@ -633,11 +644,14 @@ func (s *server) expirePending(now time.Time) []*JobResult {
 	return expired
 }
 
-// worker runs queued jobs one at a time
+// worker runs queued jobs; there are cfg.Concurrency of them, picking up
+// in FIFO order
 func (s *server) worker(ctx context.Context) {
 	for {
+		s.pickupMu.Lock()
 		select {
 		case <-ctx.Done():
+			s.pickupMu.Unlock()
 			return
 		case q := <-s.queue:
 			waiting := false
@@ -645,6 +659,11 @@ func (s *server) worker(ctx context.Context) {
 				p, ch := s.paused()
 				if !p.Paused {
 					s.mu.Lock()
+					if ctx.Err() != nil {
+						s.mu.Unlock()
+						s.pickupMu.Unlock()
+						return
+					}
 					if !s.pause.Paused {
 						// Hold mu until the run is marked running.
 						break
@@ -660,6 +679,7 @@ func (s *server) worker(ctx context.Context) {
 				}
 				select {
 				case <-ctx.Done():
+					s.pickupMu.Unlock()
 					return
 				case <-ch:
 				}
@@ -670,13 +690,16 @@ func (s *server) worker(ctx context.Context) {
 			s.notify(eventStart, q.job, resultCopy(r))
 			fmt.Fprintf(s.out, "serve: %s: running (%s)\n", q.job.Name, r.Trigger)
 			s.mu.Unlock()
+			s.pickupMu.Unlock()
 			j, err := s.effectiveJob(q.job, r.Params)
 			var result *JobResult
 			if err == nil {
-				result, err = s.runJob(j)
+				result, err = s.runJob(ctx, j)
 			}
 			s.mu.Lock()
-			if err != nil {
+			if err != nil && ctx.Err() != nil {
+				r.Status, r.Summary = "error", "interrupted: serve stopping"
+			} else if err != nil {
 				r.Status, r.Summary = "error", err.Error()
 			} else {
 				r.Started, r.Duration, r.Status, r.Summary, r.Hosts, r.Report = result.Started, result.Duration, result.Status, result.Summary, result.Hosts, result.Report
@@ -865,7 +888,7 @@ func extraVarsArg(vars map[string]string) string {
 }
 
 // execute runs a job in this process and summarizes it
-func (s *server) execute(j *ServeJob) (*JobResult, error) {
+func (s *server) execute(ctx context.Context, j *ServeJob) (*JobResult, error) {
 	started := time.Now().UTC()
 	r := &JobResult{Job: j.Name, Kind: j.Kind, Started: started, Hosts: map[string]string{}}
 	o := driftCheckOptions{limit: j.Limit, become: j.Become}
@@ -885,7 +908,7 @@ func (s *server) execute(j *ServeJob) (*JobResult, error) {
 	case "comply":
 		co := &complyOptions{driftCheckOptions: o, profile: j.Profile, failOn: j.FailOn}
 		co.become = j.Become || !strings.Contains(j.Profile, "/")
-		report, err := complyReport(co)
+		report, err := complyReport(ctx, co)
 		if err != nil {
 			return nil, err
 		}
@@ -903,7 +926,7 @@ func (s *server) execute(j *ServeJob) (*JobResult, error) {
 		r.Report, _ = json.Marshal(report)
 		s.pushMetrics(report.Metrics(s.cfg.Metrics.Labels))
 	case "verify":
-		result, err := runPlaybook(append(o.applyArgs(j.Playbook, false), "--verify-only"))
+		result, err := runPlaybookContext(ctx, append(o.applyArgs(j.Playbook, false), "--verify-only"))
 		if err != nil {
 			return nil, err
 		}
@@ -919,7 +942,7 @@ func (s *server) execute(j *ServeJob) (*JobResult, error) {
 		r.Report, _ = json.Marshal(vr)
 	default: // drift, apply
 		check := j.Kind == "drift"
-		result, err := runPlaybook(o.applyArgs(j.Playbook, check))
+		result, err := runPlaybookContext(ctx, o.applyArgs(j.Playbook, check))
 		if err != nil {
 			return nil, err
 		}
@@ -1077,8 +1100,11 @@ func (s *server) mux() *http.ServeMux {
 		_, _ = io.WriteString(w, strings.ReplaceAll(serveUI, "{{title}}", s.cfg.Title))
 	})
 	mux.HandleFunc("/api/me", auth(false, func(w http.ResponseWriter, _ *http.Request, id serveIdentity) {
-		p, _ := s.paused()
-		writeJSON(w, http.StatusOK, map[string]interface{}{"user": id.User, "operator": id.Operator, "title": s.cfg.Title, "paused": p.Paused})
+		s.mu.Lock()
+		running, queued := s.activity()
+		status := map[string]interface{}{"user": id.User, "operator": id.Operator, "title": s.cfg.Title, "paused": s.pause.Paused, "running": running, "queued": queued, "concurrency": s.cfg.Concurrency}
+		s.mu.Unlock()
+		writeJSON(w, http.StatusOK, status)
 	}))
 	mux.HandleFunc("/api/pause", auth(false, func(w http.ResponseWriter, r *http.Request, id serveIdentity) {
 		switch r.Method {
@@ -1434,6 +1460,21 @@ func (s *server) hostsView() []hostView {
 	return out
 }
 
+// activity counts executing and queued runs; caller holds mu.
+func (s *server) activity() (running, queued int) {
+	for _, runs := range s.results {
+		for _, r := range runs {
+			switch r.Status {
+			case "running":
+				running++
+			case "queued":
+				queued++
+			}
+		}
+	}
+	return
+}
+
 func (s *server) metricsHandler(w http.ResponseWriter, _ *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -1446,6 +1487,10 @@ func (s *server) metricsHandler(w http.ResponseWriter, _ *http.Request) {
 		paused = 1
 	}
 	promLine(&b, "onigirazu_serve_paused", s.cfg.Metrics.Labels, paused)
+	b.WriteString("# TYPE onigirazu_serve_running gauge\n# TYPE onigirazu_serve_concurrency gauge\n")
+	running, _ := s.activity()
+	promLine(&b, "onigirazu_serve_running", s.cfg.Metrics.Labels, float64(running))
+	promLine(&b, "onigirazu_serve_concurrency", s.cfg.Metrics.Labels, float64(s.cfg.Concurrency))
 	for _, j := range s.cfg.Jobs {
 		if j.Approval == "required" {
 			value := float64(0)
@@ -1486,8 +1531,13 @@ func runServe(ctx context.Context, cfg *ServeConfig, out io.Writer) error {
 		return err
 	}
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+	var workers sync.WaitGroup
+	defer workers.Wait()
 	defer stop()
-	go s.worker(ctx)
+	for i := 0; i < cfg.Concurrency; i++ {
+		workers.Add(1)
+		go func() { defer workers.Done(); s.worker(ctx) }()
+	}
 	go s.scheduler(ctx)
 	srv := &http.Server{Addr: cfg.Listen, Handler: s.mux(), ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second}
 	errc := make(chan error, 1)
@@ -1496,7 +1546,11 @@ func runServe(ctx context.Context, cfg *ServeConfig, out io.Writer) error {
 	if cfg.Auth.Token == "" && len(cfg.Auth.Tokens) == 0 && cfg.Auth.UserHeader == "" {
 		open = " — no auth configured, everyone is an operator"
 	}
-	fmt.Fprintf(out, "serve: %s on %s: %d job(s), results in %s%s\n", cfg.Title, cfg.Listen, len(cfg.Jobs), cfg.DataDir, open)
+	parallel := ""
+	if cfg.Concurrency > 1 {
+		parallel = fmt.Sprintf(", concurrency %d", cfg.Concurrency)
+	}
+	fmt.Fprintf(out, "serve: %s on %s: %d job(s)%s, results in %s%s\n", cfg.Title, cfg.Listen, len(cfg.Jobs), parallel, cfg.DataDir, open)
 	select {
 	case err := <-errc:
 		return err

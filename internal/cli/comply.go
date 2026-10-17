@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -100,7 +101,7 @@ severity or above) or a host cannot be checked.`,
 }
 
 func runComply(o *complyOptions, stdout io.Writer) error {
-	report, err := complyReport(o)
+	report, err := complyReport(context.Background(), o)
 	if err != nil {
 		return err
 	}
@@ -142,7 +143,7 @@ func runComply(o *complyOptions, stdout io.Writer) error {
 
 // complyReport runs the profile against the hosts and scores it; serve
 // uses it for scheduled compliance jobs too
-func complyReport(o *complyOptions) (*comply.Report, error) {
+func complyReport(ctx context.Context, o *complyOptions) (*comply.Report, error) {
 	profile, err := comply.Load(o.profile)
 	if err != nil {
 		return nil, err
@@ -176,7 +177,7 @@ func complyReport(o *complyOptions) (*comply.Report, error) {
 	if o.state == "" && (statePath == "" || statePath == ".onigirazu-state") {
 		o.state = filepath.Join(dir, ".onigirazu-state")
 	}
-	result, err := runPlaybook(append(o.applyArgs(playbook, false), "--verify-only"))
+	result, err := runPlaybookContext(ctx, append(o.applyArgs(playbook, false), "--verify-only"))
 	if err != nil {
 		return nil, err
 	}
