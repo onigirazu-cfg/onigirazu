@@ -5,11 +5,14 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
@@ -43,6 +46,55 @@ func TestDriftApplyArgs(t *testing.T) {
 	assert.Contains(t, args, "--limit")
 	assert.Contains(t, args, "--become")
 	assert.NotContains(t, o.applyArgs("site.yml", false), "--check")
+}
+
+func TestDriftApplyArgsInventoryAndState(t *testing.T) {
+	o := driftCheckOptions{inventory: []string{"a", "b"}, state: "s"}
+	assert.Equal(t, []string{"site.yml", "-i", "a", "-i", "b", "--state", "s"}, o.applyArgs("site.yml", false))
+
+	empty := driftCheckOptions{}
+	assert.Equal(t, []string{"site.yml"}, empty.applyArgs("site.yml", false))
+}
+
+func TestRunPlaybookOwnInventoryAndState(t *testing.T) {
+	// two runPlaybook calls with their own inventory and state file see only
+	// their own hosts and write nothing to the package globals; the runs are
+	// sequential: apply still swaps os.Stdout, the SSH pool and the secret
+	// lookup per run, so overlapping runs are not safe yet
+	playbook := `- hosts: all
+  gather_facts: false
+  tasks:
+    - command: "true"
+`
+	prevInventory, prevState := inventoryPaths, statePath
+	defer func() { inventoryPaths, statePath = prevInventory, prevState }()
+	inventoryPaths, statePath = []string{"sentinel,"}, "sentinel-state"
+	run := func(host string) *types.PlaybookResult {
+		dir := t.TempDir()
+		pb := filepath.Join(dir, "site.yml")
+		require.NoError(t, os.WriteFile(pb, []byte(playbook), 0o600))
+		inv := filepath.Join(dir, "hosts.yml")
+		require.NoError(t, os.WriteFile(inv, []byte("all:\n  hosts:\n    "+host+":\n      ansible_connection: local\n"), 0o600))
+		state := filepath.Join(dir, ".onigirazu-state")
+		res, err := runPlaybook([]string{pb, "-i", inv, "--state", state})
+		require.NoError(t, err)
+		_, err = os.Stat(state)
+		require.NoError(t, err, "state file of the run")
+		return res
+	}
+	hostsOf := func(r *types.PlaybookResult) []string {
+		var hosts []string
+		for _, play := range r.Plays {
+			for _, h := range play.Hosts {
+				hosts = append(hosts, h.Host)
+			}
+		}
+		return hosts
+	}
+	assert.Equal(t, []string{"hostA"}, hostsOf(run("hostA")))
+	assert.Equal(t, []string{"hostB"}, hostsOf(run("hostB")))
+	assert.Equal(t, []string{"sentinel,"}, inventoryPaths)
+	assert.Equal(t, "sentinel-state", statePath)
 }
 
 func TestPlanWording(t *testing.T) {

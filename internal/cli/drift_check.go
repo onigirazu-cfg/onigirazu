@@ -64,6 +64,8 @@ type driftCheckOptions struct {
 	fix                      bool
 	format                   string
 	output                   string
+	inventory                []string // -i for this run, else apply falls back to the root's
+	state                    string   // --state for this run, else apply falls back to the root's
 	extraVars                []string
 	limit                    string
 	exclude                  string
@@ -85,6 +87,12 @@ func (o driftCheckOptions) applyArgs(playbook string, check bool) []string {
 	args := []string{playbook}
 	if check {
 		args = append(args, "--check", "--diff")
+	}
+	for _, inv := range o.inventory {
+		args = append(args, "-i", inv)
+	}
+	if o.state != "" {
+		args = append(args, "--state", o.state)
 	}
 	for _, e := range o.extraVars {
 		args = append(args, "-e", e)

@@ -172,8 +172,9 @@ func complyReport(o *complyOptions) (*comply.Report, error) {
 		return nil, err
 	}
 	o.driftCheckOptions.become = false // the play carries become
-	if statePath == "" || statePath == ".onigirazu-state" {
-		statePath = filepath.Join(dir, ".onigirazu-state")
+	// no state of its own and none from the root's --state: a throwaway one
+	if o.state == "" && (statePath == "" || statePath == ".onigirazu-state") {
+		o.state = filepath.Join(dir, ".onigirazu-state")
 	}
 	result, err := runPlaybook(append(o.applyArgs(playbook, false), "--verify-only"))
 	if err != nil {
