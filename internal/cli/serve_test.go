@@ -2142,7 +2142,7 @@ func TestServeCancelFinished(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, status := range []string{"ok", "drift", "failed", "error", "rejected", "expired", statusCancelled, statusCancelling} {
+	for _, status := range []string{"ok", "drift", "failed", "error", "rejected", "expired", statusCancelled, statusCancelling, statusTimedOut} {
 		t.Run(status, func(t *testing.T) {
 			r := &JobResult{ID: status, Job: "patch", Status: status}
 			s.store(r)
@@ -3089,6 +3089,209 @@ func TestServeCheckParams(t *testing.T) {
 	}
 	if p.Mode != "check" || p.Limit != "web1" || !slices.Equal(p.Hosts, []string{"web1"}) || p.ExtraVars["reboot"] != "true" {
 		t.Fatalf("check parameters: %+v", p)
+	}
+}
+
+func TestServeRunTimeout(t *testing.T) {
+	for _, tc := range []struct {
+		name               string
+		server, job        time.Duration
+		cancel, paused     bool
+		shutdown, finished bool
+		late               bool
+	}{
+		{name: "job", job: 50 * time.Millisecond},
+		{name: "server default", server: 50 * time.Millisecond},
+		{name: "job override", server: time.Hour, job: 50 * time.Millisecond},
+		{name: "operator cancel", job: time.Hour, cancel: true},
+		{name: "shutdown", job: time.Hour, shutdown: true},
+		{name: "late operator cancel", job: 50 * time.Millisecond, cancel: true, late: true},
+		{name: "late shutdown", job: 50 * time.Millisecond, shutdown: true, late: true},
+		{name: "queued", job: 50 * time.Millisecond, paused: true},
+		{name: "finished", job: 50 * time.Millisecond, finished: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s, err := newServer(&ServeConfig{DataDir: t.TempDir(), Retain: 10, RunTimeout: tc.server,
+				Jobs: []ServeJob{{Name: "patch", Kind: "apply", Timeout: tc.job}}}, io.Discard)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tc.paused {
+				if _, err := s.setPause(true, "test", "waiting"); err != nil {
+					t.Fatal(err)
+				}
+			}
+			started := make(chan time.Duration, 1)
+			observed, release := make(chan struct{}), make(chan struct{}, 1)
+			s.runJob = func(ctx context.Context, _ *ServeJob, _ string) (*JobResult, error) {
+				deadline, ok := ctx.Deadline()
+				if !ok {
+					return nil, errors.New("missing deadline")
+				}
+				started <- time.Until(deadline)
+				result := &JobResult{Started: time.Now().UTC(), Status: "ok", Hosts: map[string]string{"web": "failed"}, Report: json.RawMessage(`{"partial":true}`)}
+				if tc.paused {
+					select {
+					case <-time.After(10 * time.Millisecond):
+						return result, nil
+					case <-ctx.Done():
+						return result, ctx.Err()
+					}
+				}
+				<-ctx.Done()
+				if tc.late {
+					close(observed)
+					select {
+					case <-release:
+					case <-time.After(3 * time.Second):
+					}
+				}
+				if tc.finished {
+					return result, nil
+				}
+				return result, ctx.Err()
+			}
+			ctx, stop := context.WithCancel(context.Background())
+			done := make(chan struct{})
+			go func() { defer close(done); s.worker(ctx) }()
+			t.Cleanup(func() { stop(); <-done })
+			run, err := s.request(&s.cfg.Jobs[0], "test", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tc.paused {
+				time.Sleep(150 * time.Millisecond)
+				s.mu.Lock()
+				status := s.resultByID("patch", run.ID).Status
+				s.mu.Unlock()
+				if status != "queued" {
+					t.Fatalf("paused status: %s", status)
+				}
+				if _, err := s.setPause(false, "test", ""); err != nil {
+					t.Fatal(err)
+				}
+			}
+			select {
+			case remaining := <-started:
+				if !tc.cancel && !tc.shutdown && remaining > 50*time.Millisecond {
+					t.Fatalf("timeout override ignored: %s", remaining)
+				}
+			case <-time.After(3 * time.Second):
+				t.Fatal("run did not start")
+			}
+			if tc.late {
+				select {
+				case <-observed:
+				case <-time.After(3 * time.Second):
+					t.Fatal("deadline not observed")
+				}
+			}
+			if tc.cancel {
+				if w := serveCancelRequest(s, run.ID, "alice"); w.Code != http.StatusAccepted {
+					t.Fatalf("cancel: %d %s", w.Code, w.Body.String())
+				}
+			}
+			if tc.shutdown {
+				stop()
+			}
+			release <- struct{}{}
+			serveWaitActivity(t, s, 0, 0)
+			s.mu.Lock()
+			got := resultCopy(s.resultByID("patch", run.ID))
+			busy := s.running["patch"]
+			lastHost := s.lastHostResult("patch")
+			s.mu.Unlock()
+			want := statusTimedOut
+			switch {
+			case tc.cancel && !tc.late:
+				want = statusCancelled
+			case tc.shutdown && !tc.late:
+				want = "error"
+			case tc.paused, tc.finished:
+				want = "ok"
+			}
+			if got.Status != want || busy || got.Hosts["web"] != "failed" || string(got.Report) != `{"partial":true}` {
+				t.Fatalf("result: %+v, running=%v", got, busy)
+			}
+			if want == statusTimedOut {
+				if got.Summary != "timed out after 50ms" || lastHost != nil { // partial hosts are no verdicts
+					t.Fatalf("timeout result: %+v, host verdict: %+v", got, lastHost)
+				}
+				w := httptest.NewRecorder()
+				s.metricsHandler(w, nil)
+				if strings.Contains(w.Body.String(), `onigirazu_serve_host_status{host="web"`) {
+					t.Fatalf("partial host counted: %s", w.Body.String())
+				}
+				for _, line := range []string{`onigirazu_serve_job_last_status{job="patch",kind="apply"} 5`} {
+					if !strings.Contains(w.Body.String(), line) {
+						t.Fatalf("missing %s: %s", line, w.Body.String())
+					}
+				}
+				body, err := s.notifyBody(eventFailure, &s.cfg.Jobs[0], got, "mattermost")
+				if err != nil || !strings.Contains(string(body), "timed out") || strings.Contains(string(body), "failed —") {
+					t.Fatalf("timeout notification: %s (%v)", body, err)
+				}
+			}
+			w := httptest.NewRecorder()
+			s.mux().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/jobs", nil))
+			if tc.job > 0 && !strings.Contains(w.Body.String(), `"timeout":"`+tc.job.String()+`"`) {
+				t.Fatalf("job timeout missing: %s", w.Body.String())
+			}
+		})
+	}
+}
+
+func TestServeRunTimeoutConfig(t *testing.T) {
+	for _, tc := range []struct {
+		name, config, wantError string
+	}{
+		{"server negative", "run_timeout: -1s\njobs: [{name: patch, playbook: patch.yml}]", "run_timeout must be >= 0"},
+		{"job negative", "jobs: [{name: patch, playbook: patch.yml, timeout: -1s}]", "job patch: timeout must be >= 0"},
+		{"valid", "run_timeout: 1m\njobs: [{name: patch, playbook: patch.yml, timeout: 50ms}]", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "serve.yml")
+			if err := os.WriteFile(path, []byte(tc.config), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			cfg, err := loadServeConfig(path)
+			if tc.wantError != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantError) {
+					t.Fatalf("expected %q, got %v", tc.wantError, err)
+				}
+			} else if err != nil || cfg.RunTimeout != time.Minute || cfg.Jobs[0].Timeout != 50*time.Millisecond {
+				t.Fatalf("config: %+v (%v)", cfg, err)
+			}
+		})
+	}
+}
+
+func TestServeExecuteKeepsPartialResult(t *testing.T) {
+	dir := t.TempDir()
+	playbook := filepath.Join(dir, "slow.yml")
+	inventory := filepath.Join(dir, "hosts.yml")
+	if err := os.WriteFile(playbook, []byte("- hosts: localhost\n  gather_facts: false\n  tasks:\n    - name: quick\n      command: \"true\"\n    - name: hang\n      command: sleep 30\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(inventory, []byte("all:\n  hosts:\n    localhost:\n      ansible_connection: local\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s, err := newServer(&ServeConfig{DataDir: filepath.Join(dir, "data"), Retain: 5}, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	started := time.Now()
+	r, err := s.execute(ctx, &ServeJob{Name: "slow", Kind: "apply", Playbook: playbook, Inventory: inventory}, "")
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("want the deadline, got %v", err)
+	}
+	if time.Since(started) > 20*time.Second {
+		t.Fatal("the hung task was not stopped")
+	}
+	if r == nil || r.Hosts["localhost"] == "" || len(r.Report) == 0 {
+		t.Fatalf("partial result lost: %+v", r)
 	}
 }
 
