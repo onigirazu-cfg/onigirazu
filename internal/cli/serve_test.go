@@ -2740,3 +2740,105 @@ func TestServeWorkerExitKeepsCancellingSecrets(t *testing.T) {
 		t.Fatal("exiting worker removed secrets needed to mask another cancelling run") //nolint:misspell // public API spelling
 	}
 }
+
+func TestServeHostResults(t *testing.T) {
+	cfg := &ServeConfig{DataDir: t.TempDir(), Auth: ServeAuth{Token: "tok", UserHeader: "X-User"}}
+	s, err := newServer(cfg, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	for i := range 205 {
+		job := "drift"
+		if i%2 == 0 {
+			job = "verify"
+		}
+		s.results[job] = append(s.results[job], &JobResult{ID: strconv.Itoa(i), Job: job, Kind: job, Started: now.Add(time.Duration(i) * time.Minute), Status: "failed", Summary: "one failure", Hosts: map[string]string{"web/a": "ok", "other": "failed"}, Report: json.RawMessage(`{"secret":"large report"}`)})
+	}
+	s.results["irrelevant"] = []*JobResult{{ID: "ignored", Started: now.Add(999 * time.Hour), Hosts: map[string]string{"other": "ok"}}}
+	handler := s.mux()
+	get := func(path, token string) *httptest.ResponseRecorder {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+		return w
+	}
+	if w := get("/api/hosts/web%2Fa/results", ""); w.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated: %d", w.Code)
+	}
+	viewerReq := httptest.NewRequest(http.MethodGet, "/api/hosts/web%2Fa/results", nil)
+	viewerReq.Header.Set("X-User", "viewer")
+	viewerResponse := httptest.NewRecorder()
+	handler.ServeHTTP(viewerResponse, viewerReq)
+	if viewerResponse.Code != http.StatusOK {
+		t.Fatalf("viewer history: %d", viewerResponse.Code)
+	}
+	w := get("/api/hosts/web%2Fa/results", "tok")
+	var rows []hostResultView
+	if w.Code != http.StatusOK {
+		t.Fatalf("host results: %d %s", w.Code, w.Body.String())
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &rows); err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 200 || rows[0].ID != "204" || rows[199].ID != "5" {
+		t.Fatalf("limit/order: %+v", rows)
+	}
+	for i, row := range rows {
+		if row.HostStatus != "ok" || row.Status != "failed" || row.Kind != row.Job || row.Summary != "one failure" || row.Started.IsZero() {
+			t.Fatalf("row: %+v", row)
+		}
+		if i > 0 && !rows[i-1].Started.After(row.Started) {
+			t.Fatal("not newest first")
+		}
+	}
+	if strings.Contains(w.Body.String(), "report") || strings.Contains(w.Body.String(), "other") {
+		t.Fatalf("unexpected fields: %s", w.Body.String())
+	}
+	if w := get("/api/hosts/missing/results", "tok"); w.Code != http.StatusOK || strings.TrimSpace(w.Body.String()) != "[]" {
+		t.Fatalf("missing: %d %s", w.Code, w.Body.String())
+	}
+}
+
+func TestServeJobsActiveTiming(t *testing.T) {
+	cfg := &ServeConfig{DataDir: t.TempDir(), Jobs: []ServeJob{{Name: "job", Kind: "drift", Every: time.Minute}}}
+	s, err := newServer(cfg, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	requested := time.Now().UTC().Add(-time.Minute)
+	started := requested.Add(10 * time.Second)
+	last := &JobResult{ID: "last", Job: "job", Status: "ok", Started: requested.Add(-time.Hour)}
+	active := &JobResult{ID: "active", Job: "job", Status: "queued", Requested: requested, Started: started, Hosts: map[string]string{"web": "ok"}, Report: json.RawMessage(`{"x":1}`)}
+	s.results["job"] = []*JobResult{active, last}
+	s.running["job"] = true
+	for _, status := range []string{"queued", "running"} {
+		active.Status = status
+		w := httptest.NewRecorder()
+		s.mux().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/jobs", nil))
+		var jobs []jobView
+		if err := json.Unmarshal(w.Body.Bytes(), &jobs); err != nil {
+			t.Fatal(err)
+		}
+		if len(jobs) != 1 {
+			t.Fatalf("jobs: %+v", jobs)
+		}
+		j := jobs[0]
+		if j.Active == nil || j.Active.ID != active.ID || !j.Active.Requested.Equal(requested) || !j.Active.Started.Equal(started) || j.Active.Status != status || j.Active.Report != nil || !j.Running || j.Queued != (status == "queued") || j.Every != "1m0s" || j.Last == nil || j.Last.ID != last.ID {
+			t.Fatalf("active timing: %+v", j)
+		}
+	}
+	copy := s.jobsView(serveIdentity{})[0].Active
+	copy.Hosts["web"] = "failed"
+	if active.Hosts["web"] != "ok" {
+		t.Fatal("active hosts alias server state")
+	}
+	s.running["job"] = false
+	if s.jobsView(serveIdentity{})[0].Active != nil {
+		t.Fatal("inactive job exposes active record")
+	}
+}
