@@ -67,7 +67,9 @@ sudo onigirazu serve install -f /etc/onigirazu/serve.yml      # systemd service
 Jobs run one at a time, in the order they are due or requested; a job that is pending,
 queued or running is not requested again. Paths in the file are relative to it. Every job's
 state file lives
-in `data_dir/state/<job>.state`.
+in `data_dir/state/<job>.state`. A job's inventory and state file are passed to the run as
+its own arguments, not through the process's global `-i`/`--state`, so they never leak into
+another job (still one job at a time in this release).
 
 ## Guarded runs
 
