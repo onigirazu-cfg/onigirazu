@@ -179,7 +179,7 @@ type JobResult struct {
 	Requested        time.Time         `json:"requested"` // when it was asked for
 	Started          time.Time         `json:"started"`   // the request time until the run starts
 	Duration         float64           `json:"duration_seconds"`
-	Status           string            `json:"status"` // pending, queued, running, cancelling, cancelled, ok, drift, changed, failed, error, rejected, expired
+	Status           string            `json:"status"` // pending, queued, running, statusCancelling, statusCancelled, ok, drift, changed, failed, error, rejected, expired
 	Summary          string            `json:"summary"`
 	Trigger          string            `json:"trigger"`          // schedule, api:<user>
 	Params           *RunParams        `json:"params,omitempty"` // what the caller set

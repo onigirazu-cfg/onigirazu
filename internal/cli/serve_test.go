@@ -2737,6 +2737,6 @@ func TestServeWorkerExitKeepsCancellingSecrets(t *testing.T) {
 	stop()
 	s.worker(ctx)
 	if len(s.secrets[r.ID]) == 0 {
-		t.Fatal("exiting worker removed secrets needed to mask another cancelling run")
+		t.Fatal("exiting worker removed secrets needed to mask another cancelling run") //nolint:misspell // public API spelling
 	}
 }
