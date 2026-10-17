@@ -130,6 +130,7 @@ func (a *ServeAdhoc) UnmarshalYAML(node *yaml.Node) error {
 
 // RunParams is what the caller set on a run, with the limit resolved
 type RunParams struct {
+	Mode       string            `json:"-"`
 	SecretVars []string          `json:"secret_vars,omitempty"`
 	Limit      string            `json:"limit,omitempty"`
 	ExtraVars  map[string]string `json:"extra_vars,omitempty"`
@@ -158,6 +159,7 @@ type ServeJob struct {
 	Become          bool              `yaml:"become"`
 	Every           time.Duration     `yaml:"every"`            // 0: only on demand
 	Approval        string            `yaml:"approval"`         // required: a run waits for an operator
+	CheckApproval   string            `yaml:"check_approval"`   // required: check runs wait for an operator
 	ApprovalTimeout time.Duration     `yaml:"approval_timeout"` // 0: the server's
 	Operators       []string          `yaml:"operators"`        // users or groups that may run, approve, reject; empty: every operator
 	Adhoc           ServeAdhoc        `yaml:"adhoc"`            // what a caller may set on a run
@@ -177,6 +179,7 @@ type JobResult struct {
 	ID               string            `json:"id"`
 	Job              string            `json:"job"`
 	Kind             string            `json:"kind"`
+	Mode             string            `json:"mode,omitempty"`
 	Requested        time.Time         `json:"requested"` // when it was asked for
 	Started          time.Time         `json:"started"`   // the request time until the run starts
 	Duration         float64           `json:"duration_seconds"`
@@ -355,6 +358,9 @@ func loadServeConfig(path string) (*ServeConfig, error) {
 		if j.Approval != "" && j.Approval != "required" {
 			return nil, fmt.Errorf("job %s: approval %q (required or empty)", j.Name, j.Approval)
 		}
+		if j.CheckApproval != "" && j.CheckApproval != "required" {
+			return nil, fmt.Errorf("job %s: check_approval %q (required or empty)", j.Name, j.CheckApproval)
+		}
 		if j.ApprovalTimeout == 0 {
 			j.ApprovalTimeout = cfg.ApprovalTimeout
 		}
@@ -405,7 +411,7 @@ type server struct {
 	resumed  chan struct{}
 	queue    chan queued
 	// runJob runs a job; tests replace it
-	runJob func(ctx context.Context, j *ServeJob) (*JobResult, error)
+	runJob func(ctx context.Context, j *ServeJob, mode string) (*JobResult, error)
 	audit  *audit.Storage
 	// notifications go out in goroutines; tests set the client and wait
 	notifyClient *http.Client
@@ -708,6 +714,7 @@ func (s *server) request(j *ServeJob, trigger string, params *RunParams) (*JobRe
 	id := s.nextID(j.Name, now)
 	r := &JobResult{ID: id, Job: j.Name, Kind: j.Kind, Requested: now, Started: now, Trigger: trigger, Status: "queued", Params: params}
 	if params != nil {
+		r.Mode = params.Mode
 		r.Params = resultCopy(r).Params
 		r.Params.SecretVars = nil
 		for _, name := range j.Adhoc.SecretVars {
@@ -720,8 +727,11 @@ func (s *server) request(j *ServeJob, trigger string, params *RunParams) (*JobRe
 				r.Params.SecretVars = append(r.Params.SecretVars, name)
 			}
 		}
+		if r.Params.Limit == "" && len(r.Params.ExtraVars) == 0 { // only the mode was set
+			r.Params = nil
+		}
 	}
-	if j.Approval == "required" {
+	if (r.Mode == "check" && j.CheckApproval == "required") || (r.Mode != "check" && j.Approval == "required") {
 		r.Status = "pending"
 		r.Approval = &RunApproval{Required: true, Expires: now.Add(j.ApprovalTimeout)}
 		s.pending[j.Name] = r
@@ -943,7 +953,7 @@ next:
 			j, err := s.effectiveJob(q.job, r.Params, r.ID)
 			var result *JobResult
 			if err == nil {
-				result, err = s.runJob(runCtx, j)
+				result, err = s.runJob(runCtx, j, r.Mode)
 			}
 			s.mu.Lock()
 			delete(s.cancels, r.ID)
@@ -1260,6 +1270,7 @@ func (s *server) jobInventoryView(w http.ResponseWriter, r *http.Request, j *Ser
 // extra vars the job allows
 func (s *server) runParams(r *http.Request, j *ServeJob) (*RunParams, error) {
 	var body struct {
+		Mode      string            `json:"mode"`
 		Limit     string            `json:"limit"`
 		ExtraVars map[string]string `json:"extra_vars"`
 	}
@@ -1275,6 +1286,16 @@ func (s *server) runParams(r *http.Request, j *ServeJob) (*RunParams, error) {
 	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
 		return nil, errors.New("expected one JSON body")
 	}
+	switch body.Mode {
+	case "", "apply":
+		body.Mode = ""
+	case "check":
+		if j.Kind != "apply" {
+			return nil, errors.New("only apply jobs have a check mode")
+		}
+	default:
+		return nil, errors.New("mode must be check, apply or empty")
+	}
 	if body.Limit != "" && !j.Adhoc.Limit {
 		return nil, errors.New("this job does not accept a limit")
 	}
@@ -1289,10 +1310,10 @@ func (s *server) runParams(r *http.Request, j *ServeJob) (*RunParams, error) {
 			return nil, fmt.Errorf("extra var %q is not allowed for this job", k)
 		}
 	}
-	if body.Limit == "" && len(body.ExtraVars) == 0 {
+	if body.Mode == "" && body.Limit == "" && len(body.ExtraVars) == 0 {
 		return nil, nil
 	}
-	params := &RunParams{Limit: body.Limit, ExtraVars: body.ExtraVars}
+	params := &RunParams{Mode: body.Mode, Limit: body.Limit, ExtraVars: body.ExtraVars}
 	if body.Limit != "" {
 		hosts, err := s.resolveLimit(j, body.Limit)
 		if err != nil {
@@ -1311,9 +1332,9 @@ func extraVarsArg(vars map[string]string) string {
 }
 
 // execute runs a job in this process and summarizes it
-func (s *server) execute(ctx context.Context, j *ServeJob) (*JobResult, error) {
+func (s *server) execute(ctx context.Context, j *ServeJob, mode string) (*JobResult, error) {
 	started := time.Now().UTC()
-	r := &JobResult{Job: j.Name, Kind: j.Kind, Started: started, Hosts: map[string]string{}}
+	r := &JobResult{Job: j.Name, Kind: j.Kind, Mode: mode, Started: started, Hosts: map[string]string{}}
 	o := driftCheckOptions{limit: j.Limit, become: j.Become}
 	if j.Inventory != "" {
 		o.inventory = []string{j.Inventory}
@@ -1365,7 +1386,7 @@ func (s *server) execute(ctx context.Context, j *ServeJob) (*JobResult, error) {
 		r.Summary = fmt.Sprintf("%d passed, %d failed", vr.Passed, vr.Failed)
 		r.Report, _ = json.Marshal(vr)
 	default: // drift, apply
-		check := j.Kind == "drift"
+		check := j.Kind == "drift" || mode == "check"
 		result, err := runPlaybookContext(ctx, o.applyArgs(j.Playbook, check))
 		if err != nil {
 			return nil, err
@@ -1392,7 +1413,7 @@ func (s *server) execute(ctx context.Context, j *ServeJob) (*JobResult, error) {
 		}
 		r.Summary = fmt.Sprintf("%d in sync, %d %s, %d failed", len(report.InSync), len(report.Drift), map[bool]string{true: "drifting", false: "changed"}[check], len(report.Errors))
 		r.Report, _ = json.Marshal(report)
-		if check {
+		if j.Kind == "drift" {
 			s.pushMetrics(driftMetrics(report, s.cfg.Metrics.Labels))
 		}
 	}
@@ -1638,9 +1659,15 @@ func (s *server) mux() *http.ServeMux {
 				}
 				a.OK, a.Run = true, run.ID
 				if params != nil {
-					details := run.Params.values()
+					var details []string
+					if run.Params != nil {
+						details = run.Params.values()
+					}
 					if params.Limit != "" {
 						details = append([]string{"limit=" + params.Limit}, details...)
+					}
+					if run.Mode == "check" {
+						details = append([]string{"mode=check"}, details...)
 					}
 					a.Reason = strings.Join(details, " ")
 				}
@@ -1912,10 +1939,10 @@ func (s *server) lastExecuted(job string) *JobResult {
 	return nil
 }
 
-// lastHostResult excludes incomplete runs from host verdicts; caller holds mu.
+// lastHostResult excludes incomplete and check runs from host verdicts; caller holds mu.
 func (s *server) lastHostResult(job string) *JobResult {
 	for _, r := range s.results[job] {
-		if r.Status == statusCancelled {
+		if r.Status == statusCancelled || r.Mode == "check" {
 			continue
 		}
 		if r.executed() {
@@ -2036,7 +2063,7 @@ func (s *server) metricsHandler(w http.ResponseWriter, _ *http.Request) {
 	promLine(&b, "onigirazu_serve_running", s.cfg.Metrics.Labels, float64(running))
 	promLine(&b, "onigirazu_serve_concurrency", s.cfg.Metrics.Labels, float64(s.cfg.Concurrency))
 	for _, j := range s.cfg.Jobs {
-		if j.Approval == "required" {
+		if j.Approval == "required" || j.CheckApproval == "required" {
 			value := float64(0)
 			if s.pending[j.Name] != nil {
 				value = 1
@@ -2051,7 +2078,13 @@ func (s *server) metricsHandler(w http.ResponseWriter, _ *http.Request) {
 	}
 	sort.Strings(names)
 	for _, n := range names {
-		last := s.lastExecuted(n)
+		var last *JobResult
+		for _, r := range s.results[n] {
+			if r.Mode != "check" && r.executed() {
+				last = r
+				break
+			}
+		}
 		if last == nil {
 			continue
 		}
