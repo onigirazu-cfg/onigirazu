@@ -87,10 +87,6 @@ func Eval(expression string, variables map[string]interface{}) (interface{}, err
 // programs caches compiled expressions; playbooks repeat the same few
 var programs sync.Map // string -> *vm.Program
 
-func compile(expression string) (*vm.Program, error) {
-	return compileWithFilters(expression, nil)
-}
-
 func compileWithFilters(expression string, filters map[string]func(...interface{}) (interface{}, error)) (*vm.Program, error) {
 	names := make([]string, 0, len(filters))
 	for name := range filters {
