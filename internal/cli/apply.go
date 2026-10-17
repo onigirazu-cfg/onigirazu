@@ -905,6 +905,9 @@ Examples:
 			saveCtx, saveCancel := context.WithTimeout(context.WithoutCancel(ctx), time.Minute)
 			defer saveCancel()
 			runResult, runStart = result, startTime
+			if result != nil {
+				result.ExecutionID = executionID // before any early return hands it to onResult
+			}
 			var mrun *managedRun
 			if result != nil {
 				complete := tags == "" && skipTags == "" && startAtTask == "" && ctx.Err() == nil && !runControl.Stopped()
@@ -953,7 +956,7 @@ Examples:
 			log.Info("Playbook execution completed in %v", duration)
 
 			// Record plays and tasks in audit if recorder is available
-			if auditRecorder != nil && executionID != "" {
+			if auditRecorder != nil && executionID != "" && result != nil {
 				recordAuditResults(auditRecorder, result, log)
 			}
 

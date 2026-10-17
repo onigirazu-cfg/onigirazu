@@ -17,6 +17,7 @@ data_dir: /var/lib/onigirazu/serve     # results and job state; default ~/.onigi
 approval_timeout: 1h                   # default wait for approval
 concurrency: 2                         # max jobs executing at once; default 1
 retain: 50                             # results kept per job
+retain_age: 168h                        # optional maximum result age (Go duration)
 auth:
   token: ${SERVE_TOKEN}                # API bearer token: an operator
   tokens:
@@ -49,7 +50,11 @@ jobs:
   - name: patch-wave
     kind: apply
     playbook: patch.yml
-    adhoc: {limit: true, extra_vars: [reboot]}
+    adhoc:
+      limit: true
+      extra_vars:
+        - reboot
+        - {name: token, secret: true}
     operators: [tier0-admins, denys]
     approval: required
     approval_timeout: 2h
@@ -76,6 +81,20 @@ Paths in the file are relative to it. Every job's state file lives in
 `data_dir/state/<job>.state`. A job's inventory and state file are passed to the run as
 its own arguments, not through the process's global `-i`/`--state`, so they never leak into
 another job.
+
+Results are written to `data_dir/results/<id>.json.tmp`, then renamed to `<id>.json`,
+so readers see a complete record. A failed write keeps the record in memory; run and
+approval requests return `500` with the record and `error`. Workers log the failure.
+`GET /api/me` exposes `storage_error` (empty when fine), the page shows it in red below
+the header, and `onigirazu_serve_storage_error` is 1 while set, 0 otherwise. A later
+successful result write clears the error.
+
+Retention applies at startup and when a result is stored. `retain` keeps the newest
+50 results per job by default: with `every: 30m`, that is about a day. Rejected and expired
+requests consume slots too. Optional `retain_age` also removes finished results older
+than the duration, measured from their request time. Go durations use hours, such as
+`168h` for seven days. Pending, queued and running results are never pruned by age;
+the count limit still applies.
 
 ## Guarded runs
 
@@ -107,6 +126,18 @@ For an approval-required patch job this requests a safe reboot of web1:
 curl -X POST -H 'Authorization: Bearer ...' -H 'Content-Type: application/json' \
   localhost:8086/api/jobs/patch-wave/run -d '{"limit":"web1","extra_vars":{"reboot":"true"}}'
 ```
+
+Secret parameters: declare an allowed variable as `{name: token, secret: true}` in
+`adhoc.extra_vars`; plain names still work. The page renders secret fields as password
+inputs. Secret values appear as `***` in `params.extra_vars`, result files and endpoints,
+the action log reason, notifications and the page. The record keeps only their names
+in optional `params.secret_vars`, so restart detection still works if the configuration
+changes. The actual values stay in memory until the run ends, is rejected, expires or is cancelled, and are merged into the job's
+variables only for execution. They are not kept across restarts: a pending or queued
+run with secret parameters becomes `error` with summary
+`interrupted: serve restarted (secret parameters are not kept)`.
+Masking covers the serve records, reports, action log and notifications. Playbook-generated
+task output still uses the execution engine's existing logging, audit and cache handling.
 
 Notifications: server-wide `notify:` targets and a job's targets add up. Targets accept a
 plain URL or a mapping with `url`, `format` (`mattermost`, the default, or `json`) and `on`.
@@ -173,22 +204,22 @@ reopened for every entry, so logrotate can move it aside (no `copytruncate` need
 | Method and path | Returns |
 |---|---|
 | `GET /api/audit?limit=N` | action log, newest first; default 100 entries, max 1000 (viewers too) |
-| `GET /api/me` | the caller: `user`, `operator`, `title`, `paused` (bool), `running` and `queued` counts, `concurrency` |
+| `GET /api/me` | the caller: `user`, `operator`, `title`, `paused` (bool), `running` and `queued` counts, `concurrency`, `storage_error` (last result storage error, empty when fine) |
 | `GET /api/pause` | pause state: `paused`, optional `reason`, `by`, `at` (viewers too) |
 | `POST /api/pause` | pauses execution (operators); optional JSON `{reason: "..."}`; `200` with the state; pausing again updates reason and identity; `500` with the state and `error` when `pause.json` could not be written (the pause still holds in this process) |
 | `POST /api/resume` | resumes execution (operators); `200` with the state; already resumed is a no-op; `500` as for pause |
-| `GET /api/jobs` | the jobs with schedule, next run, `running` flag (queued, running or cancelling), optional `active` record (without report), `queued` flag (waiting for the worker), last executed result, optional `pending` record (without reports), and `approval: "required"` for guarded jobs; optional `operators` list and caller-specific `allowed` bool; `adhoc: {limit, extra_vars}` when enabled |
-| `POST /api/jobs/{name}/run` | requests the job (operators); optional JSON `{limit: "host pattern", extra_vars: {k: "v"}}` as allowed by `adhoc`; `400` for invalid parameters or a limit with no hosts or hosts outside the job's limit; `202` with `{queued: name, run: id}` or `{pending: id, run: id}`; `409` when running, queued or pending; `503` when the queue is full; `403` with `{"error":"not an operator of this job"}` when the job disallows the operator |
+| `GET /api/jobs` | the jobs with schedule, next run, `running` flag (queued, running or cancelling), optional `active` record (without report), `queued` flag (waiting for the worker), last executed result, optional `pending` record (without reports), and `approval: "required"` for guarded jobs; optional `operators` list and caller-specific `allowed` bool; `adhoc: {limit, extra_vars, secret_vars}` (`extra_vars` remains a list of names) when enabled |
+| `POST /api/jobs/{name}/run` | requests the job (operators); optional JSON `{limit: "host pattern", extra_vars: {k: "v"}}` as allowed by `adhoc`; `400` for invalid parameters or a limit with no hosts or hosts outside the job's limit; `202` with `{queued: name, run: id}` or `{pending: id, run: id}`; `409` when running, queued or pending; `503` when the queue is full; `500` with the record and `error` when storage fails (the run remains in memory); `403` with `{"error":"not an operator of this job"}` when the job disallows the operator |
 | `GET /api/jobs/{name}/results` | the kept results, newest first |
 | `GET /api/jobs/{name}/results/{id}` | one result with its full report (the drift, verify or comply report as JSON) |
-| `GET /api/results/{id}` | one job result with its full report and optional `params` (`limit`, `extra_vars`, sorted `hosts`); `404` if absent |
-| `POST /api/runs/{id}/approve` | queues a pending run (operators); optional JSON `{comment: "..."}`; `200` with the record without report, `404` if absent, `409` when the run expired meanwhile (it is marked expired), `503` if the queue is full; `403` with `{"error":"not an operator of this job"}` when the job disallows the operator |
-| `POST /api/runs/{id}/reject` | rejects a pending run (operators); optional JSON `{comment: "..."}`; `200` with the record without report, `404` if absent; `403` with `{"error":"not an operator of this job"}` when the job disallows the operator |
-| `POST /api/runs/{id}/cancel` | cancels a queued or running run (job operators); optional JSON `{comment: "..."}`; `200` with the cancelled record for queued runs, `202` with the cancelling record for running runs (without report); `404` if absent, `409` if not cancellable (reject a pending run instead), `403` if disallowed |
+| `GET /api/results/{id}` | one job result with its full report, optional `audit_execution_id`, and optional `params` (`limit`, `extra_vars`, sorted `hosts`, optional `secret_vars` names); `404` if absent |
+| `POST /api/runs/{id}/approve` | queues a pending run (operators); optional JSON `{comment: "..."}`; `200` with the record without report, `404` if absent, `409` when the run expired meanwhile (it is marked expired), `503` if the queue is full; `500` with the record and `error` on storage failure; `403` with `{"error":"not an operator of this job"}` when the job disallows the operator |
+| `POST /api/runs/{id}/reject` | rejects a pending run (operators); optional JSON `{comment: "..."}`; `200` with the record without report, `404` if absent; `500` with the record and `error` on storage failure; `403` with `{"error":"not an operator of this job"}` when the job disallows the operator |
+| `POST /api/runs/{id}/cancel` | cancels a queued or running run (job operators); optional JSON `{comment: "..."}`; `200` with the cancelled record for queued runs, `202` with the cancelling record for running runs (without report); `404` if absent, `409` if not cancellable (reject a pending run instead), `500` with the record and `error` on storage failure; `403` if disallowed |
 | `GET /api/hosts` | every host seen by a job's last executed result (cancelled runs are skipped), with its worst status (`ok`, `changed`, `drift`, `failed`, `unreachable`) and the status per job |
-| `GET /api/runs[?host=&playbook=]` | the audit store's last 100 runs (every `apply`, not only the server's) |
-| `GET /api/runs/{id}` | one audit record |
-| `GET /metrics` | `onigirazu_serve_job_last_status{job,kind}` (0 ok, 1 drift/changed, 2 failed, 3 error, 4 cancelled), `onigirazu_serve_job_last_run_timestamp_seconds{job}`, `onigirazu_serve_host_status{job,host}`, `onigirazu_serve_job_pending{job}` (guarded jobs only: 1 pending, 0 otherwise); `onigirazu_serve_paused` (1 paused, 0 otherwise); `onigirazu_serve_running` (executing or cancelling runs), `onigirazu_serve_concurrency` (configured limit); all include configured metric labels |
+| `GET /api/runs[?host=&playbook=]` | the audit store's last 100 runs (every `apply`, not only the server's); optional `serve_run` links to the retained serve result |
+| `GET /api/runs/{id}` | one audit record, with optional `serve_run` |
+| `GET /metrics` | `onigirazu_serve_job_last_status{job,kind}` (0 ok, 1 drift/changed, 2 failed, 3 error, 4 cancelled), `onigirazu_serve_job_last_run_timestamp_seconds{job}`, `onigirazu_serve_host_status{job,host}`, `onigirazu_serve_job_pending{job}` (guarded jobs only: 1 pending, 0 otherwise); `onigirazu_serve_paused` (1 paused, 0 otherwise); `onigirazu_serve_running` (executing or cancelling runs), `onigirazu_serve_concurrency` (configured limit); `onigirazu_serve_storage_error` (1 while the last result storage operation failed, 0 otherwise); all include configured metric labels |
 | `GET /healthz` | `ok` |
 
 Run, approve, reject and cancel return `403` with `{"error":"not an operator of this job"}` when
@@ -200,12 +231,18 @@ The page at `/` uses the same API: Jobs (with Run/Approve/Reject/Cancel buttons 
 each result and audit record openable as JSON.
 
 A job result: `{id, job, kind, requested, started, duration_seconds, status, summary, trigger,
-hosts, report, approval, cancel, params}`. `requested` is the request time; `started` becomes the execution
+hosts, report, approval, cancel, params, audit_execution_id}`. `requested` is the request time; `started` becomes the execution
 start time when the worker begins. `trigger` is `schedule` or `api:<user>`. Status is `pending`,
 `queued`, `running`, `cancelling`, `cancelled`, `rejected`, `expired`, `ok`, `drift`, `changed`, `failed` or `error`.
 The optional approval object has `required`, `expires`, and, after a decision, `decision`
 (`approved`, `rejected`, `expired`), `by` (operator identity; absent for expiry), `at` and an
 optional `comment`. Job results open at `#job/<name>` and individual runs at `#run/<id>`.
+
+Serve results include `audit_execution_id` when drift, apply or verify starts audit
+recording. Audit history rows expose the matching `serve_run` while that serve result
+is retained. Both pages link to each other at `#run/<id>`. Comply results currently
+omit `audit_execution_id` because the compliance report does not carry the playbook's
+execution ID.
 
 `metrics.push` sends each drift job's drift metrics and each comply job's compliance metrics
 as `drift --metrics-push` and `comply --metrics-push` do.

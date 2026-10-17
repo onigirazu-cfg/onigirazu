@@ -1179,6 +1179,7 @@ func (ae *AuditEntry) UnmarshalJSON(data []byte) error {
 
 // PlaybookResult represents the result of playbook execution
 type PlaybookResult struct {
+	ExecutionID  string                 `json:"execution_id,omitempty"`
 	Name         string                 `json:"name"`
 	Success      bool                   `json:"success"`
 	Failed       bool                   `json:"failed"`
