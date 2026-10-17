@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{title}} — onigirazu</title>
 <style>
-:root{--bg:#f6f7f9;--fg:#1e2430;--muted:#6b7280;--card:#fff;--line:#e5e7eb;--ok:#2a9d6f;--warn:#d98f1a;--bad:#d14343;--accent:#3b5bdb}
-@media (prefers-color-scheme:dark){:root{--bg:#0f1218;--fg:#e6e8ee;--muted:#9aa3b2;--card:#171b24;--line:#2a3140}}
+:root{--bg:#f6f7f9;--fg:#1e2430;--muted:#6b7280;--card:#fff;--line:#e5e7eb;--ok:#2a9d6f;--warn:#d98f1a;--bad:#d14343;--accent:#3b5bdb;--add-bg:#e0f4e8;--remove-bg:#fbe5e5;--add-fg:#17623d;--remove-fg:#942b2b}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1218;--fg:#e6e8ee;--muted:#9aa3b2;--card:#171b24;--line:#2a3140;--ok:#52b98b;--warn:#dba344;--bad:#eb7777;--accent:#91a4ff;--add-bg:#163629;--remove-bg:#421f25;--add-fg:#9ce1b4;--remove-fg:#ffb1b1}}
 *{box-sizing:border-box}body{margin:0;font:14px/1.45 system-ui,-apple-system,Segoe UI,sans-serif;background:var(--bg);color:var(--fg)}
 header{display:flex;align-items:center;gap:16px;padding:12px 24px;border-bottom:1px solid var(--line);background:var(--card)}
 header h1{font-size:16px;margin:0}header .who{margin-left:auto;color:var(--muted)}
@@ -23,6 +23,14 @@ button.run{border:1px solid var(--line);background:var(--card);color:var(--fg);p
 .muted{color:var(--muted)}pre{background:var(--card);border:1px solid var(--line);padding:12px;border-radius:8px;overflow:auto;max-height:60vh}
 .adhoc-form{display:flex;gap:8px;align-items:end;flex-wrap:wrap}.adhoc-form label{display:grid;gap:4px}.adhoc-form input{padding:4px 8px;border:1px solid var(--line);border-radius:4px;background:var(--card);color:var(--fg)}
 .empty{padding:24px;color:var(--muted);text-align:center}
+
+header,nav{flex-wrap:wrap}header{overflow-wrap:anywhere}main,header>*{min-width:0}main{overflow-wrap:anywhere}a{color:var(--accent)}
+.table-scroll{width:100%;max-width:100%;overflow-x:auto;margin:12px 0}.table-scroll table{min-width:560px}th,td{overflow-wrap:anywhere}
+.report-card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px;margin:12px 0}.report-card h2,.report-card h3{margin-top:0}
+.tabs{display:flex;gap:8px;flex-wrap:wrap;margin:16px 0}.tabs [aria-selected="true"]{border-color:var(--accent);color:var(--accent)}
+.item{padding:8px 0;border-bottom:1px solid var(--line)}.text{white-space:pre-wrap;overflow-wrap:anywhere}.error-text{color:var(--bad)}.missing{color:var(--muted);background:var(--bg)}
+summary{cursor:pointer}pre{max-width:100%}.diff span{display:inline-block;min-width:100%}.diff-add{background:var(--add-bg);color:var(--add-fg)}.diff-remove{background:var(--remove-bg);color:var(--remove-fg)}
+@media(max-width:700px){header{align-items:flex-start;flex-direction:column;gap:8px;padding:12px}header .who{margin-left:0}nav{display:flex;max-width:100%}main{padding:12px;width:100%}.jobs-table .target{display:none}.adhoc-form input{max-width:100%}.adhoc-form label{max-width:100%}}
 </style>
 </head>
 <body>
@@ -65,11 +73,11 @@ async function jobs(){
   pauseView(p);activityView(m);
   if(!list.length){main.innerHTML='<div class="empty">No jobs in serve.yml</div>';return}
   const pending=list.filter(j=>j.pending);
-  main.innerHTML=(pending.length?`<h2>Pending approval</h2>${pending.map(j=>`<div class="approval-card"><b>${esc(j.name)}</b> · ${esc(j.kind)} · ${esc(j.target)}<br><span class="muted">requested by ${esc(j.pending.trigger)} ${esc(ago(j.pending.requested))} · expires in ${span(Math.max(0,(new Date(j.pending.approval.expires)-Date.now())/1000))}</span>${paramsView(j.pending)}${j.allowed?`<p><button class="run" data-decision="approve" data-id="${esc(j.pending.id)}">Approve</button> <button class="run" data-decision="reject" data-id="${esc(j.pending.id)}">Reject</button></p>`:''}</div>`).join('')}`:'')+`<table><tr><th>Job</th><th>Kind</th><th>Target</th><th>Schedule</th><th>Last run</th><th>Result</th><th></th></tr>${list.map(j=>`<tr>
-    <td><a href="#job/${encodeURIComponent(j.name)}" data-job="${esc(j.name)}">${esc(j.name)}</a></td><td>${esc(j.kind)}</td><td class="muted">${esc(j.target)}</td>
+  main.innerHTML=(pending.length?`<h2>Pending approval</h2>${pending.map(j=>`<div class="approval-card"><b>${esc(j.name)}</b> · ${esc(j.kind)} · ${esc(j.target)}<br><span class="muted">requested by ${esc(j.pending.trigger)} ${esc(ago(j.pending.requested))} · expires in ${span(Math.max(0,(new Date(j.pending.approval.expires)-Date.now())/1000))}</span>${paramsView(j.pending)}${j.allowed?`<p><button class="run" data-decision="approve" data-id="${esc(j.pending.id)}">Approve</button> <button class="run" data-decision="reject" data-id="${esc(j.pending.id)}">Reject</button></p>`:''}</div>`).join('')}`:'')+`<table class="jobs-table"><tr><th>Job</th><th>Kind</th><th class="target">Target</th><th>Schedule</th><th>Last run</th><th>Result</th><th></th></tr>${list.map(j=>`<tr>
+    <td><a href="#job/${encodeURIComponent(j.name)}" data-job="${esc(j.name)}">${esc(j.name)}</a></td><td>${esc(j.kind)}</td><td class="muted target">${esc(j.target)}</td>
     <td>${j.every?esc(j.every)+(j.next?'<br><span class="muted">next '+ago(j.next)+'</span>':''):'<span class="muted">on demand</span>'}</td>
-    <td>${j.last?esc(ago(j.last.started))+'<br><span class="muted">'+esc(j.last.trigger)+'</span>':'<span class="muted">never</span>'}</td>
-    <td>${j.pending?badge('pending'):j.running?badge(j.active?.status||(j.queued?'queued':'running')):j.last?badge(j.last.status)+' <span class="muted">'+esc(j.last.summary)+'</span>':''}</td>
+    <td>${lastRun(j)}</td>
+    <td>${j.pending?badge('pending'):j.running?badge(j.active?.status||(j.queued?'queued':'running'))+activeTime(j):j.last?badge(j.last.status)+' <span class="muted">'+esc(j.last.summary)+'</span>':''}</td>
     <td>${j.allowed?`<button class="run" data-run="${esc(j.name)}" ${j.pending||j.running?'disabled':''}>Run${hasAdhoc(j)?'…':''}</button>${j.active&&['queued','running'].includes(j.active.status)?` <button class="run" data-stop="${esc(j.active.id)}" data-name="${esc(j.name)}" data-running="${j.active.status==='running'}">Cancel</button>`:''}`:''}</td></tr>${j.allowed&&hasAdhoc(j)?`<tr data-form-row="${esc(j.name)}" hidden><td colspan="7"><form class="adhoc-form" data-form="${esc(j.name)}">${j.adhoc.limit?'<label>limit<input data-limit placeholder="host pattern, empty = the job&#39;s hosts"></label>':''}${(j.adhoc.extra_vars||[]).map(k=>`<label>${esc(k)}<input type="${(j.adhoc.secret_vars||[]).includes(k)?'password':'text'}" data-var="${esc(k)}" placeholder="keep the job's value"></label>`).join('')}<button class="run" type="submit">Run</button><button class="run" type="button" data-cancel>Cancel</button></form></td></tr>`:''}`).join('')}</table>`;
   main.querySelectorAll('[data-decision]').forEach(b=>b.onclick=async()=>{
     let comment='';
@@ -105,17 +113,114 @@ async function results(name){
   view='results';hash('#job/'+encodeURIComponent(name));
   const list=await api('/api/jobs/'+encodeURIComponent(name)+'/results');
   main.innerHTML=`<p><a href="#" id="back">← jobs</a> &nbsp; <b>${esc(name)}</b></p>`+(list.length?`<table><tr><th>Started</th><th>Trigger</th><th>Status</th><th>Summary</th><th>Hosts</th><th>Duration</th></tr>${list.map(r=>`<tr>
-    <td><a href="#run/${encodeURIComponent(r.id)}" data-res="${esc(r.id)}">${esc(new Date(r.started).toLocaleString())}</a></td><td class="muted">${esc(r.trigger)}${paramsView(r)}${r.approval?.decision?'<br>'+esc(r.approval.decision==='expired'?'expired':r.approval.decision+' by '+r.approval.by):''}</td><td>${badge(r.status)}</td><td>${esc(r.summary)}</td>
+    <td><a href="#run/${encodeURIComponent(r.id)}" data-res="${esc(r.id)}">${date(r.started)}</a></td><td class="muted">${esc(r.trigger)}${paramsView(r)}${r.approval?.decision?'<br>'+esc(r.approval.decision==='expired'?'expired':r.approval.decision+' by '+r.approval.by):''}</td><td>${badge(r.status)}</td><td>${esc(r.summary)}</td>
     <td>${Object.entries(r.hosts||{}).map(([h,s])=>`${esc(h)} ${badge(s)}`).join('<br>')}</td><td>${(r.duration_seconds||0).toFixed(1)}s</td></tr>`).join('')}</table>`:'<div class="empty">No runs yet</div>');
   $('#back').onclick=e=>{e.preventDefault();jobs()};
   main.querySelectorAll('[data-res]').forEach(a=>a.onclick=e=>{e.preventDefault();run(a.dataset.res).catch(showError)});
+}
+const empty=text=>`<div class="empty">${esc(text)}</div>`;
+const table=(heads,rows,footer='')=>`<div class="table-scroll"><table><thead><tr>${heads.map(h=>`<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody>${footer?`<tfoot>${footer}</tfoot>`:''}</table></div>`;
+const hostLink=h=>`<a href="#host/${encodeURIComponent(h)}">${esc(h)}</a>`;
+const date=t=>{if(!t||String(t).startsWith('0001-'))return '—';const d=new Date(t);return esc(d.toLocaleString(undefined,matchMedia('(max-width:700px)').matches?{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}:undefined))};
+function durationSeconds(value){
+  const units={h:3600,m:60,s:1,ms:.001,us:.000001,'µs':.000001,ns:1e-9};
+  let seconds=0, consumed='';
+  for(const m of String(value||'').matchAll(/(\d+(?:\.\d+)?)(ns|us|µs|ms|h|m|s)/g)){seconds+=Number(m[1])*units[m[2]];consumed+=m[0]}
+  return consumed===value?seconds:0;
+}
+function lastRun(j){
+  if(!j.last)return '<span class="b">never</span>';
+  const every=durationSeconds(j.every), stale=every>0&&(Date.now()-new Date(j.last.started))/1000>2*every;
+  return esc(ago(j.last.started))+(stale?' <span class="b drift">stale</span>':'')+'<br><span class="muted">'+esc(j.last.trigger)+'</span>';
+}
+function activeTime(j){
+  const t=j.queued?j.active?.requested:j.active?.started;
+  return t&&!String(t).startsWith('0001-')?` <span class="muted">${j.queued?'waiting':'elapsed'} ${span(Math.max(0,(Date.now()-new Date(t))/1000))}</span>`:'';
+}
+function itemView(i){return `<div class="item"><b>${esc(i.play?i.play+' › ':'')}${esc(i.task)}</b> <span class="muted">${esc(i.module)}</span><div class="text">${esc(i.detail)}</div>${i.since?`<small class="muted">Since ${date(i.since)}</small>`:''}</div>`}
+function reportErrors(r,p){
+  const hosts=new Set([...Object.keys(r.hosts||{}),...Object.keys(p.errors||{})]);
+  return [...hosts].filter(h=>p.errors?.[h]||['failed','unreachable'].includes(r.hosts?.[h])).map(h=>{
+    const error=p.errors?.[h];
+    return `<div class="item">${hostLink(h)} ${badge(r.hosts?.[h]||'unreachable')} ${Array.isArray(error)?error.map(itemView).join(''):`<span class="text">${esc(error||'No error details recorded')}</span>`}</div>`;
+  }).join('');
+}
+function driftTabs(r,p){
+  const changed=r.kind==='apply'&&!p.plan, wording=changed?'changed':'would change';
+  const names=[...new Set([...Object.keys(r.hosts||{}),...(p.in_sync||[]),...Object.keys(p.drift||{}),...Object.keys(p.errors||{})])].sort();
+  const entries=[];
+  for(const key of ['drift','errors'])for(const [host,items] of Object.entries(p[key]||{}))for(const item of items||[])entries.push({host,item,error:key==='errors'});
+  const hosts=names.map(h=>{
+    const items=p.drift?.[h]||[], errors=p.errors?.[h]||[], status=r.hosts?.[h]||(errors.length?'failed':items.length?(changed?'changed':'drift'):'ok');
+    return `<tr data-expand><td>${hostLink(h)}</td><td>${badge(status)}</td><td><details><summary>${items.length} ${wording}, ${errors.length} errors</summary>${items.map(itemView).join('')}${errors.map(i=>`<div class="error-text">${itemView(i)}</div>`).join('')}${!items.length&&!errors.length?'<span class="muted">No task details recorded</span>':''}</details></td></tr>`;
+  });
+  const groups=new Map();
+  for(const e of entries){const key=JSON.stringify([e.item.play,e.item.task,e.item.module]);if(!groups.has(key))groups.set(key,[]);groups.get(key).push(e)}
+  const changes=[...groups.values()].map(es=>`<section class="report-card"><h3>${esc(es[0].item.play?es[0].item.play+' › ':'')}${esc(es[0].item.task)}</h3><p class="muted">${esc(es[0].item.module)} · ${wording}</p>${es.map(e=>`<div class="item">${hostLink(e.host)} ${e.error?badge('failed'):''}<div class="text">${esc(e.item.detail)}</div>${e.item.since?`<small class="muted">Since ${date(e.item.since)}</small>`:''}</div>`).join('')}</section>`).join('');
+  let budget=200*1024, truncated=false;
+  const encoder=new TextEncoder(), decoder=new TextDecoder('utf-8',{fatal:false});
+  const diffs=entries.filter(e=>e.item.diff).map(e=>{
+    const bytes=encoder.encode(e.item.diff);
+    if(!budget){truncated=true;return ''}
+    let text=e.item.diff;
+    if(bytes.length>budget){let end=budget;while(end>0&&(bytes[end]&0xc0)===0x80)end--;text=decoder.decode(bytes.subarray(0,end));truncated=true}
+    budget-=Math.min(bytes.length,budget);
+    return `<section><h3>${esc(e.host)} › ${esc(e.item.task)}</h3><pre class="diff">${text.split('\n').map(line=>`<span class="${line.startsWith('+')?'diff-add':line.startsWith('-')?'diff-remove':''}">${esc(line)}</span>`).join('\n')}</pre></section>`;
+  }).join('');
+  const tabs=[['Hosts',hosts.length?table(['Host','Status',`Tasks (${wording}) / errors`],hosts):empty('No host results')],['Changes',changes||empty('No changes or task errors')],['Diff',diffs+(truncated?'<p class="muted">Diff truncated: only the first 200 KB are shown. The JSON tab contains the full diff.</p>':'')||empty('No diffs')]];
+  if(p.orphans?.length)tabs.push(['Orphans',table(['Managed resource'],p.orphans.map(o=>`<tr><td>${Object.entries(o).map(([k,v])=>`<div><b>${esc(k)}</b>: ${esc(typeof v==='object'?JSON.stringify(v):v)}</div>`).join('')}</td></tr>`))]);
+  return tabs;
+}
+const checkName=c=>c.check??c.name??'Unnamed check';
+const checkMessage=c=>c.detail??c.msg??c.message??'';
+function verifyTabs(r,p){
+  const names=[...new Set([...Object.keys(p.hosts||{}),...Object.keys(p.errors||{}),...Object.keys(r.hosts||{})])].sort(), groups=new Map();
+  const rows=names.map(h=>{
+    const host=p.hosts?.[h], checks=host?.checks||[];
+    for(const c of checks){const name=String(checkName(c));if(!groups.has(name))groups.set(name,{pass:new Set(),fail:new Set()});groups.get(name)[c.ok===true?'pass':'fail'].add(h)}
+    const status=r.hosts?.[h]||(p.errors?.[h]?'unreachable':host?.failed?'failed':'ok');
+    return `<tr data-expand><td>${hostLink(h)}</td><td>${badge(status)}</td><td>${host?`${esc(host.passed)} passed / ${esc(host.failed)} failed`:'Not checked'}</td><td>${checks.length?`<details><summary>${checks.length} checks</summary>${checks.map(c=>`<div class="item">${badge(c.ok===true?'ok':'failed')} <b>${esc(checkName(c))}</b> <span class="muted">${esc(c.kind)}</span><div class="text">${esc(checkMessage(c))}</div></div>`).join('')}</details>`:esc(p.errors?.[h]||'No checks recorded')}</td></tr>`;
+  });
+  return [['Hosts',rows.length?table(['Host','Status','Checks','Details'],rows):empty('No host results')],['Checks',groups.size?table(['Check','Passing hosts','Failing hosts'],[...groups].map(([name,g])=>`<tr><td>${esc(name)}</td><td>${g.pass.size}<div>${[...g.pass].map(hostLink).join(', ')}</div></td><td>${g.fail.size}<div>${[...g.fail].map(hostLink).join(', ')}</div></td></tr>`)):empty('No checks recorded')]];
+}
+function complyTabs(r,p){
+  const hosts=[...new Set([...Object.keys(p.hosts||{}),...Object.keys(p.errors||{}),...Object.keys(r.hosts||{})])].sort(), controls=new Map(), byHost=new Map();
+  for(const h of hosts){const map=new Map();for(const c of p.hosts?.[h]?.controls||[]){map.set(c.id,c);if(!controls.has(c.id))controls.set(c.id,c)}byHost.set(h,map)}
+  const unreachable=h=>Boolean(p.errors?.[h])||r.hosts?.[h]==='unreachable';
+  const rows=[...controls].map(([id,c])=>`<tr><td><b>${esc(id)}</b> ${esc(c.title)} ${badge(c.severity)}</td>${hosts.map(h=>{
+    if(unreachable(h))return `<td class="missing" title="${esc(p.errors?.[h]||'Unreachable')}">unreachable</td>`;
+    const result=byHost.get(h).get(id);
+    if(!result)return '<td class="missing">not checked</td>';
+    const details=(result.details||[]).join('\n');
+    return `<td>${result.ok?'✓':`<details title="${esc(details)}"><summary class="error-text">✗</summary><div class="text">${esc(details||'No details recorded')}</div></details>`}</td>`;
+  }).join('')}</tr>`);
+  const scores=`<tr><td><b>Score</b></td>${hosts.map(h=>`<td>${unreachable(h)?'<span class="missing">unreachable</span>':p.hosts?.[h]?esc(p.hosts[h].score)+'%':'not checked'}</td>`).join('')}</tr>`;
+  const missing=hosts.filter(h=>unreachable(h)||!p.hosts?.[h]);
+  const matrix=table(['Control',...hosts],rows,scores+`<tr><td colspan="${hosts.length+1}">Overall score: <b>${esc(p.score??'—')}%</b> · ${esc(p.passed??0)} passed / ${esc(p.failed??0)} failed · fail_on: ${esc(p.fail_on||'not set')}${missing.length?`<br><span class="error-text">Incomplete: ${missing.map(esc).join(', ')} not checked; overall score covers reported controls only.</span>`:''}</td></tr>`);
+  const remediation=[...controls].map(([id,c])=>{
+    const failed=hosts.filter(h=>!unreachable(h)&&byHost.get(h).has(id)&&!byHost.get(h).get(id).ok);
+    if(!failed.length)return '';
+    return `<section class="report-card"><h3>${esc(id)} · ${esc(c.title)} ${badge(c.severity)}</h3>${failed.map(h=>`<div class="item">${hostLink(h)}<div class="text">${esc(byHost.get(h).get(id).remediation||'No remediation recorded')}</div></div>`).join('')}</section>`;
+  }).join('');
+  return [['Matrix',matrix],['Remediation',remediation||empty('No failed controls')]];
 }
 async function run(id){
   view='result';hash('#run/'+encodeURIComponent(id));
   let r;
   try{r=await api('/api/results/'+encodeURIComponent(id))}catch(e){if(e.message.startsWith('404 '))return auditRun(id);throw e}
-  main.innerHTML=`<p><a href="#job/${encodeURIComponent(r.job)}" id="back">← ${esc(r.job)}</a>${r.audit_execution_id?` &nbsp; <a href="#run/${encodeURIComponent(r.audit_execution_id)}">Execution ${esc(r.audit_execution_id)}</a>`:''}</p><pre>${esc(JSON.stringify(r,null,2))}</pre>`;
+  const p=r.report&&typeof r.report==='object'?r.report:{}, tabs=r.kind==='drift'||r.kind==='apply'?driftTabs(r,p):r.kind==='verify'?verifyTabs(r,p):r.kind==='comply'?complyTabs(r,p):[];
+  tabs.push(['JSON',`<pre>${esc(JSON.stringify(r,null,2))}</pre>`]);
+  const approval=r.approval?`<p>Approval: ${esc(r.approval.decision||'pending')} ${r.approval.by?'by '+esc(r.approval.by):''} ${r.approval.at?date(r.approval.at):''}${r.approval.expires?' · expires '+date(r.approval.expires):''}<br>${esc(r.approval.comment)}</p>`:'';
+  main.innerHTML=`<p><a href="#job/${encodeURIComponent(r.job)}" id="back">← ${esc(r.job)}</a>${r.audit_execution_id?` &nbsp; <a href="#run/${encodeURIComponent(r.audit_execution_id)}">Execution ${esc(r.audit_execution_id)}</a>`:''}</p><section class="report-card"><h2>${esc(r.job)} <small>${esc(r.kind)}</small> ${badge(r.status)}</h2><p class="text">${esc(r.summary)}</p><p>Started ${date(r.started)} · Duration ${esc((r.duration_seconds||0).toFixed(1))}s · Trigger ${esc(r.trigger)}<br>Requested ${date(r.requested)}</p>${paramsView(r)}${approval}${['cancelled','canceled'].includes(r.status)?`<p>Cancelled: ${esc(r.summary)}</p>`:''}</section>${reportErrors(r,p)}<div class="tabs" role="tablist">${tabs.map(([name],i)=>`<button class="run" role="tab" id="tab-${i}" aria-controls="panel-${i}" aria-selected="${i===0}" data-tab="${i}">${esc(name)}</button>`).join('')}</div>${tabs.map(([,html],i)=>`<section role="tabpanel" id="panel-${i}" aria-labelledby="tab-${i}" ${i?'hidden':''}>${html}</section>`).join('')}`;
   $('#back').onclick=e=>{e.preventDefault();results(r.job).catch(showError)};
+  main.querySelectorAll('[data-expand]').forEach(row=>row.onclick=e=>{if(e.target.closest('a,details'))return;const d=row.querySelector('details');if(d)d.open=!d.open});
+  main.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{main.querySelectorAll('[data-tab]').forEach(t=>t.setAttribute('aria-selected',String(t===b)));main.querySelectorAll('[role="tabpanel"]').forEach((p,i)=>p.hidden=i!==Number(b.dataset.tab))});
+}
+async function host(name){
+  view='host';hash('#host/'+encodeURIComponent(name));
+  const list=await api('/api/hosts/'+encodeURIComponent(name)+'/results');
+  main.innerHTML=`<p><a href="#" id="back">← hosts</a></p><h2>${esc(name)}</h2><p><a href="#host-audit/${encodeURIComponent(name)}">runs in the audit store</a></p>`+(list.length?table(['Started','Job','Kind','Run status','Host status','Summary'],list.map(r=>`<tr><td><a href="#run/${encodeURIComponent(r.id)}">${date(r.started)}</a></td><td><a href="#job/${encodeURIComponent(r.job)}">${esc(r.job)}</a></td><td>${esc(r.kind)}</td><td>${badge(r.status)}</td><td>${badge(r.host_status)}</td><td>${esc(r.summary)}</td></tr>`)):empty('No retained results for this host'));
+  $('#back').onclick=e=>{e.preventDefault();show('hosts')};
 }
 async function auditRun(id){
   view='result';hash('#run/'+encodeURIComponent(id));
@@ -126,21 +231,24 @@ async function auditRun(id){
 async function hosts(){
   const list=await api('/api/hosts');
   if(!list.length){main.innerHTML='<div class="empty">No host results yet — run a job</div>';return}
-  main.innerHTML=`<table><tr><th>Host</th><th>Status</th><th>Jobs</th><th>Seen</th></tr>${list.map(h=>`<tr><td><a href="#" data-host="${esc(h.host)}">${esc(h.host)}</a></td><td>${badge(h.status)}</td>
+  main.innerHTML=`<table><tr><th>Host</th><th>Status</th><th>Jobs</th><th>Seen</th></tr>${list.map(h=>`<tr><td><a href="#host/${encodeURIComponent(h.host)}" data-host="${esc(h.host)}">${esc(h.host)}</a></td><td>${badge(h.status)}</td>
     <td>${Object.entries(h.jobs).map(([j,s])=>`${esc(j)} ${badge(s)}`).join(' &nbsp; ')}</td><td class="muted">${esc(ago(h.seen))}</td></tr>`).join('')}</table>`;
-  main.querySelectorAll('[data-host]').forEach(a=>a.onclick=e=>{e.preventDefault();runs(a.dataset.host)});
+  main.querySelectorAll('[data-host]').forEach(a=>a.onclick=e=>{e.preventDefault();host(a.dataset.host).catch(showError)});
 }
 async function runs(host){
+  if(host){view='host-audit';hash('#host-audit/'+encodeURIComponent(host))}
   const list=await api('/api/runs'+(host?'?host='+encodeURIComponent(host):''));
   main.innerHTML=(host?`<p><a href="#" id="back">← hosts</a> &nbsp; runs touching <b>${esc(host)}</b></p>`:'')+(list.length?`<table><tr><th>Started</th><th>Playbook</th><th>User</th><th>Status</th><th>Hosts</th><th>Tasks</th><th>Failed</th><th>Duration</th><th>Serve run</th></tr>${list.map(r=>`<tr>
-    <td><a href="#run/${encodeURIComponent(r.id)}" data-run="${esc(r.id)}">${esc(new Date(r.start).toLocaleString())}</a></td><td class="muted">${esc(r.playbook)}</td><td>${esc(r.user)}</td><td>${badge(r.status)}</td><td>${r.hosts}</td><td>${r.tasks}</td><td>${r.failed}</td><td>${(r.duration||0).toFixed(1)}s</td><td>${r.serve_run?`<a href="#run/${encodeURIComponent(r.serve_run)}">${esc(r.serve_run)}</a>`:''}</td></tr>`).join('')}</table>`:'<div class="empty">No runs in the audit store</div>');
-  if(host)$('#back').onclick=e=>{e.preventDefault();hosts()};
+    <td><a href="#run/${encodeURIComponent(r.id)}" data-run="${esc(r.id)}">${date(r.start)}</a></td><td class="muted">${esc(r.playbook)}</td><td>${esc(r.user)}</td><td>${badge(r.status)}</td><td>${r.hosts}</td><td>${r.tasks}</td><td>${r.failed}</td><td>${(r.duration||0).toFixed(1)}s</td><td>${r.serve_run?`<a href="#run/${encodeURIComponent(r.serve_run)}">${esc(r.serve_run)}</a>`:''}</td></tr>`).join('')}</table>`:'<div class="empty">No runs in the audit store</div>');
+  if(host)$('#back').onclick=e=>{e.preventDefault();show('hosts')};
   main.querySelectorAll('[data-run]').forEach(a=>a.onclick=e=>{e.preventDefault();auditRun(a.dataset.run).catch(showError)});
 }
 async function audit(){
   const list=await api('/api/audit');
-  main.innerHTML=list.length?`<table><tr><th>Time</th><th>User</th><th>Action</th><th>Job</th><th>Run</th><th>Result</th><th>Reason</th><th>Addr</th></tr>${list.map(a=>`<tr><td>${esc(new Date(a.time).toLocaleString())}</td><td>${esc(a.user)}</td><td>${esc(a.action)}</td><td>${esc(a.job)}</td><td>${a.run?`<a href="#run/${encodeURIComponent(a.run)}">${esc(a.run)}</a>`:''}</td><td>${badge(a.ok?'ok':'refused')}</td><td>${esc(a.reason)}</td><td>${esc(a.addr)}</td></tr>`).join('')}</table>`:'<div class="empty">No actions yet</div>';
+  main.innerHTML=list.length?`<table><tr><th>Time</th><th>User</th><th>Action</th><th>Job</th><th>Run</th><th>Result</th><th>Reason</th><th>Addr</th></tr>${list.map(a=>`<tr><td>${date(a.time)}</td><td>${esc(a.user)}</td><td>${esc(a.action)}</td><td>${esc(a.job)}</td><td>${a.run?`<a href="#run/${encodeURIComponent(a.run)}">${esc(a.run)}</a>`:''}</td><td>${badge(a.ok?'ok':'refused')}</td><td>${esc(a.reason)}</td><td>${esc(a.addr)}</td></tr>`).join('')}</table>`:'<div class="empty">No actions yet</div>';
 }
+const wrapTables=()=>main.querySelectorAll('table').forEach(t=>{if(t.parentElement.classList.contains('table-scroll'))return;const wrapper=document.createElement('div');wrapper.className='table-scroll';t.before(wrapper);wrapper.append(t)});
+new MutationObserver(wrapTables).observe(main,{childList:true,subtree:true});
 const views={jobs,hosts,runs:()=>runs(),audit};
 function show(v){view=v;if(v!=='jobs')hash('');document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));views[v]().catch(e=>main.innerHTML=`<div class="empty">${esc(e.message)}</div>`)}
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>show(b.dataset.v));
@@ -149,7 +257,9 @@ function route(){
   const [type,...parts]=location.hash.slice(1).split('/'), id=decodeURIComponent(parts.join('/'));
   if(type==='job'&&id)results(id).catch(showError);
   else if(type==='run'&&id)run(id).catch(showError);
-  else if(view==='result'||view==='results'||view==='jobs')show('jobs');
+  else if(type==='host'&&id)host(id).catch(showError);
+  else if(type==='host-audit'&&id)runs(id).catch(showError);
+  else show('jobs');
 }
 window.addEventListener('hashchange',route);
 api('/api/me').then(m=>{me=m;activityView(m);pauseView(m);api('/api/pause').then(pauseView).catch(()=>{});$('#who').textContent=m.user+(m.operator?' · operator':' · viewer');route()}).catch(e=>{main.innerHTML=`<div class="empty">${esc(e.message)}</div>`});

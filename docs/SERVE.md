@@ -208,7 +208,7 @@ reopened for every entry, so logrotate can move it aside (no `copytruncate` need
 | `GET /api/pause` | pause state: `paused`, optional `reason`, `by`, `at` (viewers too) |
 | `POST /api/pause` | pauses execution (operators); optional JSON `{reason: "..."}`; `200` with the state; pausing again updates reason and identity; `500` with the state and `error` when `pause.json` could not be written (the pause still holds in this process) |
 | `POST /api/resume` | resumes execution (operators); `200` with the state; already resumed is a no-op; `500` as for pause |
-| `GET /api/jobs` | the jobs with schedule, next run, `running` flag (queued, running or cancelling), optional `active` record (without report), `queued` flag (waiting for the worker), last executed result, optional `pending` record (without reports), and `approval: "required"` for guarded jobs; optional `operators` list and caller-specific `allowed` bool; `adhoc: {limit, extra_vars, secret_vars}` (`extra_vars` remains a list of names) when enabled |
+| `GET /api/jobs` | the jobs with schedule, next run, `running` flag (queued, running or cancelling), optional `active` record (without report; `active.requested` and `active.started` give queue and execution timing), `queued` flag (waiting for the worker), last executed result, optional `pending` record (without reports), and `approval: "required"` for guarded jobs; optional `operators` list and caller-specific `allowed` bool; `adhoc: {limit, extra_vars, secret_vars}` (`extra_vars` remains a list of names) when enabled |
 | `POST /api/jobs/{name}/run` | requests the job (operators); optional JSON `{limit: "host pattern", extra_vars: {k: "v"}}` as allowed by `adhoc`; `400` for invalid parameters or a limit with no hosts or hosts outside the job's limit; `202` with `{queued: name, run: id}` or `{pending: id, run: id}`; `409` when running, queued or pending; `503` when the queue is full; `500` with the record and `error` when storage fails (the run remains in memory); `403` with `{"error":"not an operator of this job"}` when the job disallows the operator |
 | `GET /api/jobs/{name}/results` | the kept results, newest first |
 | `GET /api/jobs/{name}/results/{id}` | one result with its full report (the drift, verify or comply report as JSON) |
@@ -216,6 +216,7 @@ reopened for every entry, so logrotate can move it aside (no `copytruncate` need
 | `POST /api/runs/{id}/approve` | queues a pending run (operators); optional JSON `{comment: "..."}`; `200` with the record without report, `404` if absent, `409` when the run expired meanwhile (it is marked expired), `503` if the queue is full; `500` with the record and `error` on storage failure; `403` with `{"error":"not an operator of this job"}` when the job disallows the operator |
 | `POST /api/runs/{id}/reject` | rejects a pending run (operators); optional JSON `{comment: "..."}`; `200` with the record without report, `404` if absent; `500` with the record and `error` on storage failure; `403` with `{"error":"not an operator of this job"}` when the job disallows the operator |
 | `POST /api/runs/{id}/cancel` | cancels a queued or running run (job operators); optional JSON `{comment: "..."}`; `200` with the cancelled record for queued runs, `202` with the cancelling record for running runs (without report); `404` if absent, `409` if not cancellable (reject a pending run instead), `500` with the record and `error` on storage failure; `403` if disallowed |
+| `GET /api/hosts/{name}/results` | that host’s retained results across all jobs, newest `started` first, at most 200: `[{id, job, kind, status, host_status, started, summary}]`; an unknown host returns `[]` |
 | `GET /api/hosts` | every host seen by a job's last executed result (cancelled runs are skipped), with its worst status (`ok`, `changed`, `drift`, `failed`, `unreachable`) and the status per job |
 | `GET /api/runs[?host=&playbook=]` | the audit store's last 100 runs (every `apply`, not only the server's); optional `serve_run` links to the retained serve result |
 | `GET /api/runs/{id}` | one audit record, with optional `serve_run` |
@@ -227,8 +228,17 @@ a server-level operator does not match the job's list. Viewers receive `403` wit
 `{"error":"operators only"}`; missing identity receives `401`. An unknown pending run
 returns `404` before the per-job check.
 
-The page at `/` uses the same API: Jobs (with Run/Approve/Reject/Cancel buttons when `allowed`), Hosts, Runs and Audit tabs,
-each result and audit record openable as JSON.
+Page: the page at `/` uses the same API: Jobs (with Run/Approve/Reject/Cancel buttons when
+`allowed`), Hosts, Runs and Audit. Run pages show metadata and tabs by kind: drift/apply
+have expandable Hosts, Changes grouped by task, coloured Diff (limited to the first
+200 KB), and Orphans when present; verify has expandable Hosts and Checks across hosts;
+comply has a control-by-host Matrix with unreachable hosts and scores, plus Remediation
+grouped by control. Every kind retains a full JSON tab. Audit records open as JSON.
+Host names open `#host/<name>` with retained serve results across jobs and a separate
+“runs in the audit store” link. Jobs show a muted “never” badge before the first executed
+run and “stale” when a scheduled job’s last execution is older than twice its interval;
+queued and running jobs show wait and elapsed time. Tables scroll horizontally on narrow
+screens; at 700px and below the Jobs Target column is hidden and dates are shortened.
 
 A job result: `{id, job, kind, requested, started, duration_seconds, status, summary, trigger,
 hosts, report, approval, cancel, params, audit_execution_id}`. `requested` is the request time; `started` becomes the execution

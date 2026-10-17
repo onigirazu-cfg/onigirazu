@@ -1583,6 +1583,9 @@ func (s *server) mux() *http.ServeMux {
 	mux.HandleFunc("/api/hosts", auth(false, func(w http.ResponseWriter, _ *http.Request, _ serveIdentity) {
 		writeJSON(w, http.StatusOK, s.hostsView())
 	}))
+	mux.HandleFunc("GET /api/hosts/{name}/results", auth(false, func(w http.ResponseWriter, r *http.Request, _ serveIdentity) {
+		writeJSON(w, http.StatusOK, s.hostResults(r.PathValue("name")))
+	}))
 	mux.HandleFunc("/api/runs", auth(false, func(w http.ResponseWriter, r *http.Request, _ serveIdentity) {
 		if s.audit == nil {
 			writeJSON(w, http.StatusOK, []interface{}{})
@@ -1746,9 +1749,9 @@ type jobView struct {
 	Every     string      `json:"every,omitempty"`
 	Next      *time.Time  `json:"next,omitempty"`
 	Queued    bool        `json:"queued"`
-	Running   bool        `json:"running"` // queued, running or stopping
-	Active    *JobResult  `json:"active,omitempty"`
+	Running   bool        `json:"running"`           // queued, running or stopping
 	Pending   *JobResult  `json:"pending,omitempty"` // the run that waits for approval
+	Active    *JobResult  `json:"active,omitempty"`  // queued or executing, without report
 	Last      *JobResult  `json:"last,omitempty"`    // the last executed run
 }
 
@@ -1819,6 +1822,39 @@ type hostView struct {
 	Status string            `json:"status"` // worst over the jobs' last results
 	Jobs   map[string]string `json:"jobs"`
 	Seen   time.Time         `json:"seen"`
+}
+
+type hostResultView struct {
+	ID         string    `json:"id"`
+	Job        string    `json:"job"`
+	Kind       string    `json:"kind"`
+	Status     string    `json:"status"`
+	HostStatus string    `json:"host_status"`
+	Started    time.Time `json:"started"`
+	Summary    string    `json:"summary"`
+}
+
+func (s *server) hostResults(host string) []hostResultView {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	rows := make([]hostResultView, 0)
+	for _, results := range s.results {
+		for _, r := range results {
+			if status, ok := r.Hosts[host]; ok {
+				rows = append(rows, hostResultView{ID: r.ID, Job: r.Job, Kind: r.Kind, Status: r.Status, HostStatus: status, Started: r.Started, Summary: r.Summary})
+			}
+		}
+	}
+	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].Started.Equal(rows[j].Started) {
+			return rows[i].ID > rows[j].ID
+		}
+		return rows[i].Started.After(rows[j].Started)
+	})
+	if len(rows) > 200 {
+		rows = rows[:200]
+	}
+	return rows
 }
 
 func (s *server) hostsView() []hostView {
