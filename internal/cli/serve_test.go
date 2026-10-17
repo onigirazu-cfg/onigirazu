@@ -11,11 +11,13 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/onigirazu-cfg/onigirazu/internal/audit"
 	"github.com/onigirazu-cfg/onigirazu/internal/logger"
 )
 
@@ -2068,5 +2070,673 @@ func TestServeCancelFinished(t *testing.T) {
 				t.Fatalf("refused audit: %+v", a)
 			}
 		})
+	}
+}
+
+func TestServeAuditExecutionIdentity(t *testing.T) {
+	cfg := &ServeConfig{DataDir: t.TempDir(), Retain: 5, Jobs: []ServeJob{{Name: "identity", Kind: "apply"}}}
+	s, err := newServer(cfg, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.audit, err = audit.NewStorage(t.TempDir(), logger.NewWithWriter(false, io.Discard))
+	if err != nil {
+		t.Fatal(err)
+	}
+	const executionID = "execution-identity"
+	if err := s.audit.SaveRecord(&audit.ExecutionRecord{ID: executionID, PlaybookPath: "site.yml", StartTime: time.Now().UTC(), Status: audit.StatusSuccess}); err != nil {
+		t.Fatal(err)
+	}
+	s.runJob = func(_ context.Context, _ *ServeJob) (*JobResult, error) {
+		return &JobResult{Status: "ok", AuditExecutionID: executionID}, nil
+	}
+	requested, err := s.request(&cfg.Jobs[0], "schedule", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { defer close(done); s.worker(ctx) }()
+	defer func() { cancel(); <-done }()
+	serveWaitActivity(t, s, 0, 0)
+	data, err := os.ReadFile(filepath.Join(cfg.DataDir, "results", requested.ID+".json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var persisted JobResult
+	if err := json.Unmarshal(data, &persisted); err != nil {
+		t.Fatal(err)
+	}
+	if persisted.AuditExecutionID != executionID {
+		t.Fatalf("persisted execution identity: %+v", persisted)
+	}
+	handler := s.mux()
+	for _, path := range []string{"/api/jobs/identity/results", "/api/results/" + requested.ID} {
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, httptest.NewRequest(http.MethodGet, path, nil))
+		if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"audit_execution_id":"`+executionID+`"`) {
+			t.Fatalf("%s: %d %s", path, w.Code, w.Body.String())
+		}
+	}
+	for _, path := range []string{"/api/runs", "/api/runs/" + executionID} {
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, httptest.NewRequest(http.MethodGet, path, nil))
+		if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"serve_run":"`+requested.ID+`"`) {
+			t.Fatalf("%s: %d %s", path, w.Code, w.Body.String())
+		}
+	}
+}
+
+func TestServeResultStorageFailureAndRecovery(t *testing.T) {
+	cfg := &ServeConfig{DataDir: t.TempDir(), Retain: 50, Jobs: []ServeJob{{Name: "storage", Kind: "drift"}}}
+	s, err := newServer(cfg, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(cfg.DataDir, "results")
+	if err := os.Remove(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(dir, []byte("blocked"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r := &JobResult{ID: "storage-run", Job: "storage", Requested: time.Now(), Status: "ok"}
+	if err := s.store(r); err == nil || s.resultByID(r.Job, r.ID) == nil {
+		t.Fatalf("failed write lost record or returned no error: %v", err)
+	}
+	checkStatus := func(wantError bool) {
+		t.Helper()
+		me := httptest.NewRecorder()
+		s.mux().ServeHTTP(me, httptest.NewRequest(http.MethodGet, "/api/me", nil))
+		var status struct {
+			StorageError string `json:"storage_error"`
+		}
+		if err := json.Unmarshal(me.Body.Bytes(), &status); err != nil || (status.StorageError != "") != wantError {
+			t.Fatalf("storage state: %s, %v", me.Body.String(), err)
+		}
+		metrics := httptest.NewRecorder()
+		s.metricsHandler(metrics, nil)
+		value := "0"
+		if wantError {
+			value = "1"
+		}
+		if !strings.Contains(metrics.Body.String(), "onigirazu_serve_storage_error "+value+"\n") {
+			t.Fatalf("storage metric: %s", metrics.Body.String())
+		}
+	}
+	checkStatus(true)
+	if err := os.Remove(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.store(r); err != nil {
+		t.Fatal(err)
+	}
+	checkStatus(false)
+	data, err := os.ReadFile(filepath.Join(dir, r.ID+".json"))
+	if err != nil || !json.Valid(data) {
+		t.Fatalf("saved record: %s, %v", data, err)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil || len(entries) != 1 || entries[0].Name() != r.ID+".json" {
+		t.Fatalf("temporary file left behind: %v, %v", entries, err)
+	}
+	// A rename onto a directory fails after the temporary file was written.
+	if err := os.Remove(filepath.Join(dir, r.ID+".json")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(dir, r.ID+".json"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.store(r); err == nil {
+		t.Fatal("rename failure was ignored")
+	}
+	if _, err := os.Stat(filepath.Join(dir, r.ID+".json.tmp")); !os.IsNotExist(err) {
+		t.Fatalf("temporary file not cleaned up: %v", err)
+	}
+}
+
+func TestServeRetainAge(t *testing.T) {
+	for _, startup := range []bool{false, true} {
+		t.Run(fmt.Sprintf("startup=%v", startup), func(t *testing.T) {
+			cfg := &ServeConfig{DataDir: t.TempDir(), Retain: 50, Jobs: []ServeJob{{Name: "retention", Kind: "drift"}}}
+			s, err := newServer(cfg, io.Discard)
+			if err != nil {
+				t.Fatal(err)
+			}
+			old := time.Now().Add(-48 * time.Hour)
+			for _, status := range []string{"ok", "rejected", "expired", "pending", "queued", "running"} {
+				r := &JobResult{ID: status, Job: "retention", Requested: old, Started: old, Status: status}
+				if status == "pending" {
+					r.Approval = &RunApproval{Expires: time.Now().Add(time.Hour)}
+				}
+				if err := s.store(r); err != nil {
+					t.Fatal(err)
+				}
+			}
+			cfg.RetainAge = 24 * time.Hour
+			if startup {
+				s, err = newServer(cfg, io.Discard)
+				if err != nil {
+					t.Fatal(err)
+				}
+			} else if err := s.store(&JobResult{ID: "new", Job: "retention", Requested: time.Now(), Status: "ok"}); err != nil {
+				t.Fatal(err)
+			}
+			for _, status := range []string{"ok", "rejected", "expired"} {
+				if s.resultByID("retention", status) != nil {
+					t.Errorf("old %s record kept in memory", status)
+				}
+				if _, err := os.Stat(filepath.Join(cfg.DataDir, "results", status+".json")); !os.IsNotExist(err) {
+					t.Errorf("old %s file kept: %v", status, err)
+				}
+			}
+			for _, status := range []string{"pending", "queued", "running"} {
+				if s.resultByID("retention", status) == nil {
+					t.Errorf("active %s pruned by age", status)
+				}
+			}
+		})
+	}
+}
+
+func blockServeResultDir(t *testing.T, s *server) {
+	t.Helper()
+	dir := filepath.Join(s.cfg.DataDir, "results")
+	if err := os.Rename(dir, dir+"-saved"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(dir, []byte("blocked"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestServeStorageFailureHTTP(t *testing.T) {
+	for _, action := range []string{"request", "approve", "reject", "expired"} {
+		t.Run(action, func(t *testing.T) {
+			cfg := &ServeConfig{DataDir: t.TempDir(), Jobs: []ServeJob{{Name: "guarded", Kind: "apply", Approval: "required", ApprovalTimeout: time.Hour}}}
+			s, err := newServer(cfg, io.Discard)
+			if err != nil {
+				t.Fatal(err)
+			}
+			path := "/api/jobs/guarded/run"
+			wantStatus := "pending"
+			if action != "request" {
+				r, err := s.request(&cfg.Jobs[0], "schedule", nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				path = "/api/runs/" + r.ID + "/" + action
+				switch action {
+				case "approve":
+					wantStatus = "queued"
+				case "reject":
+					wantStatus = "rejected"
+				case "expired":
+					path = "/api/runs/" + r.ID + "/approve"
+					wantStatus = "expired"
+					s.pending["guarded"].Approval.Expires = time.Now().Add(-time.Second)
+				}
+			}
+			blockServeResultDir(t, s)
+			res := httptest.NewRecorder()
+			s.mux().ServeHTTP(res, httptest.NewRequest(http.MethodPost, path, nil))
+			var body struct {
+				JobResult
+				Error string `json:"error"`
+			}
+			if err := json.Unmarshal(res.Body.Bytes(), &body); err != nil {
+				t.Fatal(err)
+			}
+			if res.Code != http.StatusInternalServerError || body.Error == "" || body.ID == "" || body.Status != wantStatus {
+				t.Fatalf("HTTP storage failure: %d %s", res.Code, res.Body.String())
+			}
+		})
+	}
+}
+
+func TestServeWorkerKeepsUnsavedResult(t *testing.T) {
+	cfg := &ServeConfig{DataDir: t.TempDir(), Jobs: []ServeJob{{Name: "worker", Kind: "drift"}}}
+	var logs strings.Builder
+	s, err := newServer(cfg, &logs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.runJob = func(context.Context, *ServeJob) (*JobResult, error) {
+		return &JobResult{Started: time.Now(), Status: "ok", Summary: "completed in memory"}, nil
+	}
+	r, err := s.request(&cfg.Jobs[0], "schedule", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	blockServeResultDir(t, s)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		s.worker(ctx)
+	}()
+	deadline := time.After(5 * time.Second)
+	for {
+		s.mu.Lock()
+		finished := !s.running["worker"]
+		if finished {
+			saved := s.resultByID("worker", r.ID)
+			if saved == nil || saved.Status != "ok" || saved.Summary != "completed in memory" || s.storeErr == "" {
+				t.Errorf("worker lost unsaved result: %+v", saved)
+			}
+			if !strings.Contains(logs.String(), "serve: worker: result not saved:") {
+				t.Errorf("worker did not log storage failure: %s", logs.String())
+			}
+		}
+		s.mu.Unlock()
+		if finished {
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatal("worker did not finish")
+		case <-time.After(time.Millisecond):
+		}
+	}
+	cancel()
+	<-done
+}
+
+func TestServeRetentionRemovalFailure(t *testing.T) {
+	cfg := &ServeConfig{DataDir: t.TempDir(), Retain: 1}
+	s, err := newServer(cfg, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := &JobResult{ID: "old", Job: "prune", Requested: time.Now(), Status: "rejected"}
+	if err := s.store(old); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(cfg.DataDir, "results", "old.json")
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(path, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	child := filepath.Join(path, "keep")
+	if err := os.WriteFile(child, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	latest := &JobResult{ID: "latest", Job: "prune", Requested: time.Now(), Status: "ok"}
+	if err := s.store(latest); err == nil || s.storeErr == "" || s.resultByID("prune", "old") == nil {
+		t.Fatalf("prune failure was hidden or retry lost: %v", err)
+	}
+	if err := os.Remove(child); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.store(latest); err != nil || s.storeErr != "" || s.resultByID("prune", "old") != nil {
+		t.Fatalf("prune recovery: %v, %s", err, s.storeErr)
+	}
+}
+
+func TestServeSecretConfig(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "serve.yml")
+	for _, tc := range []struct {
+		vars  string
+		valid bool
+	}{
+		{`[reboot, {name: token, secret: true}, {name: label, secret: false}]`, true},
+		{`[{secret: true}]`, false},
+		{`[token, {name: token, secret: true}]`, false},
+		{`[42]`, false},
+	} {
+		if err := os.WriteFile(path, []byte("retain_age: 168h\njobs:\n  - name: patch\n    playbook: patch.yml\n    adhoc:\n      extra_vars: "+tc.vars+"\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		cfg, err := loadServeConfig(path)
+		if !tc.valid {
+			if err == nil {
+				t.Fatalf("accepted %s", tc.vars)
+			}
+			continue
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		adhoc := cfg.Jobs[0].Adhoc
+		if cfg.RetainAge != 168*time.Hour || !slices.Equal(adhoc.ExtraVars, []string{"reboot", "token", "label"}) || !slices.Equal(adhoc.SecretVars, []string{"token"}) {
+			t.Fatalf("config: %+v", cfg)
+		}
+		data, err := json.Marshal(adhoc)
+		if err != nil || !strings.Contains(string(data), `"extra_vars":["reboot","token","label"]`) || !strings.Contains(string(data), `"secret_vars":["token"]`) {
+			t.Fatalf("compatible adhoc JSON: %s (%v)", data, err)
+		}
+	}
+}
+
+func TestServeSecretParameters(t *testing.T) {
+	const secret = "private-token-87194"
+	notifications := make(chan string, 8)
+	transport := serveNotifyTransport(func(r *http.Request) (*http.Response, error) {
+		data, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Error(err)
+		}
+		notifications <- string(data)
+		return &http.Response{StatusCode: http.StatusNoContent, Body: io.NopCloser(strings.NewReader("")), Header: make(http.Header)}, nil
+	})
+	cfg := &ServeConfig{DataDir: t.TempDir(), Retain: 50, Jobs: []ServeJob{{
+		Name: "patch", Kind: "apply", Playbook: "patch.yml", Approval: "required", ApprovalTimeout: time.Hour,
+		ExtraVars: map[string]string{"keep": "default"},
+		Adhoc:     ServeAdhoc{ExtraVars: []string{"token", "reboot"}, SecretVars: []string{"token"}},
+	}}}
+	for _, format := range []string{"json", "mattermost"} {
+		cfg.Notify = append(cfg.Notify, NotifyTarget{URL: "http://notify.test/secrets", Format: format, On: []string{eventPending, eventStart, eventSuccess}})
+	}
+	s, err := newServer(cfg, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.notifyClient = &http.Client{Transport: transport}
+	ran := make(chan map[string]string, 1)
+	s.runJob = func(_ context.Context, j *ServeJob) (*JobResult, error) {
+		ran <- j.ExtraVars
+		return &JobResult{Started: time.Now().UTC(), Status: "ok"}, nil
+	}
+	handler := s.mux()
+	do := func(method, path, body string, want int) string {
+		t.Helper()
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, httptest.NewRequest(method, path, strings.NewReader(body)))
+		if w.Code != want {
+			t.Fatalf("%s %s: %d %s", method, path, w.Code, w.Body.String())
+		}
+		if strings.Contains(w.Body.String(), secret) {
+			t.Fatalf("secret in %s", path)
+		}
+		return w.Body.String()
+	}
+	var response map[string]string
+	if err := json.Unmarshal([]byte(do("POST", "/api/jobs/patch/run", `{"extra_vars":{"token":"`+secret+`","reboot":"true"}}`, http.StatusAccepted)), &response); err != nil {
+		t.Fatal(err)
+	}
+	id := response["run"]
+	s.mu.Lock()
+	actual := s.secrets[id]["token"]
+	masked := s.resultByID("patch", id).Params.ExtraVars["token"]
+	s.mu.Unlock()
+	if actual != secret || masked != "***" {
+		t.Fatal("secret not separated from stored parameters")
+	}
+	checkMasked := func() {
+		t.Helper()
+		for _, path := range []string{"/api/results/" + id, "/api/jobs/patch/results", "/api/jobs/patch/results/" + id, "/api/jobs", "/api/audit"} {
+			if body := do("GET", path, "", http.StatusOK); !strings.Contains(body, "***") {
+				t.Fatalf("missing mask in %s: %s", path, body)
+			}
+		}
+		for _, path := range []string{filepath.Join(cfg.DataDir, "results", id+".json"), filepath.Join(cfg.DataDir, "audit.log")} {
+			data, err := os.ReadFile(path)
+			if err != nil || strings.Contains(string(data), secret) || !strings.Contains(string(data), "***") {
+				t.Fatalf("unmasked file %s: %v", path, err)
+			}
+		}
+	}
+	checkMasked()
+	s.notifyWait.Wait()
+	do("POST", "/api/runs/"+id+"/approve", "", http.StatusOK)
+	ctx, cancel := contextTimeout(t)
+	done := make(chan struct{})
+	go func() { defer close(done); s.worker(ctx) }()
+	defer func() { cancel(); <-done; s.notifyWait.Wait() }()
+	select {
+	case vars := <-ran:
+		if vars["token"] != secret || vars["reboot"] != "true" || vars["keep"] != "default" {
+			t.Fatal("effective job lost actual secret or ordinary variables")
+		}
+	case <-ctx.Done():
+		t.Fatal("job did not run")
+	}
+	serveWaitActivity(t, s, 0, 0)
+	s.mu.Lock()
+	remaining := len(s.secrets)
+	s.mu.Unlock()
+	if remaining != 0 {
+		t.Fatal("completed secret retained in memory")
+	}
+	checkMasked()
+	s.notifyWait.Wait()
+	for i := 0; i < 6; i++ {
+		select {
+		case payload := <-notifications:
+			if strings.Contains(payload, secret) || !strings.Contains(payload, "***") {
+				t.Fatalf("unmasked notification: %s", payload)
+			}
+		case <-ctx.Done():
+			t.Fatal("missing notification")
+		}
+	}
+}
+
+func TestServeSecretCleanupAndRestart(t *testing.T) {
+	for _, action := range []string{"reject", "expire", "restart-pending", "restart-queued", "cancel-running", "cancel-queued", "queue-full"} {
+		t.Run(action, func(t *testing.T) {
+			cfg := &ServeConfig{DataDir: t.TempDir(), Retain: 50, Jobs: []ServeJob{{Name: "patch", Kind: "apply", Playbook: "patch.yml", Approval: "required", ApprovalTimeout: time.Hour,
+				Adhoc: ServeAdhoc{ExtraVars: []string{"token"}, SecretVars: []string{"token"}}}}}
+			s, err := newServer(cfg, io.Discard)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if action == "queue-full" {
+				cfg.Jobs[0].Approval = ""
+				for i := 0; i < cap(s.queue); i++ {
+					s.queue <- queued{}
+				}
+			}
+			r, err := s.request(&cfg.Jobs[0], "test", &RunParams{ExtraVars: map[string]string{"token": "private-value"}})
+			if action == "queue-full" {
+				if !errors.Is(err, errQueueFull) || len(s.secrets) != 0 {
+					t.Fatalf("queue refusal: %v; secrets %d", err, len(s.secrets))
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			switch action {
+			case "reject":
+				if _, err := s.reject(r.ID, "test", ""); err != nil {
+					t.Fatal(err)
+				}
+			case "expire":
+				s.expirePending(time.Now().Add(2 * time.Hour))
+			case "restart-pending", "restart-queued":
+				if action == "restart-queued" {
+					if _, err := s.approve(r.ID, "test", ""); err != nil {
+						t.Fatal(err)
+					}
+				}
+				restarted, err := newServer(cfg, io.Discard)
+				if err != nil {
+					t.Fatal(err)
+				}
+				stored := restarted.resultByID("patch", r.ID)
+				if stored == nil || stored.Status != "error" || stored.Summary != "interrupted: serve restarted (secret parameters are not kept)" || len(restarted.secrets) != 0 || len(restarted.pending) != 0 || restarted.running["patch"] {
+					t.Fatalf("restarted run: %+v", stored)
+				}
+				data, err := os.ReadFile(filepath.Join(cfg.DataDir, "results", r.ID+".json"))
+				if err != nil || !strings.Contains(string(data), stored.Summary) {
+					t.Fatalf("restart transition not persisted: %v", err)
+				}
+				return
+			case "cancel-running", "cancel-queued":
+				if _, err := s.approve(r.ID, "test", ""); err != nil {
+					t.Fatal(err)
+				}
+				started := make(chan struct{})
+				s.runJob = func(ctx context.Context, j *ServeJob) (*JobResult, error) {
+					if j.ExtraVars["token"] != "private-value" {
+						t.Error("missing execution secret")
+					}
+					close(started)
+					<-ctx.Done()
+					return nil, ctx.Err()
+				}
+				if action == "cancel-queued" {
+					if _, err := s.setPause(true, "test", ""); err != nil {
+						t.Fatal(err)
+					}
+				}
+				ctx, cancel := contextTimeout(t)
+				done := make(chan struct{})
+				go func() { defer close(done); s.worker(ctx) }()
+				if action == "cancel-running" {
+					select {
+					case <-started:
+					case <-ctx.Done():
+						t.Fatal("job did not start")
+					}
+				}
+				cancel()
+				<-done
+			}
+			if len(s.secrets) != 0 {
+				t.Fatal("secret retained after " + action)
+			}
+		})
+	}
+}
+
+func TestServeSecretRestartMetadata(t *testing.T) {
+	for _, secret := range []bool{false, true} {
+		t.Run(fmt.Sprint(secret), func(t *testing.T) {
+			cfg := &ServeConfig{DataDir: t.TempDir(), Jobs: []ServeJob{{Name: "job", Approval: "required", ApprovalTimeout: time.Hour, Adhoc: ServeAdhoc{ExtraVars: []string{"label"}}}}}
+			if secret {
+				cfg.Jobs[0].Adhoc.SecretVars = []string{"label"}
+			}
+			s, err := newServer(cfg, io.Discard)
+			if err != nil {
+				t.Fatal(err)
+			}
+			r, err := s.request(&cfg.Jobs[0], "test", &RunParams{ExtraVars: map[string]string{"label": "***"}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			cfg.Jobs[0].Adhoc.SecretVars = nil
+			restarted, err := newServer(cfg, io.Discard)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := "pending"
+			if secret {
+				want = "error"
+			}
+			if stored := restarted.resultByID("job", r.ID); stored == nil || stored.Status != want {
+				t.Fatalf("restart secret=%v: %+v", secret, stored)
+			}
+		})
+	}
+}
+
+func TestServeSecretExecutionEcho(t *testing.T) {
+	for _, failure := range []bool{false, true} {
+		t.Run(fmt.Sprint(failure), func(t *testing.T) {
+			cfg := &ServeConfig{DataDir: t.TempDir(), Jobs: []ServeJob{{Name: "echo", Adhoc: ServeAdhoc{ExtraVars: []string{"token", "pin"}, SecretVars: []string{"token", "pin"}}}}}
+			var logs strings.Builder
+			s, err := newServer(cfg, &logs)
+			if err != nil {
+				t.Fatal(err)
+			}
+			const secret = "quoted\"secret\\value"
+			s.runJob = func(_ context.Context, j *ServeJob) (*JobResult, error) {
+				value := j.ExtraVars["token"]
+				if failure {
+					return nil, fmt.Errorf("invalid token %s", value)
+				}
+				// the value as a string and, digits only, as a JSON number
+				report := []byte(`{"output":` + strconv.Quote(value) + `,"pin":4711}`)
+				return &JobResult{Status: "ok", Summary: "used " + value, Report: report}, nil
+			}
+			r, err := s.request(&cfg.Jobs[0], "test", &RunParams{ExtraVars: map[string]string{"token": secret, "pin": "4711"}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			ctx, cancel := contextTimeout(t)
+			done := make(chan struct{})
+			go func() { defer close(done); s.worker(ctx) }()
+			defer func() { cancel(); <-done }()
+			serveWaitActivity(t, s, 0, 0)
+			data, err := os.ReadFile(filepath.Join(cfg.DataDir, "results", r.ID+".json"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var stored JobResult
+			if err := json.Unmarshal(data, &stored); err != nil {
+				t.Fatal(err)
+			}
+			s.mu.Lock()
+			logText := logs.String()
+			s.mu.Unlock()
+			if strings.Contains(stored.Summary, secret) || !strings.Contains(stored.Summary, "***") || strings.Contains(logText, secret) {
+				t.Fatal("secret echoed in stored summary or worker log")
+			}
+			if !failure && string(stored.Report) != `{"output":"***","pin":"***"}` {
+				t.Fatalf("echoed report not masked: %s", stored.Report)
+			}
+		})
+	}
+}
+
+func TestServeCancelStorageFailure(t *testing.T) {
+	for _, status := range []string{"queued", "running"} {
+		t.Run(status, func(t *testing.T) {
+			s, err := newServer(&ServeConfig{DataDir: t.TempDir(), Jobs: []ServeJob{{Name: "patch"}}}, io.Discard)
+			if err != nil {
+				t.Fatal(err)
+			}
+			r := &JobResult{ID: "cancel-storage", Job: "patch", Status: status}
+			if err := s.store(r); err != nil {
+				t.Fatal(err)
+			}
+			s.running[r.Job] = true
+			s.secrets[r.ID] = map[string]string{"token": "private-value"}
+			stopped := false
+			s.cancels[r.ID] = func() { stopped = true }
+			// A directory at the result path makes the atomic rename fail.
+			path := filepath.Join(s.cfg.DataDir, "results", r.ID+".json")
+			if err := os.Remove(path); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Mkdir(path, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			w := serveCancelRequest(s, r.ID, "alice")
+			if w.Code != http.StatusInternalServerError || s.storeErr == "" || !strings.Contains(w.Body.String(), `"error"`) {
+				t.Fatalf("cancel storage failure: %d %s (%s)", w.Code, w.Body.String(), s.storeErr)
+			}
+			if status == "queued" {
+				if r.Status != statusCancelled || s.running[r.Job] || len(s.secrets) != 0 {
+					t.Fatal("queued cancellation did not clear activity and secrets")
+				}
+			} else if r.Status != statusCancelling || !stopped || len(s.secrets[r.ID]) == 0 {
+				t.Fatal("running cancellation did not stop execution and retain masking secrets")
+			}
+		})
+	}
+}
+
+func TestServeWorkerExitKeepsCancellingSecrets(t *testing.T) {
+	s, err := newServer(&ServeConfig{DataDir: t.TempDir()}, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := &JobResult{ID: "still-stopping", Job: "patch", Status: statusCancelling}
+	s.results[r.Job] = []*JobResult{r}
+	s.secrets[r.ID] = map[string]string{"token": "private-value"}
+	ctx, stop := context.WithCancel(context.Background())
+	stop()
+	s.worker(ctx)
+	if len(s.secrets[r.ID]) == 0 {
+		t.Fatal("exiting worker removed secrets needed to mask another cancelling run")
 	}
 }

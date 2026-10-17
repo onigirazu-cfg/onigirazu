@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `onigirazu serve`: operators cancel queued or running runs from the page or `POST /api/runs/{id}/cancel`; cancellation keeps who stopped the run and any partial result, with audit entries, optional notifications and metrics
+- `onigirazu serve`: atomic result writes, visible storage errors in the page, `/api/me` and metrics, and optional `retain_age` alongside count retention
+- `onigirazu serve`: `audit_execution_id` and `serve_run` link job results to execution audit history
+- `onigirazu serve`: secret ad-hoc variables use password inputs and masked records, action logs and notifications; values stay in memory and pending or queued secret runs fail on restart
 
 - `onigirazu serve`: `concurrency` runs up to N jobs at once (default 1), with FIFO pickup and no overlap of the same job; shutdown cancels executing runs, the page shows running and queued counts, and `/api/me` and metrics expose the concurrency limit
 
