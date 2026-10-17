@@ -1746,3 +1746,327 @@ func TestServeCancelRunning(t *testing.T) {
 		t.Fatalf("persisted run: %+v", persisted)
 	}
 }
+
+func serveCancelRequest(s *server, id, user string) *httptest.ResponseRecorder {
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/api/runs/"+id+"/cancel", strings.NewReader(`{"comment":"maintenance"}`))
+	r.Header.Set("X-User", user)
+	if user != "viewer" {
+		r.Header.Set("X-Groups", "admins")
+	}
+	s.mux().ServeHTTP(w, r)
+	return w
+}
+
+func TestServeCancelQueued(t *testing.T) {
+	s, err := newServer(&ServeConfig{DataDir: t.TempDir(), Retain: 10,
+		Auth: ServeAuth{UserHeader: "X-User", GroupsHeader: "X-Groups", Operators: []string{"admins"}},
+		Jobs: []ServeJob{{Name: "patch", Kind: "apply", Operators: []string{"alice"}}}}, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	j := &s.cfg.Jobs[0]
+	run, err := s.request(j, "test", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, user := range []string{"bob", "viewer"} {
+		w := serveCancelRequest(s, run.ID, user)
+		if w.Code != 403 {
+			t.Fatalf("denied: %d %s", w.Code, w.Body.String())
+		}
+		a := s.actions(1)[0]
+		if a.OK || a.Action != "cancel" || a.Job != j.Name || a.Run != run.ID || a.User != user {
+			t.Fatalf("denied audit: %+v", a)
+		}
+	}
+	w := serveCancelRequest(s, run.ID, "alice")
+	var got JobResult
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if w.Code != 200 || got.Status != statusCancelled || got.Summary != statusCancelled+" by alice: maintenance" || got.Cancel == nil || got.Cancel.By != "alice" || got.Cancel.At.IsZero() || got.Cancel.Comment != "maintenance" {
+		t.Fatalf("queued cancel: %d %s", w.Code, w.Body.String())
+	}
+	a := s.actions(1)[0]
+	if !a.OK || a.Action != "cancel" || a.Reason != "maintenance" || a.Run != run.ID || a.Job != j.Name {
+		t.Fatalf("audit: %+v", a)
+	}
+	if s.running[j.Name] {
+		t.Fatal("canceled job still busy")
+	}
+	metrics := httptest.NewRecorder()
+	s.metricsHandler(metrics, nil)
+	if !strings.Contains(metrics.Body.String(), `onigirazu_serve_job_last_status{job="patch",kind="apply"} 4`) {
+		t.Fatalf("queued cancel metrics: %s", metrics.Body.String())
+	}
+	w = serveCancelRequest(s, "missing", "alice")
+	if w.Code != 404 {
+		t.Fatalf("missing: %d", w.Code)
+	}
+	w = serveCancelRequest(s, run.ID, "alice")
+	if w.Code != 409 {
+		t.Fatalf("finished: %d", w.Code)
+	}
+	// A replacement must stay busy when the old queue entry is skipped.
+	next, err := s.request(j, "schedule", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	started, release := make(chan struct{}), make(chan struct{})
+	s.runJob = func(ctx context.Context, _ *ServeJob) (*JobResult, error) {
+		close(started)
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-release:
+		}
+		return &JobResult{Started: time.Now(), Status: "ok"}, nil
+	}
+	ctx, stop := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { defer close(done); s.worker(ctx) }()
+	t.Cleanup(func() {
+		select {
+		case <-release:
+		default:
+			close(release)
+		}
+		stop()
+		<-done
+	})
+	select {
+	case <-started:
+	case <-time.After(3 * time.Second):
+		t.Fatal("replacement not started")
+	}
+	s.mu.Lock()
+	busy := s.running[j.Name]
+	old := resultCopy(s.resultByID(j.Name, run.ID))
+	s.mu.Unlock()
+	if !busy || old.Status != statusCancelled {
+		t.Fatalf("old entry changed state: busy=%v old=%+v", busy, old)
+	}
+	if _, err := s.request(j, "test", nil); !errors.Is(err, errJobBusy) {
+		t.Fatalf("replacement overlaps: %v", err)
+	}
+	close(release)
+	serveWaitActivity(t, s, 0, 0)
+	s.mu.Lock()
+	status := s.resultByID(j.Name, next.ID).Status
+	s.mu.Unlock()
+	if status != "ok" {
+		t.Fatalf("replacement: %s", status)
+	}
+	j.Approval, j.ApprovalTimeout = "required", time.Hour
+	pending, err := s.request(j, "test", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w = serveCancelRequest(s, pending.ID, "alice")
+	if w.Code != 409 || !strings.Contains(w.Body.String(), "reject it") {
+		t.Fatalf("pending: %d %s", w.Code, w.Body.String())
+	}
+}
+
+func TestServeCancelOperatorRunning(t *testing.T) {
+	for _, shutdown := range []bool{false, true} {
+		t.Run(fmt.Sprintf("shutdown=%v", shutdown), func(t *testing.T) {
+			var mu sync.Mutex
+			var events []string
+			client := &http.Client{Transport: serveNotifyTransport(func(r *http.Request) (*http.Response, error) {
+				var body struct {
+					Event string `json:"event"`
+				}
+				if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+					return nil, err
+				}
+				mu.Lock()
+				events = append(events, r.URL.Path+":"+body.Event)
+				mu.Unlock()
+				return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(""))}, nil
+			})}
+			s, err := newServer(&ServeConfig{DataDir: t.TempDir(), Retain: 10, Jobs: []ServeJob{{Name: "patch", Kind: "apply"}},
+				Notify: []NotifyTarget{{URL: "http://notify.test/default", Format: "json"}, {URL: "http://notify.test/cancel", Format: "json", On: []string{eventCancelled}}}}, io.Discard)
+			if err != nil {
+				t.Fatal(err)
+			}
+			s.notifyClient = client
+			// A canceled partial result must not replace this host verdict.
+			s.store(&JobResult{ID: "previous", Job: "patch", Status: "ok", Hosts: map[string]string{"web": "ok"}})
+			started, observed, release := make(chan struct{}), make(chan struct{}), make(chan struct{})
+			s.runJob = func(ctx context.Context, _ *ServeJob) (*JobResult, error) {
+				close(started)
+				<-ctx.Done()
+				close(observed)
+				<-release
+				return &JobResult{Hosts: map[string]string{"web": "failed"}, Report: json.RawMessage(`{"partial":true}`)}, ctx.Err()
+			}
+			ctx, stop := context.WithCancel(context.Background())
+			done := make(chan struct{})
+			go func() { defer close(done); s.worker(ctx) }()
+			t.Cleanup(func() {
+				select {
+				case <-release:
+				default:
+					close(release)
+				}
+				stop()
+				<-done
+			})
+			run, err := s.request(&s.cfg.Jobs[0], "test", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			select {
+			case <-started:
+			case <-time.After(3 * time.Second):
+				t.Fatal("not started")
+			}
+			if shutdown {
+				stop()
+			} else {
+				w := serveCancelRequest(s, run.ID, "alice")
+				if w.Code != 202 || !strings.Contains(w.Body.String(), `"status":"`+statusCancelling+`"`) {
+					t.Fatalf("running cancel: %d %s", w.Code, w.Body.String())
+				}
+				w = httptest.NewRecorder()
+				s.mux().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/results/"+run.ID, nil))
+				if w.Code != 200 || !strings.Contains(w.Body.String(), `"status":"`+statusCancelling+`"`) {
+					t.Fatalf("read active result: %d %s", w.Code, w.Body.String())
+				}
+				w = httptest.NewRecorder()
+				s.metricsHandler(w, nil)
+				if !strings.Contains(w.Body.String(), "onigirazu_serve_running 1\n") {
+					t.Fatalf("stopping count: %s", w.Body.String())
+				}
+				if v := s.jobsView(serveIdentity{Operator: true})[0]; v.Active == nil || v.Active.Status != statusCancelling || !v.Running {
+					t.Fatalf("active: %+v", v)
+				}
+			}
+			select {
+			case <-observed:
+			case <-time.After(3 * time.Second):
+				t.Fatal("context not canceled")
+			}
+			close(release)
+			serveWaitActivity(t, s, 0, 0)
+			stop()
+			<-done
+			s.notifyWait.Wait()
+			s.mu.Lock()
+			got := resultCopy(s.resultByID("patch", run.ID))
+			busy := s.running["patch"]
+			cancels := len(s.cancels)
+			s.mu.Unlock()
+			if busy || cancels != 0 || got.Duration <= 0 || got.Hosts["web"] != "failed" || string(got.Report) != `{"partial":true}` {
+				t.Fatalf("partial result: %+v busy=%v", got, busy)
+			}
+			if shutdown {
+				if got.Status != "error" || got.Summary != "interrupted: serve stopping" || got.Cancel != nil {
+					t.Fatalf("shutdown: %+v", got)
+				}
+				return
+			}
+			if got.Status != statusCancelled || got.Summary != statusCancelled+" by anonymous: maintenance" || got.Cancel == nil {
+				t.Fatalf("canceled: %+v", got)
+			}
+			stored := httptest.NewRecorder()
+			s.mux().ServeHTTP(stored, httptest.NewRequest(http.MethodGet, "/api/results/"+run.ID, nil))
+			var record JobResult
+			if err := json.Unmarshal(stored.Body.Bytes(), &record); err != nil || stored.Code != 200 || record.Status != statusCancelled || record.Hosts["web"] != "failed" || string(record.Report) != string(got.Report) {
+				t.Fatalf("stored API result: %d %s (%v)", stored.Code, stored.Body.String(), err)
+			}
+			mu.Lock()
+			sent := slices.Clone(events)
+			mu.Unlock()
+			if !slices.Equal(sent, []string{"/cancel:" + statusCancelled}) {
+				t.Fatalf("notifications: %v", sent)
+			}
+			hosts := s.hostsView()
+			if len(hosts) != 1 || hosts[0].Status != "ok" {
+				t.Fatalf("host verdict: %+v", hosts)
+			}
+			w := httptest.NewRecorder()
+			s.metricsHandler(w, nil)
+			if !strings.Contains(w.Body.String(), `onigirazu_serve_job_last_status{job="patch",kind="apply"} 4`) || strings.Contains(w.Body.String(), `onigirazu_serve_host_status{host="web",job="patch"} 2`) {
+				t.Fatalf("cancel metrics: %s", w.Body.String())
+			}
+			s2, err := newServer(s.cfg, io.Discard)
+			if err != nil {
+				t.Fatal(err)
+			}
+			loaded := s2.resultByID("patch", run.ID)
+			if loaded == nil || loaded.Cancel == nil || loaded.Status != statusCancelled || string(loaded.Report) != string(got.Report) {
+				t.Fatalf("persisted: %+v", loaded)
+			}
+			if _, err := s.request(&s.cfg.Jobs[0], "schedule", nil); err != nil {
+				t.Fatalf("schedule after cancel: %v", err)
+			}
+		})
+	}
+}
+
+func TestServeCancelRestartAndNotify(t *testing.T) {
+	s, err := newServer(&ServeConfig{DataDir: t.TempDir(), Retain: 10, Jobs: []ServeJob{{Name: "patch"}}}, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := &JobResult{ID: "interrupted", Job: "patch", Status: statusCancelling, Cancel: &RunCancel{By: "alice", At: time.Now()}, Hosts: map[string]string{"web": "failed"}}
+	s.store(r)
+	if len(s.hostsView()) != 0 {
+		t.Fatal("stopping run has host verdicts")
+	}
+	s2, err := newServer(s.cfg, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := s2.resultByID("patch", r.ID)
+	if got.Status != statusCancelled || got.Summary != "interrupted: serve restarted" || got.Cancel.By != "alice" || s2.running["patch"] {
+		t.Fatalf("restart: %+v", got)
+	}
+	if len(s2.hostsView()) != 0 {
+		t.Fatal("canceled run has host verdicts")
+	}
+	if err := validateNotifyTargets([]NotifyTarget{{URL: "http://notify.test", On: []string{eventCancelled}}}); err != nil {
+		t.Fatal(err)
+	}
+	body, err := s.notifyBody(eventCancelled, &s.cfg.Jobs[0], got, "mattermost")
+	if err != nil || !strings.Contains(string(body), ":no_entry: **patch** "+statusCancelled+" by alice — interrupted: serve restarted") {
+		t.Fatalf("headline: %s %v", body, err)
+	}
+	var sent int
+	s.notifyClient = &http.Client{Transport: serveNotifyTransport(func(_ *http.Request) (*http.Response, error) {
+		sent++
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(""))}, nil
+	})}
+	j := &s.cfg.Jobs[0]
+	j.NotifyOK = true
+	j.Notify = []NotifyTarget{{URL: "http://notify.test", Format: "json"}}
+	s.notify(eventCancelled, j, resultCopy(got))
+	s.notifyWait.Wait()
+	if sent != 1 {
+		t.Fatalf("notify_always: %d", sent)
+	}
+}
+
+func TestServeCancelFinished(t *testing.T) {
+	s, err := newServer(&ServeConfig{DataDir: t.TempDir(), Retain: 10, Jobs: []ServeJob{{Name: "patch"}}}, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, status := range []string{"ok", "drift", "failed", "error", "rejected", "expired", statusCancelled, statusCancelling} {
+		t.Run(status, func(t *testing.T) {
+			r := &JobResult{ID: status, Job: "patch", Status: status}
+			s.store(r)
+			w := serveCancelRequest(s, r.ID, "alice")
+			if w.Code != http.StatusConflict || r.Status != status || r.Cancel != nil {
+				t.Fatalf("finished cancellation: %d %s", w.Code, w.Body.String())
+			}
+			a := s.actions(1)[0]
+			if a.OK || a.Action != "cancel" || a.Run != r.ID || a.Reason != errRunNotCancellable.Error() {
+				t.Fatalf("refused audit: %+v", a)
+			}
+		})
+	}
+}

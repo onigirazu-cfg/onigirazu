@@ -18,13 +18,14 @@ import (
 )
 
 const (
-	eventPending  = "pending"
-	eventStart    = "start"
-	eventSuccess  = "success"
-	eventDrift    = "drift"
-	eventFailure  = "failure"
-	eventRejected = "rejected"
-	eventExpired  = "expired"
+	eventCancelled = statusCancelled
+	eventPending   = "pending"
+	eventStart     = "start"
+	eventSuccess   = "success"
+	eventDrift     = "drift"
+	eventFailure   = "failure"
+	eventRejected  = "rejected"
+	eventExpired   = "expired"
 )
 
 // NotifyTarget is a webhook and the run events it receives.
@@ -84,7 +85,7 @@ func validateNotifyTargets(targets []NotifyTarget) error {
 		}
 		for _, event := range t.On {
 			switch event {
-			case eventPending, eventStart, eventSuccess, eventDrift, eventFailure, eventRejected, eventExpired:
+			case eventPending, eventStart, eventSuccess, eventDrift, eventFailure, eventRejected, eventExpired, eventCancelled:
 			default:
 				return fmt.Errorf("target %d: unknown event %q", i+1, event)
 			}
@@ -108,7 +109,7 @@ func (s *server) notify(event string, j *ServeJob, r *JobResult) {
 		if on == nil {
 			on = []string{eventPending, eventDrift, eventFailure}
 			if j.NotifyOK {
-				on = append(on, eventSuccess)
+				on = append(on, eventSuccess, eventCancelled)
 			}
 		}
 		if !slices.Contains(on, event) {
@@ -221,6 +222,12 @@ func notifyHeadline(event, name string, r *JobResult) (text, emoji, color string
 		return name + " drift — " + r.Summary, ":warning:", "#d98f1a"
 	case eventFailure:
 		return name + " failed — " + r.Summary, ":x:", "#d14343"
+	case eventCancelled:
+		text = name + " " + statusCancelled
+		if r.Cancel != nil {
+			text += " by " + r.Cancel.By
+		}
+		return text + " — " + r.Summary, ":no_entry:", "#6b7280"
 	case eventRejected:
 		text = name + " rejected"
 		if r.Approval != nil {
