@@ -454,7 +454,7 @@ return values and examples: [docs/modules/README.md](docs/modules/README.md). Ne
 | `bootstrap HOST` | A fresh machine becomes a managed host: deploy user, your key, passwordless sudo, password logins off ([docs/BOOTSTRAP_AND_IMAGES.md](docs/BOOTSTRAP_AND_IMAGES.md)) |
 | `image build PLAYBOOK` | A container image from a playbook: run it in a container from `--from`, commit as `--tag`, optionally push ([docs/BOOTSTRAP_AND_IMAGES.md](docs/BOOTSTRAP_AND_IMAGES.md)) |
 | `pull --repo URL` | This host converges itself from a git repository: once, every `--interval`, or `pull install` (systemd timer); `--drift-only`, `--only-on-change`, `--notify`, `--metrics-*` ([pull mode](docs/PULL.md)) |
-| `serve -f serve.yml` | Fleet server: scheduled drift/apply/verify/comply jobs, results per host, run history, web page and REST API behind a token or a reverse proxy's identity ([docs/SERVE.md](docs/SERVE.md)) |
+| `serve -f serve.yml` | Fleet server: scheduled drift/apply/verify/comply jobs, up to `concurrency` at a time, approvals, ad-hoc limited runs with secret parameters, cancel, pause; results per host rendered as reports, host history, audit log, notifications, metrics; web page and REST API behind a token or a reverse proxy's identity ([docs/SERVE.md](docs/SERVE.md)) |
 | `mcp -i INVENTORY` | MCP server over stdio for AI agents: inventory, plan, drift, verify, comply, run history, module docs; `apply` only with `--allow-apply` ([docs/MCP.md](docs/MCP.md)) |
 | `listen -f listen.yml` | Run playbooks on events: Alertmanager/vmalert alerts, GitHub webhooks, Mattermost commands, any JSON POST; `listen test`, `listen install` ([docs/LISTEN.md](docs/LISTEN.md)) |
 | `plugin list` | Command plugins found (`onigirazu-NAME` executables) |

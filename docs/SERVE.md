@@ -1,9 +1,11 @@
 # Fleet server
 
 `onigirazu serve` is a small server in the same binary: jobs run on a schedule or on demand
-(drift checks, applies, `verify`, compliance profiles), their results are kept, and a web page
-and a REST API show them per job and per host together with the run history of the audit
-store. One process, one YAML file, no database.
+(drift checks, applies, `verify`, compliance profiles), up to `concurrency` of them at a time,
+their results are kept, and a web page and a REST API show them per job and per host together
+with the run history of the audit store. Guarded jobs wait for an operator's approval, ad-hoc
+runs take a host limit and variables (secret ones never touch the disk), a queued or running
+run can be cancelled, execution can be paused. One process, one YAML file, no database.
 
 ```yaml
 # serve.yml
