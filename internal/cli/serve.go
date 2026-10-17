@@ -868,25 +868,16 @@ func extraVarsArg(vars map[string]string) string {
 func (s *server) execute(j *ServeJob) (*JobResult, error) {
 	started := time.Now().UTC()
 	r := &JobResult{Job: j.Name, Kind: j.Kind, Started: started, Hosts: map[string]string{}}
-	// the apply command reads these package globals: set them for this job
-	// and put them back afterwards, so the next job starts from the
-	// server's own values (jobs run one at a time)
-	s.mu.Lock()
-	prevInventory, prevState := inventoryPaths, statePath
-	if j.Inventory != "" {
-		inventoryPaths = []string{j.Inventory}
-	}
-	if statePath == "" || statePath == ".onigirazu-state" {
-		statePath = filepath.Join(s.cfg.DataDir, "state", j.Name+".state")
-		_ = os.MkdirAll(filepath.Dir(statePath), 0o700)
-	}
-	s.mu.Unlock()
-	defer func() {
-		s.mu.Lock()
-		inventoryPaths, statePath = prevInventory, prevState
-		s.mu.Unlock()
-	}()
 	o := driftCheckOptions{limit: j.Limit, become: j.Become}
+	if j.Inventory != "" {
+		o.inventory = []string{j.Inventory}
+	} else {
+		o.inventory = s.inventory
+	}
+	o.state = filepath.Join(s.cfg.DataDir, "state", j.Name+".state")
+	if err := os.MkdirAll(filepath.Dir(o.state), 0o700); err != nil {
+		return nil, err
+	}
 	if len(j.ExtraVars) > 0 {
 		o.extraVars = []string{extraVarsArg(j.ExtraVars)}
 	}

@@ -203,12 +203,12 @@ func runBootstrap(cmd *cobra.Command, target string, o *bootstrapOptions) error 
 	if err := os.WriteFile(pbPath, playbook, 0o600); err != nil {
 		return err
 	}
-	inventoryPaths = []string{inventory}
-	statePath = filepath.Join(dir, ".onigirazu-state")
+	state := filepath.Join(dir, ".onigirazu-state")
 	args := []string{pbPath}
 	if o.dryRun {
 		args = append(args, "--check", "--diff")
 	}
+	args = append(args, "-i", inventory, "--state", state)
 	fmt.Fprintf(out, "bootstrap: %s@%s:%d → user %s with %s\n", o.user, host, port, o.newUser, strings.TrimSuffix(filepath.Base(privateKey), ".pub")+".pub")
 	result, err := runPlaybook(args)
 	if err != nil {
@@ -241,11 +241,10 @@ func runBootstrap(cmd *cobra.Command, target string, o *bootstrapOptions) error 
 	if err := os.WriteFile(checkPB, []byte("plays:\n  - hosts: all\n    gather_facts: false\n    tasks:\n      - command: sudo -n true\n        changed_when: false\n"), 0o600); err != nil {
 		return err
 	}
-	inventoryPaths = []string{check}
 	// sshd may be re-executing after the reload: a few attempts
 	deadline := time.Now().Add(30 * time.Second)
 	for {
-		res, err := runPlaybook([]string{checkPB})
+		res, err := runPlaybook([]string{checkPB, "-i", check, "--state", state})
 		if err == nil && !imageFailed(res) {
 			break
 		}

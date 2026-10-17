@@ -217,13 +217,14 @@ func pullOnce(ctx context.Context, o *pullOptions, dir string, out interface{ Wr
 		inventory = filepath.Join(dir, inventory)
 	}
 	fmt.Fprintf(out, "pull: %s at %s, running %s\n", o.branch, commit[:8], o.playbook)
-	// the inventory and the state file are global flags of the root command:
-	// this run's are the checkout's
-	inventoryPaths = []string{inventory}
-	if statePath == "" || statePath == ".onigirazu-state" {
-		statePath = filepath.Join(dir, ".onigirazu-state")
+	// this run's inventory and state file are the checkout's, passed as
+	// apply arguments (not the root command's globals)
+	state := statePath
+	if state == "" || state == ".onigirazu-state" {
+		state = filepath.Join(dir, ".onigirazu-state")
 	}
-	result, err := runPlaybook(pullApplyArgs(o, dir))
+	args := append(pullApplyArgs(o, dir), "-i", inventory, "--state", state)
+	result, err := runPlaybook(args)
 	if err != nil {
 		return 1, err
 	}

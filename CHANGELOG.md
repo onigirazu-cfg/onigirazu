@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `apply` takes its inventory and state file from its own `-i`/`--state` flags; `drift`, `verify`, `comply`, `serve`, `listen`, `pull`, `image`, `bootstrap` and `mcp` pass theirs the same way instead of writing the process's global `-i`/`--state` before running a playbook in-process
+
 ### Added
 
 - `onigirazu serve`: `POST /api/jobs/{name}/run` takes `limit` and `extra_vars` when the job allows them (`adhoc: {limit: true, extra_vars: [...]}`); the limit is resolved against the inventory and must stay inside the job's hosts; the run record, the page and the notifications show the parameters — a safe reboot of one host is the patch job limited to it

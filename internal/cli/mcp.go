@@ -130,12 +130,20 @@ func (o *mcpOptions) optionsFrom(args map[string]interface{}) driftCheckOptions 
 			d.extraVars = append(d.extraVars, fmt.Sprintf("%s=%v", k, v))
 		}
 	}
-	if inv := argString(args, "inventory"); inv != "" {
-		inventoryPaths = []string{inv}
-	} else if o.inventory != "" {
-		inventoryPaths = []string{o.inventory}
-	}
+	d.inventory = o.inventoryPaths(args)
 	return d
+}
+
+// inventoryPaths is the -i sources for this call: the call's own "inventory"
+// argument, else the server's -i
+func (o *mcpOptions) inventoryPaths(args map[string]interface{}) []string {
+	if inv := argString(args, "inventory"); inv != "" {
+		return []string{inv}
+	}
+	if o.inventory != "" {
+		return []string{o.inventory}
+	}
+	return nil
 }
 
 func (o *mcpOptions) tools() []mcpTool {
@@ -143,8 +151,7 @@ func (o *mcpOptions) tools() []mcpTool {
 		{Name: "inventory_list", Description: "The inventory as ansible-inventory --list prints it: groups, hosts and host variables (passwords left out)",
 			InputSchema: schema(nil, map[string]interface{}{"inventory": prop("string", "Inventory path (default: the server's -i)")}),
 			run: func(args map[string]interface{}) (string, error) {
-				o.optionsFrom(args)
-				m, err := loadInventoryQuiet()
+				m, err := loadInventoryQuiet(o.inventoryPaths(args))
 				if err != nil {
 					return "", err
 				}
@@ -153,8 +160,7 @@ func (o *mcpOptions) tools() []mcpTool {
 		{Name: "inventory_host", Description: "One host's variables as ansible-inventory --host prints them",
 			InputSchema: schema([]string{"host"}, map[string]interface{}{"host": prop("string", "Host name"), "inventory": prop("string", "Inventory path")}),
 			run: func(args map[string]interface{}) (string, error) {
-				o.optionsFrom(args)
-				m, err := loadInventoryQuiet()
+				m, err := loadInventoryQuiet(o.inventoryPaths(args))
 				if err != nil {
 					return "", err
 				}
@@ -292,12 +298,16 @@ func jsonString(v interface{}) (string, error) {
 	return string(data), err
 }
 
-func loadInventoryQuiet() (inventoryManager, error) {
+// loadInventoryQuiet loads paths, or the root's -i when paths is empty
+func loadInventoryQuiet(paths []string) (inventoryManager, error) {
 	lg, err := logger.NewEnhancedLogger("error", "text", os.Stderr)
 	if err != nil {
 		return nil, err
 	}
-	return loadInventory(context.Background(), lg)
+	if len(paths) == 0 {
+		return loadInventory(context.Background(), lg)
+	}
+	return loadInventoryFrom(context.Background(), lg, paths)
 }
 
 // inventoryManager is what the tools need of the inventory

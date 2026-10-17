@@ -1493,9 +1493,9 @@ func TestServeInventorySources(t *testing.T) {
 	}
 }
 
-func TestServeExecuteRestoresGlobals(t *testing.T) {
-	// a job's inventory and state file are set for its run only: the next
-	// job must not inherit them (nor must a limit be validated against them)
+func TestServeExecuteDoesNotWriteGlobals(t *testing.T) {
+	// a job's inventory and state file are passed as apply arguments: the
+	// package globals must never be touched by a job's run
 	prevInventory, prevState := inventoryPaths, statePath
 	defer func() { inventoryPaths, statePath = prevInventory, prevState }()
 	inventoryPaths, statePath = []string{"orig,"}, ""
@@ -1512,7 +1512,7 @@ func TestServeExecuteRestoresGlobals(t *testing.T) {
 		t.Fatal("a missing playbook must fail")
 	}
 	if !slices.Equal(inventoryPaths, []string{"orig,"}) || statePath != "" {
-		t.Fatalf("globals not restored: %v %q", inventoryPaths, statePath)
+		t.Fatalf("globals written by execute: %v %q", inventoryPaths, statePath)
 	}
 	if _, err := os.Stat(filepath.Join(cfg.DataDir, "state")); err != nil {
 		t.Fatalf("state dir: %v", err)

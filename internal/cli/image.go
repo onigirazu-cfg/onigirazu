@@ -140,8 +140,6 @@ func runImageBuild(ctx context.Context, playbook string, o *imageOptions, out io
 		cleanup()
 		return err
 	}
-	inventoryPaths = []string{invPath}
-	statePath = filepath.Join(dir, ".onigirazu-state")
 	args := []string{playbook}
 	for _, e := range o.extraVars {
 		args = append(args, "-e", e)
@@ -152,6 +150,7 @@ func runImageBuild(ctx context.Context, playbook string, o *imageOptions, out io
 	if o.become {
 		args = append(args, "--become")
 	}
+	args = append(args, "-i", invPath, "--state", filepath.Join(dir, ".onigirazu-state"))
 	result, err := runPlaybook(args)
 	if err != nil || imageFailed(result) {
 		cleanup()

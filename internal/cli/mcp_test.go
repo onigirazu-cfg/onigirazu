@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -76,5 +77,43 @@ func TestMCPProtocol(t *testing.T) {
 	s := newMCPServer(&mcpOptions{allowApply: true}, &bytes.Buffer{})
 	if _, ok := s.tools["apply"]; !ok {
 		t.Error("--allow-apply offers apply")
+	}
+}
+
+func TestMCPPerCallInventoryDoesNotWriteGlobal(t *testing.T) {
+	// a call's own "inventory" argument must not touch the package global
+	dir := t.TempDir()
+	inv := filepath.Join(dir, "hosts.yml")
+	if err := os.WriteFile(inv, []byte("all:\n  hosts:\n    web1: {ansible_host: 10.0.0.1}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	other := filepath.Join(dir, "other.yml")
+	if err := os.WriteFile(other, []byte("all:\n  hosts:\n    web2: {ansible_host: 10.0.0.2}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	old := inventoryPaths
+	defer func() { inventoryPaths = old }()
+	inventoryPaths = []string{"sentinel,"}
+
+	in := strings.Join([]string{
+		`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"t","version":"0"}}}`,
+		`{"jsonrpc":"2.0","method":"notifications/initialized"}`,
+		`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"inventory_host","arguments":{"host":"web2","inventory":"` + other + `"}}}`,
+	}, "\n") + "\n"
+	var out bytes.Buffer
+	if err := runMCP(context.Background(), &mcpOptions{inventory: inv}, strings.NewReader(in), &out); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(inventoryPaths, []string{"sentinel,"}) {
+		t.Fatalf("global written by a per-call inventory override: %v", inventoryPaths)
+	}
+	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
+	var resp mcpResponse
+	if err := json.Unmarshal([]byte(lines[len(lines)-1]), &resp); err != nil {
+		t.Fatal(err)
+	}
+	host, _ := json.Marshal(resp.Result)
+	if !strings.Contains(string(host), "10.0.0.2") {
+		t.Errorf("inventory_host with per-call inventory: %s", host)
 	}
 }

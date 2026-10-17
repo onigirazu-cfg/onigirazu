@@ -384,15 +384,19 @@ func (d *dispatcher) worker(ctx context.Context) {
 }
 
 // runListenJob runs the playbook in this process, as pull does; the
-// inventory and state file of the job replace the global ones for the run
+// inventory and state file of the job are passed as apply arguments, not
+// through the package globals
 func runListenJob(j *listenJob) (changed, failed int, err error) {
+	args := append([]string{}, j.args...)
 	if j.inventory != "" {
-		inventoryPaths = []string{j.inventory}
+		args = append(args, "-i", j.inventory)
 	}
-	if statePath == "" || statePath == ".onigirazu-state" {
-		statePath = filepath.Join(filepath.Dir(j.rule.Playbook), ".onigirazu-state")
+	state := statePath
+	if state == "" || state == ".onigirazu-state" {
+		state = filepath.Join(filepath.Dir(j.rule.Playbook), ".onigirazu-state")
 	}
-	result, err := runPlaybook(j.args)
+	args = append(args, "--state", state)
+	result, err := runPlaybook(args)
 	if err != nil {
 		return 0, 0, err
 	}

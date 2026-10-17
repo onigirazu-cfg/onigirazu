@@ -57,6 +57,8 @@ func NewApplyCommand() *cobra.Command {
 func newApplyCommand(onResult func(*types.PlaybookResult)) *cobra.Command {
 	var (
 		// Command-specific flags
+		applyInventory []string
+		applyState     string
 		check          bool
 		diff           bool
 		dryRun         bool
@@ -132,6 +134,18 @@ Examples:
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			playbookPath := args[0]
+
+			// apply's own -i/-s take priority; otherwise this run uses the
+			// root command's (so in-process callers never need to touch
+			// those package globals to steer this run)
+			resolvedInventory := applyInventory
+			if len(resolvedInventory) == 0 {
+				resolvedInventory = inventoryPaths
+			}
+			resolvedState := applyState
+			if !cmd.Flags().Changed("state") {
+				resolvedState = statePath
+			}
 
 			// output_format and interactive_mode from the config stand for -o and
 			// --interactive; they are needed before the rest of the config loads
@@ -221,8 +235,8 @@ Examples:
 			if parallel != 10 {
 				cfg.MaxConcurrency = parallel
 			}
-			if statePath != ".onigirazu-state" {
-				cfg.StateFile = statePath
+			if resolvedState != ".onigirazu-state" {
+				cfg.StateFile = resolvedState
 			}
 			if check || dryRun {
 				cfg.CheckMode = true
@@ -535,9 +549,9 @@ Examples:
 
 			// Load inventory from multiple sources (files, directories, dynamic scripts)
 			var finalInventoryPaths []string
-			if len(inventoryPaths) > 0 {
+			if len(resolvedInventory) > 0 {
 				// Use specified inventory paths
-				finalInventoryPaths = inventoryPaths
+				finalInventoryPaths = resolvedInventory
 			} else {
 				// Try to find inventory file in playbook directory (auto-discovery)
 				playbookDir := filepath.Dir(playbookPath)
@@ -1268,6 +1282,8 @@ Examples:
 	cmd.Flags().BoolVar(&backgroundMode, "background", false, "Run in background mode (returns immediately, use show-execution to view results)")
 
 	// Inventory flags
+	cmd.Flags().StringArrayVarP(&applyInventory, "inventory", "i", nil, "Inventory file, directory or script, or a host list such as host1,user@host2:2222 (repeatable; default: the root command's -i)")
+	cmd.Flags().StringVarP(&applyState, "state", "s", ".onigirazu-state", "Path to state file")
 	cmd.Flags().BoolVar(&lenient, "lenient", false, "Lenient mode: skip inventory validation errors and process what is valid")
 
 	// Profiling flags
