@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `onigirazu serve`: operators cancel queued or running runs from the page or `POST /api/runs/{id}/cancel`; cancellation keeps who stopped the run and any partial result, with audit entries, optional notifications and metrics
+
 - `onigirazu serve`: `concurrency` runs up to N jobs at once (default 1), with FIFO pickup and no overlap of the same job; shutdown cancels executing runs, the page shows running and queued counts, and `/api/me` and metrics expose the concurrency limit
 
 - `onigirazu serve`: `POST /api/jobs/{name}/run` takes `limit` and `extra_vars` when the job allows them (`adhoc: {limit: true, extra_vars: [...]}`); the limit is resolved against the inventory and must stay inside the job's hosts; the run record, the page and the notifications show the parameters — a safe reboot of one host is the patch job limited to it

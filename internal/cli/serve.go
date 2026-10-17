@@ -119,6 +119,11 @@ type ServeJob struct {
 	FailOn          string            `yaml:"fail_on"` // comply
 }
 
+const (
+	statusCancelling = "cancelling" //nolint:misspell // Public API spelling.
+	statusCancelled  = "cancelled"  //nolint:misspell // Public API spelling.
+)
+
 // JobResult is one run of a job, as stored
 type JobResult struct {
 	ID        string            `json:"id"`
@@ -127,13 +132,21 @@ type JobResult struct {
 	Requested time.Time         `json:"requested"` // when it was asked for
 	Started   time.Time         `json:"started"`   // the request time until the run starts
 	Duration  float64           `json:"duration_seconds"`
-	Status    string            `json:"status"` // pending, queued, running, ok, drift, failed, error, rejected, expired
+	Status    string            `json:"status"` // pending, queued, running, terminal result or cancellation state
 	Summary   string            `json:"summary"`
-	Trigger   string            `json:"trigger"`            // schedule, api:<user>
-	Params    *RunParams        `json:"params,omitempty"`   // what the caller set
-	Hosts     map[string]string `json:"hosts,omitempty"`    // host -> ok|drift|failed|unreachable
+	Trigger   string            `json:"trigger"`          // schedule, api:<user>
+	Params    *RunParams        `json:"params,omitempty"` // what the caller set
+	Hosts     map[string]string `json:"hosts,omitempty"`  // host -> ok|drift|failed|unreachable
+	Cancel    *RunCancel        `json:"cancel,omitempty"`
 	Approval  *RunApproval      `json:"approval,omitempty"` // jobs with approval: required
 	Report    json.RawMessage   `json:"report,omitempty"`
+}
+
+// RunCancel records who canceled a run.
+type RunCancel struct {
+	By      string    `json:"by"`
+	At      time.Time `json:"at"`
+	Comment string    `json:"comment,omitempty"`
 }
 
 // RunApproval is the approval state of a guarded run
@@ -146,10 +159,10 @@ type RunApproval struct {
 	Comment  string     `json:"comment,omitempty"`
 }
 
-// executed: the run ran (as opposed to waiting, rejected or expired)
+// executed reports terminal results, including cancellation.
 func (r *JobResult) executed() bool {
 	switch r.Status {
-	case "ok", "drift", "changed", "failed", "error":
+	case "ok", "drift", "changed", "failed", "error", statusCancelled:
 		return true
 	}
 	return false
@@ -164,6 +177,10 @@ func resultCopy(r *JobResult) *JobResult {
 		params.ExtraVars = maps.Clone(r.Params.ExtraVars)
 		params.Hosts = slices.Clone(r.Params.Hosts)
 		copy.Params = &params
+	}
+	if r.Cancel != nil {
+		cancellation := *r.Cancel
+		copy.Cancel = &cancellation
 	}
 	copy.Report = append(json.RawMessage(nil), r.Report...)
 	if r.Approval != nil {
@@ -325,6 +342,7 @@ type server struct {
 	mu       sync.Mutex
 	results  map[string][]*JobResult // job -> newest first
 	running  map[string]bool         // job is pending, queued or running
+	cancels  map[string]context.CancelFunc
 	pending  map[string]*JobResult
 	lastID   map[string]string // job -> the base of the last id given (ids stay unique when records are pruned)
 	lastSeq  map[string]int
@@ -357,7 +375,7 @@ func newServer(cfg *ServeConfig, out io.Writer) (*server, error) {
 	if cfg.Concurrency == 0 {
 		cfg.Concurrency = 1
 	}
-	s := &server{cfg: cfg, out: out, results: map[string][]*JobResult{}, running: map[string]bool{}, pending: map[string]*JobResult{}, lastID: map[string]string{}, lastSeq: map[string]int{}, nextRun: map[string]time.Time{}, queue: make(chan queued, 64), resumed: make(chan struct{})}
+	s := &server{cancels: map[string]context.CancelFunc{}, cfg: cfg, out: out, results: map[string][]*JobResult{}, running: map[string]bool{}, pending: map[string]*JobResult{}, lastID: map[string]string{}, lastSeq: map[string]int{}, nextRun: map[string]time.Time{}, queue: make(chan queued, 64), resumed: make(chan struct{})}
 	s.runJob = s.execute
 	s.inventory = slices.Clone(inventoryPaths)
 	if err := os.MkdirAll(filepath.Join(cfg.DataDir, "results"), 0o700); err != nil {
@@ -464,6 +482,9 @@ func (s *server) loadResults() {
 				}
 				s.pending[r.Job] = r
 				s.running[r.Job] = true
+			case statusCancelling:
+				r.Status, r.Summary = statusCancelled, "interrupted: serve restarted"
+				s.store(r)
 			case "queued", "running":
 				r.Status = "error"
 				r.Summary = "interrupted: serve restarted"
@@ -509,10 +530,12 @@ func (s *server) job(name string) *ServeJob {
 }
 
 var (
-	errJobBusy      = errors.New("already running, queued or pending")
-	errNoPendingRun = errors.New("no such pending run")
-	errRunExpired   = errors.New("the run expired before the decision")
-	errQueueFull    = errors.New("queue full")
+	errNoSuchRun         = errors.New("no such run")
+	errRunNotCancellable = errors.New("run is not queued or running; for a pending run, reject it instead")
+	errJobBusy           = errors.New("already running, queued or pending")
+	errNoPendingRun      = errors.New("no such pending run")
+	errRunExpired        = errors.New("the run expired before the decision")
+	errQueueFull         = errors.New("queue full")
 )
 
 // resultByID finds a record of a job; the caller holds mu
@@ -573,6 +596,51 @@ func (s *server) request(j *ServeJob, trigger string, params *RunParams) (*JobRe
 		s.notify(eventPending, j, resultCopy(r))
 	}
 	return resultCopy(r), nil
+}
+
+// cancel stops a queued or running run.
+func (s *server) cancel(id, by, comment string) (*JobResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for job, list := range s.results {
+		for _, r := range list {
+			if r.ID != id {
+				continue
+			}
+			if r.Status != "queued" && r.Status != "running" {
+				return nil, errRunNotCancellable
+			}
+			// the comment is printed to the log and sent in messages: one line
+			comment = strings.Map(func(c rune) rune {
+				if unicode.IsControl(c) {
+					return ' '
+				}
+				return c
+			}, comment)
+			r.Cancel = &RunCancel{By: by, At: time.Now().UTC(), Comment: comment}
+			r.Summary = statusCancelled + " by " + by
+			if comment != "" {
+				r.Summary += ": " + comment
+			}
+			if r.Status == "queued" {
+				r.Status = statusCancelled
+				s.running[job] = false
+				s.store(r)
+				s.notify(eventCancelled, s.job(job), resultCopy(r))
+				fmt.Fprintf(s.out, "serve: %s: %s (queued)\n", job, r.Summary)
+			} else {
+				stop := s.cancels[id]
+				if stop == nil {
+					return nil, errRunNotCancellable
+				}
+				r.Status = statusCancelling
+				stop()
+				s.store(r)
+			}
+			return resultCopy(r), nil
+		}
+	}
+	return nil, errNoSuchRun
 }
 
 func (s *server) approve(id, by, comment string) (*JobResult, error) {
@@ -647,6 +715,7 @@ func (s *server) expirePending(now time.Time) []*JobResult {
 // worker runs queued jobs; there are cfg.Concurrency of them, picking up
 // in FIFO order
 func (s *server) worker(ctx context.Context) {
+next:
 	for {
 		s.pickupMu.Lock()
 		select {
@@ -656,6 +725,13 @@ func (s *server) worker(ctx context.Context) {
 		case q := <-s.queue:
 			waiting := false
 			for {
+				s.mu.Lock()
+				skip := q.run.Status == statusCancelled
+				s.mu.Unlock()
+				if skip {
+					s.pickupMu.Unlock()
+					continue next
+				}
 				p, ch := s.paused()
 				if !p.Paused {
 					s.mu.Lock()
@@ -684,28 +760,51 @@ func (s *server) worker(ctx context.Context) {
 				case <-ch:
 				}
 			}
+			if q.run.Status == statusCancelled {
+				s.mu.Unlock()
+				s.pickupMu.Unlock()
+				continue next
+			}
 			r := q.run
+			runCtx, cancel := context.WithCancel(ctx)
+			s.cancels[r.ID] = cancel
 			r.Status, r.Started = "running", time.Now().UTC()
 			s.store(r)
 			s.notify(eventStart, q.job, resultCopy(r))
 			fmt.Fprintf(s.out, "serve: %s: running (%s)\n", q.job.Name, r.Trigger)
+			started := r.Started
 			s.mu.Unlock()
 			s.pickupMu.Unlock()
 			j, err := s.effectiveJob(q.job, r.Params)
 			var result *JobResult
 			if err == nil {
-				result, err = s.runJob(ctx, j)
+				result, err = s.runJob(runCtx, j)
 			}
 			s.mu.Lock()
-			if err != nil && ctx.Err() != nil {
-				r.Status, r.Summary = "error", "interrupted: serve stopping"
-			} else if err != nil {
-				r.Status, r.Summary = "error", err.Error()
-			} else {
+			delete(s.cancels, r.ID)
+			// a run that finished keeps its result, even when a cancel or
+			// the shutdown arrived in the moment between its end and here
+			switch {
+			case err == nil:
 				r.Started, r.Duration, r.Status, r.Summary, r.Hosts, r.Report = result.Started, result.Duration, result.Status, result.Summary, result.Hosts, result.Report
+			case ctx.Err() != nil, runCtx.Err() != nil:
+				// stopped: what the partial result knows about the hosts stays
+				r.Status = statusCancelled
+				if ctx.Err() != nil && r.Cancel == nil {
+					r.Status, r.Summary = "error", "interrupted: serve stopping"
+				}
+				r.Duration = time.Since(started).Seconds()
+				if result != nil {
+					r.Hosts, r.Report = result.Hosts, result.Report
+				}
+			default:
+				r.Status, r.Summary = "error", err.Error()
 			}
+			cancel()
 			s.store(r)
 			switch r.Status {
+			case statusCancelled:
+				s.notify(eventCancelled, q.job, resultCopy(r))
 			case "ok":
 				s.notify(eventSuccess, q.job, resultCopy(r))
 			case "drift":
@@ -1285,11 +1384,14 @@ func (s *server) mux() *http.ServeMux {
 	mux.HandleFunc("/api/runs/", auth(false, func(w http.ResponseWriter, r *http.Request, id serveIdentity) {
 		path := strings.TrimPrefix(r.URL.Path, "/api/runs/")
 		runID, action, _ := strings.Cut(path, "/")
-		if r.Method == http.MethodPost && (action == "approve" || action == "reject") {
+		if r.Method == http.MethodPost && (action == "approve" || action == "reject" || action == "cancel") {
 			auth(true, func(w http.ResponseWriter, r *http.Request, _ serveIdentity) {
 				a := s.requestAction(r, id)
 				if a.Job == "" {
 					a.Reason = errNoPendingRun.Error()
+					if action == "cancel" {
+						a.Reason = errNoSuchRun.Error()
+					}
 					s.logAction(a)
 					writeJSON(w, http.StatusNotFound, map[string]string{"error": a.Reason})
 					return
@@ -1311,6 +1413,9 @@ func (s *server) mux() *http.ServeMux {
 				if action == "reject" {
 					decide = s.reject
 				}
+				if action == "cancel" {
+					decide = s.cancel
+				}
 				result, err := decide(runID, id.User, body.Comment)
 				a.OK, a.Reason = err == nil, body.Comment
 				if err != nil {
@@ -1320,16 +1425,20 @@ func (s *server) mux() *http.ServeMux {
 				if err != nil {
 					code := http.StatusServiceUnavailable
 					switch {
-					case errors.Is(err, errNoPendingRun):
+					case errors.Is(err, errNoPendingRun), errors.Is(err, errNoSuchRun):
 						code = http.StatusNotFound
-					case errors.Is(err, errRunExpired):
+					case errors.Is(err, errRunExpired), errors.Is(err, errRunNotCancellable):
 						code = http.StatusConflict
 					}
 					writeJSON(w, code, map[string]string{"error": err.Error()})
 					return
 				}
 				result.Report = nil
-				writeJSON(w, http.StatusOK, result)
+				code := http.StatusOK
+				if result.Status == statusCancelling {
+					code = http.StatusAccepted
+				}
+				writeJSON(w, code, result)
 			})(w, r)
 			return
 		}
@@ -1368,7 +1477,8 @@ type jobView struct {
 	Every     string      `json:"every,omitempty"`
 	Next      *time.Time  `json:"next,omitempty"`
 	Queued    bool        `json:"queued"`
-	Running   bool        `json:"running"`           // queued or running
+	Running   bool        `json:"running"` // queued, running or stopping
+	Active    *JobResult  `json:"active,omitempty"`
 	Pending   *JobResult  `json:"pending,omitempty"` // the run that waits for approval
 	Last      *JobResult  `json:"last,omitempty"`    // the last executed run
 }
@@ -1385,6 +1495,8 @@ func (s *server) jobsView(id serveIdentity) []jobView {
 		}
 		if list := s.results[j.Name]; v.Running && len(list) > 0 {
 			v.Queued = list[0].Status == "queued"
+			v.Active = resultCopy(list[0])
+			v.Active.Report = nil
 		}
 		if j.Kind == "comply" {
 			v.Target = j.Profile
@@ -1420,6 +1532,19 @@ func (s *server) lastExecuted(job string) *JobResult {
 	return nil
 }
 
+// lastHostResult excludes incomplete runs from host verdicts; caller holds mu.
+func (s *server) lastHostResult(job string) *JobResult {
+	for _, r := range s.results[job] {
+		if r.Status == statusCancelled {
+			continue
+		}
+		if r.executed() {
+			return r
+		}
+	}
+	return nil
+}
+
 type hostView struct {
 	Host   string            `json:"host"`
 	Status string            `json:"status"` // worst over the jobs' last results
@@ -1433,7 +1558,7 @@ func (s *server) hostsView() []hostView {
 	rank := map[string]int{"ok": 0, "changed": 1, "drift": 2, "failed": 3, "unreachable": 4}
 	hosts := map[string]*hostView{}
 	for job := range s.results {
-		last := s.lastExecuted(job)
+		last := s.lastHostResult(job)
 		if last == nil {
 			continue
 		}
@@ -1465,7 +1590,7 @@ func (s *server) activity() (running, queued int) {
 	for _, runs := range s.results {
 		for _, r := range runs {
 			switch r.Status {
-			case "running":
+			case "running", statusCancelling:
 				running++
 			case "queued":
 				queued++
@@ -1500,7 +1625,7 @@ func (s *server) metricsHandler(w http.ResponseWriter, _ *http.Request) {
 			promLine(&b, "onigirazu_serve_job_pending", withLabels(map[string]string{"job": j.Name}, s.cfg.Metrics.Labels), value)
 		}
 	}
-	codes := map[string]float64{"ok": 0, "drift": 1, "changed": 1, "failed": 2, "error": 3, "unreachable": 3}
+	codes := map[string]float64{"ok": 0, "drift": 1, "changed": 1, "failed": 2, "error": 3, "unreachable": 3, statusCancelled: 4}
 	names := make([]string, 0, len(s.results))
 	for n := range s.results {
 		names = append(names, n)
@@ -1513,6 +1638,10 @@ func (s *server) metricsHandler(w http.ResponseWriter, _ *http.Request) {
 		}
 		promLine(&b, "onigirazu_serve_job_last_status", withLabels(map[string]string{"job": n, "kind": last.Kind}, s.cfg.Metrics.Labels), codes[last.Status])
 		promLine(&b, "onigirazu_serve_job_last_run_timestamp_seconds", withLabels(map[string]string{"job": n}, s.cfg.Metrics.Labels), float64(last.Started.Unix()))
+		last = s.lastHostResult(n)
+		if last == nil {
+			continue
+		}
 		hosts := make([]string, 0, len(last.Hosts))
 		for h := range last.Hosts {
 			hosts = append(hosts, h)

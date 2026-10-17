@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-// serve_audit: the action log — every run, approve, reject, pause and resume
+// serve_audit: the action log — every run, approve, reject, cancel, pause and resume
 // and every refused attempt, one JSON line each in data_dir/audit.log
 
 // serveAction is one entry of the action log
@@ -123,8 +123,8 @@ func (s *server) requestAction(r *http.Request, id serveIdentity) serveAction {
 		case "runs":
 			a.Run = parts[2]
 			s.mu.Lock()
-			for job, run := range s.pending {
-				if run.ID == a.Run {
+			for job := range s.results {
+				if run := s.resultByID(job, a.Run); run != nil && (a.Action == "cancel" || run.Status == "pending") {
 					a.Job = job
 					break
 				}
