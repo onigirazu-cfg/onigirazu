@@ -66,6 +66,7 @@ $('#pause').onclick=async()=>{
   try{pauseView(await api(me.paused?'/api/resume':'/api/pause',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reason})}));if(view==='jobs')await jobs()}catch(e){alert(e.message)}
 };
 const paramsView=r=>r.params?`<div class="muted">${r.params.limit?`limit ${esc(r.params.limit)} → ${esc((r.params.hosts||[]).join(', '))}<br>`:''}${Object.keys(r.params.extra_vars||{}).length?'vars '+Object.entries(r.params.extra_vars).map(([k,v])=>esc(k)+'='+esc(v)).join(', '):''}</div>`:'';
+const checkBadge=r=>r?.mode==='check'?' '+badge('check'):'';
 const hasAdhoc=j=>j.adhoc?.limit||j.adhoc?.extra_vars?.length;
 function targetPicker(form){
   const input=form.querySelector('[data-limit]');
@@ -106,8 +107,8 @@ async function jobs(){
     <td><a href="#job/${encodeURIComponent(j.name)}" data-job="${esc(j.name)}">${esc(j.name)}</a></td><td>${esc(j.kind)}</td><td class="muted target">${esc(j.target)}</td>
     <td>${j.every?esc(j.every)+(j.next?'<br><span class="muted">next '+ago(j.next)+'</span>':''):'<span class="muted">on demand</span>'}</td>
     <td>${lastRun(j)}</td>
-    <td>${j.pending?badge('pending'):j.running?badge(j.active?.status||(j.queued?'queued':'running'))+activeTime(j):j.last?badge(j.last.status)+' <span class="muted">'+esc(j.last.summary)+'</span>':''}</td>
-    <td>${j.allowed?`<button class="run" data-run="${esc(j.name)}" ${j.pending||j.running?'disabled':''}>Run${hasAdhoc(j)?'…':''}</button>${j.active&&['queued','running'].includes(j.active.status)?` <button class="run" data-stop="${esc(j.active.id)}" data-name="${esc(j.name)}" data-running="${j.active.status==='running'}">Cancel</button>`:''}`:''}</td></tr>${j.allowed&&hasAdhoc(j)?`<tr data-form-row="${esc(j.name)}" hidden><td colspan="7"><form class="adhoc-form" data-form="${esc(j.name)}">${j.adhoc.limit?'<div class="limit-picker"><div data-inventory class="limit-chips muted"></div><label>limit<input data-limit placeholder="host pattern, empty = the job&#39;s hosts"></label><div data-preview class="muted" role="status" aria-live="polite"></div></div>':''}${(j.adhoc.extra_vars||[]).map(k=>`<label>${esc(k)}<input type="${(j.adhoc.secret_vars||[]).includes(k)?'password':'text'}" data-var="${esc(k)}" placeholder="keep the job's value"></label>`).join('')}<button class="run" type="submit">Run</button><button class="run" type="button" data-cancel>Cancel</button></form></td></tr>`:''}`).join('')}</table>`;
+    <td>${j.pending?badge('pending')+checkBadge(j.pending):j.running?badge(j.active?.status||(j.queued?'queued':'running'))+checkBadge(j.active)+activeTime(j):j.last?badge(j.last.status)+checkBadge(j.last)+' <span class="muted">'+esc(j.last.summary)+'</span>':''}</td>
+    <td>${j.allowed?`<button class="run" data-run="${esc(j.name)}" ${j.pending||j.running?'disabled':''}>Run${hasAdhoc(j)?'…':''}</button>${j.kind==='apply'?` <button class="run" data-check="${esc(j.name)}" ${j.pending||j.running?'disabled':''}>Check</button>`:''}${j.active&&['queued','running'].includes(j.active.status)?` <button class="run" data-stop="${esc(j.active.id)}" data-name="${esc(j.name)}" data-running="${j.active.status==='running'}">Cancel</button>`:''}`:''}</td></tr>${j.allowed&&hasAdhoc(j)?`<tr data-form-row="${esc(j.name)}" hidden><td colspan="7"><form class="adhoc-form" data-form="${esc(j.name)}">${j.adhoc.limit?'<div class="limit-picker"><div data-inventory class="limit-chips muted"></div><label>limit<input data-limit placeholder="host pattern, empty = the job&#39;s hosts"></label><div data-preview class="muted" role="status" aria-live="polite"></div></div>':''}${(j.adhoc.extra_vars||[]).map(k=>`<label>${esc(k)}<input type="${(j.adhoc.secret_vars||[]).includes(k)?'password':'text'}" data-var="${esc(k)}" placeholder="keep the job's value"></label>`).join('')}<button class="run" type="submit">Run</button>${j.kind==='apply'?'<button class="run" type="submit" data-mode="check">Check</button>':''}<button class="run" type="button" data-cancel>Cancel</button></form></td></tr>`:''}`).join('')}</table>`;
   main.querySelectorAll('[data-decision]').forEach(b=>b.onclick=async()=>{
     let comment='';
     if(b.dataset.decision==='reject'){comment=prompt('Comment (optional)');if(comment===null)return}
@@ -125,14 +126,18 @@ async function jobs(){
     if(row){row.hidden=!row.hidden;if(!row.hidden)targetPicker(row.querySelector('form'));return}
     b.disabled=true;try{await api('/api/jobs/'+encodeURIComponent(b.dataset.run)+'/run',{method:'POST'})}catch(e){alert(e.message)}setTimeout(jobs,500)
   });
+  main.querySelectorAll('[data-check]').forEach(b=>b.onclick=async()=>{
+    b.disabled=true;try{await api('/api/jobs/'+encodeURIComponent(b.dataset.check)+'/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:'check'})})}catch(e){alert(e.message)}setTimeout(jobs,500)
+  });
   main.querySelectorAll('[data-form]').forEach(form=>{
     form.querySelector('[data-cancel]').onclick=()=>form.closest('tr').hidden=true;
     form.onsubmit=async e=>{
       e.preventDefault();const body={}, vars=Object.create(null), limit=form.querySelector('[data-limit]')?.value;
+      if(e.submitter?.dataset.mode==='check')body.mode='check';
       if(limit)body.limit=limit;
       form.querySelectorAll('[data-var]').forEach(input=>{if(input.value)vars[input.dataset.var]=input.value});
       if(Object.keys(vars).length)body.extra_vars=vars;
-      const button=form.querySelector('[type="submit"]');button.disabled=true;
+      const button=e.submitter||form.querySelector('[type="submit"]');button.disabled=true;
       try{await api('/api/jobs/'+encodeURIComponent(form.dataset.form)+'/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});await jobs()}catch(e){alert(e.message);button.disabled=false}
     };
   });
@@ -142,7 +147,7 @@ async function results(name){
   view='results';hash('#job/'+encodeURIComponent(name));
   const list=await api('/api/jobs/'+encodeURIComponent(name)+'/results');
   main.innerHTML=`<p><a href="#" id="back">← jobs</a> &nbsp; <b>${esc(name)}</b></p>`+(list.length?`<table><tr><th>Started</th><th>Trigger</th><th>Status</th><th>Summary</th><th>Hosts</th><th>Duration</th></tr>${list.map(r=>`<tr>
-    <td><a href="#run/${encodeURIComponent(r.id)}" data-res="${esc(r.id)}">${date(r.started)}</a></td><td class="muted">${esc(r.trigger)}${paramsView(r)}${r.approval?.decision?'<br>'+esc(r.approval.decision==='expired'?'expired':r.approval.decision+' by '+r.approval.by):''}</td><td>${badge(r.status)}</td><td>${esc(r.summary)}</td>
+    <td><a href="#run/${encodeURIComponent(r.id)}" data-res="${esc(r.id)}">${date(r.started)}</a></td><td class="muted">${esc(r.trigger)}${paramsView(r)}${r.approval?.decision?'<br>'+esc(r.approval.decision==='expired'?'expired':r.approval.decision+' by '+r.approval.by):''}</td><td>${badge(r.status)}${checkBadge(r)}</td><td>${esc(r.summary)}</td>
     <td>${Object.entries(r.hosts||{}).map(([h,s])=>`${esc(h)} ${badge(s)}`).join('<br>')}</td><td>${(r.duration_seconds||0).toFixed(1)}s</td></tr>`).join('')}</table>`:'<div class="empty">No runs yet</div>');
   $('#back').onclick=e=>{e.preventDefault();jobs()};
   main.querySelectorAll('[data-res]').forEach(a=>a.onclick=e=>{e.preventDefault();run(a.dataset.res).catch(showError)});
@@ -240,7 +245,7 @@ async function run(id){
   const p=r.report&&typeof r.report==='object'?r.report:{}, tabs=r.kind==='drift'||r.kind==='apply'?driftTabs(r,p):r.kind==='verify'?verifyTabs(r,p):r.kind==='comply'?complyTabs(r,p):[];
   tabs.push(['JSON',`<pre>${esc(JSON.stringify(r,null,2))}</pre>`]);
   const approval=r.approval?`<p>Approval: ${esc(r.approval.decision||'pending')} ${r.approval.by?'by '+esc(r.approval.by):''} ${r.approval.at?date(r.approval.at):''}${r.approval.expires?' · expires '+date(r.approval.expires):''}<br>${esc(r.approval.comment)}</p>`:'';
-  main.innerHTML=`<p><a href="#job/${encodeURIComponent(r.job)}" id="back">← ${esc(r.job)}</a>${r.audit_execution_id?` &nbsp; <a href="#run/${encodeURIComponent(r.audit_execution_id)}">Execution ${esc(r.audit_execution_id)}</a>`:''}</p><section class="report-card"><h2>${esc(r.job)} <small>${esc(r.kind)}</small> ${badge(r.status)}</h2><p class="text">${esc(r.summary)}</p><p>Started ${date(r.started)} · Duration ${esc((r.duration_seconds||0).toFixed(1))}s · Trigger ${esc(r.trigger)}<br>Requested ${date(r.requested)}</p>${paramsView(r)}${approval}${['cancelled','canceled'].includes(r.status)?`<p>Cancelled: ${esc(r.summary)}</p>`:''}</section>${reportErrors(r,p)}<div class="tabs" role="tablist">${tabs.map(([name],i)=>`<button class="run" role="tab" id="tab-${i}" aria-controls="panel-${i}" aria-selected="${i===0}" data-tab="${i}">${esc(name)}</button>`).join('')}</div>${tabs.map(([,html],i)=>`<section role="tabpanel" id="panel-${i}" aria-labelledby="tab-${i}" ${i?'hidden':''}>${html}</section>`).join('')}`;
+  main.innerHTML=`<p><a href="#job/${encodeURIComponent(r.job)}" id="back">← ${esc(r.job)}</a>${r.audit_execution_id?` &nbsp; <a href="#run/${encodeURIComponent(r.audit_execution_id)}">Execution ${esc(r.audit_execution_id)}</a>`:''}</p><section class="report-card"><h2>${esc(r.job)} <small>${esc(r.kind)}</small> ${badge(r.status)}${checkBadge(r)}</h2><p class="text">${esc(r.summary)}</p><p>Started ${date(r.started)} · Duration ${esc((r.duration_seconds||0).toFixed(1))}s · Trigger ${esc(r.trigger)}<br>Requested ${date(r.requested)}</p>${paramsView(r)}${approval}${['cancelled','canceled'].includes(r.status)?`<p>Cancelled: ${esc(r.summary)}</p>`:''}</section>${reportErrors(r,p)}<div class="tabs" role="tablist">${tabs.map(([name],i)=>`<button class="run" role="tab" id="tab-${i}" aria-controls="panel-${i}" aria-selected="${i===0}" data-tab="${i}">${esc(name)}</button>`).join('')}</div>${tabs.map(([,html],i)=>`<section role="tabpanel" id="panel-${i}" aria-labelledby="tab-${i}" ${i?'hidden':''}>${html}</section>`).join('')}`;
   $('#back').onclick=e=>{e.preventDefault();results(r.job).catch(showError)};
   main.querySelectorAll('[data-expand]').forEach(row=>row.onclick=e=>{if(e.target.closest('a,details'))return;const d=row.querySelector('details');if(d)d.open=!d.open});
   main.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{main.querySelectorAll('[data-tab]').forEach(t=>t.setAttribute('aria-selected',String(t===b)));main.querySelectorAll('[role="tabpanel"]').forEach((p,i)=>p.hidden=i!==Number(b.dataset.tab))});

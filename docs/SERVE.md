@@ -59,6 +59,7 @@ jobs:
         - {name: token, secret: true}
     operators: [tier0-admins, denys]
     approval: required
+    check_approval: required           # optional: also guard check runs
     approval_timeout: 2h
   - name: deploy-web
     kind: apply
@@ -109,6 +110,16 @@ Each job has at most one pending run; the schedule skips it while one waits. The
 and `approval.comment`. A restart keeps pending runs and marks queued or executing runs as
 `error` with `interrupted: serve restarted`; `cancelling` runs become `cancelled` with the same summary.
 
+Apply jobs accept `{"mode":"check"}` at `POST /api/jobs/{name}/run` to preview changes
+without applying them. `mode: "apply"` or an empty mode keeps normal behavior; other
+values return `400`. Check mode is only valid for apply jobs (other kinds return
+`{"error":"only apply jobs have a check mode"}`). It uses the same job operators and
+busy rule as Run and needs no `adhoc` setting. A check can also include allowed
+`limit` and `extra_vars`. Checks bypass `approval: required` unless the job sets
+`check_approval: required` (the only accepted values are `required` or empty). Each
+check is a separate run and never approves or unlocks an apply run. Its record keeps
+`mode: "check"` across restarts; normal runs omit `mode`.
+
 The ad-hoc form lists clickable groups and hosts within the job's limit and previews the hosts matched by an editable limit pattern before Run.
 
 Limited runs: `POST /api/jobs/{name}/run` accepts an optional JSON body
@@ -158,7 +169,9 @@ Pending/start messages show resolved ad-hoc hosts (up to 10, then `… (+N)`), e
 the job's limit (or "all hosts"); caller variables appear as `vars: k=v`; final messages group host
 statuses, for example `3 ok, 1 drift, 1 failed`. Generic JSON has the shape
 `{"event":"success","job":{"name":"patch-wave","kind":"apply","target":"patch.yml","limit":"web"},"run":{...},"url":"https://fleet.example.com/#run/<id>","text":"patch-wave ok — ..."}`;
-`run` is the job result without `report`, and `text` is the headline without formatting.
+`run` is the job result without `report`, including `mode: "check"` for checks,
+and `text` is the headline without formatting. Check headlines add ` (check)` after
+the job name and use the same events.
 Set the server's `url` to include a link to `#run/<id>`; without it, JSON `url` is empty
 and Mattermost has no link. Delivery is asynchronous with a 10s timeout. Failures are logged
 with the webhook URL redacted and never fail the run.
@@ -214,15 +227,15 @@ reopened for every entry, so logrotate can move it aside (no `copytruncate` need
 | `POST /api/resume` | resumes execution (operators); `200` with the state; already resumed is a no-op; `500` as for pause |
 | `GET /api/jobs` | the jobs with schedule, next run, `running` flag (queued, running or cancelling), optional `active` record (without report; `active.requested` and `active.started` give queue and execution timing), `queued` flag (waiting for the worker), last executed result, optional `pending` record (without reports), and `approval: "required"` for guarded jobs; optional `operators` list and caller-specific `allowed` bool; `adhoc: {limit, extra_vars, secret_vars}` (`extra_vars` remains a list of names) when enabled |
 | `GET /api/jobs/{name}/inventory` | operators of jobs with `adhoc.limit: true` only; sorted reachable host names and nonempty groups that lie entirely within the job's limit (recursive, excluding `all`); `?limit=pattern` previews resolved host names; `400` for invalid limits or jobs without ad-hoc limits; `403` for callers not allowed to operate the job; `500` for inventory load errors |
-| `POST /api/jobs/{name}/run` | requests the job (operators); optional JSON `{limit: "host pattern", extra_vars: {k: "v"}}` as allowed by `adhoc`; `400` for invalid parameters or a limit with no hosts or hosts outside the job's limit; `202` with `{queued: name, run: id}` or `{pending: id, run: id}`; `409` when running, queued or pending; `503` when the queue is full; `500` with the record and `error` when storage fails (the run remains in memory); `403` with `{"error":"not an operator of this job"}` when the job disallows the operator |
+| `POST /api/jobs/{name}/run` | requests the job (operators); optional JSON `{mode: "check", limit: "host pattern", extra_vars: {k: "v"}}` with limit/variables as allowed by `adhoc`; mode is `check` (apply jobs only), `apply` or empty; `400` for invalid parameters or a limit with no hosts or hosts outside the job's limit; `202` with `{queued: name, run: id}` or `{pending: id, run: id}`; `409` when running, queued or pending; `503` when the queue is full; `500` with the record and `error` when storage fails (the run remains in memory); `403` with `{"error":"not an operator of this job"}` when the job disallows the operator |
 | `GET /api/jobs/{name}/results` | the kept results, newest first |
 | `GET /api/jobs/{name}/results/{id}` | one result with its full report (the drift, verify or comply report as JSON) |
-| `GET /api/results/{id}` | one job result with its full report, optional `audit_execution_id`, and optional `params` (`limit`, `extra_vars`, sorted `hosts`, optional `secret_vars` names); `404` if absent |
+| `GET /api/results/{id}` | one job result with its full report, optional `mode: "check"`, optional `audit_execution_id`, and optional `params` (`limit`, `extra_vars`, sorted `hosts`, optional `secret_vars` names); `404` if absent |
 | `POST /api/runs/{id}/approve` | queues a pending run (operators); optional JSON `{comment: "..."}`; `200` with the record without report, `404` if absent, `409` when the run expired meanwhile (it is marked expired), `503` if the queue is full; `500` with the record and `error` on storage failure; `403` with `{"error":"not an operator of this job"}` when the job disallows the operator |
 | `POST /api/runs/{id}/reject` | rejects a pending run (operators); optional JSON `{comment: "..."}`; `200` with the record without report, `404` if absent; `500` with the record and `error` on storage failure; `403` with `{"error":"not an operator of this job"}` when the job disallows the operator |
 | `POST /api/runs/{id}/cancel` | cancels a queued or running run (job operators); optional JSON `{comment: "..."}`; `200` with the cancelled record for queued runs, `202` with the cancelling record for running runs (without report); `404` if absent, `409` if not cancellable (reject a pending run instead), `500` with the record and `error` on storage failure; `403` if disallowed |
 | `GET /api/hosts/{name}/results` | that host’s retained results across all jobs, newest `started` first, at most 200: `[{id, job, kind, status, host_status, started, summary}]`; an unknown host returns `[]` |
-| `GET /api/hosts` | every host seen by a job's last executed result (cancelled runs are skipped), with its worst status (`ok`, `changed`, `drift`, `failed`, `unreachable`) and the status per job |
+| `GET /api/hosts` | every host seen by a job's last executed result (cancelled and check runs are skipped), with its worst status (`ok`, `changed`, `drift`, `failed`, `unreachable`) and the status per job |
 | `GET /api/runs[?host=&playbook=]` | the audit store's last 100 runs (every `apply`, not only the server's); optional `serve_run` links to the retained serve result |
 | `GET /api/runs/{id}` | one audit record, with optional `serve_run` |
 | `GET /metrics` | `onigirazu_serve_job_last_status{job,kind}` (0 ok, 1 drift/changed, 2 failed, 3 error, 4 cancelled), `onigirazu_serve_job_last_run_timestamp_seconds{job}`, `onigirazu_serve_host_status{job,host}`, `onigirazu_serve_job_pending{job}` (guarded jobs only: 1 pending, 0 otherwise); `onigirazu_serve_paused` (1 paused, 0 otherwise); `onigirazu_serve_running` (executing or cancelling runs), `onigirazu_serve_concurrency` (configured limit); `onigirazu_serve_storage_error` (1 while the last result storage operation failed, 0 otherwise); all include configured metric labels |
@@ -233,8 +246,14 @@ a server-level operator does not match the job's list. Viewers receive `403` wit
 `{"error":"operators only"}`; missing identity receives `401`. An unknown pending run
 returns `404` before the per-job check.
 
+Check runs are excluded from job last-status, last-run timestamp and host-status metrics
+and host verdicts. Apply checks do not push drift metrics. The jobs API still shows the
+newest executed result in `last`, including checks.
+
 Page: the page at `/` uses the same API: Jobs (with Run/Approve/Reject/Cancel buttons when
-`allowed`), Hosts, Runs and Audit. Run pages show metadata and tabs by kind: drift/apply
+`allowed`), a Check button next to Run for apply jobs and a second Check submit button
+in their ad-hoc forms, Hosts, Runs and Audit. Check runs have a `check` badge in the jobs table, result list and run header.
+Run pages show metadata and tabs by kind: drift/apply
 have expandable Hosts, Changes grouped by task, coloured Diff (limited to the first
 200 KB), and Orphans when present; verify has expandable Hosts and Checks across hosts;
 comply has a control-by-host Matrix with unreachable hosts and scores, plus Remediation
@@ -245,7 +264,7 @@ run and “stale” when a scheduled job’s last execution is older than twice 
 queued and running jobs show wait and elapsed time. Tables scroll horizontally on narrow
 screens; at 700px and below the Jobs Target column is hidden and dates are shortened.
 
-A job result: `{id, job, kind, requested, started, duration_seconds, status, summary, trigger,
+A job result: `{id, job, kind, mode, requested, started, duration_seconds, status, summary, trigger,
 hosts, report, approval, cancel, params, audit_execution_id}`. `requested` is the request time; `started` becomes the execution
 start time when the worker begins. `trigger` is `schedule` or `api:<user>`. Status is `pending`,
 `queued`, `running`, `cancelling`, `cancelled`, `rejected`, `expired`, `ok`, `drift`, `changed`, `failed` or `error`.
