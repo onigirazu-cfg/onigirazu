@@ -39,7 +39,7 @@ type scopedFilters struct {
 
 // WithFilters copies variables and attaches this engine's plugin filters.
 func WithFilters(variables map[string]interface{}, filters map[string]func(...interface{}) (interface{}, error)) map[string]interface{} {
-	out := make(map[string]interface{}, len(variables)+1)
+	out := make(map[string]interface{}, len(variables))
 	for k, v := range variables {
 		out[k] = v
 	}

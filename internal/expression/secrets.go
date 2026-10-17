@@ -15,7 +15,7 @@ var SecretLookup func(provider, item, field string) (string, error)
 
 // WithSecretLookup copies variables and attaches a resolver for this evaluation.
 func WithSecretLookup(variables map[string]interface{}, lookup func(string, string, string) (string, error)) map[string]interface{} {
-	out := make(map[string]interface{}, len(variables)+1)
+	out := make(map[string]interface{}, len(variables))
 	for k, v := range variables {
 		out[k] = v
 	}
