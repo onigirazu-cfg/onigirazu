@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `onigirazu serve`: ad-hoc target picker with reachable group and host chips and live limit previews via `GET /api/jobs/{name}/inventory`
 - `onigirazu serve`: operators cancel queued or running runs from the page or `POST /api/runs/{id}/cancel`; cancellation keeps who stopped the run and any partial result, with audit entries, optional notifications and metrics
 - `onigirazu serve`: report tabs for drift/apply, verify and compliance with bounded coloured diffs, retained host history at `/api/hosts/{name}/results`, job freshness and active timing, and narrow-screen layouts
 

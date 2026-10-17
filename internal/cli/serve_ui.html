@@ -22,6 +22,7 @@ tr:last-child td{border-bottom:0}.b{display:inline-block;padding:1px 8px;border-
 button.run{border:1px solid var(--line);background:var(--card);color:var(--fg);padding:4px 10px;border-radius:6px;cursor:pointer}button.run:disabled{opacity:.5}
 .muted{color:var(--muted)}pre{background:var(--card);border:1px solid var(--line);padding:12px;border-radius:8px;overflow:auto;max-height:60vh}
 .adhoc-form{display:flex;gap:8px;align-items:end;flex-wrap:wrap}.adhoc-form label{display:grid;gap:4px}.adhoc-form input{padding:4px 8px;border:1px solid var(--line);border-radius:4px;background:var(--card);color:var(--fg)}
+.limit-picker{display:grid;gap:4px;flex:1 1 100%;min-width:0;max-width:calc(100vw - 50px)}.limit-chips{display:flex;gap:4px;flex-wrap:wrap}.limit-chips button{max-width:100%;overflow-wrap:anywhere}.limit-chips [aria-pressed="true"]{border-color:var(--accent);color:var(--accent)}.limit-picker input{width:100%;min-width:0}
 .empty{padding:24px;color:var(--muted);text-align:center}
 
 header,nav{flex-wrap:wrap}header{overflow-wrap:anywhere}main,header>*{min-width:0}main{overflow-wrap:anywhere}a{color:var(--accent)}
@@ -66,6 +67,34 @@ $('#pause').onclick=async()=>{
 };
 const paramsView=r=>r.params?`<div class="muted">${r.params.limit?`limit ${esc(r.params.limit)} → ${esc((r.params.hosts||[]).join(', '))}<br>`:''}${Object.keys(r.params.extra_vars||{}).length?'vars '+Object.entries(r.params.extra_vars).map(([k,v])=>esc(k)+'='+esc(v)).join(', '):''}</div>`:'';
 const hasAdhoc=j=>j.adhoc?.limit||j.adhoc?.extra_vars?.length;
+function targetPicker(form){
+  const input=form.querySelector('[data-limit]');
+  if(!input||form.dataset.picker)return;
+  form.dataset.picker='true';
+  const chips=form.querySelector('[data-inventory]'), preview=form.querySelector('[data-preview]'), path='/api/jobs/'+encodeURIComponent(form.dataset.form)+'/inventory';
+  let inventory, debounce, revision=0;
+  const message=(text,error=false)=>{preview.textContent=text;preview.className=error?'error-text':'muted'};
+  const selected=()=>input.value.split(',').map(s=>s.trim()).filter(Boolean);
+  const mark=()=>{const values=selected();chips.querySelectorAll('[data-target]').forEach(b=>b.setAttribute('aria-pressed',String(values.includes(b.dataset.target))))};
+  const update=async version=>{
+    const limit=input.value;
+    if(!limit&&inventory){message('→ all '+inventory.hosts.length+' hosts of the job');return}
+    try{
+      const result=await api(path+'?limit='+encodeURIComponent(limit));
+      if(version!==revision)return;
+      const hosts=result.hosts, extra=hosts.length-20;
+      message(!limit?'→ all '+hosts.length+' hosts of the job':'→ '+hosts.length+' hosts: '+hosts.slice(0,20).join(', ')+(extra>0?' … +'+extra:''));
+    }catch(e){if(version===revision)message(e.message,true)}
+  };
+  input.oninput=()=>{mark();clearTimeout(debounce);const version=++revision;message('Resolving…');debounce=setTimeout(()=>update(version),300)};
+  chips.textContent='Loading inventory…';
+  api(path).then(data=>{
+    inventory=data;
+    chips.innerHTML=data.groups.map(g=>`<button class="run" type="button" data-target="${esc(g.name)}" aria-pressed="false">${esc(g.name)} (${g.hosts.length})</button>`).join('')+data.hosts.map(h=>`<button class="run" type="button" data-target="${esc(h)}" aria-pressed="false">${esc(h)}</button>`).join('');
+    chips.querySelectorAll('[data-target]').forEach(b=>b.onclick=()=>{const values=selected(), target=b.dataset.target;input.value=values.includes(target)?values.filter(v=>v!==target).join(','):values.concat(target).join(',');input.oninput()});
+    mark();clearTimeout(debounce);update(++revision);
+  }).catch(e=>{chips.textContent=e.message;chips.classList.add('error-text')});
+}
 function hash(value){if(location.hash!==value)history.pushState(null,'',value||location.pathname+location.search)}
 async function jobs(){
   view='jobs';hash('');
@@ -78,7 +107,7 @@ async function jobs(){
     <td>${j.every?esc(j.every)+(j.next?'<br><span class="muted">next '+ago(j.next)+'</span>':''):'<span class="muted">on demand</span>'}</td>
     <td>${lastRun(j)}</td>
     <td>${j.pending?badge('pending'):j.running?badge(j.active?.status||(j.queued?'queued':'running'))+activeTime(j):j.last?badge(j.last.status)+' <span class="muted">'+esc(j.last.summary)+'</span>':''}</td>
-    <td>${j.allowed?`<button class="run" data-run="${esc(j.name)}" ${j.pending||j.running?'disabled':''}>Run${hasAdhoc(j)?'…':''}</button>${j.active&&['queued','running'].includes(j.active.status)?` <button class="run" data-stop="${esc(j.active.id)}" data-name="${esc(j.name)}" data-running="${j.active.status==='running'}">Cancel</button>`:''}`:''}</td></tr>${j.allowed&&hasAdhoc(j)?`<tr data-form-row="${esc(j.name)}" hidden><td colspan="7"><form class="adhoc-form" data-form="${esc(j.name)}">${j.adhoc.limit?'<label>limit<input data-limit placeholder="host pattern, empty = the job&#39;s hosts"></label>':''}${(j.adhoc.extra_vars||[]).map(k=>`<label>${esc(k)}<input type="${(j.adhoc.secret_vars||[]).includes(k)?'password':'text'}" data-var="${esc(k)}" placeholder="keep the job's value"></label>`).join('')}<button class="run" type="submit">Run</button><button class="run" type="button" data-cancel>Cancel</button></form></td></tr>`:''}`).join('')}</table>`;
+    <td>${j.allowed?`<button class="run" data-run="${esc(j.name)}" ${j.pending||j.running?'disabled':''}>Run${hasAdhoc(j)?'…':''}</button>${j.active&&['queued','running'].includes(j.active.status)?` <button class="run" data-stop="${esc(j.active.id)}" data-name="${esc(j.name)}" data-running="${j.active.status==='running'}">Cancel</button>`:''}`:''}</td></tr>${j.allowed&&hasAdhoc(j)?`<tr data-form-row="${esc(j.name)}" hidden><td colspan="7"><form class="adhoc-form" data-form="${esc(j.name)}">${j.adhoc.limit?'<div class="limit-picker"><div data-inventory class="limit-chips muted"></div><label>limit<input data-limit placeholder="host pattern, empty = the job&#39;s hosts"></label><div data-preview class="muted" role="status" aria-live="polite"></div></div>':''}${(j.adhoc.extra_vars||[]).map(k=>`<label>${esc(k)}<input type="${(j.adhoc.secret_vars||[]).includes(k)?'password':'text'}" data-var="${esc(k)}" placeholder="keep the job's value"></label>`).join('')}<button class="run" type="submit">Run</button><button class="run" type="button" data-cancel>Cancel</button></form></td></tr>`:''}`).join('')}</table>`;
   main.querySelectorAll('[data-decision]').forEach(b=>b.onclick=async()=>{
     let comment='';
     if(b.dataset.decision==='reject'){comment=prompt('Comment (optional)');if(comment===null)return}
@@ -93,7 +122,7 @@ async function jobs(){
   });
   main.querySelectorAll('[data-run]').forEach(b=>b.onclick=async()=>{
     const row=Array.from(main.querySelectorAll('[data-form-row]')).find(row=>row.dataset.formRow===b.dataset.run);
-    if(row){row.hidden=!row.hidden;return}
+    if(row){row.hidden=!row.hidden;if(!row.hidden)targetPicker(row.querySelector('form'));return}
     b.disabled=true;try{await api('/api/jobs/'+encodeURIComponent(b.dataset.run)+'/run',{method:'POST'})}catch(e){alert(e.message)}setTimeout(jobs,500)
   });
   main.querySelectorAll('[data-form]').forEach(form=>{
