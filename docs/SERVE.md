@@ -15,6 +15,7 @@ notify:
     on: [pending, failure]
 data_dir: /var/lib/onigirazu/serve     # results and job state; default ~/.onigirazu/serve
 approval_timeout: 1h                   # default wait for approval
+concurrency: 2                         # max jobs executing at once; default 1
 retain: 50                             # results kept per job
 auth:
   token: ${SERVE_TOKEN}                # API bearer token: an operator
@@ -64,13 +65,16 @@ onigirazu serve --config-file serve.yml
 sudo onigirazu serve install -f /etc/onigirazu/serve.yml      # systemd service
 ```
 
-Jobs run one at a time, in the order they are due or requested; a job that is pending,
-queued or running is not requested again. Paths in the file are relative to it. Every job's
-state file lives
-in `data_dir/state/<job>.state`. A job's inventory and state file are passed to the run as
+Up to `concurrency` jobs run at a time (default 1), picked up in FIFO order as they
+are due or requested. A job that is pending, queued or running is not requested again,
+so a job never overlaps itself. Pause stops new runs from starting while executing runs
+finish; resume drains the queue. Server shutdown cancels executing runs and records them
+as `error` with summary `interrupted: serve stopping`.
+
+Paths in the file are relative to it. Every job's state file lives in
+`data_dir/state/<job>.state`. A job's inventory and state file are passed to the run as
 its own arguments, not through the process's global `-i`/`--state`, so they never leak into
-another job. Jobs can safely overlap at the engine level; `serve` still runs one at a time
-until it gets a `concurrency` option.
+another job.
 
 ## Guarded runs
 
@@ -159,7 +163,7 @@ reopened for every entry, so logrotate can move it aside (no `copytruncate` need
 | Method and path | Returns |
 |---|---|
 | `GET /api/audit?limit=N` | action log, newest first; default 100 entries, max 1000 (viewers too) |
-| `GET /api/me` | the caller: `user`, `operator`, `title`, `paused` (bool) |
+| `GET /api/me` | the caller: `user`, `operator`, `title`, `paused` (bool), `running` and `queued` counts, `concurrency` |
 | `GET /api/pause` | pause state: `paused`, optional `reason`, `by`, `at` (viewers too) |
 | `POST /api/pause` | pauses execution (operators); optional JSON `{reason: "..."}`; `200` with the state; pausing again updates reason and identity; `500` with the state and `error` when `pause.json` could not be written (the pause still holds in this process) |
 | `POST /api/resume` | resumes execution (operators); `200` with the state; already resumed is a no-op; `500` as for pause |
@@ -173,7 +177,7 @@ reopened for every entry, so logrotate can move it aside (no `copytruncate` need
 | `GET /api/hosts` | every host seen by a job's last executed result with its worst status (`ok`, `changed`, `drift`, `failed`, `unreachable`) and the status per job |
 | `GET /api/runs[?host=&playbook=]` | the audit store's last 100 runs (every `apply`, not only the server's) |
 | `GET /api/runs/{id}` | one audit record |
-| `GET /metrics` | `onigirazu_serve_job_last_status{job,kind}` (0 ok, 1 drift/changed, 2 failed, 3 error), `onigirazu_serve_job_last_run_timestamp_seconds{job}`, `onigirazu_serve_host_status{job,host}`, `onigirazu_serve_job_pending{job}` (guarded jobs only: 1 pending, 0 otherwise); `onigirazu_serve_paused` (1 paused, 0 otherwise); all include configured metric labels |
+| `GET /metrics` | `onigirazu_serve_job_last_status{job,kind}` (0 ok, 1 drift/changed, 2 failed, 3 error), `onigirazu_serve_job_last_run_timestamp_seconds{job}`, `onigirazu_serve_host_status{job,host}`, `onigirazu_serve_job_pending{job}` (guarded jobs only: 1 pending, 0 otherwise); `onigirazu_serve_paused` (1 paused, 0 otherwise); `onigirazu_serve_running` (executing runs), `onigirazu_serve_concurrency` (configured limit); all include configured metric labels |
 | `GET /healthz` | `ok` |
 
 Run, approve and reject return `403` with `{"error":"not an operator of this job"}` when

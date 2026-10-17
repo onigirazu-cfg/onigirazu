@@ -55,7 +55,7 @@ func TestServeConfigAndAPI(t *testing.T) {
 		t.Fatal(err)
 	}
 	ran := make(chan string, 4)
-	s.runJob = func(j *ServeJob) (*JobResult, error) {
+	s.runJob = func(_ context.Context, j *ServeJob) (*JobResult, error) {
 		ran <- j.Name
 		return &JobResult{Job: j.Name, Kind: j.Kind, Started: time.Now().UTC(), Status: "drift", Summary: "1 drifting",
 			Hosts: map[string]string{"web1": "drift", "web2": "ok"}, Report: json.RawMessage(`{"x":1}`)}, nil
@@ -177,7 +177,7 @@ jobs:
 		t.Fatal(err)
 	}
 	ran := make(chan struct{}, 4)
-	s.runJob = func(j *ServeJob) (*JobResult, error) {
+	s.runJob = func(_ context.Context, j *ServeJob) (*JobResult, error) {
 		ran <- struct{}{}
 		return &JobResult{Started: time.Now().UTC(), Status: "drift", Summary: "drifting", Hosts: map[string]string{"web": "drift"}, Report: json.RawMessage(`{"x":1}`)}, nil
 	}
@@ -434,8 +434,7 @@ func TestServeWorkerError(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	s.runJob = func(_ *ServeJob) (*JobResult, error) {
-		defer cancel()
+	s.runJob = func(_ context.Context, _ *ServeJob) (*JobResult, error) {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		r := s.results["patch"][0]
@@ -444,7 +443,12 @@ func TestServeWorkerError(t *testing.T) {
 		}
 		return nil, errors.New("execution failed")
 	}
-	s.worker(ctx)
+	done := make(chan struct{})
+	go func() { defer close(done); s.worker(ctx) }()
+	defer func() { cancel(); <-done }()
+	serveWaitActivity(t, s, 0, 0)
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	list := s.results["patch"]
 	if len(list) != 1 || list[0].ID != requested.ID || list[0].Requested != requested.Requested || list[0].Trigger != "schedule" || list[0].Status != "error" || list[0].Summary != "execution failed" || s.running["patch"] {
 		t.Fatalf("failed record: %+v", list)
@@ -473,7 +477,7 @@ func TestServePause(t *testing.T) {
 		t.Fatal(err)
 	}
 	ran := make(chan string, 4)
-	s.runJob = func(j *ServeJob) (*JobResult, error) {
+	s.runJob = func(_ context.Context, j *ServeJob) (*JobResult, error) {
 		ran <- j.Name
 		return &JobResult{Started: time.Now().UTC(), Status: "drift", Summary: "1 drifting", Hosts: map[string]string{"web1": "drift"}}, nil
 	}
@@ -728,7 +732,7 @@ jobs:
 	defer cancel()
 	started := make(chan struct{}, 1)
 	finish := make(chan struct{}, 1)
-	s.runJob = func(j *ServeJob) (*JobResult, error) {
+	s.runJob = func(_ context.Context, j *ServeJob) (*JobResult, error) {
 		started <- struct{}{}
 		select {
 		case <-finish:
@@ -937,14 +941,16 @@ func TestServeNotifyRouting(t *testing.T) {
 			s.notifyClient = &http.Client{Timeout: time.Second, Transport: transport}
 			ctx, cancel := contextTimeout(t)
 			defer cancel()
-			s.runJob = func(_ *ServeJob) (*JobResult, error) {
-				cancel()
+			s.runJob = func(_ context.Context, _ *ServeJob) (*JobResult, error) {
 				return &JobResult{Status: tc.status, Report: json.RawMessage(`{"secret":"report"}`)}, tc.err
 			}
 			if _, err := s.request(&cfg.Jobs[0], "schedule", nil); err != nil {
 				t.Fatal(err)
 			}
-			s.worker(ctx)
+			done := make(chan struct{})
+			go func() { defer close(done); s.worker(ctx) }()
+			defer func() { cancel(); <-done }()
+			serveWaitActivity(t, s, 0, 0)
 			s.notifyWait.Wait()
 			mu.Lock()
 			defer mu.Unlock()
@@ -1038,7 +1044,7 @@ jobs:
 		t.Fatal(err)
 	}
 	ctx, cancel := contextTimeout(t)
-	s.runJob = func(_ *ServeJob) (*JobResult, error) { return &JobResult{Status: "ok"}, nil }
+	s.runJob = func(_ context.Context, _ *ServeJob) (*JobResult, error) { return &JobResult{Status: "ok"}, nil }
 	done := make(chan struct{})
 	go func() { defer close(done); s.worker(ctx) }()
 	defer func() { cancel(); <-done }()
@@ -1294,7 +1300,7 @@ func TestServeAdhocRun(t *testing.T) {
 		t.Fatal(err)
 	}
 	ran := make(chan ServeJob, 8)
-	s.runJob = func(j *ServeJob) (*JobResult, error) {
+	s.runJob = func(_ context.Context, j *ServeJob) (*JobResult, error) {
 		ran <- *j
 		return &JobResult{Started: time.Now().UTC(), Status: "ok"}, nil
 	}
@@ -1508,7 +1514,7 @@ func TestServeExecuteDoesNotWriteGlobals(t *testing.T) {
 		t.Fatalf("server inventory: %v", s.inventory)
 	}
 	j := &ServeJob{Name: "x", Kind: "apply", Playbook: filepath.Join(cfg.DataDir, "missing.yml"), Inventory: filepath.Join(cfg.DataDir, "missing-hosts.yml")}
-	if _, err := s.execute(j); err == nil {
+	if _, err := s.execute(context.Background(), j); err == nil {
 		t.Fatal("a missing playbook must fail")
 	}
 	if !slices.Equal(inventoryPaths, []string{"orig,"}) || statePath != "" {
@@ -1524,5 +1530,219 @@ func TestServeExtraVarsArg(t *testing.T) {
 	vars, err := parseExtraVars([]string{extraVarsArg(map[string]string{"reboot": "true ansible_host=evil", "serial": "1"})})
 	if err != nil || len(vars) != 2 || vars["reboot"] != "true ansible_host=evil" || vars["serial"] != "1" {
 		t.Fatalf("extra vars: %v %v", vars, err)
+	}
+}
+
+func TestServeConcurrencyConfig(t *testing.T) {
+	for _, tc := range []struct {
+		value string
+		want  int
+	}{{"", 1}, {"concurrency: 0\n", 1}, {"concurrency: 2\n", 2}, {"concurrency: -1\n", 0}} {
+		t.Run(strings.TrimSpace(tc.value), func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "serve.yml")
+			if err := os.WriteFile(path, []byte(tc.value+testServeYML), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			cfg, err := loadServeConfig(path)
+			if tc.want == 0 {
+				if err == nil || !strings.Contains(err.Error(), "concurrency") {
+					t.Fatalf("want concurrency error, got %v", err)
+				}
+			} else if err != nil || cfg.Concurrency != tc.want {
+				t.Fatalf("want concurrency %d, got %+v, %v", tc.want, cfg, err)
+			}
+		})
+	}
+}
+
+// blockedServe reports starts and keeps each job running until released or canceled.
+func blockedServe(t *testing.T, concurrency int) (*server, <-chan string, map[string]chan struct{}, context.CancelFunc) {
+	t.Helper()
+	cfg := &ServeConfig{DataDir: t.TempDir(), Retain: 5, Concurrency: concurrency,
+		Metrics: ServeMetric{Labels: map[string]string{"env": "test"}}}
+	release := map[string]chan struct{}{}
+	for _, name := range []string{"a", "b", "c", "d"} {
+		cfg.Jobs = append(cfg.Jobs, ServeJob{Name: name, Kind: "drift"})
+		release[name] = make(chan struct{})
+	}
+	s, err := newServer(cfg, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	started := make(chan string, len(cfg.Jobs))
+	s.runJob = func(ctx context.Context, j *ServeJob) (*JobResult, error) {
+		started <- j.Name
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-release[j.Name]:
+			return &JobResult{Started: time.Now().UTC(), Status: "ok"}, nil
+		}
+	}
+	ctx, cancel := contextTimeout(t)
+	var workers sync.WaitGroup
+	for i := 0; i < concurrency; i++ {
+		workers.Add(1)
+		go func() { defer workers.Done(); s.worker(ctx) }()
+	}
+	t.Cleanup(func() { cancel(); workers.Wait() })
+	return s, started, release, cancel
+}
+
+func serveStart(t *testing.T, started <-chan string) string {
+	t.Helper()
+	select {
+	case name := <-started:
+		return name
+	case <-time.After(3 * time.Second):
+		t.Fatal("job did not start")
+		return ""
+	}
+}
+
+func serveNoStart(t *testing.T, started <-chan string) {
+	t.Helper()
+	select {
+	case name := <-started:
+		t.Fatalf("unexpected start: %s", name)
+	case <-time.After(50 * time.Millisecond):
+	}
+}
+
+func serveWaitActivity(t *testing.T, s *server, running, queued int) {
+	t.Helper()
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		s.mu.Lock()
+		r, q := s.activity()
+		s.mu.Unlock()
+		if r == running && q == queued {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("activity = %d running / %d queued, want %d / %d", r, q, running, queued)
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
+func TestServeConcurrentWorkers(t *testing.T) {
+	for _, concurrency := range []int{1, 2} {
+		t.Run(fmt.Sprint(concurrency), func(t *testing.T) {
+			s, started, release, _ := blockedServe(t, concurrency)
+			for i := 0; i < 3; i++ {
+				if _, err := s.request(&s.cfg.Jobs[i], "test", nil); err != nil {
+					t.Fatal(err)
+				}
+			}
+			active := map[string]bool{}
+			for i := 0; i < concurrency; i++ {
+				active[serveStart(t, started)] = true
+			}
+			if !active["a"] || (concurrency == 2 && !active["b"]) {
+				t.Fatalf("first jobs = %v", active)
+			}
+			serveWaitActivity(t, s, concurrency, 3-concurrency)
+			if concurrency == 2 {
+				s.mu.Lock()
+				ordered := !s.results["a"][0].Started.After(s.results["b"][0].Started)
+				s.mu.Unlock()
+				if !ordered {
+					t.Fatal("jobs marked running out of FIFO order")
+				}
+			}
+			serveNoStart(t, started)
+			if _, err := s.request(&s.cfg.Jobs[0], "again", nil); !errors.Is(err, errJobBusy) {
+				t.Fatalf("duplicate job: %v", err)
+			}
+			w := httptest.NewRecorder()
+			s.mux().ServeHTTP(w, httptest.NewRequest("GET", "/api/me", nil))
+			var status struct{ Running, Queued, Concurrency int }
+			if err := json.Unmarshal(w.Body.Bytes(), &status); err != nil {
+				t.Fatal(err)
+			}
+			if status.Running != concurrency || status.Queued != 3-concurrency || status.Concurrency != concurrency {
+				t.Fatalf("status: %+v", status)
+			}
+			w = httptest.NewRecorder()
+			s.metricsHandler(w, httptest.NewRequest("GET", "/metrics", nil))
+			for _, metric := range []string{"running", "concurrency"} {
+				want := fmt.Sprintf("onigirazu_serve_%s{env=\"test\"} %d\n", metric, concurrency)
+				if !strings.Contains(w.Body.String(), want) {
+					t.Fatalf("missing %s in %s", want, w.Body.String())
+				}
+			}
+			close(release["a"])
+			want := "b"
+			if concurrency == 2 {
+				want = "c"
+			}
+			if got := serveStart(t, started); got != want {
+				t.Fatalf("next job = %s, want %s", got, want)
+			}
+			close(release["b"])
+			if concurrency == 1 {
+				if got := serveStart(t, started); got != "c" {
+					t.Fatalf("last job = %s", got)
+				}
+			}
+			close(release["c"])
+			serveWaitActivity(t, s, 0, 0)
+		})
+	}
+}
+
+func TestServeConcurrentPause(t *testing.T) {
+	s, started, release, _ := blockedServe(t, 2)
+	for i := range s.cfg.Jobs {
+		if _, err := s.request(&s.cfg.Jobs[i], "test", nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	active := []string{serveStart(t, started), serveStart(t, started)}
+	if _, err := s.setPause(true, "test", "maintenance"); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range active {
+		close(release[name])
+	}
+	serveWaitActivity(t, s, 0, 2)
+	serveNoStart(t, started)
+	if _, err := s.setPause(false, "test", ""); err != nil {
+		t.Fatal(err)
+	}
+	resumed := []string{serveStart(t, started), serveStart(t, started)}
+	serveWaitActivity(t, s, 2, 0)
+	for _, name := range resumed {
+		close(release[name])
+	}
+	serveWaitActivity(t, s, 0, 0)
+}
+
+func TestServeCancelRunning(t *testing.T) {
+	s, started, _, cancel := blockedServe(t, 2)
+	r, err := s.request(&s.cfg.Jobs[0], "test", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	serveStart(t, started)
+	cancel()
+	serveWaitActivity(t, s, 0, 0)
+	s.mu.Lock()
+	stored := resultCopy(s.resultByID("a", r.ID))
+	s.mu.Unlock()
+	if stored.Status != "error" || stored.Summary != "interrupted: serve stopping" {
+		t.Fatalf("canceled run: %+v", stored)
+	}
+	data, err := os.ReadFile(filepath.Join(s.cfg.DataDir, "results", r.ID+".json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var persisted JobResult
+	if err := json.Unmarshal(data, &persisted); err != nil {
+		t.Fatal(err)
+	}
+	if persisted.Status != stored.Status || persisted.Summary != stored.Summary {
+		t.Fatalf("persisted run: %+v", persisted)
 	}
 }
