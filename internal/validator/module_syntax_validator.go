@@ -11,7 +11,8 @@ import (
 
 // ModuleSyntaxValidator validates module syntax and existence
 type ModuleSyntaxValidator struct {
-	validModules map[string]bool
+	validModules  map[string]bool
+	bridgeAllowed func(string) bool
 	// Warnings of the last ValidatePlaybookModules: collection modules a
 	// role uses that onigirazu lacks; the task fails only if it runs
 	Warnings  []string
@@ -21,7 +22,8 @@ type ModuleSyntaxValidator struct {
 // NewModuleSyntaxValidator creates a new module syntax validator
 func NewModuleSyntaxValidator(availableModules []string) *ModuleSyntaxValidator {
 	validator := &ModuleSyntaxValidator{
-		validModules: make(map[string]bool),
+		validModules:  make(map[string]bool),
+		bridgeAllowed: bridge.Allowed,
 	}
 
 	for _, module := range availableModules {
@@ -29,6 +31,13 @@ func NewModuleSyntaxValidator(availableModules []string) *ModuleSyntaxValidator 
 	}
 
 	return validator
+}
+
+// NewModuleSyntaxValidatorWithBridge creates a validator with per-run bridge settings.
+func NewModuleSyntaxValidatorWithBridge(availableModules []string, cfg bridge.Config) *ModuleSyntaxValidator {
+	v := NewModuleSyntaxValidator(availableModules)
+	v.bridgeAllowed = cfg.Clone().Allowed
+	return v
 }
 
 // ValidateTaskModule validates that a task's module exists and is valid
@@ -47,7 +56,7 @@ func (m *ModuleSyntaxValidator) ValidateTaskModule(task *types.Task, playIndex, 
 
 	// Check if module exists; modules allowed through the Ansible bridge run
 	// with ansible-core
-	if !m.validModules[moduleName] && !bridge.Allowed(moduleName) {
+	if !m.validModules[moduleName] && !m.bridgeAllowed(moduleName) {
 		return &ModuleSyntaxError{
 			PlayIndex:  playIndex + 1,
 			TaskIndex:  taskIndex + 1,

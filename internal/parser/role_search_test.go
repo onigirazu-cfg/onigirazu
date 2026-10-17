@@ -46,3 +46,20 @@ func TestFindRole(t *testing.T) {
 	got, _ = findRole("thing", playRoles)
 	assert.Equal(t, byPath, got, "roles_path of onigirazu.yml")
 }
+
+func TestParserRoleSearchIsolation(t *testing.T) {
+	base := t.TempDir()
+	for _, name := range []string{"first", "second", "third"} {
+		dir := filepath.Join(base, name)
+		require.NoError(t, os.MkdirAll(filepath.Join(dir, "same"), 0o755))
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			p := NewEnhancedParser(&mockTemplateEngine{}, &mockLogger{})
+			paths := []string{dir}
+			p.SetRoleSearch(paths, nil)
+			paths[0] = "changed"
+			got, _ := findRoleWithSearch("same", filepath.Join(base, "roles"), p.roleLoader.search)
+			require.Equal(t, filepath.Join(dir, "same"), got)
+		})
+	}
+}

@@ -347,8 +347,8 @@ func (p *ConnectionPool) DialTimeout() time.Duration {
 }
 
 // The global pool is shared by every run in the process: its settings
-// (strict host key checking, known_hosts file, dial timeout) are taken from
-// the first run that initializes it and are not changed afterwards. A later
+// (strict host key checking, known_hosts file, dial timeout, remote server)
+// come from the first run and are not changed afterwards. A later
 // run asking for different settings keeps the pool it found and gets one
 // warning naming the setting: connections are shared, so the settings
 // cannot differ per run.
@@ -363,6 +363,7 @@ type globalPoolSettings struct {
 	strictMode     bool
 	knownHostsFile string
 	dialTimeout    time.Duration
+	remoteServer   string
 }
 
 // GetGlobalPool returns the global connection pool instance
@@ -393,7 +394,7 @@ func InitializeGlobalPool(cfg interface{}) {
 // process from cfg. A later call with the same settings does nothing; a
 // later call with different settings keeps the existing pool and warns.
 func InitializeGlobalPoolWithLogger(cfg interface{}, lg Logger) {
-	want := globalPoolSettings{dialTimeout: DefaultDialTimeout}
+	want := globalPoolSettings{dialTimeout: DefaultDialTimeout, remoteServer: "auto"}
 
 	type SSHConfig interface {
 		IsSSHStrictHostKeyEnabled() bool
@@ -405,7 +406,9 @@ func InitializeGlobalPoolWithLogger(cfg interface{}, lg Logger) {
 		want.knownHostsFile = sshCfg.GetSSHKnownHostsFile()
 	}
 	if r, ok := cfg.(interface{ GetRemoteServer() string }); ok {
-		SetRemoteServer(r.GetRemoteServer())
+		if mode := r.GetRemoteServer(); mode != "" {
+			want.remoteServer = mode
+		}
 	}
 	if t, ok := cfg.(interface{ GetSSHTimeout() time.Duration }); ok && t.GetSSHTimeout() > 0 {
 		want.dialTimeout = t.GetSSHTimeout()
@@ -424,6 +427,7 @@ func InitializeGlobalPoolWithLogger(cfg interface{}, lg Logger) {
 		return
 	}
 
+	SetRemoteServer(want.remoteServer)
 	hostKeyMgr := NewHostKeyManager(want.knownHostsFile, want.strictMode)
 	pool := NewConnectionPoolWithHostKeyManagerAndLogger(DefaultPoolConfig(), hostKeyMgr, lg)
 	pool.dialTimeout = want.dialTimeout
@@ -448,6 +452,9 @@ func (s *globalPoolSettings) differences(want globalPoolSettings) []difference {
 	}
 	if s.dialTimeout != want.dialTimeout {
 		out = append(out, difference{"ssh_timeout", s.dialTimeout.String()})
+	}
+	if s.remoteServer != want.remoteServer {
+		out = append(out, difference{"remote_server", s.remoteServer})
 	}
 	return out
 }

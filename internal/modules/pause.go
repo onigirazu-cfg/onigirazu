@@ -56,9 +56,9 @@ func (m *PauseModule) Execute(ctx context.Context, host types.Host, args map[str
 
 	// If there's a prompt, wait for user input
 	if prompt != "" {
-		fmt.Print(prompt)
+		fmt.Fprint(outputFromContext(ctx), prompt)
 		if len(prompt) > 0 && prompt[len(prompt)-1:] != "\n" && prompt[len(prompt)-1:] != " " {
-			fmt.Print("\n")
+			fmt.Fprint(outputFromContext(ctx), "\n")
 		}
 		scanner := bufio.NewScanner(os.Stdin)
 		if scanner.Scan() {
@@ -68,7 +68,13 @@ func (m *PauseModule) Execute(ctx context.Context, host types.Host, args map[str
 		// Sleep for the specified duration
 		result.Output["seconds"] = totalSeconds
 		result.Output["msg"] = fmt.Sprintf("Pausing for %d seconds", totalSeconds)
-		time.Sleep(time.Duration(totalSeconds) * time.Second)
+		timer := time.NewTimer(time.Duration(totalSeconds) * time.Second)
+		defer timer.Stop()
+		select {
+		case <-ctx.Done():
+			return result, ctx.Err()
+		case <-timer.C:
+		}
 	}
 
 	result.Duration = time.Since(startTime)

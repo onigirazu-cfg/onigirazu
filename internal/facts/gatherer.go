@@ -48,9 +48,12 @@ type Gatherer struct {
 
 // NewGatherer creates a new facts gatherer
 func NewGatherer() *Gatherer {
-	return &Gatherer{
-		cache: cache.GetGlobalFactsCache(),
-	}
+	return NewGathererWithCache(cache.GetGlobalFactsCache())
+}
+
+// NewGathererWithCache creates a gatherer using the run's cache.
+func NewGathererWithCache(fc *cache.FactsCache) *Gatherer {
+	return &Gatherer{cache: fc}
 }
 
 // GatherFacts collects system facts from a host

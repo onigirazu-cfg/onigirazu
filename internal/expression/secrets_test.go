@@ -36,3 +36,29 @@ func TestSecretFunctions(t *testing.T) {
 		}
 	}
 }
+
+func TestSecretLookupPerEvaluation(t *testing.T) {
+	for _, name := range []string{"first", "second", "third"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			vars := WithSecretLookup(nil, func(provider, item, field string) (string, error) {
+				if field == "" {
+					return `{"value":"` + name + `"}`, nil
+				}
+				return name, nil
+			})
+			for _, code := range []string{
+				`bitwarden('item')`, `bitwarden ('item')`, `vault('item', 'value')`, `secret('vault', 'item', 'value')`,
+				`lookup('bitwarden', 'item')`, `lookup('hashi_vault', 'item:value')`,
+				`lookup('vault_kv2_get', 'item').secret.value`,
+			} {
+				for range 20 {
+					got, err := Eval(code, vars)
+					if err != nil || got != name {
+						t.Fatalf("%s = %v, %v; want %s", code, got, err, name)
+					}
+				}
+			}
+		})
+	}
+}

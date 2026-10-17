@@ -2,6 +2,7 @@ package utils
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"runtime"
 	"strings"
@@ -139,9 +140,16 @@ func shouldEnableColors() bool {
 
 // isTerminal checks if stdout is connected to a terminal
 func isTerminal() bool {
-	// Simple check - in a real implementation you might want to use
-	// a library like golang.org/x/term
-	stat, err := os.Stdout.Stat()
+	return IsColorTerminalFor(os.Stdout)
+}
+
+// IsColorTerminalFor checks the stream used for this run's output.
+func IsColorTerminalFor(out io.Writer) bool {
+	file, ok := out.(*os.File)
+	if !ok {
+		return false
+	}
+	stat, err := file.Stat()
 	if err != nil {
 		return false
 	}

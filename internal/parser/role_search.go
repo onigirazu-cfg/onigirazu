@@ -26,7 +26,7 @@ var (
 func SetRoleSearch(roles, collections []string) {
 	searchMu.Lock()
 	defer searchMu.Unlock()
-	extraRoles, extraCollection = roles, collections
+	extraRoles, extraCollection = append([]string(nil), roles...), append([]string(nil), collections...)
 }
 
 // roleSearch returns the role and collection directories for a playbook in
@@ -37,6 +37,12 @@ func roleSearch(playbookDir string) (roles, collections []string) {
 	collections = append(collections, extraCollection...)
 	searchMu.Unlock()
 
+	return roleSearchPaths(playbookDir, roles, collections)
+}
+
+func roleSearchPaths(playbookDir string, roles, collections []string) ([]string, []string) {
+	roles = append([]string(nil), roles...)
+	collections = append([]string(nil), collections...)
 	cfgRoles, cfgCollections := ansibleCfgPaths(playbookDir)
 	roles = append(roles, envPaths("ANSIBLE_ROLES_PATH")...)
 	roles = append(roles, cfgRoles...)
@@ -131,6 +137,10 @@ func ansibleCfgPaths(playbookDir string) (roles, collections []string) {
 // playbook, the roles path, and ns.collection.role in the collections path.
 // It returns the directory and the places it looked.
 func findRole(name, playRoles string) (string, []string) {
+	return findRoleWithSearch(name, playRoles, roleSearch)
+}
+
+func findRoleWithSearch(name, playRoles string, search func(string) ([]string, []string)) (string, []string) {
 	playbookDir := filepath.Dir(playRoles)
 	var tried []string
 	check := func(p string) bool {
@@ -150,7 +160,7 @@ func findRole(name, playRoles string) (string, []string) {
 	if check(filepath.Join(playbookDir, name)) {
 		return filepath.Join(playbookDir, name), tried
 	}
-	roles, collections := roleSearch(playbookDir)
+	roles, collections := search(playbookDir)
 	for _, dir := range roles {
 		if check(filepath.Join(dir, name)) {
 			return filepath.Join(dir, name), tried

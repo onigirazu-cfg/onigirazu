@@ -61,17 +61,15 @@ func Text(v interface{}) string {
 }
 
 var (
-	specMu    sync.Mutex
-	specCache = map[string]*Spec{}
-	docVer    string
+	specMu      sync.Mutex
+	specCache   = map[string]*Spec{}
+	docVersions = map[string]string{}
 )
 
 // docBinary is ansible-doc next to the configured ansible-playbook, or from
 // PATH
-func docBinary() string {
-	mu.RLock()
-	pb := cfg.AnsiblePlaybook
-	mu.RUnlock()
+func (c Config) docBinary() string {
+	pb := c.AnsiblePlaybook
 	if pb != "" && strings.ContainsRune(pb, filepath.Separator) {
 		return filepath.Join(filepath.Dir(pb), "ansible-doc")
 	}
@@ -85,30 +83,38 @@ var ErrNoAnsibleDoc = errors.New("ansible-doc is not installed")
 // are cached per ansible-core version in the user cache directory, so lint
 // runs offline once a module was looked up.
 func SpecFor(module string) (*Spec, error) {
+	return currentConfig().SpecFor(module)
+}
+
+// SpecFor returns a module spec using this configuration's ansible-doc.
+func (c Config) SpecFor(module string) (*Spec, error) {
 	specMu.Lock()
 	defer specMu.Unlock()
-	if s, ok := specCache[module]; ok {
+	bin := c.docBinary()
+	key := bin + "\x00" + module
+	if s, ok := specCache[key]; ok {
 		return s, nil
 	}
-	bin := docBinary()
 	if _, err := exec.LookPath(bin); err != nil {
 		return nil, ErrNoAnsibleDoc
 	}
-	if docVer == "" {
+	version := docVersions[bin]
+	if version == "" {
 		out, err := exec.Command(bin, "--version").Output() // #nosec G204 -- ansible-doc from the configuration
 		if err != nil {
 			return nil, fmt.Errorf("ansible-doc --version: %w", err)
 		}
-		docVer = strings.SplitN(strings.TrimSpace(string(out)), "\n", 2)[0]
+		version = strings.SplitN(strings.TrimSpace(string(out)), "\n", 2)[0]
+		docVersions[bin] = version
 	}
 	cacheFile := ""
 	if dir, err := os.UserCacheDir(); err == nil {
-		sum := sha256.Sum256([]byte(docVer))
+		sum := sha256.Sum256([]byte(bin + "\x00" + version))
 		cacheFile = filepath.Join(dir, "onigirazu", "ansible-doc", hex.EncodeToString(sum[:6]), module+".json")
 		if data, err := os.ReadFile(cacheFile); err == nil { // #nosec G304 -- our own cache
 			s := &Spec{}
 			if json.Unmarshal(data, s) == nil {
-				specCache[module] = s
+				specCache[key] = s
 				return s, nil
 			}
 		}
@@ -139,7 +145,7 @@ func SpecFor(module string) (*Spec, error) {
 			s.Options[k] = o
 		}
 	}
-	specCache[module] = s
+	specCache[key] = s
 	if cacheFile != "" {
 		if data, err := json.Marshal(s); err == nil && os.MkdirAll(filepath.Dir(cacheFile), 0o750) == nil {
 			_ = os.WriteFile(cacheFile, data, 0o600)

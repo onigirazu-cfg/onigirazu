@@ -61,7 +61,7 @@ func TestSpecForCaches(t *testing.T) {
 	Configure(Config{AnsiblePlaybook: filepath.Join(dir, "ansible-playbook")})
 	defer Configure(Config{})
 	specMu.Lock()
-	specCache, docVer = map[string]*Spec{}, ""
+	specCache, docVersions = map[string]*Spec{}, map[string]string{}
 	specMu.Unlock()
 	s, err := SpecFor("m")
 	if err != nil || !s.Options["a"].Required || Text(s.Description) != "demo" {
@@ -78,5 +78,26 @@ func TestSpecForCaches(t *testing.T) {
 	}
 	if _, err := SpecFor("none.such"); err == nil || !strings.Contains(err.Error(), "does not know") {
 		t.Errorf("unknown module: %v", err)
+	}
+}
+
+func TestSpecForUsesConfiguredBinary(t *testing.T) {
+	for _, name := range []string{"first", "second"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			dir := t.TempDir()
+			script := "#!/bin/sh\nif [ \"$1\" = --version ]; then echo 'ansible-doc [core same-version]'; exit 0; fi\necho '{\"isolated.module\":{\"doc\":{\"short_description\":\"" + name + "\",\"options\":{}}}}'\n"
+			if err := os.WriteFile(filepath.Join(dir, "ansible-doc"), []byte(script), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			cfg := Config{AnsiblePlaybook: filepath.Join(dir, "ansible-playbook")}
+			spec, err := cfg.SpecFor("isolated.module")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := Text(spec.Description); got != name {
+				t.Fatalf("spec from another binary: %q", got)
+			}
+		})
 	}
 }

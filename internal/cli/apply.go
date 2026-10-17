@@ -10,9 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/onigirazu-cfg/onigirazu/internal/bridge"
-
-	"github.com/onigirazu-cfg/onigirazu/internal/expression"
 	"github.com/onigirazu-cfg/onigirazu/internal/secrets"
 
 	"github.com/spf13/cobra"
@@ -160,48 +157,37 @@ Examples:
 				}
 			}
 
-			// -o json/yaml: stdout carries only the result document; banners,
-			// logs and the progress bar go to stderr
 			resultOut := io.Writer(os.Stdout)
+			out := resultOut
 			var runResult *types.PlaybookResult
 			var runStart time.Time
-			// the same for listings that scripts read (--list-hosts, --syntax-check, --list-tasks)
 			if outputFormat == "json" || outputFormat == "yaml" || onResult != nil || listHosts || syntaxCheck || listTasks {
-				realStdout := os.Stdout
-				resultOut = realStdout
-				os.Stdout = os.Stderr
+				out = os.Stderr
 				defer func() {
-					os.Stdout = realStdout
 					if runResult == nil {
 						return
 					}
 					if onResult != nil {
 						onResult(runResult)
 					} else {
-						writeRunResult(realStdout, outputFormat, runResult, playbookPath, runStart)
+						writeRunResult(resultOut, outputFormat, runResult, playbookPath, runStart)
 					}
 				}()
 			}
 
-			// Configure colors
-			if noColor {
+			if onResult == nil && noColor {
 				utils.EnableColors(false)
 			}
-
-			// Create context with cancellation
-			ctx := context.Background()
-
-			// Create signal handler with 10-second graceful shutdown timeout
-			signalHandler := execution.NewSignalHandler(ctx, 10*time.Second)
-			defer signalHandler.Close()
-
-			// Use the signal handler's context for execution
-			ctx = signalHandler.Context()
-
-			// Register SSH pool cleanup (will be executed on graceful shutdown)
-			signalHandler.RegisterCleanup(func() error {
-				return sshpkg.GetGlobalPool().CloseAll()
-			})
+			ctx := cmd.Context()
+			var signalHandler *execution.SignalHandler
+			if onResult == nil {
+				signalHandler = execution.NewSignalHandlerWithWriter(ctx, 10*time.Second, out)
+				defer signalHandler.Close()
+				ctx = signalHandler.Context()
+				signalHandler.RegisterCleanup(func() error {
+					return sshpkg.GetGlobalPool().CloseAll()
+				})
+			}
 
 			// Determine playbook directory for discovery
 			playbookDir := filepath.Dir(playbookPath)
@@ -211,11 +197,8 @@ Examples:
 			if err != nil {
 				return fmt.Errorf("failed to load configuration: %w", err)
 			}
-			parser.SetRoleSearch(cfg.RolesPath, cfg.CollectionsPath)
-			configureFactsCache(cfg, playbookDir, flushCache)
-			bridge.Configure(cfg.AnsibleBridge)
+			factsCache := configureFactsCache(cfg, playbookDir, flushCache)
 			secretResolver := secrets.NewResolver(cfg.Secrets)
-			expression.SecretLookup = secretResolver.Get
 			defer func() { _ = secretResolver.Close() }()
 
 			// Override config with command line flags
@@ -264,10 +247,10 @@ Examples:
 
 			// Create TUI model early if interactive mode to capture all logs
 			var tuiModel *execution.EnhancedTUIModel
-			var logWriter io.Writer = os.Stdout
+			var logWriter io.Writer = out
 
 			// the dashboard needs a terminal; -o json/yaml keeps stdout for the result
-			if interactive && (!term.IsTerminal(int(os.Stdin.Fd())) || !term.IsTerminal(int(os.Stderr.Fd())) ||
+			if interactive && (onResult != nil || !term.IsTerminal(int(os.Stdin.Fd())) || !term.IsTerminal(int(os.Stderr.Fd())) ||
 				outputFormat == "json" || outputFormat == "yaml") {
 				fmt.Fprintln(os.Stderr, "Interactive mode needs a terminal and text output; running without the dashboard")
 				interactive = false
@@ -299,9 +282,9 @@ Examples:
 
 			// Print startup banner
 			if cfg.IsColorOutputEnabled() {
-				fmt.Println(utils.Colors.Header("🍙 Starting Onigirazu Configuration Management Tool"))
+				fmt.Fprintln(out, utils.Colors.Header("🍙 Starting Onigirazu Configuration Management Tool"))
 			} else {
-				fmt.Println("Starting Onigirazu Configuration Management Tool")
+				fmt.Fprintln(out, "Starting Onigirazu Configuration Management Tool")
 			}
 
 			log.Info("Starting Onigirazu configuration management tool")
@@ -408,6 +391,8 @@ Examples:
 				templateEngine = template.NewEngine()
 			}
 
+			templateEngine.SetSecretLookup(secretResolver.Get)
+
 			// Initialize state backend based on configuration
 			stateConfig := state.NewDefaultConfig()
 			backendFactory := state.NewBackendFactory(stateConfig)
@@ -425,8 +410,9 @@ Examples:
 
 			// Create execution pool with signal handler's context for graceful shutdown support
 			executionPool := execution.NewPoolWithContext(ctx, cfg.MaxConcurrency, log)
-			progressTracker := progress.NewTracker()
+			progressTracker := progress.NewTrackerWithOptions(0, out, true)
 			moduleRegistry := modules.NewRegistry()
+			moduleRegistry.SetBridgeConfig(cfg.AnsibleBridge)
 			var callbacks []plugins.CallbackPlugin
 			if pluginManager != nil {
 				// module plugins are used like built-in modules
@@ -446,6 +432,7 @@ Examples:
 
 			// Initialize parser and inventory manager
 			enhancedParser := parser.NewEnhancedParser(templateEngine, log)
+			enhancedParser.SetRoleSearch(cfg.RolesPath, cfg.CollectionsPath)
 
 			// Enable lenient mode if requested
 			if lenient {
@@ -453,7 +440,7 @@ Examples:
 			}
 
 			// Set up module syntax validator with available modules
-			moduleSyntaxValidator := validator.NewModuleSyntaxValidator(moduleRegistry.ListModules())
+			moduleSyntaxValidator := validator.NewModuleSyntaxValidatorWithBridge(moduleRegistry.ListModules(), cfg.AnsibleBridge)
 			enhancedParser.SetModuleSyntaxValidator(moduleSyntaxValidator)
 
 			inventoryManager := inventory.NewManager(enhancedParser, log, cacheManager)
@@ -475,8 +462,11 @@ Examples:
 				executionPool,
 				cacheManager,
 			)
+			executionEngine.SetOutput(out)
+			executionEngine.SetFactsCache(factsCache)
 			executionEngine.SetCallbacks(callbacks)
 			executionEngine.SetRolesPath(filepath.Join(filepath.Dir(playbookPath), "roles"))
+			executionEngine.SetRoleSearch(cfg.RolesPath, cfg.CollectionsPath)
 			executionEngine.SetPlaybookDir(filepath.Dir(playbookPath))
 			// the dashboard shows the diff of a changed file in its details
 			executionEngine.SetShowDiff(diff || interactive)
@@ -701,9 +691,9 @@ Examples:
 			// Set check mode if specified
 			if cfg.IsCheckMode() {
 				if cfg.IsColorOutputEnabled() {
-					fmt.Println(utils.Colors.Warning("⚠️  Running in check mode (dry-run) - no changes will be made"))
+					fmt.Fprintln(out, utils.Colors.Warning("⚠️  Running in check mode (dry-run) - no changes will be made"))
 				} else {
-					fmt.Println("Running in check mode (dry-run) - no changes will be made")
+					fmt.Fprintln(out, "Running in check mode (dry-run) - no changes will be made")
 				}
 				log.Info("Running in check mode (dry-run)")
 			}
@@ -744,62 +734,64 @@ Examples:
 			}
 
 			// Set up signal handler callbacks for graceful shutdown
-			signalHandler.SetCancelCallbacks(
-				// onConfirm callback - graceful shutdown with state saving
-				func(saveState bool) error {
-					// Stop all running tasks via execution pool
-					executionPool.StopAll()
+			if signalHandler != nil {
+				signalHandler.SetCancelCallbacks(
+					// onConfirm callback - graceful shutdown with state saving
+					func(saveState bool) error {
+						// Stop all running tasks via execution pool
+						executionPool.StopAll()
 
-					// Record execution interruption in audit
-					if auditRecorder != nil && executionID != "" {
-						if saveState {
-							_ = auditRecorder.SetMetadata("interrupt_status", "saved")
-						} else {
-							_ = auditRecorder.SetMetadata("interrupt_status", "discarded")
-						}
-					}
-
-					// Save state if requested
-					if saveState && stateManager != nil {
-						fmt.Println("Saving state...")
-						// Load current state first
-						currentState, err := stateManager.LoadState(ctx)
-						if err != nil {
-							log.Warn("Failed to load state: %v", err)
-							currentState = &types.State{
-								Version:   state.CurrentVersion,
-								Variables: make(map[string]interface{}),
-								Checksums: make(map[string]string),
+						// Record execution interruption in audit
+						if auditRecorder != nil && executionID != "" {
+							if saveState {
+								_ = auditRecorder.SetMetadata("interrupt_status", "saved")
+							} else {
+								_ = auditRecorder.SetMetadata("interrupt_status", "discarded")
 							}
 						}
-						// Save state with loaded data
-						if err := stateManager.SaveState(ctx, currentState); err != nil {
-							log.Warn("Failed to save state: %v", err)
+
+						// Save state if requested
+						if saveState && stateManager != nil {
+							fmt.Fprintln(out, "Saving state...")
+							// Load current state first
+							currentState, err := stateManager.LoadState(ctx)
+							if err != nil {
+								log.Warn("Failed to load state: %v", err)
+								currentState = &types.State{
+									Version:   state.CurrentVersion,
+									Variables: make(map[string]interface{}),
+									Checksums: make(map[string]string),
+								}
+							}
+							// Save state with loaded data
+							if err := stateManager.SaveState(ctx, currentState); err != nil {
+								log.Warn("Failed to save state: %v", err)
+							} else {
+								fmt.Fprintln(out, "✓ State saved successfully")
+							}
 						} else {
-							fmt.Println("✓ State saved successfully")
+							fmt.Fprintln(out, "State discarded as requested")
 						}
-					} else {
-						fmt.Println("State discarded as requested")
-					}
 
-					return nil
-				},
-				// onForce callback - immediate shutdown
-				func() error {
-					// Force stop all tasks immediately
-					executionPool.KillAll()
+						return nil
+					},
+					// onForce callback - immediate shutdown
+					func() error {
+						// Force stop all tasks immediately
+						executionPool.KillAll()
 
-					// Try to record force termination in audit
-					if auditRecorder != nil && executionID != "" {
-						_ = auditRecorder.SetMetadata("execution_force_terminated", map[string]interface{}{
-							"timestamp": time.Now(),
-							"reason":    "force_interrupt",
-						})
-					}
+						// Try to record force termination in audit
+						if auditRecorder != nil && executionID != "" {
+							_ = auditRecorder.SetMetadata("execution_force_terminated", map[string]interface{}{
+								"timestamp": time.Now(),
+								"reason":    "force_interrupt",
+							})
+						}
 
-					return nil
-				},
-			)
+						return nil
+					},
+				)
+			}
 
 			// === METRICS SERVER SETUP ===
 			var metricsInstance *metrics.Metrics
@@ -823,13 +815,14 @@ Examples:
 				}()
 
 				// Register cleanup for graceful shutdown
-				signalHandler.RegisterCleanup(func() error {
-					log.Info("Shutting down metrics server")
-					// Note: metrics server shutdown would need to be implemented separately
-					// The current implementation uses ListenAndServe which blocks
-					return nil
-				})
-
+				if signalHandler != nil {
+					signalHandler.RegisterCleanup(func() error {
+						log.Info("Shutting down metrics server")
+						// Note: metrics server shutdown would need to be implemented separately
+						// The current implementation uses ListenAndServe which blocks
+						return nil
+					})
+				}
 				log.Info("Metrics server configured - endpoints available at http://%s%s", metricsAddr, cfg.GetMetricsPath())
 				if cfg.GetMetricsAuthToken() != "" {
 					log.Info("  - Bearer token authentication enabled")
@@ -938,7 +931,7 @@ Examples:
 			}
 
 			if err != nil {
-				if err == context.Canceled || strings.Contains(err.Error(), "context canceled") {
+				if onResult == nil && (err == context.Canceled || strings.Contains(err.Error(), "context canceled")) {
 					fmt.Fprintf(os.Stderr, "\n⚠️  Playbook execution interrupted by user\n")
 					os.Exit(130)
 				}
@@ -947,10 +940,6 @@ Examples:
 
 			// resources that left the playbook: removed or put back
 			if !noDestroy && !cfg.IsCheckMode() && result != nil && !result.Failed {
-				out := resultOut
-				if outputFormat == "json" || outputFormat == "yaml" {
-					out = os.Stderr
-				}
 				known := func(host string) bool {
 					hosts, err := inventoryManager.GetHosts(host)
 					return err == nil && len(hosts) > 0
@@ -968,15 +957,14 @@ Examples:
 				recordAuditResults(auditRecorder, result, log)
 			}
 
+			execResult := execution.FromPlaybookResult(result, playbookPath, filepath.Base(playbookPath), startTime, duration)
+
 			// === PHASE 2A: Cache Execution Results ===
 			// Save results to cache for later retrieval without re-execution
 			if homeDir != "" {
 				cacheDir := filepath.Join(homeDir, ".onigirazu", "cache", "executions")
 				cacheMgr, err := execution.NewCacheManagerWithPath(cacheDir)
 				if err == nil {
-					execResult := execution.FromPlaybookResult(result, playbookPath,
-						filepath.Base(playbookPath), startTime, duration)
-
 					// Save to cache
 					if err := cacheMgr.Save(execResult); err != nil {
 						log.Warn("Failed to cache execution results: %v", err)
@@ -990,12 +978,12 @@ Examples:
 			// Background mode: Return execution ID immediately
 			if backgroundMode {
 				execID := fmt.Sprintf("exec-%d", time.Now().Unix())
-				fmt.Printf("\n✓ Playbook started in background\n")
-				fmt.Printf("Execution ID: %s\n", execID)
-				fmt.Printf("\nView results with:\n")
-				fmt.Printf("  onigirazu show-execution %s\n", execID)
-				fmt.Printf("  onigirazu show-execution %s --verbose\n", execID)
-				fmt.Printf("  onigirazu show-execution %s --debug\n", execID)
+				fmt.Fprintf(out, "\n✓ Playbook started in background\n")
+				fmt.Fprintf(out, "Execution ID: %s\n", execID)
+				fmt.Fprintf(out, "\nView results with:\n")
+				fmt.Fprintf(out, "  onigirazu show-execution %s\n", execID)
+				fmt.Fprintf(out, "  onigirazu show-execution %s --verbose\n", execID)
+				fmt.Fprintf(out, "  onigirazu show-execution %s --debug\n", execID)
 				return nil
 			}
 
@@ -1010,20 +998,10 @@ Examples:
 					}
 				}
 
-				useColors := cfg.IsColorOutputEnabled() && utils.IsColorTerminal()
-				displayer := execution.NewDisplayer(displayMode, useColors)
+				useColors := cfg.IsColorOutputEnabled() && utils.IsColorTerminalFor(out)
+				displayer := execution.NewDisplayerWithWriter(displayMode, useColors, out)
 
-				// Create and display execution result
-				if homeDir != "" {
-					cacheDir := filepath.Join(homeDir, ".onigirazu", "cache", "executions")
-					cacheMgr, err := execution.NewCacheManagerWithPath(cacheDir)
-					if err == nil {
-						latestResult, err := cacheMgr.LoadLatest()
-						if err == nil && latestResult != nil {
-							displayer.DisplayExecution(latestResult)
-						}
-					}
-				}
+				displayer.DisplayExecution(execResult)
 			}
 
 			// Prepare execution summary
@@ -1174,14 +1152,14 @@ Examples:
 					return fmt.Errorf("run stopped by user before it finished")
 				}
 				if result.RolledBack {
-					printRollout(os.Stdout, result.Rollout)
+					printRollout(out, result.Rollout)
 					return &ExitError{Code: 5, Message: "an unhealthy batch was rolled back; the rollout stopped"}
 				}
-				printRollout(os.Stdout, result.Rollout)
+				printRollout(out, result.Rollout)
 				return fmt.Errorf("playbook execution failed")
 			}
 
-			printRollout(os.Stdout, result.Rollout)
+			printRollout(out, result.Rollout)
 			log.Info("Playbook execution successful")
 			// Print formatted execution end
 			log.PrintExecutionEnd(summary)

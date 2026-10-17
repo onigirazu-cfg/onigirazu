@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"strings"
@@ -16,6 +17,7 @@ import (
 
 // SignalHandler manages graceful shutdown with user confirmation and cleanup
 type SignalHandler struct {
+	output           io.Writer
 	ctx              context.Context
 	cancel           context.CancelFunc
 	sigChan          chan os.Signal
@@ -30,14 +32,23 @@ type SignalHandler struct {
 
 // NewSignalHandler creates a new signal handler with specified timeout
 func NewSignalHandler(ctx context.Context, shutdownTimeout time.Duration) *SignalHandler {
+	return NewSignalHandlerWithWriter(ctx, shutdownTimeout, os.Stdout)
+}
+
+// NewSignalHandlerWithWriter sends shutdown messages to output.
+func NewSignalHandlerWithWriter(ctx context.Context, shutdownTimeout time.Duration, output io.Writer) *SignalHandler {
+	if output == nil {
+		output = os.Stdout
+	}
 	newCtx, cancel := context.WithCancel(ctx)
 
 	sh := &SignalHandler{
+		output:          output,
 		ctx:             newCtx,
 		cancel:          cancel,
 		sigChan:         make(chan os.Signal, 2), // Buffer for multiple signals
 		shutdownTimeout: shutdownTimeout,
-		logger:          logger.New(false), // FIXED in Phase 1: Initialize logger
+		logger:          logger.NewWithWriter(false, output), // FIXED in Phase 1: Initialize logger
 	}
 
 	// Start signal listener
@@ -96,21 +107,21 @@ func (sh *SignalHandler) handleSignals() {
 // handleFirstInterrupt prompts user for confirmation
 func (sh *SignalHandler) handleFirstInterrupt(sig os.Signal) {
 	sh.logger.Debug("handleFirstInterrupt called") // FIXED in Phase 1: Use logger
-	fmt.Println()
-	fmt.Println("╔══════════════════════════════════════════════════════════╗")
-	fmt.Println("║         Interrupt Signal Received (Ctrl+C)              ║")
-	fmt.Println("╚══════════════════════════════════════════════════════════╝")
-	fmt.Println()
-	fmt.Println("Currently running tasks will be interrupted.")
-	fmt.Println()
+	fmt.Fprintln(sh.output)
+	fmt.Fprintln(sh.output, "╔══════════════════════════════════════════════════════════╗")
+	fmt.Fprintln(sh.output, "║         Interrupt Signal Received (Ctrl+C)              ║")
+	fmt.Fprintln(sh.output, "╚══════════════════════════════════════════════════════════╝")
+	fmt.Fprintln(sh.output)
+	fmt.Fprintln(sh.output, "Currently running tasks will be interrupted.")
+	fmt.Fprintln(sh.output)
 
 	// Ask about state saving
 	saveState := sh.promptSaveState()
 
-	fmt.Println()
-	fmt.Println("Starting graceful shutdown (max 10 seconds)...")
-	fmt.Println("Press Ctrl+C again to force immediate termination.")
-	fmt.Println()
+	fmt.Fprintln(sh.output)
+	fmt.Fprintln(sh.output, "Starting graceful shutdown (max 10 seconds)...")
+	fmt.Fprintln(sh.output, "Press Ctrl+C again to force immediate termination.")
+	fmt.Fprintln(sh.output)
 
 	sh.gracefulShutdown = true
 	sh.cancel()
@@ -131,13 +142,13 @@ func (sh *SignalHandler) handleFirstInterrupt(sig os.Signal) {
 
 // handleForceInterrupt forces immediate shutdown
 func (sh *SignalHandler) handleForceInterrupt(sig os.Signal) {
-	fmt.Println()
-	fmt.Println("╔══════════════════════════════════════════════════════════╗")
-	fmt.Println("║     Force Shutdown Initiated (Second Ctrl+C)            ║")
-	fmt.Println("╚══════════════════════════════════════════════════════════╝")
-	fmt.Println()
-	fmt.Println("⚠️  Terminating immediately - tasks may be interrupted!")
-	fmt.Println()
+	fmt.Fprintln(sh.output)
+	fmt.Fprintln(sh.output, "╔══════════════════════════════════════════════════════════╗")
+	fmt.Fprintln(sh.output, "║     Force Shutdown Initiated (Second Ctrl+C)            ║")
+	fmt.Fprintln(sh.output, "╚══════════════════════════════════════════════════════════╝")
+	fmt.Fprintln(sh.output)
+	fmt.Fprintln(sh.output, "⚠️  Terminating immediately - tasks may be interrupted!")
+	fmt.Fprintln(sh.output)
 
 	// Execute cleanup functions
 	sh.executeCleanups()
@@ -157,9 +168,9 @@ func (sh *SignalHandler) shutdownTimeout_timer() {
 
 	// If we're still running after timeout, force shutdown
 	if sh.gracefulShutdown {
-		fmt.Println()
-		fmt.Println("⚠️  Graceful shutdown timeout exceeded - forcing termination!")
-		fmt.Println()
+		fmt.Fprintln(sh.output)
+		fmt.Fprintln(sh.output, "⚠️  Graceful shutdown timeout exceeded - forcing termination!")
+		fmt.Fprintln(sh.output)
 		if sh.onForceCancel != nil {
 			_ = sh.onForceCancel()
 		}
@@ -172,18 +183,18 @@ func (sh *SignalHandler) promptSaveState() bool {
 	reader := bufio.NewReader(os.Stdin)
 
 	for {
-		fmt.Print("Save state/audit data before exiting? [Y/n]: ")
+		fmt.Fprint(sh.output, "Save state/audit data before exiting? [Y/n]: ")
 		response, _ := reader.ReadString('\n')
 		response = strings.TrimSpace(strings.ToLower(response))
 
 		if response == "" || response == "y" || response == "yes" {
-			fmt.Println("✓ State will be saved")
+			fmt.Fprintln(sh.output, "✓ State will be saved")
 			return true
 		} else if response == "n" || response == "no" {
-			fmt.Println("✓ State will be discarded")
+			fmt.Fprintln(sh.output, "✓ State will be discarded")
 			return false
 		} else {
-			fmt.Println("Please answer 'y' or 'n'")
+			fmt.Fprintln(sh.output, "Please answer 'y' or 'n'")
 		}
 	}
 }

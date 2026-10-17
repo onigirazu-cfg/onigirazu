@@ -41,6 +41,11 @@ func NewEnhancedParser(templateEngine interfaces.TemplateEngine, logger interfac
 	return parser
 }
 
+// SetRoleSearch sets the role and collection paths for this parser.
+func (p *EnhancedParser) SetRoleSearch(roles, collections []string) {
+	p.roleLoader.SetRoleSearch(roles, collections)
+}
+
 // SetLenient sets lenient mode for inventory parsing
 func (p *EnhancedParser) SetLenient(lenient bool) {
 	p.lenient = lenient

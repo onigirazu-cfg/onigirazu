@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -111,11 +112,19 @@ func (o driftCheckOptions) applyArgs(playbook string, check bool) []string {
 
 // runPlaybook runs apply with args and returns its result
 func runPlaybook(args []string) (*types.PlaybookResult, error) {
+	return runPlaybookContext(context.Background(), args)
+}
+
+func runPlaybookContext(ctx context.Context, args []string) (*types.PlaybookResult, error) {
 	var result *types.PlaybookResult
 	apply := newApplyCommand(func(r *types.PlaybookResult) { result = r })
+	apply.SetContext(ctx)
 	apply.SetArgs(args)
 	apply.SilenceUsage, apply.SilenceErrors = true, true
 	err := apply.Execute()
+	if ctx.Err() != nil {
+		return result, ctx.Err()
+	}
 	if result == nil && err != nil {
 		return nil, err
 	}
