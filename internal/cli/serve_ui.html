@@ -5,54 +5,276 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{title}} — onigirazu</title>
 <style>
-:root{--bg:#f6f7f9;--fg:#1e2430;--muted:#6b7280;--card:#fff;--line:#e5e7eb;--ok:#2a9d6f;--warn:#d98f1a;--bad:#d14343;--accent:#3b5bdb;--add-bg:#e0f4e8;--remove-bg:#fbe5e5;--add-fg:#17623d;--remove-fg:#942b2b}
-@media (prefers-color-scheme:dark){:root{--bg:#0f1218;--fg:#e6e8ee;--muted:#9aa3b2;--card:#171b24;--line:#2a3140;--ok:#52b98b;--warn:#dba344;--bad:#eb7777;--accent:#91a4ff;--add-bg:#163629;--remove-bg:#421f25;--add-fg:#9ce1b4;--remove-fg:#ffb1b1}}
-*{box-sizing:border-box}body{margin:0;font:14px/1.45 system-ui,-apple-system,Segoe UI,sans-serif;background:var(--bg);color:var(--fg)}
-header{display:flex;align-items:center;gap:16px;padding:12px 24px;border-bottom:1px solid var(--line);background:var(--card)}
-header h1{font-size:16px;margin:0}header .who{margin-left:auto;color:var(--muted)}
-nav button{background:none;border:0;padding:8px 12px;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;font:inherit}
-nav button.on{color:var(--fg);border-color:var(--accent)}
-.banner{padding:8px 24px;background:var(--warn);color:#fff}
-main{padding:16px 24px;max-width:1200px;margin:0 auto}
-table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:8px;overflow:hidden}
-th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--line);vertical-align:top}th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase}
-tr:last-child td{border-bottom:0}.b{display:inline-block;padding:1px 8px;border-radius:10px;font-size:12px;color:#fff;background:var(--muted)}
-.ok{background:var(--ok)}.drift,.changed{background:var(--warn)}.refused,.failed,.error,.unreachable,.timed_out{background:var(--bad)}.cancelling,.pending{background:var(--warn)}.queued,.running,.scheduled{background:var(--accent)}.cancelled,.rejected,.expired{background:var(--muted)}
-.recent{display:flex;gap:3px;flex-wrap:wrap;max-width:145px;margin-top:5px}.recent-square{display:block;flex:0 0 9px;height:9px;border:1px solid currentColor;border-radius:1px;background:currentColor;color:var(--muted)}.recent-square.ok{color:var(--ok)}.recent-square.drift,.recent-square.changed{color:var(--warn)}.recent-square.failed,.recent-square.error,.recent-square.timed_out,.recent-square.unreachable{color:var(--bad)}.recent-square.check{background:transparent}.sparkline{display:block;width:100%;height:40px}.sparkline rect{fill:var(--muted)}.sparkline rect.ok{fill:var(--ok)}.sparkline rect.drift,.sparkline rect.changed{fill:var(--warn)}.sparkline rect.failed,.sparkline rect.error,.sparkline rect.timed_out{fill:var(--bad)}.compare-controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:12px 0}.compare-warning{color:var(--warn)}
-.approval-card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:12px}
-button.run{border:1px solid var(--line);background:var(--card);color:var(--fg);padding:4px 10px;border-radius:6px;cursor:pointer}button.run:disabled{opacity:.5}
-.muted{color:var(--muted)}pre{background:var(--card);border:1px solid var(--line);padding:12px;border-radius:8px;overflow:auto;max-height:60vh}
-.adhoc-form{display:flex;gap:8px;align-items:end;flex-wrap:wrap}.adhoc-form label{display:grid;gap:4px}.adhoc-form input{padding:4px 8px;border:1px solid var(--line);border-radius:4px;background:var(--card);color:var(--fg)}
-.limit-picker{display:grid;gap:4px;flex:1 1 100%;min-width:0;max-width:calc(100vw - 50px)}.limit-chips{display:flex;gap:4px;flex-wrap:wrap}.limit-chips button{max-width:100%;overflow-wrap:anywhere}.limit-chips [aria-pressed="true"]{border-color:var(--accent);color:var(--accent)}.limit-picker input{width:100%;min-width:0}
-.filters{display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin-bottom:12px}.filters label{display:grid;gap:3px;flex:1 1 130px;min-width:0}.filters input,.filters select{width:100%;min-width:0;padding:5px 8px;border:1px solid var(--line);border-radius:4px;background:var(--card);color:var(--fg)}
-.empty{padding:24px;color:var(--muted);text-align:center}
+/* Tokens: zinc surfaces and semantic status colours. */
+:root{color-scheme:light;--bg:#fff;--content:oklch(97% .003 285.8);--card:#fff;--fg:oklch(14.5% .017 285.8);--muted:oklch(44% .015 285.8);--line:oklch(92.2% .007 285.8);--hover:oklch(96% .003 285.8);--primary:#18181b;--primary-fg:#fff;--accent:#245dbe;--selection:#e7efff;--ok:#187446;--ok-bg:#e5f5ec;--warn:#936013;--warn-bg:#fff2d5;--bad:oklch(50% .20 27.3);--bad-bg:#fee9e8;--blue:#245dbe;--blue-bg:#e9f0ff;--violet:#7445ad;--violet-bg:#f1eaff;--grey:#60606b;--grey-bg:#efeff2;--add-bg:#e0f4e8;--remove-bg:#fbe5e5;--add-fg:#17623d;--remove-fg:#942b2b;--destructive:oklch(57.7% .245 27.3);--shadow:0 1px 3px rgb(0 0 0/.1)}
 
-header,nav{flex-wrap:wrap}header{overflow-wrap:anywhere}main,header>*{min-width:0}main{overflow-wrap:anywhere}a{color:var(--accent)}
-.table-scroll{width:100%;max-width:100%;overflow-x:auto;margin:12px 0}.table-scroll table{min-width:560px}th,td{overflow-wrap:anywhere}
-.report-card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px;margin:12px 0}.report-card h2,.report-card h3{margin-top:0}
-.inventory-effective{margin-top:6px}.inventory-effective[open] summary{margin-bottom:8px}.inventory-var{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:2px 12px;padding:6px 0;border-top:1px solid var(--line)}.inventory-var strong{grid-column:1/-1}.inventory-var span{min-width:0;overflow-wrap:anywhere}
-.tabs{display:flex;gap:8px;flex-wrap:wrap;margin:16px 0}.tabs [aria-selected="true"]{border-color:var(--accent);color:var(--accent)}
-.item{padding:8px 0;border-bottom:1px solid var(--line)}.text{white-space:pre-wrap;overflow-wrap:anywhere}.error-text{color:var(--bad)}.missing{color:var(--muted);background:var(--bg)}
-.task-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:start}.task-row>div{min-width:0}.task-meta{display:flex;gap:8px;align-items:center;justify-content:flex-end;flex-wrap:wrap}.task-duration{white-space:nowrap;font-variant-numeric:tabular-nums}.task-list{margin:0;padding-left:24px}.task-host summary{overflow-wrap:anywhere}.task-host summary .muted{display:block;margin-left:16px}.task-host[open] summary{margin-bottom:8px}
-summary{cursor:pointer}pre{max-width:100%}.diff span{display:inline-block;min-width:100%}.diff-add{background:var(--add-bg);color:var(--add-fg)}.diff-remove{background:var(--remove-bg);color:var(--remove-fg)}
-@media(max-width:700px){header{align-items:flex-start;flex-direction:column;gap:8px;padding:12px}header .who{margin-left:0}nav{display:flex;max-width:100%}main{padding:12px;width:100%}.jobs-table .target{display:none}.adhoc-form input{max-width:100%}.adhoc-form label{max-width:100%}}
-@media(max-width:700px){.table-scroll .inventory-hosts-table{display:block;min-width:0}.inventory-hosts-table tbody{display:block}.inventory-hosts-table thead{display:none}.inventory-hosts-table tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);border-bottom:1px solid var(--line)}.inventory-hosts-table td{display:block;min-width:0;border:0;padding:6px 8px}.inventory-hosts-table td::before{content:attr(data-label);display:block;color:var(--muted);font-size:12px}.inventory-hosts-table .inventory-host-vars{grid-column:1/-1}}
+:root[data-theme=dark]{color-scheme:dark;--bg:oklch(14.1% .005 285.8);--content:oklch(11.5% .005 285.8);--card:oklch(20.5% .007 285.8);--fg:oklch(98.5% .002 285.8);--muted:oklch(70.8% .015 285.8);--line:oklch(27.4% .009 285.8);--hover:oklch(24% .007 285.8);--primary:#fafafa;--primary-fg:#18181b;--accent:#9dbbff;--selection:#203773;--ok:#78d4a0;--ok-bg:#16382a;--warn:#f4c277;--warn-bg:#3a2b17;--bad:oklch(70% .19 27.3);--bad-bg:#422324;--blue:#9dbbff;--blue-bg:#1c2b4a;--violet:#c6a7f0;--violet-bg:#322441;--grey:#b8b8c2;--grey-bg:#303036;--add-bg:#163629;--remove-bg:#421f25;--add-fg:#9ce1b4;--remove-fg:#ffb1b1}
+
+*{box-sizing:border-box}
+body{margin:0;font:14px/1.5 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--fg);background:var(--content)}
+button,input,select{font:inherit}
+button,a,input,select,summary{outline-offset:3px}
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{outline:2px solid var(--accent)}
+button{cursor:pointer}
+button:disabled{opacity:.45;cursor:not-allowed}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+svg.icon{width:16px;height:16px;flex-shrink:0;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+[hidden]{display:none!important}
+
+/* Application shell. */
+.topbar{height:56px;display:flex;align-items:center;gap:14px;padding:0 20px;background:var(--bg);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20}
+.brand{display:flex;gap:10px;align-items:center;min-width:200px;color:var(--fg);font-size:17px;font-weight:650;white-space:nowrap;overflow:hidden}
+.brand svg{width:28px;height:28px;flex-shrink:0}
+.brand span{overflow:hidden;text-overflow:ellipsis}
+.search{margin:auto;position:relative;width:min(440px,32vw)}
+.search .icon{position:absolute;left:11px;top:10px;color:var(--muted)}
+.search input{width:100%;height:36px;padding:7px 35px;border:1px solid var(--line);background:var(--content);border-radius:6px;color:var(--fg)}
+.search kbd{position:absolute;right:12px;top:8px;color:var(--muted)}
+.top-actions{display:flex;align-items:center;gap:8px}
+.activity{font-size:12px;color:var(--muted);white-space:nowrap}
+.icon-button{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border:1px solid transparent;background:transparent;color:var(--fg);border-radius:6px}
+.icon-button:hover{background:var(--hover)}
+.user-menu{position:relative}
+.user-menu summary{list-style:none}
+.user-popover{position:absolute;right:0;top:42px;min-width:210px;padding:12px;background:var(--card);border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow)}
+.user-popover p{margin:0 0 10px}
+.sidebar{position:fixed;left:0;top:56px;bottom:0;width:240px;background:var(--bg);border-right:1px solid var(--line);padding:16px 8px;display:flex;flex-direction:column;z-index:15}
+.sidebar nav{display:grid;gap:4px}
+.sidebar nav button{display:flex;gap:12px;align-items:center;text-align:left;color:var(--muted);background:none;border:0;padding:10px 14px;border-radius:6px;width:100%}
+.sidebar nav button:hover{background:var(--hover);color:var(--fg)}
+.sidebar nav button.on{background:var(--line);color:var(--fg);font-weight:600}
+.sidebar-foot{margin-top:auto;padding:16px;color:var(--muted);font-size:12px}
+.banner{margin-left:240px;padding:8px 28px;border-bottom:1px solid var(--line);background:var(--warn-bg);color:var(--warn);font-size:13px}
+.banner.error-banner{background:var(--bad-bg);color:var(--bad)}
+main{margin-left:240px;min-width:0;padding:28px;overflow-wrap:anywhere}
+.page-header{display:flex;gap:16px;align-items:center;justify-content:space-between;margin-bottom:26px}
+.page-header h1{font-size:26px;line-height:1.2;letter-spacing:-.7px;margin:0 0 6px;font-weight:650}
+.page-header p{margin:0;color:var(--muted)}
+.page-actions,.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.menu-button{display:none}
+.drawer-scrim{display:none}
+.muted{color:var(--muted)}
+small{font-size:12px}
+h2{font-size:18px;letter-spacing:-.3px}
+h3{font-size:15px}
+p{margin:12px 0}
+
+/* Components and report content. */
+button.run{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:5px 11px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg);box-shadow:var(--shadow);white-space:nowrap}
+button.run:hover:not(:disabled){background:var(--hover)}
+button.primary{background:var(--primary);color:var(--primary-fg);border-color:var(--primary)}
+button.primary:hover:not(:disabled){opacity:.85;background:var(--primary)}
+.table-scroll{width:100%;max-width:100%;overflow:auto;border:1px solid var(--line);border-radius:10px;background:var(--bg);margin:14px 0;box-shadow:var(--shadow)}
+table{width:100%;border-collapse:collapse;min-width:560px}
+th,td{text-align:left;padding:13px 16px;border-bottom:1px solid var(--line);vertical-align:top;overflow-wrap:anywhere}
+th{background:var(--card);color:var(--muted);font-size:12px;font-weight:550;white-space:nowrap}
+tr:last-child td{border-bottom:0}
+tbody tr:hover{background:var(--hover)}
+.jobs-table td:first-child a{font-weight:600;color:var(--fg)}
+.jobs-table td:last-child{min-width:190px;text-align:right}
+.jobs-table td:last-child button{margin:0 0 5px 4px}
+.table-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;color:var(--muted);font-size:12px;margin:14px 0}
+.pagination{display:flex;gap:8px}
+.b{display:inline-flex;align-items:center;gap:5px;padding:2px 7px;font-size:11px;line-height:1.5;font-weight:550;border-radius:6px;background:var(--grey-bg);color:var(--grey);white-space:nowrap}
+.ok{color:var(--ok);background:var(--ok-bg)}
+.drift,.changed,.cancelling,.pending{color:var(--warn);background:var(--warn-bg)}
+.refused,.failed,.error,.unreachable,.timed_out{color:var(--bad);background:var(--bad-bg)}
+.queued,.running,.check{color:var(--blue);background:var(--blue-bg)}
+.scheduled{color:var(--violet);background:var(--violet-bg)}
+.cancelled,.rejected,.expired{color:var(--grey);background:var(--grey-bg)}
+.recent{display:flex;gap:3px;max-width:145px;margin-top:7px}
+.recent-square{display:block;flex:0 0 7px;height:12px;border:1px solid currentColor;border-radius:2px;background:currentColor;color:var(--grey)}
+.recent-square.ok{color:var(--ok)}
+.recent-square.drift,.recent-square.changed{color:var(--warn)}
+.recent-square.failed,.recent-square.error,.recent-square.timed_out,.recent-square.unreachable{color:var(--bad)}
+.recent-square.queued,.recent-square.running{color:var(--blue)}
+.recent-square.scheduled{color:var(--violet)}
+.recent-square.pending,.recent-square.cancelling{color:var(--warn)}
+.recent-square.refused{color:var(--bad)}
+.recent-square.check{background:transparent}
+.sparkline{display:block;width:100%;height:40px;margin-top:12px}
+.sparkline rect{fill:var(--muted)}
+.sparkline rect.ok{fill:var(--ok)}
+.sparkline rect.drift,.sparkline rect.changed{fill:var(--warn)}
+.sparkline rect.failed,.sparkline rect.error,.sparkline rect.timed_out{fill:var(--bad)}
+.compare-controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:14px 0}
+.compare-warning{color:var(--warn)}
+.approval-card,.report-card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:22px;margin:14px 0;box-shadow:var(--shadow)}
+.approval-card{border-left:3px solid var(--warn)}
+.approval-card p:last-child{margin-bottom:0}
+.report-card h2,.report-card h3{margin-top:0}
+.empty{padding:44px 20px;text-align:center;color:var(--muted);border:1px solid var(--line);border-radius:12px;background:var(--bg)}
+pre{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:16px;overflow:auto;max-height:60vh;max-width:100%;font-size:12px}
+.filters{display:flex;align-items:end;gap:12px;flex-wrap:wrap;border:1px solid var(--line);background:var(--card);border-radius:12px;padding:18px;margin-bottom:20px}
+.filters label{display:grid;gap:6px;flex:1 1 130px;min-width:0;color:var(--muted);font-size:12px}
+input:not([type=checkbox]),select{min-width:0;max-width:100%;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg);padding:8px 10px;min-height:36px}
+input[type=checkbox]{accent-color:var(--accent);width:15px;height:15px}
+select{padding-right:26px}
+.filters input,.filters select{width:100%}
+.tabs{display:flex;gap:4px;overflow:auto;flex-wrap:nowrap;border-bottom:1px solid var(--line);margin:16px 0 20px;padding-bottom:8px}
+.tabs button.run{border-color:transparent;box-shadow:none;background:none;color:var(--muted)}
+.tabs [aria-selected=true]{background:var(--hover)!important;color:var(--fg)!important;border-color:var(--line)!important}
+.item{padding:12px 0;border-bottom:1px solid var(--line)}
+.text{white-space:pre-wrap;overflow-wrap:anywhere}
+.error-text{color:var(--bad)}
+.missing{color:var(--muted);background:var(--content)}
+summary{cursor:pointer}
+.task-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:start}
+.task-row>div{min-width:0}
+.task-meta{display:flex;gap:8px;align-items:center;justify-content:flex-end;flex-wrap:wrap}
+.task-duration{white-space:nowrap;font-variant-numeric:tabular-nums}
+.task-list{margin:0;padding-left:24px}
+.task-host summary .muted{display:block;margin-left:16px}
+.task-host[open] summary{margin-bottom:8px}
+.diff span{display:inline-block;min-width:100%}
+.diff-add{background:var(--add-bg);color:var(--add-fg)}
+.diff-remove{background:var(--remove-bg);color:var(--remove-fg)}
+.inventory-effective{margin-top:8px}
+.inventory-effective[open] summary{margin-bottom:8px}
+.inventory-var{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:2px 12px;padding:6px 0;border-top:1px solid var(--line)}
+.inventory-var strong{grid-column:1/-1}
+.inventory-var span{min-width:0;overflow-wrap:anywhere}
+
+/* Job inbox and run sheet. */
+.job-split{display:grid;grid-template-columns:minmax(260px,340px) minmax(0,1fr);border:1px solid var(--line);border-radius:12px;background:var(--bg);overflow:hidden;min-height:510px}
+.run-list{border-right:1px solid var(--line);background:var(--bg);min-width:0}
+.run-list .report-card{border:0;border-bottom:1px solid var(--line);border-radius:0;margin:0;padding:16px;box-shadow:none}
+.run-list .compare-controls{padding:0 16px;font-size:12px}
+.run-list .compare-controls .muted{max-width:170px}
+.run-item{padding:14px 16px;border-top:1px solid var(--line);display:grid;grid-template-columns:18px minmax(0,1fr);gap:8px}
+.run-item.selected{background:var(--selection)}
+.run-item:hover{background:var(--hover)}
+.run-item.selected:hover{background:var(--selection)}
+.run-item a[data-res]{display:block;color:var(--fg);font-weight:600;margin:6px 0}
+.run-item .run-summary{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin:5px 0;color:var(--muted);font-size:12px}
+.run-item .muted{font-size:12px}
+.run-item .run-top{display:flex;justify-content:space-between;gap:8px}
+.run-detail{min-width:0;padding:20px}
+.run-detail>.report-card{margin-top:14px}
+.run-detail .toolbar{padding-bottom:14px;border-bottom:1px solid var(--line)}
+.run-detail .report-card{padding:18px}
+.run-detail .empty{margin-top:100px;border:0}
+.run-detail [role=tabpanel]{min-width:0}
+.run-detail .table-scroll table{min-width:500px}
+.sheet{margin:0 0 0 auto;height:100dvh;max-height:100dvh;width:480px;max-width:100%;padding:0;border:0;border-left:1px solid var(--line);background:var(--content);color:var(--fg);box-shadow:-8px 0 40px #0002}
+.sheet::backdrop{background:rgb(0 0 0/.45)}
+.sheet-header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:22px;border-bottom:1px solid var(--line);background:var(--bg)}
+.sheet-header h2{margin:0}
+.sheet-body{padding:0 20px 24px}
+.adhoc-form{display:block}
+.adhoc-form .report-card{padding:20px}
+.adhoc-form label{display:grid;gap:8px;margin:16px 0;font-weight:550}
+.adhoc-form label small{font-weight:400}
+.adhoc-form label input[type=checkbox]{justify-self:start}
+.adhoc-form input,.adhoc-form select{width:100%}
+.adhoc-form input[type=checkbox]{width:16px}
+.required{color:var(--bad)}
+.limit-picker{min-width:0;max-width:100%}
+.limit-chips{display:flex;gap:6px;flex-wrap:wrap}
+.limit-chips button{max-width:100%;white-space:normal;overflow-wrap:anywhere;box-shadow:none;font-size:12px}
+.limit-chips [aria-pressed=true]{border-color:var(--accent);background:var(--selection);color:var(--accent)}
+.sheet-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:20px}
+.mobile-back{display:none}
+
+@media(max-width:1100px){.activity{max-width:140px;white-space:normal;line-height:1.3}
+.brand{min-width:160px}
+.topbar{gap:10px;padding:0 16px}
+.job-split{grid-template-columns:minmax(240px,300px) minmax(0,1fr)}
+main{padding:24px}
+.run-detail{padding:16px}
+}
+
+@media(max-width:900px){.sidebar{width:64px;padding:16px 6px}
+.sidebar nav button{justify-content:center;padding:12px}
+.sidebar nav button span,.sidebar-foot{display:none}
+main,.banner{margin-left:64px}
+.brand{min-width:0;max-width:190px}
+.job-split{grid-template-columns:minmax(220px,280px) minmax(0,1fr)}
+.search{width:auto;flex:1}
+.search input{min-width:100px}
+.top-actions{gap:3px}
+.activity{display:none}
+}
+
+@media(max-width:700px){.job-split{display:block}
+.run-list{border-right:0}
+.job-split.detail-open .run-list{display:none}
+.job-split:not(.detail-open) .run-detail{display:none}
+.mobile-back{display:inline-flex}
+.jobs-table .target{display:none}
+.page-header{align-items:flex-start}
+.table-scroll .inventory-hosts-table{display:block;min-width:0}
+.inventory-hosts-table tbody{display:block}
+.inventory-hosts-table thead{display:none}
+.inventory-hosts-table tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);border-bottom:1px solid var(--line)}
+.inventory-hosts-table td{display:block;min-width:0;border:0;padding:8px}
+.inventory-hosts-table td::before{content:attr(data-label);display:block;color:var(--muted);font-size:12px}
+.inventory-hosts-table .inventory-host-vars{grid-column:1/-1}
+}
+
+@media(max-width:600px){.topbar{padding:0 10px;gap:6px}
+.brand{font-size:14px;max-width:135px;gap:6px}
+.brand svg{width:23px}
+.search{min-width:0}
+.search input{min-width:0;padding-right:8px;padding-left:28px}
+.search kbd{display:none}
+.search .icon{left:8px}
+.top-actions #pause{font-size:11px;padding:4px 6px}
+.top-actions .icon-button{width:28px}
+.menu-button{display:inline-flex;flex-shrink:0}
+.sidebar{transform:translateX(-100%);width:240px;transition:transform .15s}
+.sidebar nav button{justify-content:flex-start}
+.sidebar nav button span,.sidebar-foot{display:block}
+.drawer-open .sidebar{transform:none}
+.drawer-open .drawer-scrim{display:block;position:fixed;inset:56px 0 0;background:#0007;z-index:14;border:0}
+main{margin-left:0;padding:20px 12px}
+.banner{margin-left:0;padding:8px 12px}
+.page-header{margin-bottom:20px}
+.page-header h1{font-size:24px}
+.page-header p{font-size:12px}
+.report-card,.approval-card{padding:16px}
+.filters{padding:12px;gap:10px}
+.task-row{grid-template-columns:minmax(0,1fr)}
+.task-meta{justify-content:flex-start}
+.run-detail{padding:12px}
+.table-footer{flex-wrap:wrap}
+.sheet-body{padding:0 12px 20px}
+}
+
+@media(prefers-reduced-motion:reduce){*{transition:none!important}
+}
+
 </style>
 </head>
 <body>
-<header><h1>{{title}}</h1><nav><button data-v="jobs" class="on">Jobs</button><button data-v="hosts">Hosts</button><button data-v="inventory">Inventory</button><button data-v="runs">Runs</button><button data-v="audit">Audit</button></nav><span class="who" id="activity" hidden></span><button class="run" id="pause" hidden>Pause</button><span class="who" id="who"></span></header>
-<div class="banner" id="storage-error" style="background:var(--bad)" role="alert" hidden></div>
-<div class="banner" id="pause-banner" hidden></div>
-<main id="main"></main>
+<header class="topbar">
+<button class="icon-button menu-button" id="menu" aria-controls="main-navigation" aria-label="Open navigation" aria-expanded="false"></button>
+<a class="brand" href="#" aria-label="onigirazu home"><svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M13 5c1.3-2 4.7-2 6 0l10 18c1.5 2.8-.5 6-3.5 6h-19C3.5 29 1.5 25.8 3 23Z" stroke="currentColor" stroke-width="1.7"/><rect x="12" y="19" width="8" height="10" rx="1.5" fill="currentColor"/></svg><span>{{title}}</span></a>
+<label class="search"><span id="search-icon"></span><input id="search" type="search" aria-label="Search current list" placeholder="Search…"><kbd>/</kbd></label>
+<div class="top-actions"><span class="activity" id="activity" role="status" aria-live="polite" hidden></span><button class="run" id="pause" hidden>Pause</button><button class="icon-button" id="theme" aria-label="Theme: system" title="Theme: system"></button><details class="user-menu" id="user-menu"><summary class="icon-button" aria-label="User menu" id="user-icon"></summary><div class="user-popover"><p id="who"></p><button class="run" id="set-token">Set token</button></div></details></div>
+</header>
+<button class="drawer-scrim" id="drawer-scrim" aria-label="Close navigation"></button>
+<aside class="sidebar"><nav id="main-navigation" aria-label="Main navigation"><button data-v="jobs" class="on"><span>Jobs</span></button><button data-v="runs"><span>Runs</span></button><button data-v="hosts"><span>Hosts</span></button><button data-v="inventory"><span>Inventory</span></button><button data-v="audit"><span>Audit</span></button></nav><div class="sidebar-foot">onigirazu<br><span>Fleet automation</span></div></aside>
+<div class="banner error-banner" id="storage-error" role="alert" hidden></div><div class="banner" id="pause-banner" role="status" hidden></div>
+<main id="main" aria-label="Fleet workspace"></main>
+<dialog class="sheet" id="run-sheet" aria-labelledby="sheet-title"><div class="sheet-header"><div><h2 id="sheet-title">Run job</h2><span class="muted" id="sheet-subtitle"></span></div><button class="icon-button" id="close-sheet" aria-label="Close run form"></button></div><div class="sheet-body" id="sheet-content"></div></dialog>
 <script>
 const $=s=>document.querySelector(s), main=$('#main');
-const request=async(p,o={})=>{const headers=new Headers(o.headers), token=sessionStorage.getItem('serveToken');if(token)headers.set('Authorization','Bearer '+token);return fetch(p,{...o,headers})};
-const apiPage=async(p,o)=>{const r=await request(p,o);if(!r.ok)throw new Error(r.status+' '+(await r.text()));return {data:await r.json(),headers:r.headers}};
+const request=async(p,o={})=>{const headers=new Headers(o.headers), token=readToken();
+  if(token)headers.set('Authorization','Bearer '+token);
+  return fetch(p,{...o,headers})};
+const apiPage=async(p,o)=>{const r=await request(p,o);
+  if(!r.ok)throw new Error(r.status+' '+(await r.text()));
+  return {data:await r.json(),headers:r.headers}};
 const api=async(p,o)=>(await apiPage(p,o)).data;
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const span=d=>d<90?Math.round(d)+'s':d<5400?Math.round(d/60)+'m':d<172800?Math.round(d/3600)+'h':Math.round(d/86400)+'d';
-const ago=t=>{if(!t)return'';const d=(Date.now()-new Date(t))/1000;return d<0?'in '+span(-d):span(d)+' ago'};
-const badge=s=>{s=s==='failure'?'failed':s==='success'?'ok':s;return `<span class="b ${esc(s)}">${esc(s)}</span>`};
+const ago=t=>{if(!t)return'';
+  const d=(Date.now()-new Date(t))/1000;
+  return d<0?'in '+span(-d):span(d)+' ago'};
+const badge=s=>{s=s==='failure'?'failed':s==='success'?'ok':s;
+  return `<span class="b ${esc(s)}">${esc(s)}</span>`};
 let me={operator:false}, view='jobs', timer, progressController;
 function stopProgress(){progressController?.abort();progressController=null}
 window.addEventListener('pagehide',stopProgress);
@@ -60,7 +282,7 @@ function activityView(m){
   $('#storage-error').hidden=!m.storage_error;
   $('#storage-error').textContent=m.storage_error?'Results not saved: '+m.storage_error:'';
   $('#activity').hidden=!(m.running+m.queued+(m.scheduled||0));
-  $('#activity').textContent=`${m.running} running / ${m.queued} queued / ${m.scheduled||0} scheduled`;
+  $('#activity').textContent=`${m.running||0} running · ${m.queued||0} queued · ${m.scheduled||0} scheduled`;
 }
 function pauseView(p){
   me.paused=p.paused;
@@ -71,12 +293,15 @@ function pauseView(p){
 }
 $('#pause').onclick=async()=>{
   let reason='';
-  if(!me.paused){reason=prompt('Reason (optional)');if(reason===null)return}
-  try{pauseView(await api(me.paused?'/api/resume':'/api/pause',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reason})}));if(view==='jobs')await jobs()}catch(e){alert(e.message)}
+  if(!me.paused){reason=prompt('Reason (optional)');
+  if(reason===null)return}
+  try{pauseView(await api(me.paused?'/api/resume':'/api/pause',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reason})}));
+  if(view==='jobs')await jobs()}
+  catch(e){alert(e.message)}
 };
 const paramsView=r=>r.params?`<div class="muted">${r.params.limit?`limit ${esc(r.params.limit)} → ${esc((r.params.hosts||[]).join(', '))}<br>`:''}${Object.keys(r.params.extra_vars||{}).length?'vars '+Object.entries(r.params.extra_vars).map(([k,v])=>esc(k)+'='+esc(v)).join(', '):''}</div>`:'';
 const checkBadge=r=>r?.mode==='check'?' '+badge('check'):'';
-const hasAdhoc=j=>j.adhoc?.limit||j.adhoc?.extra_vars?.length;
+const hasAdhoc=j=>j?.adhoc?.limit||j?.adhoc?.extra_vars?.length||j?.adhoc?.vars?.length;
 function varInput(v){
   const value=v.default??'', attrs=`data-var="${esc(v.name)}" ${v.required&&!v.secret&&v.type!=='bool'?'required':''}`;
   let input;
@@ -84,7 +309,7 @@ function varInput(v){
   else if(v.type==='choice')input=`<select ${attrs}><option value="">Choose…</option>${(v.choices||[]).map(c=>`<option value="${esc(c)}" ${c===value?'selected':''}>${esc(c)}</option>`).join('')}</select>`;
   else if(v.type==='bool')input=`<input type="checkbox" ${attrs} ${v.default!=null?`data-default="${esc(v.default)}"`:''} ${value==='true'?'checked':''}>`;
   else input=`<input type="${v.type==='int'?'number':'text'}" ${attrs} value="${esc(value)}" ${v.type==='int'?`step="1" ${v.min!=null?`min="${esc(v.min)}"`:''} ${v.max!=null?`max="${esc(v.max)}"`:''}`:v.pattern?`title="must match ${esc(v.pattern)} (RE2, checked by the server)"`:''}>`;
-  return `<label>${esc(v.name)}${v.required?' *':''}${input}${v.description?`<small class="muted">${esc(v.description)}</small>`:''}</label>`;
+  return `<label>${esc(v.name)}${v.required?' <span class="required">*</span>':' <small class="muted">(optional)</small>'}${input}${v.description?`<small class="muted">${esc(v.description)}</small>`:''}</label>`;
 }
 const scheduledTime=t=>`scheduled for ${new Date(t).toLocaleString('en',{weekday:'short',hour:'2-digit',minute:'2-digit',hourCycle:'h23'})}, ${ago(t)}`;
 function localRFC3339(value){
@@ -108,9 +333,11 @@ function targetPicker(form){
       if(version!==revision)return;
       const hosts=result.hosts, extra=hosts.length-20;
       message(!limit?'→ all '+hosts.length+' hosts of the job':'→ '+hosts.length+' hosts: '+hosts.slice(0,20).join(', ')+(extra>0?' … +'+extra:''));
-    }catch(e){if(version===revision)message(e.message,true)}
+    }
+  catch(e){if(version===revision)message(e.message,true)}
   };
-  input.oninput=()=>{mark();clearTimeout(debounce);const version=++revision;message('Resolving…');debounce=setTimeout(()=>update(version),300)};
+  input.oninput=()=>{mark();clearTimeout(debounce);
+  const version=++revision;message('Resolving…');debounce=setTimeout(()=>update(version),300)};
   chips.textContent='Loading inventory…';
   api(path).then(data=>{
     inventory=data;
@@ -120,58 +347,77 @@ function targetPicker(form){
   }).catch(e=>{chips.textContent=e.message;chips.classList.add('error-text')});
 }
 function hash(value){if(location.hash!==value){stopProgress();history.pushState(null,'',value||location.pathname+location.search)}}
+// Views: job list, run controls, and parameter sheet.
+let jobsCache=[], jobContext=null;
+const pageHeader=(title,subtitle,actions='')=>`<div class="page-header"><div><h1>${esc(title)}</h1><p>${esc(subtitle)}</p></div><div class="page-actions">${actions}</div></div>`;
+function jobActions(j,includeCancel=true){return j?.allowed?`<button class="run primary" data-run="${esc(j.name)}" ${j.pending||j.running?'disabled':''}>${icon('play')} Run</button><button class="run" data-configure="${esc(j.name)}" ${j.pending||j.running?'disabled':''}>Run…</button><button class="run" data-run-at="${esc(j.name)}" ${j.scheduled||j.pending?'disabled':''}>Run at…</button>${j.kind==='apply'?`<button class="run" data-check="${esc(j.name)}" ${j.pending||j.running?'disabled':''}>Check</button>`:''}${includeCancel&&j.active&&['queued','running'].includes(j.active.status)?`<button class="run" data-stop="${esc(j.active.id)}" data-name="${esc(j.name)}" data-running="${j.active.status==='running'}">Cancel</button>`:''}`:''}
+function decisionButtons(r,j){return j?.allowed&&r.status==='pending'?`<button class="run primary" data-decision="approve" data-id="${esc(r.id)}">Approve</button><button class="run" data-decision="reject" data-id="${esc(r.id)}">Reject</button>`:''}
+async function refreshCurrent(){closeSheet();
+  if(view==='result'&&jobContext)return run(jobContext.selected);
+  if(view==='results'&&jobContext)return results(jobContext.name);
+  return jobs()}
+function bindJobActions(root=main){
+  root.querySelectorAll('[data-decision]').forEach(b=>b.onclick=async()=>{let comment='';
+  if(b.dataset.decision==='reject'){comment=prompt('Comment (optional)');
+  if(comment===null)return}b.disabled=true;
+  try{await api('/api/runs/'+encodeURIComponent(b.dataset.id)+'/'+b.dataset.decision,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({comment})});await refreshCurrent()}
+  catch(e){alert(e.message);
+  b.disabled=false}});
+  root.querySelectorAll('[data-stop]').forEach(b=>b.onclick=async()=>{if(b.dataset.running==='true'&&!confirm('Stop '+b.dataset.name+' now?'))return;
+  const comment=prompt('Comment (optional)');
+  if(comment===null)return;
+  b.disabled=true;
+  try{await api('/api/runs/'+encodeURIComponent(b.dataset.stop)+'/cancel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({comment})});await refreshCurrent()}
+  catch(e){alert(e.message);
+  b.disabled=false}});
+  root.querySelectorAll('[data-run],[data-configure],[data-run-at],[data-check]').forEach(b=>b.onclick=async()=>{
+    const name=b.dataset.run||b.dataset.configure||b.dataset.runAt||b.dataset.check,j=jobsCache.find(j=>j.name===name);
+    if(b.dataset.configure||b.dataset.runAt||(b.dataset.run&&hasAdhoc(j))){openSheet(j,Boolean(b.dataset.runAt));return}
+    b.disabled=true;
+  try{await api('/api/jobs/'+encodeURIComponent(name)+'/run',{method:'POST',...(b.dataset.check?{headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:'check'})}:{})})}
+  catch(e){alert(e.message)}setTimeout(()=>refreshCurrent().catch(showError),500);
+  });
+}
+let sheetTrigger;
+function closeSheet(){if($('#run-sheet').open)$('#run-sheet').close();sheetTrigger?.focus()}
+function openSheet(j,scheduled=false){
+  if(!j)return;sheetTrigger=document.activeElement ;
+  $('#sheet-title').textContent=scheduled?'Schedule run':'Run job' ;
+  $('#sheet-subtitle').textContent=j.name+' · '+j.kind;
+  $('#sheet-content').innerHTML=`<form class="adhoc-form" data-form="${esc(j.name)}"><section class="report-card"><h3>Run settings</h3><p class="muted">Choose the target hosts and execution time.</p>${j.adhoc?.limit?'<div class="limit-picker"><label>Limit <small class="muted">(optional)</small><small class="muted">Leave empty to use every host in this job.</small><input data-limit placeholder="Host or group pattern"></label><div data-inventory class="limit-chips muted"></div><p data-preview class="muted" role="status" aria-live="polite"></p></div>':''}<label>Run at (local time) ${scheduled?'<span class="required">*</span>':'<small class="muted">(optional)</small>'}<small class="muted">Uses this browser’s time zone. Leave empty to run now.</small><input type="datetime-local" data-not-before ${scheduled?'required':''}></label></section>${(j.adhoc?.vars||j.adhoc?.extra_vars||[]).length?`<section class="report-card"><h3>Variables</h3><p class="muted">Values apply to this run only.</p>${(j.adhoc?.vars||(j.adhoc?.extra_vars||[]).map(name=>({name,secret:(j.adhoc?.secret_vars||[]).includes(name)}))).map(varInput).join('')}</section>`:''}<div class="sheet-actions"><button class="run primary" type="submit">${scheduled?'Schedule run':'Run'}</button>${j.kind==='apply'?'<button class="run" type="submit" data-mode="check">Check</button>':''}<button class="run" type="button" data-cancel>Cancel</button></div></form>`;
+  const form=$('#sheet-content form');
+  form.querySelector('[data-cancel]').onclick=closeSheet;
+  form.onsubmit=async e=>{e.preventDefault();
+  const body={},vars=Object.create(null),limit=form.querySelector('[data-limit]')?.value;
+  if(e.submitter?.dataset.mode==='check')body.mode='check';
+  if(limit)body.limit=limit;
+  const later=form.querySelector('[data-not-before]').value;
+  if(later)body.not_before=localRFC3339(later);form.querySelectorAll('[data-var]').forEach(input=>{if(input.type==='checkbox'){if(input.checked||input.dataset.default!==undefined)vars[input.dataset.var]=String(input.checked)}else if(input.value||input.required)vars[input.dataset.var]=input.value});
+  if(Object.keys(vars).length)body.extra_vars=vars;
+  const button=e.submitter||form.querySelector('[type="submit"]');
+  button.disabled=true;
+  try{await api('/api/jobs/'+encodeURIComponent(j.name)+'/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});await refreshCurrent()}
+  catch(e){alert(e.message);
+  button.disabled=false}};
+  $('#run-sheet').showModal();
+  targetPicker(form);(scheduled?form.querySelector('[data-not-before]'):form.querySelector('input,select,button'))?.focus();
+}
 async function jobs(){
   stopProgress();
-  view='jobs';hash('');
+  view='jobs';
+  hash('');
+  setNav('jobs');
+  jobContext=null;
   const [list,p,m]=await Promise.all([api('/api/jobs'),api('/api/pause'),api('/api/me')]);
-  pauseView(p);activityView(m);
-  if(!list.length){main.innerHTML='<div class="empty">No jobs in serve.yml</div>';return}
+  if(view!=='jobs')return;
+  jobsCache=list;
+  pauseView(p);
+  activityView(m);
   const pending=list.filter(j=>j.pending);
-  main.innerHTML=(pending.length?`<h2>Pending approval</h2>${pending.map(j=>`<div class="approval-card"><b>${esc(j.name)}</b> · ${esc(j.kind)} · ${esc(j.target)}<br><span class="muted">requested by ${esc(j.pending.trigger)} ${esc(ago(j.pending.requested))} · expires in ${span(Math.max(0,(new Date(j.pending.approval.expires)-Date.now())/1000))}</span>${j.pending.not_before?`<div class="muted">${esc(scheduledTime(j.pending.not_before))}</div>`:''}${paramsView(j.pending)}${j.allowed?`<p><button class="run" data-decision="approve" data-id="${esc(j.pending.id)}">Approve</button> <button class="run" data-decision="reject" data-id="${esc(j.pending.id)}">Reject</button></p>`:''}</div>`).join('')}`:'')+`<table class="jobs-table"><tr><th>Job</th><th>Kind</th><th class="target">Target</th><th>Schedule</th><th>Last run</th><th>Result</th><th></th></tr>${list.map(j=>`<tr>
-    <td><a href="#job/${encodeURIComponent(j.name)}" data-job="${esc(j.name)}">${esc(j.name)}</a></td><td>${esc(j.kind)}</td><td class="muted target">${esc(j.target)}</td>
-    <td>${j.every?esc(j.every)+(j.next?'<br><span class="muted">next '+ago(j.next)+'</span>':''):'<span class="muted">on demand</span>'}${j.windows?.length?`<div class="muted">${j.windows.map(esc).join('<br>')} (${esc(j.windows_tz||'UTC')})${j.next_window?'<br>next window '+date(j.next_window):''}</div>`:''}</td>
-    <td>${lastRun(j)}${recentStrip(j.recent)}</td>
-    <td>${j.pending?badge('pending')+checkBadge(j.pending):j.running?badge(j.active?.status||(j.queued?'queued':'running'))+checkBadge(j.active)+activeTime(j):j.last?badge(j.last.status)+checkBadge(j.last)+' <span class="muted">'+esc(j.last.summary)+'</span>':''}${(j.scheduled_runs||(j.scheduled?[j.scheduled]:[])).map(r=>`<div>${badge('scheduled')}${checkBadge(r)} <a href="#run/${encodeURIComponent(r.id)}">${esc(scheduledTime(r.not_before))}</a>${r.summary?'<br><span class="muted">'+esc(r.summary)+'</span>':''}${j.allowed?` <button class="run" data-stop="${esc(r.id)}" data-name="${esc(j.name)}" data-running="false">Cancel</button>`:''}</div>`).join('')}</td>
-    <td>${j.allowed?`<button class="run" data-run="${esc(j.name)}" ${j.pending||j.running?'disabled':''}>Run${hasAdhoc(j)?'…':''}</button> <button class="run" data-run-at="${esc(j.name)}" ${j.scheduled||j.pending?'disabled':''}>Run at…</button>${j.kind==='apply'?` <button class="run" data-check="${esc(j.name)}" ${j.pending||j.running?'disabled':''}>Check</button>`:''}${j.active&&['queued','running'].includes(j.active.status)?` <button class="run" data-stop="${esc(j.active.id)}" data-name="${esc(j.name)}" data-running="${j.active.status==='running'}">Cancel</button>`:''}`:''}</td></tr>${j.allowed?`<tr data-form-row="${esc(j.name)}" hidden><td colspan="7"><form class="adhoc-form" data-form="${esc(j.name)}">${j.adhoc?.limit?'<div class="limit-picker"><div data-inventory class="limit-chips muted"></div><label>limit<input data-limit placeholder="host pattern, empty = the job&#39;s hosts"></label><div data-preview class="muted" role="status" aria-live="polite"></div></div>':''}${(j.adhoc?.vars||(j.adhoc?.extra_vars||[]).map(name=>({name,secret:(j.adhoc?.secret_vars||[]).includes(name)}))).map(varInput).join('')}<label>Run at (local time)<input type="datetime-local" data-not-before></label><button class="run" type="submit">Run</button>${j.kind==='apply'?'<button class="run" type="submit" data-mode="check">Check</button>':''}<button class="run" type="button" data-cancel>Cancel</button></form></td></tr>`:''}`).join('')}</table>`;
-  main.querySelectorAll('[data-decision]').forEach(b=>b.onclick=async()=>{
-    let comment='';
-    if(b.dataset.decision==='reject'){comment=prompt('Comment (optional)');if(comment===null)return}
-    b.disabled=true;
-    try{await api('/api/runs/'+encodeURIComponent(b.dataset.id)+'/'+b.dataset.decision,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({comment})});await jobs()}catch(e){alert(e.message);b.disabled=false}
-  });
-  main.querySelectorAll('[data-stop]').forEach(b=>b.onclick=async()=>{
-    if(b.dataset.running==='true'&&!confirm('Stop '+b.dataset.name+' now?'))return;
-    const comment=prompt('Comment (optional)');if(comment===null)return;
-    b.disabled=true;
-    try{await api('/api/runs/'+encodeURIComponent(b.dataset.stop)+'/cancel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({comment})});await jobs()}catch(e){alert(e.message);b.disabled=false}
-  });
-  main.querySelectorAll('[data-run]').forEach(b=>b.onclick=async()=>{
-    const row=Array.from(main.querySelectorAll('[data-form-row]')).find(row=>row.dataset.formRow===b.dataset.run);
-    if(row&&list.find(j=>j.name===b.dataset.run&&hasAdhoc(j))){row.hidden=!row.hidden;row.querySelector('[data-not-before]').required=false;if(!row.hidden)targetPicker(row.querySelector('form'));return}
-    b.disabled=true;try{await api('/api/jobs/'+encodeURIComponent(b.dataset.run)+'/run',{method:'POST'})}catch(e){alert(e.message)}setTimeout(jobs,500)
-  });
-  main.querySelectorAll('[data-run-at]').forEach(b=>b.onclick=()=>{
-    const row=Array.from(main.querySelectorAll('[data-form-row]')).find(row=>row.dataset.formRow===b.dataset.runAt);
-    row.hidden=false;targetPicker(row.querySelector('form'));
-    const input=row.querySelector('[data-not-before]');input.required=true;input.focus();
-  });
-  main.querySelectorAll('[data-check]').forEach(b=>b.onclick=async()=>{
-    b.disabled=true;try{await api('/api/jobs/'+encodeURIComponent(b.dataset.check)+'/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:'check'})})}catch(e){alert(e.message)}setTimeout(jobs,500)
-  });
-  main.querySelectorAll('[data-form]').forEach(form=>{
-    form.querySelector('[data-cancel]').onclick=()=>form.closest('tr').hidden=true;
-    form.onsubmit=async e=>{
-      e.preventDefault();const body={}, vars=Object.create(null), limit=form.querySelector('[data-limit]')?.value;
-      if(e.submitter?.dataset.mode==='check')body.mode='check';
-      if(limit)body.limit=limit;
-      const later=form.querySelector('[data-not-before]').value;if(later)body.not_before=localRFC3339(later);
-      form.querySelectorAll('[data-var]').forEach(input=>{if(input.type==='checkbox'){if(input.checked||input.dataset.default!==undefined)vars[input.dataset.var]=String(input.checked)}else if(input.value||input.required)vars[input.dataset.var]=input.value});
-      if(Object.keys(vars).length)body.extra_vars=vars;
-      const button=e.submitter||form.querySelector('[type="submit"]');button.disabled=true;
-      try{await api('/api/jobs/'+encodeURIComponent(form.dataset.form)+'/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});await jobs()}catch(e){alert(e.message);button.disabled=false}
-    };
-  });
-  main.querySelectorAll('[data-job]').forEach(a=>a.onclick=e=>{e.preventDefault();results(a.dataset.job)});
+  main.innerHTML=pageHeader('Jobs','Scheduled and on-demand fleet automation')+(pending.length?`<h2>Pending approval <span class="b pending">${pending.length}</span></h2>${pending.map(j=>`<section class="approval-card"><b>${esc(j.name)}</b> · ${esc(j.kind)} · ${esc(j.target)}<br><span class="muted">Requested by ${esc(j.pending.trigger)} ${esc(ago(j.pending.requested))} · expires in ${span(Math.max(0,(new Date(j.pending.approval.expires)-Date.now())/1000))}</span>${j.pending.not_before?`<div class="muted">${esc(scheduledTime(j.pending.not_before))}</div>`:''}${paramsView(j.pending)}<p>${decisionButtons({...j.pending,status:'pending'},j)}</p></section>`).join('')}`:'')+(list.length?`<div class="table-scroll"><table class="jobs-table"><thead><tr><th>Job</th><th>Kind</th><th class="target">Target</th><th>Schedule</th><th>Last run</th><th>Result</th><th>Actions</th></tr></thead><tbody>${list.map(j=>`<tr data-search="${esc([j.name,j.kind,j.target].join(' '))}"><td><a href="#job/${encodeURIComponent(j.name)}">${esc(j.name)}</a></td><td>${esc(j.kind)}</td><td class="muted target">${esc(j.target)}</td><td>${j.every?esc(j.every)+(j.next?'<br><span class="muted">next '+esc(ago(j.next))+'</span>':''):'<span class="muted">On demand</span>'}${j.windows?.length?`<div class="muted">${j.windows.map(esc).join('<br>')} (${esc(j.windows_tz||'UTC')})${j.next_window?'<br>next window '+date(j.next_window):''}</div>`:''}</td><td>${lastRun(j)}${recentStrip(j.recent)}</td><td>${j.pending?badge('pending')+checkBadge(j.pending):j.running?badge(j.active?.status||(j.queued?'queued':'running'))+checkBadge(j.active)+activeTime(j):j.last?badge(j.last.status)+checkBadge(j.last)+'<div class="muted">'+esc(j.last.summary)+'</div>':''}${(j.scheduled_runs||(j.scheduled?[j.scheduled]:[])).map(r=>`<div>${badge('scheduled')}${checkBadge(r)} <a href="#run/${encodeURIComponent(r.id)}">${esc(scheduledTime(r.not_before))}</a>${r.summary?'<br><span class="muted">'+esc(r.summary)+'</span>':''}${j.allowed?` <button class="run" data-stop="${esc(r.id)}" data-name="${esc(j.name)}" data-running="false">Cancel</button>`:''}</div>`).join('')}</td><td>${jobActions(j)}</td></tr>`).join('')}</tbody></table></div>`:empty('No jobs in serve.yml'));
+  bindJobActions();
+  listFooter(list.length);
+  applySearch();
 }
 function recentStrip(recent){
   return `<div class="recent" aria-label="Recent runs, newest on the right">${(recent||[]).slice(0,20).reverse().map(r=>`<span class="recent-square ${esc(r.status)}${r.mode==='check'?' check':''}" title="${esc(r.status)}${r.mode==='check'?' (check)':''} · ${date(r.started)}"></span>`).join('')}</div>`;
@@ -180,48 +426,64 @@ function durationChart(list){
   const runs=list.filter(r=>r.started&&!String(r.started).startsWith('0001-')&&['ok','drift','changed','failed','error','cancelled','timed_out'].includes(r.status)).slice(0,50).reverse();
   if(!runs.length)return '';
   const max=Math.max(...runs.map(r=>r.duration_seconds||0)), width=runs.length*10;
-  return `<section class="report-card"><div class="muted">Duration · ${runs.length} recent runs · newest right · max ${max.toFixed(1)}s</div><svg class="sparkline" viewBox="0 0 ${width} 40" preserveAspectRatio="none" role="img" aria-label="Recent run durations, newest on the right">${runs.map((r,i)=>{const height=Math.max(1,40*(r.duration_seconds||0)/(max||1));return `<rect class="${esc(r.status)}" x="${i*10+1}" y="${40-height}" width="8" height="${height}"><title>${esc(r.status)}${r.mode==='check'?' (check)':''} · ${date(r.started)} · ${(r.duration_seconds||0).toFixed(1)}s</title></rect>`}).join('')}</svg></section>`;
+  return `<section class="report-card"><div class="muted">Duration · ${runs.length} recent runs · newest right · max ${max.toFixed(1)}s</div><svg class="sparkline" viewBox="0 0 ${width} 40" preserveAspectRatio="none" role="img" aria-label="Recent run durations, newest on the right">${runs.map((r,i)=>{const height=Math.max(1,40*(r.duration_seconds||0)/(max||1));
+  return `<rect class="${esc(r.status)}" x="${i*10+1}" y="${40-height}" width="8" height="${height}"><title>${esc(r.status)}${r.mode==='check'?' (check)':''} · ${date(r.started)} · ${(r.duration_seconds||0).toFixed(1)}s</title></rect>`}).join('')}</svg></section>`;
 }
 function comparisonView(c){
   const items=(label,list)=>`<h3>${esc(label)} (${list.length})</h3>`+(list.length?list.map(i=>`<div class="item">${hostLink(i.host)} · <b>${esc(i.play?i.play+' › ':'')}${esc(i.task)}</b> <span class="muted">${esc(i.module)}</span>${i.key?`<div class="muted">${esc(i.key)}</div>`:''}</div>`).join(''):empty('None'));
   return `<section class="report-card"><h2>Run comparison</h2><p>A: <a href="#run/${encodeURIComponent(c.a.id)}">${date(c.a.started)}</a> ${badge(c.a.status)} → B: <a href="#run/${encodeURIComponent(c.b.id)}">${date(c.b.started)}</a> ${badge(c.b.status)}</p>${c.same_playbook?'':'<p class="compare-warning" role="status">Playbook content differs or a playbook hash is unavailable; task changes may reflect playbook edits.</p>'}<h3>Changed host verdicts (${c.hosts.length})</h3>${c.hosts.length?table(['Host','A','B'],c.hosts.map(h=>`<tr><td>${hostLink(h.host)}</td><td>${h.a?badge(h.a):'<span class="muted">not present</span>'}</td><td>${h.b?badge(h.b):'<span class="muted">not present</span>'}</td></tr>`)):empty('No host verdict changes')}${items('Appeared',c.appeared)}${items('Resolved',c.resolved)}</section>`;
 }
+function runList(list,job,selected=''){
+  const comparable=['drift','apply'].includes(job?.kind),eligible=r=>comparable&&r.started&&!String(r.started).startsWith('0001-')&&['ok','drift','changed','failed','error','cancelled','timed_out'].includes(r.status);
+  return durationChart(list)+(comparable&&list.length?'<div class="compare-controls"><button class="run" id="compare" disabled>Compare</button><span class="muted" id="compare-hint">Select two executed runs to compare.</span></div>':'')+(list.length?list.map(r=>`<article class="run-item ${r.id===selected?'selected':''}" data-search="${esc([r.id,r.trigger,r.status,r.summary].join(' '))}"><div><input type="checkbox" data-compare="${esc(r.id)}" aria-label="Select run ${esc(r.id)} for comparison" ${eligible(r)?'':'disabled'}></div><div><div class="run-top"><span>${badge(r.status)}${checkBadge(r)}</span><span class="muted">${esc(ago(r.started||r.requested))}</span></div><a href="#run/${encodeURIComponent(r.id)}" data-res="${esc(r.id)}">${esc(r.trigger||'Run')} · ${date(r.started||r.requested)}</a><p class="run-summary" title="${esc(r.summary)}">${esc(r.summary||'No summary yet')}</p>${paramsView(r)}${r.approval?.decision?'<div class="muted">'+esc(r.approval.decision==='expired'?'expired':r.approval.decision+' by '+r.approval.by)+'</div>':''}<div class="muted">${esc(r.hosts_count)} hosts${r.failed_hosts?' · '+esc(r.failed_hosts)+' failed':''} · ${(r.duration_seconds||0).toFixed(1)}s</div></div></article>`).join(''):empty('No runs yet'));
+}
+function bindRunList(name,list,job){
+  main.querySelectorAll('[data-res]').forEach(a=>a.onclick=e=>{e.preventDefault();run(a.dataset.res).catch(showError)});
+  const button=$('#compare');
+  if(!button)return;
+  const hint=$('#compare-hint'),output=$('#comparison'),checks=[...main.querySelectorAll('[data-compare]')];
+  let revision=0;
+  const eligible=r=>r&&r.started&&!String(r.started).startsWith('0001-')&&['ok','drift','changed','failed','error','cancelled','timed_out'].includes(r.status),selected=()=>checks.filter(c=>c.checked);
+  checks.forEach(c=>c.onchange=()=>{revision++;
+  output.innerHTML='';
+  const count=selected().length;
+  button.disabled=count!==2;
+  button.textContent='Compare';
+  hint.textContent=count===2?'A is the older selected run; B is the newer.':'Select two executed runs to compare.';
+  checks.forEach(c=>c.disabled=!eligible(list.find(r=>r.id===c.dataset.compare))||count===2&&!c.checked)});
+  button.onclick=async()=>{const ids=selected().map(c=>c.dataset.compare).sort((a,b)=>list.findIndex(r=>r.id===b)-list.findIndex(r=>r.id===a));
+  if(ids.length!==2)return;
+  const version=++revision;
+  button.disabled=true;
+  button.textContent='Comparing…';
+  output.innerHTML='';
+  try{const result=await api('/api/jobs/'+encodeURIComponent(name)+'/compare?a='+encodeURIComponent(ids[0])+'&b='+encodeURIComponent(ids[1]));
+  if(version===revision&&output.isConnected)output.innerHTML=comparisonView(result)}
+  catch(e){if(version===revision&&output.isConnected)output.innerHTML=`<p class="error-text" role="alert">${esc(e.message)}</p>`}
+  finally{if(version===revision&&button.isConnected){button.disabled=selected().length!==2;
+  button.textContent='Compare'}}};
+}
 async function results(name){
   stopProgress();
-  view='results';hash('#job/'+encodeURIComponent(name));
+  view='results';
+  hash('#job/'+encodeURIComponent(name));
+  setNav('jobs');
   const [list,jobsList]=await Promise.all([api('/api/jobs/'+encodeURIComponent(name)+'/history?limit=50'),api('/api/jobs')]);
   if(view!=='results'||location.hash!=='#job/'+encodeURIComponent(name))return;
-  const comparable=['drift','apply'].includes(jobsList.find(j=>j.name===name)?.kind);
-  const eligible=r=>comparable&&r.started&&!String(r.started).startsWith('0001-')&&['ok','drift','changed','failed','error','cancelled','timed_out'].includes(r.status);
-  main.innerHTML=`<p><a href="#" id="back">← jobs</a> &nbsp; <b>${esc(name)}</b></p>`+(list.length?durationChart(list)+(comparable?'<div class="compare-controls"><button class="run" id="compare" disabled>Compare</button><span class="muted" id="compare-hint">Select two executed runs to compare.</span></div>':'')+table(['Compare','Started','Trigger','Status','Summary','Hosts','Duration'],list.map(r=>`<tr>
-    <td><input type="checkbox" data-compare="${esc(r.id)}" aria-label="Select run ${esc(r.id)} for comparison" ${eligible(r)?'':'disabled'}></td><td><a href="#run/${encodeURIComponent(r.id)}" data-res="${esc(r.id)}">${date(r.started||r.requested)}</a></td><td class="muted">${esc(r.trigger)}${paramsView(r)}${r.approval?.decision?'<br>'+esc(r.approval.decision==='expired'?'expired':r.approval.decision+' by '+r.approval.by):''}</td><td>${badge(r.status)}${checkBadge(r)}</td><td>${esc(r.summary)}</td>
-    <td>${esc(r.hosts_count)} total${r.failed_hosts?' · '+esc(r.failed_hosts)+' failed':''}</td><td>${(r.duration_seconds||0).toFixed(1)}s</td></tr>`))+'<div id="comparison" aria-live="polite"></div>':'<div class="empty">No runs yet</div>');
-  $('#back').onclick=e=>{e.preventDefault();jobs()};
-  main.querySelectorAll('[data-res]').forEach(a=>a.onclick=e=>{e.preventDefault();run(a.dataset.res).catch(showError)});
-  if(!comparable||!list.length)return;
-  const button=$('#compare'), hint=$('#compare-hint'), output=$('#comparison'), checks=[...main.querySelectorAll('[data-compare]')];
-  let revision=0;
-  const selected=()=>checks.filter(c=>c.checked);
-  checks.forEach(c=>c.onchange=()=>{
-    revision++;output.innerHTML='';const count=selected().length;
-    button.disabled=count!==2;button.textContent='Compare';hint.textContent=count===2?'A is the older selected run; B is the newer.':'Select two executed runs to compare.';
-    checks.forEach(c=>c.disabled=!eligible(list.find(r=>r.id===c.dataset.compare))||count===2&&!c.checked);
-  });
-  button.onclick=async()=>{
-    const ids=selected().map(c=>c.dataset.compare).sort((a,b)=>list.findIndex(r=>r.id===b)-list.findIndex(r=>r.id===a));
-    if(ids.length!==2)return;
-    const version=++revision;button.disabled=true;button.textContent='Comparing…';output.innerHTML='';
-    try{
-      const result=await api('/api/jobs/'+encodeURIComponent(name)+'/compare?a='+encodeURIComponent(ids[0])+'&b='+encodeURIComponent(ids[1]));
-      if(version===revision&&output.isConnected)output.innerHTML=comparisonView(result);
-    }catch(e){if(version===revision&&output.isConnected)output.innerHTML=`<p class="error-text" role="alert">${esc(e.message)}</p>`}
-    finally{if(version===revision&&button.isConnected){button.disabled=selected().length!==2;button.textContent='Compare'}}
-  };
+  jobsCache=jobsList;
+  const job=jobsList.find(j=>j.name===name);
+  jobContext={name,list,job,selected:null};
+  main.innerHTML=pageHeader(name,(job?.kind||'Job')+' · run history',jobActions(job))+`<p><a href="#">← Jobs</a></p><div class="job-split"><section class="run-list" aria-label="Job runs">${runList(list,job)}</section><section class="run-detail" aria-label="Run details"><div class="empty">${icon('activity')}<p>Select a run to inspect its results.</p></div></section></div><div id="comparison" aria-live="polite"></div>`;
+  bindJobActions();
+  bindRunList(name,list,job);
+  applySearch();
 }
 const empty=text=>`<div class="empty">${esc(text)}</div>`;
 const table=(heads,rows,footer='')=>`<div class="table-scroll"><table><thead><tr>${heads.map(h=>`<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody>${footer?`<tfoot>${footer}</tfoot>`:''}</table></div>`;
 const hostLink=h=>`<a href="#host/${encodeURIComponent(h)}">${esc(h)}</a>`;
-const date=t=>{if(!t||String(t).startsWith('0001-'))return '—';const d=new Date(t);return esc(d.toLocaleString(undefined,matchMedia('(max-width:700px)').matches?{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}:undefined))};
+const date=t=>{if(!t||String(t).startsWith('0001-'))return '—';
+  const d=new Date(t);
+  return esc(d.toLocaleString(undefined,matchMedia('(max-width:700px)').matches?{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}:undefined))};
 function durationSeconds(value){
   const units={h:3600,m:60,s:1,ms:.001,us:.000001,'µs':.000001,ns:1e-9};
   let seconds=0, consumed='';
@@ -264,13 +526,15 @@ function driftTabs(r,p){
     return `<tr data-expand><td>${hostLink(h)}</td><td>${badge(status)}</td><td><details><summary>${items.length} ${wording}, ${errors.length} errors</summary>${items.map(itemView).join('')}${errors.map(i=>`<div class="error-text">${itemView(i)}</div>`).join('')}${!items.length&&!errors.length?'<span class="muted">No task details recorded</span>':''}</details></td></tr>`;
   });
   const groups=new Map();
-  for(const e of entries){const key=JSON.stringify([e.item.play,e.item.task,e.item.module]);if(!groups.has(key))groups.set(key,[]);groups.get(key).push(e)}
+  for(const e of entries){const key=JSON.stringify([e.item.play,e.item.task,e.item.module]);
+  if(!groups.has(key))groups.set(key,[]);groups.get(key).push(e)}
   const changes=[...groups.values()].map(es=>`<section class="report-card"><h3>${esc(es[0].item.play?es[0].item.play+' › ':'')}${esc(es[0].item.task)}</h3><p class="muted">${esc(es[0].item.module)} · ${wording}</p>${es.map(e=>`<div class="item">${hostLink(e.host)} ${e.error?badge('failed'):''}<div class="text">${esc(e.item.detail)}</div>${e.item.since?`<small class="muted">Since ${date(e.item.since)}</small>`:''}</div>`).join('')}</section>`).join('');
   let budget=200*1024, truncated=false;
   const encoder=new TextEncoder(), decoder=new TextDecoder('utf-8',{fatal:false});
   const diffs=entries.filter(e=>e.item.diff).map(e=>{
     const bytes=encoder.encode(e.item.diff);
-    if(!budget){truncated=true;return ''}
+    if(!budget){truncated=true;
+  return ''}
     let text=e.item.diff;
     if(bytes.length>budget){let end=budget;while(end>0&&(bytes[end]&0xc0)===0x80)end--;text=decoder.decode(bytes.subarray(0,end));truncated=true}
     budget-=Math.min(bytes.length,budget);
@@ -286,7 +550,8 @@ function verifyTabs(r,p){
   const names=[...new Set([...Object.keys(p.hosts||{}),...Object.keys(p.errors||{}),...Object.keys(r.hosts||{})])].sort(), groups=new Map();
   const rows=names.map(h=>{
     const host=p.hosts?.[h], checks=host?.checks||[];
-    for(const c of checks){const name=String(checkName(c));if(!groups.has(name))groups.set(name,{pass:new Set(),fail:new Set()});groups.get(name)[c.ok===true?'pass':'fail'].add(h)}
+    for(const c of checks){const name=String(checkName(c));
+  if(!groups.has(name))groups.set(name,{pass:new Set(),fail:new Set()});groups.get(name)[c.ok===true?'pass':'fail'].add(h)}
     const status=r.hosts?.[h]||(p.errors?.[h]?'unreachable':host?.failed?'failed':'ok');
     return `<tr data-expand><td>${hostLink(h)}</td><td>${badge(status)}</td><td>${host?`${esc(host.passed)} passed / ${esc(host.failed)} failed`:'Not checked'}</td><td>${checks.length?`<details><summary>${checks.length} checks</summary>${checks.map(c=>`<div class="item">${badge(c.ok===true?'ok':'failed')} <b>${esc(checkName(c))}</b> <span class="muted">${esc(c.kind)}</span><div class="text">${esc(checkMessage(c))}</div></div>`).join('')}</details>`:esc(p.errors?.[h]||'No checks recorded')}</td></tr>`;
   });
@@ -294,7 +559,8 @@ function verifyTabs(r,p){
 }
 function complyTabs(r,p){
   const hosts=[...new Set([...Object.keys(p.hosts||{}),...Object.keys(p.errors||{}),...Object.keys(r.hosts||{})])].sort(), controls=new Map(), byHost=new Map();
-  for(const h of hosts){const map=new Map();for(const c of p.hosts?.[h]?.controls||[]){map.set(c.id,c);if(!controls.has(c.id))controls.set(c.id,c)}byHost.set(h,map)}
+  for(const h of hosts){const map=new Map();for(const c of p.hosts?.[h]?.controls||[]){map.set(c.id,c);
+  if(!controls.has(c.id))controls.set(c.id,c)}byHost.set(h,map)}
   const unreachable=h=>Boolean(p.errors?.[h])||r.hosts?.[h]==='unreachable';
   const rows=[...controls].map(([id,c])=>`<tr><td><b>${esc(id)}</b> ${esc(c.title)} ${badge(c.severity)}</td>${hosts.map(h=>{
     if(unreachable(h))return `<td class="missing" title="${esc(p.errors?.[h]||'Unreachable')}">unreachable</td>`;
@@ -315,25 +581,44 @@ function complyTabs(r,p){
 }
 async function run(id){
   stopProgress();
-  view='result';hash('#run/'+encodeURIComponent(id));
+  view='result';
+  hash('#run/'+encodeURIComponent(id));
+  setNav('jobs');
+  const expected=location.hash;
   let r;
-  try{r=await api('/api/results/'+encodeURIComponent(id))}catch(e){if(e.message.startsWith('404 '))return auditRun(id);throw e}
+  try{r=await api('/api/results/'+encodeURIComponent(id))}
+  catch(e){if(e.message.startsWith('404 '))return auditRun(id);throw e}
   const p=r.report&&typeof r.report==='object'?r.report:{}, tabs=r.kind==='drift'||r.kind==='apply'?driftTabs(r,p):r.kind==='verify'?verifyTabs(r,p):r.kind==='comply'?complyTabs(r,p):[];
-  const job=(await api('/api/jobs')).find(j=>j.name===r.job);
+  jobsCache=await api('/api/jobs');
+  const job=jobsCache.find(j=>j.name===r.job);
+  const list=await api('/api/jobs/'+encodeURIComponent(r.job)+'/history?limit=50').catch(()=>[r]);
+  if(view!=='result'||location.hash!==expected)return;
+  jobContext={name:r.job,list,job,selected:id};
   const failed=Object.values(r.hosts||{}).filter(s=>s==='failed'||s==='unreachable').length;
   const canRerun=job?.allowed&&failed&&!r.params?.secret_vars?.length&&['ok','drift','changed','failed','error','cancelled','timed_out'].includes(r.status);
   const live=['pending','scheduled','queued','running','cancelling'].includes(r.status);
   if(live)tabs.unshift(['Progress','<p id="progress-state" class="muted" role="status">Waiting for progress…</p><div id="progress-hosts"></div><h3>Task events</h3><div id="progress-log"></div>']);
   tabs.push(['JSON',`<pre>${esc(JSON.stringify(r,null,2))}</pre>`]);
   const approval=r.approval?`<p>Approval: ${esc(r.approval.decision||'pending')} ${r.approval.by?'by '+esc(r.approval.by):''} ${r.approval.at?date(r.approval.at):''}${r.approval.expires?' · expires '+date(r.approval.expires):''}<br>${esc(r.approval.comment)}</p>`:'';
-  main.innerHTML=`<p><a href="#job/${encodeURIComponent(r.job)}" id="back">← ${esc(r.job)}</a>${r.audit_execution_id?` &nbsp; <a href="#run/${encodeURIComponent(r.audit_execution_id)}">Execution ${esc(r.audit_execution_id)}</a>`:''}</p><section class="report-card"><h2>${esc(r.job)} <small>${esc(r.kind)}</small> ${badge(r.status)}${checkBadge(r)}</h2><p class="text">${esc(r.summary)}</p><p>Started ${date(r.started)} · Duration ${esc((r.duration_seconds||0).toFixed(1))}s · Trigger ${esc(r.trigger)}<br>Requested ${date(r.requested)}</p>${r.not_before?`<p>${esc(scheduledTime(r.not_before))} · ${date(r.not_before)}</p>`:''}${paramsView(r)}${r.parent?`<p>rerun of <a href="#run/${encodeURIComponent(r.parent)}">${esc(r.parent)}</a></p>`:''}${canRerun?`<button class="run" id="rerun-failed" ${job.running||job.pending?'disabled':''}>Rerun failed hosts (${failed})</button>`:''}${approval}${['cancelled','canceled'].includes(r.status)?`<p>Cancelled: ${esc(r.summary)}</p>`:''}</section>${reportErrors(r,p)}<div class="tabs" role="tablist">${tabs.map(([name],i)=>`<button class="run" role="tab" id="tab-${i}" aria-controls="panel-${i}" aria-selected="${i===0}" data-tab="${i}">${esc(name)}</button>`).join('')}</div>${tabs.map(([,html],i)=>`<section role="tabpanel" id="panel-${i}" aria-labelledby="tab-${i}" ${i?'hidden':''}>${html}</section>`).join('')}`;
+  main.innerHTML=pageHeader(r.job,r.kind+' · run details')+`<div class="job-split detail-open"><section class="run-list" aria-label="Job runs">${runList(list,job,id)}</section><section class="run-detail" aria-label="Selected run"><div class="toolbar"><button class="run mobile-back" id="runs-back">← Runs</button>${canRerun?`<button class="run" id="rerun-failed" ${job.running||job.pending?'disabled':''}>Rerun failed hosts (${failed})</button>`:''}${jobActions(job,false)}${decisionButtons(r,job)}${job?.allowed&&['scheduled','queued','running'].includes(r.status)?`<button class="run" data-stop="${esc(r.id)}" data-name="${esc(r.job)}" data-running="${r.status==='running'}">Cancel</button>`:''}</div><p><a href="#job/${encodeURIComponent(r.job)}" id="back">← ${esc(r.job)}</a>${r.audit_execution_id?` &nbsp; <a href="#run/${encodeURIComponent(r.audit_execution_id)}">Execution ${esc(r.audit_execution_id)}</a>`:''}</p><section class="report-card"><h2>${esc(r.job)} <small>${esc(r.kind)}</small> ${badge(r.status)}${checkBadge(r)}</h2><p class="text">${esc(r.summary)}</p><p>Started ${date(r.started)} · Duration ${esc((r.duration_seconds||0).toFixed(1))}s · Trigger ${esc(r.trigger)}<br>Requested ${date(r.requested)}</p>${r.not_before?`<p>${esc(scheduledTime(r.not_before))} · ${date(r.not_before)}</p>`:''}${paramsView(r)}${r.parent?`<p>rerun of <a href="#run/${encodeURIComponent(r.parent)}">${esc(r.parent)}</a></p>`:''}${approval}${['cancelled','canceled'].includes(r.status)?`<p>Cancelled: ${esc(r.summary)}</p>`:''}</section>${reportErrors(r,p)}<div class="tabs" role="tablist">${tabs.map(([name],i)=>`<button class="run" role="tab" id="tab-${i}" aria-controls="panel-${i}" aria-selected="${i===0}" data-tab="${i}">${esc(name)}</button>`).join('')}</div>${tabs.map(([,html],i)=>`<section role="tabpanel" id="panel-${i}" aria-labelledby="tab-${i}" ${i?'hidden':''}>${html}</section>`).join('')}</section></div><div id="comparison" aria-live="polite"></div>`;
+  bindJobActions();
+  bindRunList(r.job,list,job);
+  applySearch() ;
+  $('#runs-back').onclick=()=>{main.querySelector('.job-split').classList.remove('detail-open');
+  stopProgress()};
   if(canRerun)$('#rerun-failed').onclick=async e=>{
     e.target.disabled=true;
-    try{const next=await api('/api/runs/'+encodeURIComponent(id)+'/rerun-failed',{method:'POST'});await run(next.run)}catch(err){alert(err.message);e.target.disabled=false}
+    try{const next=await api('/api/runs/'+encodeURIComponent(id)+'/rerun-failed',{method:'POST'});await run(next.run)}
+  catch(err){alert(err.message);e.target.disabled=false}
   };
   $('#back').onclick=e=>{e.preventDefault();results(r.job).catch(showError)};
-  main.querySelectorAll('[data-expand]').forEach(row=>row.onclick=e=>{if(e.target.closest('a,details'))return;const d=row.querySelector('details');if(d)d.open=!d.open});
+  main.querySelectorAll('[data-expand]').forEach(row=>row.onclick=e=>{if(e.target.closest('a,details'))return;
+  const d=row.querySelector('details');
+  if(d)d.open=!d.open});
   main.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{main.querySelectorAll('[data-tab]').forEach(t=>t.setAttribute('aria-selected',String(t===b)));main.querySelectorAll('[role="tabpanel"]').forEach((p,i)=>p.hidden=i!==Number(b.dataset.tab))});
+  const tabButtons=[...main.querySelectorAll('[data-tab]')];tabButtons.forEach((b,i)=>b.onkeydown=e=>{let next;
+  if(e.key==='ArrowRight')next=(i+1)%tabButtons.length;else if(e.key==='ArrowLeft')next=(i+tabButtons.length-1)%tabButtons.length;else if(e.key==='Home')next=0;else if(e.key==='End')next=tabButtons.length-1;
+  if(next!==undefined){e.preventDefault();tabButtons[next].click();tabButtons[next].focus()}});
   if(live)streamProgress(id);
 }
 async function streamProgress(id){
@@ -341,13 +626,16 @@ async function streamProgress(id){
   const {signal}=controller;
   let after=0, snapshotSeq=0, backoff=1000, hosts={}, finished=0;
   const draw=()=>{
-    $('#progress-hosts').innerHTML=table(['Host','Current task','OK','Changed','Failed','Skipped'],Object.entries(hosts).map(([host,h])=>`<tr><td>${esc(host)}</td><td class="text">${esc(h.done?'done':h.task)}</td><td>${h.ok}</td><td>${h.changed}</td><td>${h.failed}</td><td>${h.skipped}</td></tr>`));
+    $('#progress-hosts').innerHTML=table(['Host','Current task','OK','Changed','Failed','Skipped'],Object.entries(hosts).map(([host,h])=>`<tr><td>${esc(host)}</td><td class="text">${esc(h.done?'done':h.task)}</td><td>${esc(h.ok)}</td><td>${esc(h.changed)}</td><td>${esc(h.failed)}</td><td>${esc(h.skipped)}</td></tr>`));
     $('#progress-state').textContent=`${finished} tasks finished`;
   };
   const receive=e=>{
     if(e.type==='ping')return false;
-    if(e.type==='snapshot'){hosts=Object.assign(Object.create(null),e.hosts);finished=e.tasks_finished;snapshotSeq=e.seq;draw();if(e.status){run(id).catch(showError);return true}return false}
-    if(e.type==='gap'){$('#progress-state').textContent='Earlier events are no longer available; host totals are current.';return false}
+    if(e.type==='snapshot'){hosts=Object.assign(Object.create(null),e.hosts);finished=e.tasks_finished;snapshotSeq=e.seq;draw();
+  if(e.status){run(id).catch(showError);
+  return true}return false}
+    if(e.type==='gap'){$('#progress-state').textContent='Earlier events are no longer available; host totals are current.';
+  return false}
     if(e.seq<=after)return false;
     after=e.seq;
     if(e.seq>snapshotSeq)backoff=1000;
@@ -360,7 +648,8 @@ async function streamProgress(id){
     const row=document.createElement('div');row.className='item text';
     row.textContent=[new Date(e.at).toLocaleTimeString(),e.type,e.play,e.host,e.task,e.status,e.duration_ms?e.duration_ms+'ms':''].filter(Boolean).join(' · ');
     const log=$('#progress-log');log.prepend(row);while(log.children.length>300)log.lastElementChild.remove();
-    if(e.type==='end'){run(id).catch(showError);return true}
+    if(e.type==='end'){run(id).catch(showError);
+  return true}
     return false;
   };
   while(!signal.aborted){
@@ -370,37 +659,52 @@ async function streamProgress(id){
         if(response.status===404){await run(id);return}
         throw new Error(response.status+' '+await response.text());
       }
-      const reader=response.body.getReader(), decoder=new TextDecoder();let pending='';
+      const reader=response.body.getReader(), decoder=new TextDecoder();
+  let pending='';
       try{
         while(!signal.aborted){
-          const {value,done}=await reader.read();if(done)break;
+          const {value,done}=await reader.read();
+  if(done)break;
           pending+=decoder.decode(value,{stream:true});
-          let newline;while((newline=pending.indexOf('\n'))>=0){const line=pending.slice(0,newline);pending=pending.slice(newline+1);if(line&&receive(JSON.parse(line)))return}
+          let newline;while((newline=pending.indexOf('\n'))>=0){const line=pending.slice(0,newline);pending=pending.slice(newline+1);
+  if(line&&receive(JSON.parse(line)))return}
         }
-      }finally{await reader.cancel().catch(()=>{});reader.releaseLock()}
-    }catch(e){if(signal.aborted)return;$('#progress-state').textContent='Reconnecting: '+e.message}
+      }
+  finally{await reader.cancel().catch(()=>{});reader.releaseLock()}
+    }
+  catch(e){if(signal.aborted)return ;
+  $('#progress-state').textContent='Reconnecting: '+e.message}
     if(signal.aborted)return;
     await new Promise(resolve=>{const done=()=>{clearTimeout(timeout);signal.removeEventListener('abort',done);resolve()},timeout=setTimeout(done,backoff);signal.addEventListener('abort',done,{once:true})});
     backoff=Math.min(10000,backoff*2);
   }
 }
 async function host(name){
-  view='host';hash('#host/'+encodeURIComponent(name));
+  stopProgress();
+  view='host';
+  hash('#host/'+encodeURIComponent(name));
+  setNav('hosts');
   const list=await api('/api/hosts/'+encodeURIComponent(name)+'/results');
-  main.innerHTML=`<p><a href="#" id="back">← hosts</a></p><h2>${esc(name)}</h2><p><a href="#host-audit/${encodeURIComponent(name)}">runs in the audit store</a></p>`+(list.length?table(['Started','Job','Kind','Run status','Host status','Summary'],list.map(r=>`<tr><td><a href="#run/${encodeURIComponent(r.id)}">${date(r.started)}</a></td><td><a href="#job/${encodeURIComponent(r.job)}">${esc(r.job)}</a></td><td>${esc(r.kind)}</td><td>${badge(r.status)}</td><td>${badge(r.host_status)}</td><td>${esc(r.summary)}</td></tr>`)):empty('No retained results for this host'));
+  main.innerHTML=pageHeader(name,'Retained results for this host')+`<p><a href="#" id="back">← Hosts</a></p><p><a href="#host-audit/${encodeURIComponent(name)}">runs in the audit store</a></p>`+(list.length?table(['Started','Job','Kind','Run status','Host status','Summary'],list.map(r=>`<tr><td><a href="#run/${encodeURIComponent(r.id)}">${date(r.started)}</a></td><td><a href="#job/${encodeURIComponent(r.job)}">${esc(r.job)}</a></td><td>${esc(r.kind)}</td><td>${badge(r.status)}</td><td>${badge(r.host_status)}</td><td>${esc(r.summary)}</td></tr>`)):empty('No retained results for this host'));
   $('#back').onclick=e=>{e.preventDefault();show('hosts')};
 }
 async function auditRun(id){
-  view='result';hash('#run/'+encodeURIComponent(id));
+  view='result';
+  hash('#run/'+encodeURIComponent(id));
+  setNav('runs');
+  jobContext=null;
   const r=await api('/api/runs/'+encodeURIComponent(id));
-  main.innerHTML=`<p><a href="#" id="back">← runs</a>${r.serve_run?` &nbsp; <a href="#run/${encodeURIComponent(r.serve_run)}">Serve run ${esc(r.serve_run)}</a>`:''}</p><pre>${esc(JSON.stringify(r,null,2))}</pre>`;
+  main.innerHTML=pageHeader('Execution', 'Audit execution record')+`<p><a href="#" id="back">← runs</a>${r.serve_run?` &nbsp; <a href="#run/${encodeURIComponent(r.serve_run)}">Serve run ${esc(r.serve_run)}</a>`:''}</p><pre>${esc(JSON.stringify(r,null,2))}</pre>`;
   $('#back').onclick=e=>{e.preventDefault();show('runs')};
 }
 async function hosts(){
+  setNav('hosts');
   const list=await api('/api/hosts');
-  if(!list.length){main.innerHTML='<div class="empty">No host results yet — run a job</div>';return}
-  main.innerHTML=`<table><tr><th>Host</th><th>Status</th><th>Jobs</th><th>Seen</th></tr>${list.map(h=>`<tr><td><a href="#host/${encodeURIComponent(h.host)}" data-host="${esc(h.host)}">${esc(h.host)}</a></td><td>${badge(h.status)}</td>
+  if(!list.length){main.innerHTML=pageHeader('Hosts','Latest results across your fleet')+empty('No host results yet — run a job');return}
+  main.innerHTML=pageHeader('Hosts','Latest results across your fleet')+`<table><tr><th>Host</th><th>Status</th><th>Jobs</th><th>Seen</th></tr>${list.map(h=>`<tr data-search="${esc(h.host)}"><td><a href="#host/${encodeURIComponent(h.host)}" data-host="${esc(h.host)}">${esc(h.host)}</a></td><td>${badge(h.status)}</td>
     <td>${Object.entries(h.jobs).map(([j,s])=>`${esc(j)} ${badge(s)}`).join(' &nbsp; ')}</td><td class="muted">${esc(ago(h.seen))}</td></tr>`).join('')}</table>`;
+  listFooter(list.length);
+  applySearch();
   main.querySelectorAll('[data-host]').forEach(a=>a.onclick=e=>{e.preventDefault();host(a.dataset.host).catch(showError)});
 }
 async function runs(host){
@@ -409,7 +713,9 @@ async function runs(host){
 }
 async function audit(){return historyView('audit')}
 async function historyView(kind){
+  stopProgress();
   view=kind;
+  setNav(kind);
   const params=new URLSearchParams(location.hash.split('?')[1]||''), isRuns=kind==='runs';
   const fields=isRuns?['host','playbook','status','job','from','to','limit','offset']:['user','action','job','run','ok','from','to','limit','before'];
   const choices={status:['success','failure','running','skipped'],action:['run','approve','reject','cancel','pause','resume'],ok:['true','false']};
@@ -417,7 +723,7 @@ async function historyView(kind){
   const heads=isRuns?['Started','Playbook','User','Status','Hosts','Tasks','Failed','Duration','Serve run']:['Time','User','Action','Job','Run','Result','Reason','Addr'];
   const row=isRuns?r=>`<tr><td><a href="#run/${encodeURIComponent(r.id)}">${date(r.start)}</a></td><td class="muted">${esc(r.playbook)}</td><td>${esc(r.user)}</td><td>${badge(r.status)}</td><td>${esc(r.hosts)}</td><td>${esc(r.tasks)}</td><td>${esc(r.failed)}</td><td>${(r.duration||0).toFixed(1)}s</td><td>${r.serve_run?`<a href="#run/${encodeURIComponent(r.serve_run)}">${esc(r.serve_run)}</a>`:''}</td></tr>`:a=>`<tr><td>${date(a.time)}</td><td>${esc(a.user)}</td><td>${esc(a.action)}</td><td>${esc(a.job)}</td><td>${a.run?`<a href="#run/${encodeURIComponent(a.run)}">${esc(a.run)}</a>`:''}</td><td>${badge(a.ok?'ok':'refused')}</td><td>${esc(a.reason)}</td><td>${esc(a.addr)}</td></tr>`;
   const expected=location.hash;
-  main.innerHTML=bar+table(heads,[])+'<p class="muted" id="history-state" role="status">Loading…</p><button class="run" id="older" hidden>Older</button>';
+  main.innerHTML=pageHeader(isRuns?'Runs':'Audit',isRuns?'Execution history from the audit store':'Actions and decisions across the fleet')+bar+table(heads,[])+'<p class="muted" id="history-state" role="status">Loading…</p><button class="run" id="older" hidden>Older</button>';
   const form=$('#filters'), body=main.querySelector('tbody'), older=$('#older'), state=$('#history-state');
   form.onsubmit=e=>{
     e.preventDefault();
@@ -433,19 +739,23 @@ async function historyView(kind){
       const {data,headers}=await apiPage('/api/'+kind+'?'+params);
       if(view!==kind||location.hash!==expected)return;
       body.insertAdjacentHTML('beforeend',data.map(row).join(''));
-      count+=data.length;
-      state.textContent=count?'':isRuns?'No runs in the audit store':'No actions yet';
+      count+=data.length;body.querySelectorAll('tr').forEach(tr=>tr.dataset.search=tr.textContent);
+  applySearch();
+      state.textContent=count?'Showing 1–'+count+' loaded records':isRuns?'No runs in the audit store':'No actions yet';
       next=headers.get(isRuns?'X-Next-Offset':'X-Next-Cursor');
       older.hidden=!next;
-    }finally{older.disabled=false}
+    }
+  finally{older.disabled=false}
   };
   older.onclick=async()=>{
     params.set(isRuns?'offset':'before',next);
-    try{await load()}catch(e){state.textContent=e.message}
+    try{await load()}
+  catch(e){state.textContent=e.message}
   };
   await load();
 }
-const wrapTables=()=>main.querySelectorAll('table').forEach(t=>{if(t.parentElement.classList.contains('table-scroll'))return;const wrapper=document.createElement('div');wrapper.className='table-scroll';t.before(wrapper);wrapper.append(t)});
+const wrapTables=()=>main.querySelectorAll('table').forEach(t=>{if(t.parentElement.classList.contains('table-scroll'))return;
+  const wrapper=document.createElement('div');wrapper.className='table-scroll';t.before(wrapper);wrapper.append(t)});
 new MutationObserver(wrapTables).observe(main,{childList:true,subtree:true});
 function inventoryNames(names){
   const first=names.slice(0,3).map(esc).join(', ');
@@ -455,8 +765,9 @@ function inventoryEffective(vars){
   return `<details class="inventory-effective"><summary>Effective variables (${vars.length})</summary>${vars.length?vars.map(v=>`<div class="inventory-var"><strong>${esc(v.name)}</strong><span>${esc(v.from.startsWith('group:')?'group '+v.from.slice(6):v.from)}</span><span title="${esc(v.source)}">${esc(v.source.split(/[\\/]/).pop()||v.source)}</span></div>`).join(''):'<span class="muted">No effective variables</span>'}</details>`;
 }
 async function inventory(){
+  setNav('inventory');
   const sources=await api('/api/inventory');
-  main.innerHTML='<h2>Inventory</h2><div id="inventory-sources"></div>';
+  main.innerHTML=pageHeader('Inventory','Sources, groups and effective host variables')+'<div id="inventory-sources"></div>';
   const container=$('#inventory-sources');
   sources.forEach(source=>{
     const card=document.createElement('section');card.className='report-card';
@@ -464,33 +775,134 @@ async function inventory(){
     if(source.error){card.innerHTML+=`<p class="error-text">${esc(source.error)}</p>`;container.append(card);return}
     card.innerHTML+=`<h3>Groups</h3>${table(['Name','Children','Hosts','Var names'],source.groups.map(g=>`<tr><td>${esc(g.name)}</td><td>${inventoryNames(g.children)}</td><td>${g.hosts.length}</td><td>${inventoryNames(g.vars)}</td></tr>`))}<h3>Hosts</h3><div class="filters"><label>Filter hosts<input type="search" placeholder="Host name or group" data-host-filter></label></div><div data-inventory-hosts></div>`;
     const input=card.querySelector('[data-host-filter]'), output=card.querySelector('[data-inventory-hosts]');
-    const render=()=>{const query=input.value.toLowerCase();output.innerHTML=table(['Name','Groups','Var names',...(me.operator?['Address']:[])],source.hosts.filter(h=>[h.name,...h.groups].some(v=>v.toLowerCase().includes(query))).map(h=>`<tr><td data-label="Name">${hostLink(h.name)}</td><td data-label="Groups">${inventoryNames(h.groups)}</td><td data-label="Var names" class="inventory-host-vars">${inventoryNames(h.vars)}${me.operator?inventoryEffective(h.effective||[]):''}</td>${me.operator?`<td data-label="Address">${esc(h.address)}</td>`:''}</tr>`));if(me.operator)output.querySelector('table')?.classList.add('inventory-hosts-table')};
-    input.oninput=render;render();container.append(card);
+    const render=()=>{const query=input.value.toLowerCase();
+  output.innerHTML=table(['Name','Groups','Var names',...(me.operator?['Address']:[])],source.hosts.filter(h=>[h.name,...h.groups].some(v=>v.toLowerCase().includes(query))).map(h=>`<tr data-search="${esc([h.name,...h.groups].join(' '))}"><td data-label="Name">${hostLink(h.name)}</td><td data-label="Groups">${inventoryNames(h.groups)}</td><td data-label="Var names" class="inventory-host-vars">${inventoryNames(h.vars)}${me.operator?inventoryEffective(h.effective||[]):''}</td>${me.operator?`<td data-label="Address">${esc(h.address)}</td>`:''}</tr>`));
+  if(me.operator)output.querySelector('table')?.classList.add('inventory-hosts-table')};
+    input.oninput=()=>{render();
+  applySearch()};render();container.append(card);
   });
   if(!sources.length)container.innerHTML=empty('No inventory sources');
+  applySearch();
   main.querySelectorAll('[data-inventory-refresh]').forEach(button=>button.onclick=async()=>{
     const buttons=main.querySelectorAll('[data-inventory-refresh]');buttons.forEach(b=>b.disabled=true);
-    try{await api('/api/inventory/refresh',{method:'POST'});if(view==='inventory')await inventory()}catch(e){buttons.forEach(b=>b.disabled=false);alert(e.message)}
+    try{await api('/api/inventory/refresh',{method:'POST'});
+  if(view==='inventory')await inventory()}
+  catch(e){buttons.forEach(b=>b.disabled=false);alert(e.message)}
   });
 }
+// Shell interactions, themes, search and routing.
+// Lucide-style inline icons, ISC License: Copyright (c) Lucide Contributors. Permission to use, copy, modify, and/or distribute this software for any purpose with or without fee is hereby granted, provided that the above copyright notice and this permission notice appear in all copies. THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+function icon(name){const paths={jobs:'<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',runs:'<path d="M9 3H3v6M3 9a9 9 0 1 1 1 8M12 7v5l3 2"/>',hosts:'<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 21h8M12 16v5"/>',inventory:'<path d="m12 3 9 5-9 5-9-5 9-5ZM3 12l9 5 9-5M3 16l9 5 9-5"/>',audit:'<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 7h6M9 11h6M9 15h4"/>',search:'<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/>',user:'<circle cx="12" cy="8" r="3"/><path d="M5 21v-2a7 7 0 0 1 14 0v2"/>',sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M5 19l1.5-1.5M17.5 6.5 19 5"/>',moon:'<path d="M20.5 13a9 9 0 0 1-9.5-9.5A9 9 0 1 0 20.5 13Z"/>',menu:'<path d="M4 6h16M4 12h16M4 18h16"/>',close:'<path d="m6 6 12 12M6 18 18 6"/>',play:'<path d="m8 4 12 8-12 8V4Z"/>',activity:'<path d="M2 12h5l3-9 4 18 3-9h5"/>'};
+  return `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">${paths[name]||paths.hosts}</svg>`}
+function readToken(){try{return sessionStorage.getItem('serveToken')||''}catch{return ''}}
+let themeMode='system';
+  try{const value=localStorage.getItem('serveTheme');
+  if(['system','light','dark'].includes(value))themeMode=value}catch{}
+const systemTheme=matchMedia('(prefers-color-scheme:dark)');
+function applyTheme(){document.documentElement.dataset.theme=themeMode==='system'?(systemTheme.matches?'dark':'light'):themeMode ;
+  $('#theme').innerHTML=icon(themeMode==='dark'?'moon':themeMode==='light'?'sun':'hosts') ;
+  $('#theme').setAttribute('aria-label','Theme: '+themeMode+'; activate to change') ;
+  $('#theme').title='Theme: '+themeMode}
+$('#theme').onclick=()=>{themeMode=['system','light','dark'][(['system','light','dark'].indexOf(themeMode)+1)%3];
+  try{localStorage.setItem('serveTheme',themeMode)}catch{}applyTheme()};systemTheme.addEventListener?.('change',applyTheme);applyTheme();
+$('#search-icon').innerHTML=icon('search') ;
+  $('#user-icon').innerHTML=icon('user') ;
+  $('#menu').innerHTML=icon('menu') ;
+  $('#close-sheet').innerHTML=icon('close');
+const mobileNavigation=matchMedia('(max-width:600px)');
+function syncSidebar(){
+  const sidebar=$('.sidebar');
+  sidebar.inert=mobileNavigation.matches&&!document.body.classList.contains('drawer-open');
+}
+function drawer(open){
+  const wasOpen=document.body.classList.contains('drawer-open');
+  document.body.classList.toggle('drawer-open',open);
+  $('#menu').setAttribute('aria-expanded',String(open));
+  $('#menu').setAttribute('aria-label',open?'Close navigation':'Open navigation');
+  syncSidebar();
+  if(open&&mobileNavigation.matches)$('.sidebar nav button')?.focus();
+  if(wasOpen&&!open&&mobileNavigation.matches)$('#menu').focus();
+}
+mobileNavigation.addEventListener?.('change',()=>{drawer(false);syncSidebar()});
+syncSidebar();
+$('#menu').onclick=()=>drawer(!document.body.classList.contains('drawer-open')) ;
+  $('#drawer-scrim').onclick=()=>drawer(false);
+$('#close-sheet').onclick=closeSheet ;
+  $('#run-sheet').addEventListener('click',e=>{if(e.target===$('#run-sheet')){const r=e.target.getBoundingClientRect();
+  if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)closeSheet()}}) ;
+  $('#run-sheet').addEventListener('cancel',e=>{e.preventDefault();
+  closeSheet()});
+$('#set-token').onclick=()=>{const token=prompt('Bearer token (empty to clear)',readToken());
+  if(token===null)return;
+  try{if(token)sessionStorage.setItem('serveToken',token);else sessionStorage.removeItem('serveToken')}catch{alert('This browser cannot save the token in session storage.');return}location.reload()};
+function setNav(v){document.querySelectorAll('nav [data-v]').forEach(b=>{const active=b.dataset.v===v;b.classList.toggle('on',active);
+  if(active)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')});
+  drawer(false)}
+let listPage=0;
+function applySearch(reset=false){
+  if(reset)listPage=0;
+  const query=$('#search').value.trim().toLowerCase();
+  const rows=[...main.querySelectorAll('[data-search]')];
+  const matches=rows.filter(row=>row.dataset.search.toLowerCase().includes(query));
+  const paged=Boolean(main.querySelector('[data-list-count]'));
+  if(paged)listPage=Math.min(listPage,Math.max(0,Math.ceil(matches.length/50)-1));
+  rows.forEach(row=>row.hidden=true);
+  const visible=paged?matches.slice(listPage*50,(listPage+1)*50):matches;
+  visible.forEach(row=>row.hidden=false);
+  const count=main.querySelector('[data-list-count]');
+  if(count)count.textContent=matches.length?'Showing '+(listPage*50+1)+'–'+Math.min((listPage+1)*50,matches.length)+' of '+matches.length:'Showing 0 of 0';
+  const previous=main.querySelector('[data-previous]'),next=main.querySelector('[data-next]');
+  if(previous)previous.disabled=listPage===0;
+  if(next)next.disabled=(listPage+1)*50>=matches.length;
+  let emptySearch=main.querySelector('[data-search-empty]');
+  if(!emptySearch&&rows.length){
+    emptySearch=document.createElement('div');
+    emptySearch.className='empty';emptySearch.dataset.searchEmpty='';
+    emptySearch.textContent='No matches for your search.';
+    emptySearch.setAttribute('role','status');
+    const anchor=main.querySelector('.table-footer')||main.querySelector('.run-list')||main.lastElementChild;
+    if(anchor?.classList.contains('run-list'))anchor.append(emptySearch);else anchor?.after(emptySearch);
+  }
+  if(emptySearch)emptySearch.hidden=!query||matches.length>0;
+}
+function listFooter(n){
+  main.insertAdjacentHTML('beforeend',`<div class="table-footer"><span data-list-count>Showing ${n?'1–'+Math.min(n,50):0} of ${n}</span><span class="pagination"><button class="run" data-previous disabled>Previous</button><button class="run" data-next>Next</button></span></div>`);
+  main.querySelector('[data-previous]').onclick=()=>{listPage--;
+  applySearch()};
+  main.querySelector('[data-next]').onclick=()=>{listPage++;
+  applySearch()};
+}
+$('#search').oninput=()=>applySearch(true);
+document.addEventListener('keydown',e=>{if(e.key==='/'&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&!e.target.closest('input,textarea,select,[contenteditable]')&&!$('#run-sheet').open){e.preventDefault() ;
+  $('#search').focus()}if(e.key==='Escape'){drawer(false) ;
+  $('#user-menu').open=false}});
 const views={jobs,hosts,inventory,runs:()=>runs(),audit};
-function show(v){stopProgress();view=v;if(v==='runs'||v==='audit'||v==='inventory')hash('#'+v);else if(v!=='jobs')hash('');document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));views[v]().catch(e=>main.innerHTML=`<div class="empty">${esc(e.message)}</div>`)}
-document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>show(b.dataset.v));
-function showError(e){main.innerHTML=`<div class="empty">${esc(e.message)}</div>`}
+function show(v){listPage=0;stopProgress();
+  closeSheet();
+  view=v;
+  jobContext=null;
+  hash(v==='jobs'?'':'#'+v);
+  setNav(v);views[v]().catch(showError)}
+document.querySelectorAll('nav [data-v]').forEach(b=>{b.insertAdjacentHTML('afterbegin',icon(b.dataset.v));b.title=b.textContent;b.onclick=()=>show(b.dataset.v)});
+function showError(e){main.innerHTML=empty(e.message)}
 function route(){
-  stopProgress();
-  const [type,...parts]=location.hash.slice(1).split('/'), id=decodeURIComponent(parts.join('/'));
-  const historyKind=type.split('?')[0];
-  if(historyKind==='runs'||historyKind==='audit'||historyKind==='inventory'){view=historyKind;document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===historyKind));views[historyKind]().catch(showError);return}
-  if(type==='job'&&id)results(id).catch(showError);
-  else if(type==='run'&&id)run(id).catch(showError);
-  else if(type==='host'&&id)host(id).catch(showError);
-  else if(type==='host-audit'&&id)runs(id).catch(showError);
-  else show('jobs');
+  listPage=0;stopProgress();
+  closeSheet();
+  let type,id;
+  try{const parts=location.hash.slice(1).split('/');type=parts.shift();id=decodeURIComponent(parts.join('/'))}
+  catch(e){showError(e);return}
+  const kind=type.split('?')[0];
+  if(['runs','audit','inventory','hosts'].includes(kind)){view=kind;
+  setNav(kind);views[kind]().catch(showError);return}
+  if(type==='job'&&id)results(id).catch(showError);else if(type==='run'&&id)run(id).catch(showError);else if(type==='host'&&id)host(id).catch(showError);else if(type==='host-audit'&&id)runs(id).catch(showError);else show('jobs');
 }
 window.addEventListener('hashchange',route);
-api('/api/me').then(m=>{me=m;activityView(m);pauseView(m);api('/api/pause').then(pauseView).catch(()=>{});$('#who').textContent=m.user+(m.operator?' · operator':' · viewer');route()}).catch(e=>{main.innerHTML=`<div class="empty">${esc(e.message)}</div>`});
-timer=setInterval(()=>{api('/api/me').then(activityView).catch(()=>{});if(view==='jobs'&&!main.querySelector('[data-form-row]:not([hidden])')&&!main.querySelector('pre')&&!main.querySelector('#back'))jobs().catch(()=>{})},10000);
+api('/api/me').then(m=>{me=m;
+  activityView(m);
+  pauseView(m);api('/api/pause').then(pauseView).catch(()=>{}) ;
+  $('#who').textContent=m.user+(m.operator?' · operator':' · viewer');route()}).catch(showError);
+timer=setInterval(()=>{api('/api/me').then(activityView).catch(()=>{});
+  if(view==='jobs'&&!$('#run-sheet').open)jobs().catch(()=>{})},10000);
 </script>
 </body>
 </html>
