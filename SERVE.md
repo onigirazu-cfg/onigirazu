@@ -305,6 +305,39 @@ the Authentik groups that may run jobs, `trusted_proxies` = the outpost's addres
 `sign_out_url: /outpost.goauthentik.io/sign_out` for a Sign out entry in the user menu
 (`/api/me` returns it as `sign_out_url`; only `/…` or `http(s)://` links are shown). Viewers read everything; operators also start jobs, approve or reject pending runs and cancel scheduled, queued or running ones.
 
+### Behind Authentik
+
+`serve` has no login of its own: Authentik signs people in and passes who they are in headers.
+
+```yaml
+listen: "192.0.2.20:8086"           # an internal address only the proxy reaches
+auth:
+  user_header: X-Authentik-Username
+  groups_header: X-Authentik-Groups
+  operators: [fleet-operators]      # Authentik groups that may run, approve and cancel
+  trusted_proxies: [192.0.2.5]     # the outpost or the reverse proxy (see below)
+  sign_out_url: /outpost.goauthentik.io/sign_out
+  tokens:
+    - name: ci
+      token: ${SERVE_CI_TOKEN}      # automation, not through Authentik
+```
+
+In Authentik:
+
+1. Create a Proxy Provider. "Proxy" mode: the outpost itself forwards to `http://192.0.2.20:8086`.
+   "Forward auth (single application)": nginx or Traefik fronts `serve` and asks the outpost.
+2. Create an Application for it; bind the groups that may open the page at all (everyone else is
+   stopped by Authentik). Who is an operator is decided by `operators` above.
+3. Add the Application to an outpost (the embedded one is enough).
+
+`trusted_proxies` is the address that connects to `serve`: the outpost in "Proxy" mode, the
+reverse proxy (nginx, Traefik) in forward-auth mode, which copies the `X-Authentik-*` headers from
+the auth response and must overwrite any the client sent (nginx `proxy_set_header` does). The
+outpost's own paths, such as `/outpost.goauthentik.io/sign_out`, must reach the outpost.
+
+Automation with a bearer token goes around Authentik: call `serve` on its own address, or give
+`/api/` a route on the reverse proxy that skips Authentik (the token is still required there).
+
 Named bearer tokens in `auth.tokens` have a `name`, a `token` value (expands `${VAR}`),
 and optional `groups`. Each is a server-level operator. Names must be unique and values
 must be nonempty. Tokens are checked before proxy headers.
