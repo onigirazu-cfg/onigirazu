@@ -3270,7 +3270,7 @@ func TestServeExecuteKeepsPartialResult(t *testing.T) {
 	dir := t.TempDir()
 	playbook := filepath.Join(dir, "slow.yml")
 	inventory := filepath.Join(dir, "hosts.yml")
-	if err := os.WriteFile(playbook, []byte("- hosts: localhost\n  gather_facts: false\n  tasks:\n    - name: quick\n      command: \"true\"\n    - name: hang\n      command: sleep 30\n"), 0o600); err != nil {
+	if err := os.WriteFile(playbook, []byte("- hosts: localhost\n  gather_facts: false\n  tasks:\n    - name: quick\n      command: \"true\"\n    - name: hang\n      shell: \"sleep 30; true\"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(inventory, []byte("all:\n  hosts:\n    localhost:\n      ansible_connection: local\n"), 0o600); err != nil {

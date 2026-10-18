@@ -281,11 +281,13 @@ func (e *CommandExecutor) executeWithContext(ctx context.Context, command string
 	} else if e.become || e.env != "" {
 		// #nosec G204 -- privilege escalation wraps the module's own command
 		cmd := exec.CommandContext(ctx, "sh", "-c", fullCommand)
+		stopWithContext(cmd)
 		output, err := cmd.CombinedOutput()
 		return string(output), err
 	} else {
 		// Execute locally with context
 		cmd := exec.CommandContext(ctx, command, args...)
+		stopWithContext(cmd)
 		output, err := cmd.CombinedOutput()
 		return string(output), err
 	}
