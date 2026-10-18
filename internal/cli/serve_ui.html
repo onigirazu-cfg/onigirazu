@@ -281,7 +281,7 @@ main{margin-left:0;padding:20px 12px}
 <button class="icon-button menu-button" id="menu" aria-controls="main-navigation" aria-label="Open navigation" aria-expanded="false"></button>
 <a class="brand" href="#" aria-label="onigirazu home"><svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M13 5c1.3-2 4.7-2 6 0l10 18c1.5 2.8-.5 6-3.5 6h-19C3.5 29 1.5 25.8 3 23Z" stroke="currentColor" stroke-width="1.7"/><rect x="12" y="19" width="8" height="10" rx="1.5" fill="currentColor"/></svg><span>{{title}}</span></a>
 <label class="search"><span id="search-icon"></span><input id="search" type="search" aria-label="Search current list" placeholder="Search…"><kbd>/</kbd></label>
-<div class="top-actions"><span class="activity" id="activity" role="status" aria-live="polite" hidden></span><button class="run" id="pause" hidden>Pause</button><button class="icon-button" id="theme" aria-label="Theme: system" title="Theme: system"></button><details class="user-menu" id="user-menu"><summary class="icon-button" aria-label="User menu" id="user-icon"></summary><div class="user-popover"><p id="who"></p><button class="run" id="set-token">Set token</button></div></details></div>
+<div class="top-actions"><span class="activity" id="activity" role="status" aria-live="polite" hidden></span><button class="run" id="pause" hidden>Pause</button><button class="icon-button" id="theme" aria-label="Theme: system" title="Theme: system"></button><details class="user-menu" id="user-menu"><summary class="icon-button" aria-label="User menu" id="user-icon"></summary><div class="user-popover"><p id="who"></p><button class="run" id="set-token">Set token</button><a class="run" id="sign-out" hidden>Sign out</a></div></details></div>
 </header>
 <button class="drawer-scrim" id="drawer-scrim" aria-label="Close navigation"></button>
 <aside class="sidebar"><nav id="main-navigation" aria-label="Main navigation"><button data-v="jobs" class="on"><span>Jobs</span></button><button data-v="runs"><span>Runs</span></button><button data-v="hosts"><span>Hosts</span></button><button data-v="inventory"><span>Inventory</span></button><button data-v="audit"><span>Audit</span></button></nav><div class="sidebar-foot">onigirazu<br><span>Fleet automation</span></div></aside>
@@ -945,7 +945,9 @@ window.addEventListener('hashchange',route);
 api('/api/me').then(m=>{me=m;
   activityView(m);
   pauseView(m);api('/api/pause').then(pauseView).catch(()=>{}) ;
-  $('#who').textContent=m.user+(m.operator?' · operator':' · viewer');route()}).catch(showError);
+  $('#who').textContent=m.user+(m.operator?' · operator':' · viewer');
+  const out=String(m.sign_out_url||'');if(/^(\/(?!\/)|https?:\/\/)/i.test(out)){$('#sign-out').href=out;$('#sign-out').hidden=false}
+  route()}).catch(showError);
 timer=setInterval(()=>{api('/api/me').then(activityView).catch(()=>{});
   if(view==='jobs'&&!$('#run-sheet').open)jobs().catch(()=>{})},10000);
 </script>

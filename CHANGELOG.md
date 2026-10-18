@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `onigirazu serve`: proxy group lists split on `|` and `,` only; a space is part of a group name
 - In-process playbook runs can overlap with their own output, secrets, role paths, bridge configuration and facts cache; cancellation follows the caller's context, and SSH pool settings are retained from the first initialization
 - `apply` takes its inventory and state file from its own `-i`/`--state` flags; `drift`, `verify`, `comply`, `serve`, `listen`, `pull`, `image`, `bootstrap` and `mcp` pass theirs the same way instead of writing the process's global `-i`/`--state` before running a playbook in-process
 
@@ -20,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `onigirazu serve`: `auth.trusted_proxies` limits proxy identity headers to the proxy's addresses, `auth.sign_out_url` adds Sign out to the user menu
 - `onigirazu serve`: redesigned page with a sidebar, search, light/dark themes, a split run view, a run sheet and phone layouts
 - `onigirazu serve`: apply diffs, per-host Tasks with statuses and durations, and compliance audit links with partial reports on cancel or timeout
 - `onigirazu serve`: live host task progress and structured result events in a Progress tab, with resumable NDJSON streams at `GET /api/results/{id}/events`
