@@ -93,7 +93,8 @@ A missing required variable returns `400` unless it has a declared default. Defa
 are applied server-side only for omitted variables, including requests without a body,
 and recorded in `params.extra_vars`. Validation errors identify the variable and rule
 without exposing secret values. The page shows selects, checkboxes, number inputs,
-text or password fields, with defaults, descriptions and required markers. Secret
+text or password fields, with defaults, descriptions and required markers; a pattern is shown
+as a hint and checked only by the server (RE2), so the browser's regex dialect never blocks a value. Secret
 defaults are never sent to the page; leaving a secret field empty uses its server default.
 
 ```bash

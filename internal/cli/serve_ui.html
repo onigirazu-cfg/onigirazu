@@ -83,7 +83,7 @@ function varInput(v){
   if(v.secret)input=`<input type="password" ${attrs} autocomplete="new-password">`;
   else if(v.type==='choice')input=`<select ${attrs}><option value="">Choose…</option>${(v.choices||[]).map(c=>`<option value="${esc(c)}" ${c===value?'selected':''}>${esc(c)}</option>`).join('')}</select>`;
   else if(v.type==='bool')input=`<input type="checkbox" ${attrs} ${v.default!=null?`data-default="${esc(v.default)}"`:''} ${value==='true'?'checked':''}>`;
-  else input=`<input type="${v.type==='int'?'number':'text'}" ${attrs} value="${esc(value)}" ${v.type==='int'?`step="1" ${v.min!=null?`min="${esc(v.min)}"`:''} ${v.max!=null?`max="${esc(v.max)}"`:''}`:v.pattern?`pattern="${esc(v.pattern)}"`:''}>`;
+  else input=`<input type="${v.type==='int'?'number':'text'}" ${attrs} value="${esc(value)}" ${v.type==='int'?`step="1" ${v.min!=null?`min="${esc(v.min)}"`:''} ${v.max!=null?`max="${esc(v.max)}"`:''}`:v.pattern?`title="must match ${esc(v.pattern)} (RE2, checked by the server)"`:''}>`;
   return `<label>${esc(v.name)}${v.required?' *':''}${input}${v.description?`<small class="muted">${esc(v.description)}</small>`:''}</label>`;
 }
 const scheduledTime=t=>`scheduled for ${new Date(t).toLocaleString('en',{weekday:'short',hour:'2-digit',minute:'2-digit',hourCycle:'h23'})}, ${ago(t)}`;
