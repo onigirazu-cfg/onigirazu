@@ -15,11 +15,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - `apply` whose output reader goes away (`| head`, `| grep -q`) runs to the end instead of being killed by SIGPIPE mid-run, which left hosts half-changed, the state unsaved and the state lock held
-- `copy` on a local host applies `mode` when the content is already right and when it rewrites an existing file, as it does over SSH
-- Canceling a run (Ctrl-C, `serve` cancel or timeout) stops a local command or `script` together with the processes it started; before, a shell child kept the run waiting until it finished on its own
+- `copy` on a local host applies `mode` when the content is already right and when it rewrites an existing file, as it does over SSH, and reports its diff with `--diff`
+- Canceling a run (Ctrl-C, `serve` cancel or timeout) stops a local command, `script` or `verify:` command check together with the processes it started; before, a shell child kept the run waiting until it finished on its own
 
 ### Added
 
+- `onigirazu serve`: apply diffs, per-host Tasks with statuses and durations, and compliance audit links with partial reports on cancel or timeout
 - `onigirazu serve`: live host task progress and structured result events in a Progress tab, with resumable NDJSON streams at `GET /api/results/{id}/events`
 - `onigirazu serve`: typed, validated launch forms with defaults and one-click failed-host reruns linked to their parent run
 - `onigirazu serve`: run later with `not_before`, persistent scheduled runs and apply maintenance windows (`windows`, `windows_tz`), with page controls, cancellation, notifications and metrics

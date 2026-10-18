@@ -149,7 +149,7 @@ func (m *CopyModule) Execute(ctx context.Context, host types.Host, args map[stri
 
 	// check mode takes the executor path, which only reads before its check
 	if isLocal && !inCheckMode(args) {
-		return m.applyOwnership(ctx, host, args, dest, owner, group)(m.executeLocal(dest, sourceData, backup, force, mode, owner, group, sourceChecksum, result))
+		return m.applyOwnership(ctx, host, args, dest, owner, group)(m.executeLocal(args, dest, sourceData, backup, force, mode, owner, group, sourceChecksum, result))
 	} else {
 		return m.applyOwnership(ctx, host, args, dest, owner, group)(m.executeRemote(ctx, host, args, dest, sourceData, backup, force, remoteSrc, mode, "", sourceChecksum, result))
 	}
@@ -228,7 +228,7 @@ func copyMode(mode string) (os.FileMode, bool) {
 }
 
 // executeLocal handles file copying on local host
-func (m *CopyModule) executeLocal(dest string, sourceData []byte, backup, force bool, mode, owner, group, sourceChecksum string, result types.TaskResult) (types.TaskResult, error) {
+func (m *CopyModule) executeLocal(args map[string]interface{}, dest string, sourceData []byte, backup, force bool, mode, owner, group, sourceChecksum string, result types.TaskResult) (types.TaskResult, error) {
 	// Check if destination exists
 	destExists := true
 	_, err := os.Stat(dest)
@@ -241,8 +241,9 @@ func (m *CopyModule) executeLocal(dest string, sourceData []byte, backup, force 
 	}
 
 	var destChecksum string
+	var destData []byte
 	if destExists {
-		destData, err := os.ReadFile(dest) // #nosec G304 -- dest is validated by security validator
+		destData, err = os.ReadFile(dest) // #nosec G304 -- dest is validated by security validator
 		if err != nil {
 			result.Failed = true
 			result.Error = fmt.Sprintf("failed to read destination file %s: %v", dest, err)
@@ -272,6 +273,8 @@ func (m *CopyModule) executeLocal(dest string, sourceData []byte, backup, force 
 		}
 		return result, nil
 	}
+
+	addDiff(args, &result, dest, diffText(destData, destExists), diffText(sourceData, true))
 
 	// Create backup if requested and file exists
 	if backup && destExists {

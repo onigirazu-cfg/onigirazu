@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/onigirazu-cfg/onigirazu/internal/audit"
+	"github.com/onigirazu-cfg/onigirazu/internal/comply"
 	"github.com/onigirazu-cfg/onigirazu/internal/logger"
 )
 
@@ -3135,7 +3136,7 @@ func TestServeRunTimeout(t *testing.T) {
 					return nil, errors.New("missing deadline")
 				}
 				started <- time.Until(deadline)
-				result := &JobResult{Started: time.Now().UTC(), Status: "ok", Hosts: map[string]string{"web": "failed"}, Report: json.RawMessage(`{"partial":true}`)}
+				result := &JobResult{Started: time.Now().UTC(), Status: "ok", AuditExecutionID: "exec-1", Hosts: map[string]string{"web": "failed"}, Report: json.RawMessage(`{"partial":true}`)}
 				if tc.paused {
 					select {
 					case <-time.After(10 * time.Millisecond):
@@ -3216,7 +3217,7 @@ func TestServeRunTimeout(t *testing.T) {
 			case tc.paused, tc.finished:
 				want = "ok"
 			}
-			if got.Status != want || busy || got.Hosts["web"] != "failed" || string(got.Report) != `{"partial":true}` {
+			if got.Status != want || busy || got.Hosts["web"] != "failed" || string(got.Report) != `{"partial":true}` || got.AuditExecutionID != "exec-1" {
 				t.Fatalf("result: %+v, running=%v", got, busy)
 			}
 			if want == statusTimedOut {
@@ -3934,5 +3935,117 @@ func TestServeRerunFailed(t *testing.T) {
 				t.Fatalf("audit: %s %v", log, err)
 			}
 		})
+	}
+}
+
+func TestServeComplyKeepsPartialResult(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	profile, inventory := writeComplyRunFiles(t, dir, true)
+	s, err := newServer(&ServeConfig{DataDir: filepath.Join(dir, "data"), Retain: 5}, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pushes := 0
+	oldTransport := http.DefaultTransport
+	http.DefaultTransport = serveNotifyTransport(func(r *http.Request) (*http.Response, error) {
+		pushes++
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader("")), Header: make(http.Header)}, nil
+	})
+	t.Cleanup(func() { http.DefaultTransport = oldTransport })
+	s.cfg.Metrics.Push = "http://metrics.test/push"
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	r, err := s.execute(ctx, &ServeJob{Name: "partial", Kind: "comply", Profile: profile, Inventory: inventory}, "")
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("want deadline, got %v", err)
+	}
+	if r == nil || r.AuditExecutionID == "" || r.Hosts["localhost"] != "ok" || len(r.Report) == 0 {
+		t.Fatalf("partial result lost: %+v", r)
+	}
+	var report comply.Report
+	if err := json.Unmarshal(r.Report, &report); err != nil {
+		t.Fatal(err)
+	}
+	if report.Passed != 1 || report.Failed != 0 {
+		t.Fatalf("partial checks: %+v", report)
+	}
+	if pushes != 0 {
+		t.Fatalf("stopped run pushed metrics %d times", pushes)
+	}
+}
+
+func TestServeApplyIncludesDiff(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	playbook := filepath.Join(dir, "site.yml")
+	inventory := filepath.Join(dir, "hosts.yml")
+	target := filepath.Join(dir, "managed.txt")
+	if err := os.WriteFile(target, []byte("before\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(playbook, []byte("- hosts: localhost\n  gather_facts: false\n  tasks:\n    - name: config\n      copy:\n        dest: "+target+"\n        content: 'after'\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(inventory, []byte("all:\n  hosts:\n    localhost:\n      ansible_connection: local\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s, err := newServer(&ServeConfig{DataDir: filepath.Join(dir, "data"), Retain: 5}, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	j := &ServeJob{Name: "diff", Kind: "apply", Playbook: playbook, Inventory: inventory}
+	for _, mode := range []string{"check", "apply"} {
+		r, err := s.execute(context.Background(), j, mode)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var report DriftReport
+		if err := json.Unmarshal(r.Report, &report); err != nil {
+			t.Fatal(err)
+		}
+		items := report.Drift["localhost"]
+		if len(items) != 1 || !strings.Contains(items[0].Diff, "-before") || !strings.Contains(items[0].Diff, "+after") {
+			t.Fatalf("%s diff: %+v", mode, items)
+		}
+		data, err := os.ReadFile(target)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if mode == "check" && string(data) != "before\n" {
+			t.Fatalf("check modified file: %s", data)
+		}
+		if mode == "apply" && string(data) != "after" {
+			t.Fatalf("apply did not modify file: %s", data)
+		}
+	}
+}
+
+func TestServeComplyWithoutCompletedChecks(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	profile, inventory := writeComplyRunFiles(t, dir, false)
+	if err := os.WriteFile(profile, []byte("name: pending\nbecome: false\ncontrols:\n  - id: slow\n    title: slow command\n    check: {command: {cmd: 'sleep 30; true'}}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s, err := newServer(&ServeConfig{DataDir: filepath.Join(dir, "data"), Retain: 5}, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	r, err := s.execute(ctx, &ServeJob{Name: "pending", Kind: "comply", Profile: profile, Inventory: inventory}, "")
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("want deadline, got %v", err)
+	}
+	if r == nil || r.AuditExecutionID == "" || len(r.Hosts) != 0 || len(r.Report) == 0 {
+		t.Fatalf("stopped run without checks: %+v", r)
+	}
+	var report comply.Report
+	if err := json.Unmarshal(r.Report, &report); err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Hosts) != 0 || report.Passed != 0 || report.Failed != 0 {
+		t.Fatalf("unexpected verdict: %+v", report)
 	}
 }

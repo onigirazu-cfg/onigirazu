@@ -53,9 +53,9 @@ func runShellOnHost(ctx context.Context, host types.Host, args map[string]interf
 		exec.SetBecome(true, becomeUser, becomeMethod)
 	}
 
-	// One command string keeps quoting identical for local and SSH execution
-	// The executor already adds the output to the error
-	return exec.Execute("sh -c " + shellQuote(script))
+	// The executor quotes the script the same way locally and over SSH, adds the
+	// output to the error, and stops the command when ctx ends
+	return exec.ExecuteContext(ctx, "sh", "-c", script)
 }
 
 // probeOnHost describes path through the host's command server without a

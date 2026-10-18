@@ -1191,6 +1191,7 @@ next:
 				r.Duration = time.Since(started).Seconds()
 				if result != nil {
 					r.Hosts, r.Report = result.Hosts, result.Report
+					r.AuditExecutionID = result.AuditExecutionID
 				}
 			default:
 				r.Status, r.Summary = "error", err.Error()
@@ -1726,10 +1727,12 @@ func (s *server) execute(ctx context.Context, j *ServeJob, mode string) (*JobRes
 	case "comply":
 		co := &complyOptions{driftCheckOptions: o, profile: j.Profile, failOn: j.FailOn}
 		co.become = j.Become || !strings.Contains(j.Profile, "/")
-		report, err := complyReport(ctx, co)
-		if err != nil {
-			return nil, err
+		report, executionID, err := complyReport(ctx, co)
+		if report == nil {
+			return nil, cmp.Or(err, errors.New("the playbook returned no result"))
 		}
+		runErr = err
+		r.AuditExecutionID = executionID
 		for host, h := range report.Hosts {
 			r.Hosts[host] = map[bool]string{true: "ok", false: "failed"}[h.Failed == 0]
 		}
@@ -1742,7 +1745,9 @@ func (s *server) execute(ctx context.Context, j *ServeJob, mode string) (*JobRes
 		}
 		r.Summary = fmt.Sprintf("%d/%d controls pass (%.0f%%) on %d host(s)", report.Passed, report.Passed+report.Failed, report.Score, len(report.Hosts))
 		r.Report, _ = json.Marshal(report)
-		s.pushMetrics(report.Metrics(s.cfg.Metrics.Labels))
+		if runErr == nil {
+			s.pushMetrics(report.Metrics(s.cfg.Metrics.Labels))
+		}
 	case "verify":
 		result, err := runPlaybookContext(ctx, append(o.applyArgs(j.Playbook, false), "--verify-only"))
 		if result == nil {
@@ -1763,6 +1768,9 @@ func (s *server) execute(ctx context.Context, j *ServeJob, mode string) (*JobRes
 	default: // drift, apply
 		check := j.Kind == "drift" || mode == "check"
 		args := o.applyArgs(j.Playbook, check)
+		if !check {
+			args = append(args, "--diff")
+		}
 		if mode == "check" { // the verify: checks would test the state before the changes
 			args = append(args, "--skip-verify")
 		}

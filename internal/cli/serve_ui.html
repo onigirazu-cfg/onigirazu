@@ -32,6 +32,7 @@ header,nav{flex-wrap:wrap}header{overflow-wrap:anywhere}main,header>*{min-width:
 .report-card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px;margin:12px 0}.report-card h2,.report-card h3{margin-top:0}
 .tabs{display:flex;gap:8px;flex-wrap:wrap;margin:16px 0}.tabs [aria-selected="true"]{border-color:var(--accent);color:var(--accent)}
 .item{padding:8px 0;border-bottom:1px solid var(--line)}.text{white-space:pre-wrap;overflow-wrap:anywhere}.error-text{color:var(--bad)}.missing{color:var(--muted);background:var(--bg)}
+.task-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:start}.task-row>div{min-width:0}.task-meta{display:flex;gap:8px;align-items:center;justify-content:flex-end;flex-wrap:wrap}.task-duration{white-space:nowrap;font-variant-numeric:tabular-nums}.task-list{margin:0;padding-left:24px}.task-host summary{overflow-wrap:anywhere}.task-host summary .muted{display:block;margin-left:16px}.task-host[open] summary{margin-bottom:8px}
 summary{cursor:pointer}pre{max-width:100%}.diff span{display:inline-block;min-width:100%}.diff-add{background:var(--add-bg);color:var(--add-fg)}.diff-remove{background:var(--remove-bg);color:var(--remove-fg)}
 @media(max-width:700px){header{align-items:flex-start;flex-direction:column;gap:8px;padding:12px}header .who{margin-left:0}nav{display:flex;max-width:100%}main{padding:12px;width:100%}.jobs-table .target{display:none}.adhoc-form input{max-width:100%}.adhoc-form label{max-width:100%}}
 </style>
@@ -242,6 +243,15 @@ function reportErrors(r,p){
     return `<div class="item">${hostLink(h)} ${badge(r.hosts?.[h]||'unreachable')} ${Array.isArray(error)?error.map(itemView).join(''):`<span class="text">${esc(error||'No error details recorded')}</span>`}</div>`;
   }).join('');
 }
+function taskRunsView(p){
+  const hosts=Object.entries(p.tasks||{}).sort(([a],[b])=>a.localeCompare(b));
+  const rows=hosts.flatMap(([host,tasks])=>tasks.map(task=>({host,task})));
+  if(!rows.length)return empty('No task results recorded');
+  const duration=t=>Math.max(0,Number(t.duration_ms)||0), formatted=ms=>ms<1000?`${ms} ms`:`${(ms/1000).toFixed(2)} s`;
+  const row=(t,host)=>`<div class="task-row item"><div><b>${esc(t.task||'Unnamed task')}</b>${host?`<div>${hostLink(host)}</div>`:''}<div class="muted">${esc([t.play,t.module].filter(Boolean).join(' · '))}</div>${t.key?`<small class="muted">${esc(t.key)}</small>`:''}</div><div class="task-meta">${badge(t.status)}<span class="task-duration">${formatted(duration(t))}</span></div></div>`;
+  const slowest=[...rows].sort((a,b)=>duration(b.task)-duration(a.task)).slice(0,10);
+  return `${p.tasks_truncated?'<p class="compare-warning" role="status">Task list truncated at 2,000 rows per host. Totals and slowest tasks are based on retained rows only.</p>':''}<section class="report-card"><h3>Slowest ${slowest.length} tasks</h3><ol class="task-list">${slowest.map(({host,task})=>`<li>${row(task,host)}</li>`).join('')}</ol></section>${hosts.map(([host,tasks])=>`<details class="report-card task-host"><summary><b>${esc(host)}</b><span class="muted">${tasks.length} ${p.tasks_truncated?'retained ':''}tasks · ${formatted(tasks.reduce((total,t)=>total+duration(t),0))} total task duration</span></summary>${tasks.map(t=>row(t)).join('')}</details>`).join('')}`;
+}
 function driftTabs(r,p){
   const changed=r.kind==='apply'&&!p.plan, wording=changed?'changed':'would change';
   const names=[...new Set([...Object.keys(r.hosts||{}),...(p.in_sync||[]),...Object.keys(p.drift||{}),...Object.keys(p.errors||{})])].sort();
@@ -264,7 +274,7 @@ function driftTabs(r,p){
     budget-=Math.min(bytes.length,budget);
     return `<section><h3>${esc(e.host)} › ${esc(e.item.task)}</h3><pre class="diff">${text.split('\n').map(line=>`<span class="${line.startsWith('+')?'diff-add':line.startsWith('-')?'diff-remove':''}">${esc(line)}</span>`).join('\n')}</pre></section>`;
   }).join('');
-  const tabs=[['Hosts',hosts.length?table(['Host','Status',`Tasks (${wording}) / errors`],hosts):empty('No host results')],['Changes',changes||empty('No changes or task errors')],['Diff',diffs+(truncated?'<p class="muted">Diff truncated: only the first 200 KB are shown. The JSON tab contains the full diff.</p>':'')||empty('No diffs')]];
+  const tabs=[['Hosts',hosts.length?table(['Host','Status',`Tasks (${wording}) / errors`],hosts):empty('No host results')],['Tasks',taskRunsView(p)],['Changes',changes||empty('No changes or task errors')],['Diff',diffs+(truncated?'<p class="muted">Diff truncated: only the first 200 KB are shown. The JSON tab contains the full diff.</p>':'')||empty('No diffs')]];
   if(p.orphans?.length)tabs.push(['Orphans',table(['Managed resource'],p.orphans.map(o=>`<tr><td>${Object.entries(o).map(([k,v])=>`<div><b>${esc(k)}</b>: ${esc(typeof v==='object'?JSON.stringify(v):v)}</div>`).join('')}</td></tr>`))]);
   return tabs;
 }
