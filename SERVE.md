@@ -109,6 +109,8 @@ Each job has at most one pending run; the schedule skips it while one waits. The
 and `approval.comment`. A restart keeps pending runs and marks queued or executing runs as
 `error` with `interrupted: serve restarted`; `cancelling` runs become `cancelled` with the same summary.
 
+The ad-hoc form lists clickable groups and hosts within the job's limit and previews the hosts matched by an editable limit pattern before Run.
+
 Limited runs: `POST /api/jobs/{name}/run` accepts an optional JSON body
 `{"limit":"web1","extra_vars":{"reboot":"true"}}`. The job must allow `limit` with
 `adhoc.limit: true` and list each caller-set variable in `adhoc.extra_vars`. Unfilled
@@ -211,6 +213,7 @@ reopened for every entry, so logrotate can move it aside (no `copytruncate` need
 | `POST /api/pause` | pauses execution (operators); optional JSON `{reason: "..."}`; `200` with the state; pausing again updates reason and identity; `500` with the state and `error` when `pause.json` could not be written (the pause still holds in this process) |
 | `POST /api/resume` | resumes execution (operators); `200` with the state; already resumed is a no-op; `500` as for pause |
 | `GET /api/jobs` | the jobs with schedule, next run, `running` flag (queued, running or cancelling), optional `active` record (without report; `active.requested` and `active.started` give queue and execution timing), `queued` flag (waiting for the worker), last executed result, optional `pending` record (without reports), and `approval: "required"` for guarded jobs; optional `operators` list and caller-specific `allowed` bool; `adhoc: {limit, extra_vars, secret_vars}` (`extra_vars` remains a list of names) when enabled |
+| `GET /api/jobs/{name}/inventory` | operators of jobs with `adhoc.limit: true` only; sorted reachable host names and nonempty groups that lie entirely within the job's limit (recursive, excluding `all`); `?limit=pattern` previews resolved host names; `400` for invalid limits or jobs without ad-hoc limits; `403` for callers not allowed to operate the job; `500` for inventory load errors |
 | `POST /api/jobs/{name}/run` | requests the job (operators); optional JSON `{limit: "host pattern", extra_vars: {k: "v"}}` as allowed by `adhoc`; `400` for invalid parameters or a limit with no hosts or hosts outside the job's limit; `202` with `{queued: name, run: id}` or `{pending: id, run: id}`; `409` when running, queued or pending; `503` when the queue is full; `500` with the record and `error` when storage fails (the run remains in memory); `403` with `{"error":"not an operator of this job"}` when the job disallows the operator |
 | `GET /api/jobs/{name}/results` | the kept results, newest first |
 | `GET /api/jobs/{name}/results/{id}` | one result with its full report (the drift, verify or comply report as JSON) |
