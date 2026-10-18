@@ -12,6 +12,10 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// InventoryNameOnly preserves an inspection variable name that execution moves
+// into a connection field. It carries no value.
+type InventoryNameOnly struct{}
+
 // Host represents a target host
 type Host struct {
 	Name                  string `yaml:"name"`

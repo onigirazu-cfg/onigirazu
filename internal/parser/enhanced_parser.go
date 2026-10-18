@@ -132,7 +132,7 @@ func (p *EnhancedParser) ParsePlaybook(ctx context.Context, filePath string) (*t
 }
 
 // PreserveInventoryStructure keeps direct membership and the implicit all group
-// for inventory inspection. Password variable names remain with nil values.
+// for inventory inspection. Password variable names remain as markers without values.
 func (p *EnhancedParser) PreserveInventoryStructure() {
 	p.inventoryParser.preserveStructure = true
 }

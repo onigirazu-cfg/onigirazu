@@ -30,11 +30,13 @@ button.run{border:1px solid var(--line);background:var(--card);color:var(--fg);p
 header,nav{flex-wrap:wrap}header{overflow-wrap:anywhere}main,header>*{min-width:0}main{overflow-wrap:anywhere}a{color:var(--accent)}
 .table-scroll{width:100%;max-width:100%;overflow-x:auto;margin:12px 0}.table-scroll table{min-width:560px}th,td{overflow-wrap:anywhere}
 .report-card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px;margin:12px 0}.report-card h2,.report-card h3{margin-top:0}
+.inventory-effective{margin-top:6px}.inventory-effective[open] summary{margin-bottom:8px}.inventory-var{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:2px 12px;padding:6px 0;border-top:1px solid var(--line)}.inventory-var strong{grid-column:1/-1}.inventory-var span{min-width:0;overflow-wrap:anywhere}
 .tabs{display:flex;gap:8px;flex-wrap:wrap;margin:16px 0}.tabs [aria-selected="true"]{border-color:var(--accent);color:var(--accent)}
 .item{padding:8px 0;border-bottom:1px solid var(--line)}.text{white-space:pre-wrap;overflow-wrap:anywhere}.error-text{color:var(--bad)}.missing{color:var(--muted);background:var(--bg)}
 .task-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:start}.task-row>div{min-width:0}.task-meta{display:flex;gap:8px;align-items:center;justify-content:flex-end;flex-wrap:wrap}.task-duration{white-space:nowrap;font-variant-numeric:tabular-nums}.task-list{margin:0;padding-left:24px}.task-host summary{overflow-wrap:anywhere}.task-host summary .muted{display:block;margin-left:16px}.task-host[open] summary{margin-bottom:8px}
 summary{cursor:pointer}pre{max-width:100%}.diff span{display:inline-block;min-width:100%}.diff-add{background:var(--add-bg);color:var(--add-fg)}.diff-remove{background:var(--remove-bg);color:var(--remove-fg)}
 @media(max-width:700px){header{align-items:flex-start;flex-direction:column;gap:8px;padding:12px}header .who{margin-left:0}nav{display:flex;max-width:100%}main{padding:12px;width:100%}.jobs-table .target{display:none}.adhoc-form input{max-width:100%}.adhoc-form label{max-width:100%}}
+@media(max-width:700px){.table-scroll .inventory-hosts-table{display:block;min-width:0}.inventory-hosts-table tbody{display:block}.inventory-hosts-table thead{display:none}.inventory-hosts-table tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);border-bottom:1px solid var(--line)}.inventory-hosts-table td{display:block;min-width:0;border:0;padding:6px 8px}.inventory-hosts-table td::before{content:attr(data-label);display:block;color:var(--muted);font-size:12px}.inventory-hosts-table .inventory-host-vars{grid-column:1/-1}}
 </style>
 </head>
 <body>
@@ -449,6 +451,9 @@ function inventoryNames(names){
   const first=names.slice(0,3).map(esc).join(', ');
   return names.length>3?`${first}<details><summary>+${names.length-3}</summary>${names.slice(3).map(esc).join(', ')}</details>`:first;
 }
+function inventoryEffective(vars){
+  return `<details class="inventory-effective"><summary>Effective variables (${vars.length})</summary>${vars.length?vars.map(v=>`<div class="inventory-var"><strong>${esc(v.name)}</strong><span>${esc(v.from.startsWith('group:')?'group '+v.from.slice(6):v.from)}</span><span title="${esc(v.source)}">${esc(v.source.split(/[\\/]/).pop()||v.source)}</span></div>`).join(''):'<span class="muted">No effective variables</span>'}</details>`;
+}
 async function inventory(){
   const sources=await api('/api/inventory');
   main.innerHTML='<h2>Inventory</h2><div id="inventory-sources"></div>';
@@ -459,7 +464,7 @@ async function inventory(){
     if(source.error){card.innerHTML+=`<p class="error-text">${esc(source.error)}</p>`;container.append(card);return}
     card.innerHTML+=`<h3>Groups</h3>${table(['Name','Children','Hosts','Var names'],source.groups.map(g=>`<tr><td>${esc(g.name)}</td><td>${inventoryNames(g.children)}</td><td>${g.hosts.length}</td><td>${inventoryNames(g.vars)}</td></tr>`))}<h3>Hosts</h3><div class="filters"><label>Filter hosts<input type="search" placeholder="Host name or group" data-host-filter></label></div><div data-inventory-hosts></div>`;
     const input=card.querySelector('[data-host-filter]'), output=card.querySelector('[data-inventory-hosts]');
-    const render=()=>{const query=input.value.toLowerCase();output.innerHTML=table(['Name','Groups','Var names',...(me.operator?['Address']:[])],source.hosts.filter(h=>[h.name,...h.groups].some(v=>v.toLowerCase().includes(query))).map(h=>`<tr><td>${hostLink(h.name)}</td><td>${inventoryNames(h.groups)}</td><td>${inventoryNames(h.vars)}</td>${me.operator?`<td>${esc(h.address)}</td>`:''}</tr>`))};
+    const render=()=>{const query=input.value.toLowerCase();output.innerHTML=table(['Name','Groups','Var names',...(me.operator?['Address']:[])],source.hosts.filter(h=>[h.name,...h.groups].some(v=>v.toLowerCase().includes(query))).map(h=>`<tr><td data-label="Name">${hostLink(h.name)}</td><td data-label="Groups">${inventoryNames(h.groups)}</td><td data-label="Var names" class="inventory-host-vars">${inventoryNames(h.vars)}${me.operator?inventoryEffective(h.effective||[]):''}</td>${me.operator?`<td data-label="Address">${esc(h.address)}</td>`:''}</tr>`));if(me.operator)output.querySelector('table')?.classList.add('inventory-hosts-table')};
     input.oninput=render;render();container.append(card);
   });
   if(!sources.length)container.innerHTML=empty('No inventory sources');

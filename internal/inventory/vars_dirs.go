@@ -44,7 +44,15 @@ func (msl *MultiSourceLoader) loadVarsDirs(dir string) error {
 			path := filepath.Join(dir, kind, name)
 			var vars map[string]interface{}
 			if e.IsDir() {
-				vars, err = readVarsDir(path)
+				if msl.trackSources {
+					labels := msl.varsSources.Hosts
+					if kind == "group_vars" {
+						labels = msl.varsSources.Groups
+					}
+					vars, err = readVarsDirTracked(path, labels, name)
+				} else {
+					vars, err = readVarsDir(path)
+				}
 			} else {
 				ext := filepath.Ext(name)
 				if !varsFileExts[ext] {
@@ -52,6 +60,13 @@ func (msl *MultiSourceLoader) loadVarsDirs(dir string) error {
 				}
 				name = strings.TrimSuffix(name, ext)
 				vars, err = readVarsFile(path)
+				if msl.trackSources && err == nil {
+					labels := msl.varsSources.Hosts
+					if kind == "group_vars" {
+						labels = msl.varsSources.Groups
+					}
+					recordVarSources(labels, name, vars, path)
+				}
 			}
 			if err != nil {
 				return fmt.Errorf("%s: %w", path, err)
@@ -69,6 +84,10 @@ func (msl *MultiSourceLoader) loadVarsDirs(dir string) error {
 }
 
 func readVarsDir(dir string) (map[string]interface{}, error) {
+	return readVarsDirTracked(dir, nil, "")
+}
+
+func readVarsDirTracked(dir string, labels map[string]map[string]string, name string) (map[string]interface{}, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, err
@@ -85,6 +104,9 @@ func readVarsDir(dir string) (map[string]interface{}, error) {
 		vars, err := readVarsFile(filepath.Join(dir, n))
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", n, err)
+		}
+		if labels != nil {
+			recordVarSources(labels, name, vars, filepath.Join(dir, n))
 		}
 		for k, v := range vars {
 			merged[k] = v
@@ -122,6 +144,9 @@ func (msl *MultiSourceLoader) applyVarsFiles() {
 		}
 		for k, v := range vars {
 			group.Vars[k] = v
+			if msl.trackSources {
+				recordSource(msl.sources.Groups, name, k, msl.varsSources.Groups[name][k])
+			}
 		}
 	}
 	setHostVars := func(name string, host *types.Host) {
@@ -134,6 +159,11 @@ func (msl *MultiSourceLoader) applyVarsFiles() {
 		}
 		for k, v := range vars {
 			host.Vars[k] = v
+			if msl.trackSources {
+				source := msl.varsSources.Hosts[name][k]
+				recordSource(msl.sources.Hosts, name, k, source)
+				msl.sources.hostLabels(host)[k] = source
+			}
 		}
 	}
 	// group entries are keyed by host name; their Name field may be empty

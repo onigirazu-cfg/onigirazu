@@ -557,7 +557,7 @@ func (p *InventoryParser) parseAnsibleHost(hostName string, hostData interface{}
 		switch key {
 		case "ansible_password", "ansible_ssh_pass", "ansible_become_password", "ansible_become_pass", "ansible_sudo_pass", "onigirazu_become_password":
 			if p.preserveStructure {
-				host.Vars[key] = nil
+				host.Vars[key] = types.InventoryNameOnly{}
 			}
 		default:
 			host.Vars[key] = value

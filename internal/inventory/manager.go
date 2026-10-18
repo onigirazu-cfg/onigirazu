@@ -670,9 +670,40 @@ func (m *Manager) getGroupHosts(group *types.Group, groupName string) []types.Ho
 // depth, then name), and the host's own variables over all of them. The same
 // host gets the same variables whichever pattern selected it.
 func (m *Manager) hostView(host *types.Host) types.Host {
+	groups := m.orderedHostGroups(host.Name)
+
+	merged := make(map[string]interface{})
+	m.visitHostVariables(host, groups, func(_ string, _ *types.Host, vars map[string]interface{}) {
+		for k, v := range vars {
+			merged[k] = v
+		}
+	})
+	hostCopy := *host
+	hostCopy.Vars = make(map[string]interface{}, len(host.Vars))
+	for k, v := range merged {
+		hostCopy.Vars[k] = v
+	}
+	for k, v := range host.Vars {
+		hostCopy.Vars[k] = v
+	}
+
+	applyGroupConnectionVars(&hostCopy, host, renderConnectionVars(merged, hostCopy.Vars))
+	if len(m.connOverrides) > 0 {
+		empty := types.Host{Name: host.Name, Vars: map[string]interface{}{}}
+		applyGroupConnectionVars(&hostCopy, &empty, m.connOverrides)
+	}
+
+	names := append([]string(nil), groups...)
+	sort.Strings(names)
+	hostCopy.Vars["group_names"] = names
+	return hostCopy
+}
+
+// orderedHostGroups is shared by the engine's host view and provenance.
+func (m *Manager) orderedHostGroups(hostName string) []string {
 	groups := make([]string, 0)
 	for name, group := range m.inventory.Groups {
-		if _, ok := group.Hosts[host.Name]; ok && name != "all" {
+		if _, ok := group.Hosts[hostName]; ok && name != "all" {
 			groups = append(groups, name)
 		}
 	}
@@ -701,41 +732,21 @@ func (m *Manager) hostView(host *types.Host) types.Host {
 		return groups[i] < groups[j]
 	})
 
-	merged := make(map[string]interface{})
-	for _, g := range append([]string{"all"}, groups...) {
-		for k, v := range m.groupVars[g] {
-			merged[k] = v
-		}
-	}
+	return groups
+}
 
-	// A host listed in several groups is a separate object in each; its own
-	// variables are the union of all of them, over every group variable
+// visitHostVariables visits group variables and then the host definitions in
+// engine order. The selected host's own variables are applied last by callers.
+func (m *Manager) visitHostVariables(host *types.Host, groups []string, visit func(string, *types.Host, map[string]interface{})) {
+	visit("all", nil, m.groupVars["all"])
+	for _, g := range groups {
+		visit(g, nil, m.groupVars[g])
+	}
 	for _, g := range groups {
 		if entry := m.inventory.Groups[g].Hosts[host.Name]; entry != nil {
-			for k, v := range entry.Vars {
-				merged[k] = v
-			}
+			visit("", entry, entry.Vars)
 		}
 	}
-
-	hostCopy := *host
-	hostCopy.Vars = make(map[string]interface{}, len(host.Vars))
-	for k, v := range merged {
-		hostCopy.Vars[k] = v
-	}
-	for k, v := range host.Vars {
-		hostCopy.Vars[k] = v
-	}
-	applyGroupConnectionVars(&hostCopy, host, renderConnectionVars(merged, hostCopy.Vars))
-	if len(m.connOverrides) > 0 {
-		empty := types.Host{Name: host.Name, Vars: map[string]interface{}{}}
-		applyGroupConnectionVars(&hostCopy, &empty, m.connOverrides)
-	}
-
-	names := append([]string(nil), groups...)
-	sort.Strings(names)
-	hostCopy.Vars["group_names"] = names
-	return hostCopy
 }
 
 // groupVar is the first of the names a group variable is set under:
