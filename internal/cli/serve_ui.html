@@ -37,7 +37,7 @@ summary{cursor:pointer}pre{max-width:100%}.diff span{display:inline-block;min-wi
 </style>
 </head>
 <body>
-<header><h1>{{title}}</h1><nav><button data-v="jobs" class="on">Jobs</button><button data-v="hosts">Hosts</button><button data-v="runs">Runs</button><button data-v="audit">Audit</button></nav><span class="who" id="activity" hidden></span><button class="run" id="pause" hidden>Pause</button><span class="who" id="who"></span></header>
+<header><h1>{{title}}</h1><nav><button data-v="jobs" class="on">Jobs</button><button data-v="hosts">Hosts</button><button data-v="inventory">Inventory</button><button data-v="runs">Runs</button><button data-v="audit">Audit</button></nav><span class="who" id="activity" hidden></span><button class="run" id="pause" hidden>Pause</button><span class="who" id="who"></span></header>
 <div class="banner" id="storage-error" style="background:var(--bad)" role="alert" hidden></div>
 <div class="banner" id="pause-banner" hidden></div>
 <main id="main"></main>
@@ -408,15 +408,38 @@ async function historyView(kind){
 }
 const wrapTables=()=>main.querySelectorAll('table').forEach(t=>{if(t.parentElement.classList.contains('table-scroll'))return;const wrapper=document.createElement('div');wrapper.className='table-scroll';t.before(wrapper);wrapper.append(t)});
 new MutationObserver(wrapTables).observe(main,{childList:true,subtree:true});
-const views={jobs,hosts,runs:()=>runs(),audit};
-function show(v){stopProgress();view=v;if(v==='runs'||v==='audit')hash('#'+v);else if(v!=='jobs')hash('');document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));views[v]().catch(e=>main.innerHTML=`<div class="empty">${esc(e.message)}</div>`)}
+function inventoryNames(names){
+  const first=names.slice(0,3).map(esc).join(', ');
+  return names.length>3?`${first}<details><summary>+${names.length-3}</summary>${names.slice(3).map(esc).join(', ')}</details>`:first;
+}
+async function inventory(){
+  const sources=await api('/api/inventory');
+  main.innerHTML='<h2>Inventory</h2><div id="inventory-sources"></div>';
+  const container=$('#inventory-sources');
+  sources.forEach(source=>{
+    const card=document.createElement('section');card.className='report-card';
+    card.innerHTML=`<h3>${esc(source.source)}</h3><p>Jobs: ${source.jobs.map(name=>`<a href="#job/${encodeURIComponent(name)}">${esc(name)}</a>`).join(', ')} · loaded ${ago(source.loaded_at)}</p>${me.operator?'<button class="run" data-inventory-refresh title="Refresh all inventory snapshots">Refresh</button>':''}`;
+    if(source.error){card.innerHTML+=`<p class="error-text">${esc(source.error)}</p>`;container.append(card);return}
+    card.innerHTML+=`<h3>Groups</h3>${table(['Name','Children','Hosts','Var names'],source.groups.map(g=>`<tr><td>${esc(g.name)}</td><td>${inventoryNames(g.children)}</td><td>${g.hosts.length}</td><td>${inventoryNames(g.vars)}</td></tr>`))}<h3>Hosts</h3><div class="filters"><label>Filter hosts<input type="search" placeholder="Host name or group" data-host-filter></label></div><div data-inventory-hosts></div>`;
+    const input=card.querySelector('[data-host-filter]'), output=card.querySelector('[data-inventory-hosts]');
+    const render=()=>{const query=input.value.toLowerCase();output.innerHTML=table(['Name','Groups','Var names',...(me.operator?['Address']:[])],source.hosts.filter(h=>[h.name,...h.groups].some(v=>v.toLowerCase().includes(query))).map(h=>`<tr><td>${hostLink(h.name)}</td><td>${inventoryNames(h.groups)}</td><td>${inventoryNames(h.vars)}</td>${me.operator?`<td>${esc(h.address)}</td>`:''}</tr>`))};
+    input.oninput=render;render();container.append(card);
+  });
+  if(!sources.length)container.innerHTML=empty('No inventory sources');
+  main.querySelectorAll('[data-inventory-refresh]').forEach(button=>button.onclick=async()=>{
+    const buttons=main.querySelectorAll('[data-inventory-refresh]');buttons.forEach(b=>b.disabled=true);
+    try{await api('/api/inventory/refresh',{method:'POST'});if(view==='inventory')await inventory()}catch(e){buttons.forEach(b=>b.disabled=false);alert(e.message)}
+  });
+}
+const views={jobs,hosts,inventory,runs:()=>runs(),audit};
+function show(v){stopProgress();view=v;if(v==='runs'||v==='audit'||v==='inventory')hash('#'+v);else if(v!=='jobs')hash('');document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));views[v]().catch(e=>main.innerHTML=`<div class="empty">${esc(e.message)}</div>`)}
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>show(b.dataset.v));
 function showError(e){main.innerHTML=`<div class="empty">${esc(e.message)}</div>`}
 function route(){
   stopProgress();
   const [type,...parts]=location.hash.slice(1).split('/'), id=decodeURIComponent(parts.join('/'));
   const historyKind=type.split('?')[0];
-  if(historyKind==='runs'||historyKind==='audit'){view=historyKind;document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===historyKind));views[historyKind]().catch(showError);return}
+  if(historyKind==='runs'||historyKind==='audit'||historyKind==='inventory'){view=historyKind;document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===historyKind));views[historyKind]().catch(showError);return}
   if(type==='job'&&id)results(id).catch(showError);
   else if(type==='run'&&id)run(id).catch(showError);
   else if(type==='host'&&id)host(id).catch(showError);

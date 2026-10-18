@@ -258,6 +258,8 @@ with `after` when a stream drops and opens the report when the run ends.
 | `POST /api/runs/{id}/cancel` | cancels a queued or running run (job operators); optional JSON `{comment: "..."}`; `200` with the cancelled record for queued runs, `202` with the cancelling record for running runs (without report); `404` if absent, `409` if not cancellable (reject a pending run instead), `500` with the record and `error` on storage failure; `403` if disallowed |
 | `GET /api/hosts/{name}/results` | that host’s retained results across all jobs, newest `started` first, at most 200: `[{id, job, kind, status, host_status, started, summary}]`; an unknown host returns `[]` |
 | `GET /api/results/{id}/events?after=N` | live NDJSON progress (viewers allowed): snapshot, replay after sequence N, gap marker when replay was truncated, task events and final end; idle pings every 15 seconds |
+| `GET /api/inventory` | inventory sources shared by jobs (viewers too), with sorted groups, direct host membership, recursive host groups and variable names; addresses are included only for operators; each entry has `source`, `jobs`, `loaded_at`, `groups`, `hosts`, and `error` if loading failed |
+| `POST /api/inventory/refresh` | clears inventory snapshots (operators); the next GET reloads; `200 {"ok":true}`; audited as `inventory_refresh` |
 | `GET /api/hosts` | every host seen by a job's last executed result (cancelled and check runs are skipped), with its worst status (`ok`, `changed`, `drift`, `failed`, `unreachable`) and the status per job |
 | `GET /api/runs` | audit store run array, newest first (viewers too); filters `host`, `playbook` (path substring), `status`, `job` (linked serve runs), `from`, `to` (RFC 3339); `limit` defaults to 100, max 1000, `offset` defaults to 0; `X-Next-Offset` gives the next offset when more exist; `400` for invalid dates or a non-numeric, negative or overflowing offset; optional `serve_run` links to the retained serve result |
 | `GET /api/runs/{id}` | one audit record, with optional `serve_run` |
@@ -277,7 +279,14 @@ The Runs and Audit tabs have compact filters with shareable hash links and an Ol
 
 Page: the page at `/` uses the same API: Jobs (with Run/Approve/Reject/Cancel buttons when
 `allowed`), a Check button next to Run for apply jobs and a second Check submit button
-in their ad-hoc forms, Hosts, Runs and Audit. Check runs have a `check` badge in the jobs table, result list and run header.
+in their ad-hoc forms, Hosts, Inventory, Runs and Audit. Check runs have a `check` badge in the jobs table, result list and run header.
+
+Inventory shows one card per inventory source with its jobs, groups, hosts and a host filter.
+Snapshots load lazily and are reused for five minutes, including failed loads; concurrent
+requests for the same source share one load, other sources are not held up by it, and a load
+gives up after one minute. Variable names are shown without values or connection credentials;
+only operators see host addresses and inline inventories (viewers see `inline` instead). Operators can use Refresh to clear snapshots for the next
+request.
 
 Jobs show up to 20 status squares, newest on the right, with hollow squares for check
 runs and status/date tooltips. The job page uses light history with a duration sparkline
