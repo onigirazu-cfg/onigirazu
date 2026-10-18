@@ -389,7 +389,7 @@ function jobActions(j,includeCancel=true){
 function decisionButtons(r,j){return j?.allowed&&r.status==='pending'?`<button class="run primary" data-decision="approve" data-id="${esc(r.id)}">Approve</button><button class="run" data-decision="reject" data-id="${esc(r.id)}">Reject</button>`:''}
 async function refreshCurrent(){closeSheet();
   if(view==='result'&&jobContext)return run(jobContext.selected);
-  if(view==='results'&&jobContext)return results(jobContext.name);
+  if(view==='results'&&jobContext)return results(jobContext.name,false); // a refresh keeps the history in view
   return jobs()}
 function bindJobActions(root=main){
   root.querySelectorAll('[popovertarget]').forEach(button=>{
@@ -655,7 +655,7 @@ async function run(id){
     try{const next=await api('/api/runs/'+encodeURIComponent(id)+'/rerun-failed',{method:'POST'});await run(next.run)}
   catch(err){alert(err.message);e.target.disabled=false}
   };
-  $('#back').onclick=e=>{e.preventDefault();results(r.job,!matchMedia('(max-width:700px)').matches).catch(showError)};
+  $('#back').onclick=e=>{e.preventDefault();results(r.job,false).catch(showError)};
   main.querySelectorAll('[data-expand]').forEach(row=>row.onclick=e=>{if(e.target.closest('a,details'))return;
   const d=row.querySelector('details');
   if(d)d.open=!d.open});
