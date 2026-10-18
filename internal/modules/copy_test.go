@@ -663,3 +663,36 @@ func TestCopyModule_ValidateMissingRequired(t *testing.T) {
 		})
 	}
 }
+
+// on the local host mode is set as over SSH: on a file whose content is
+// already right, and on an existing file that is rewritten
+func TestCopyModuleLocalMode(t *testing.T) {
+	host := types.Host{Name: "localhost", Address: "localhost"}
+	dest := filepath.Join(t.TempDir(), "conf")
+	perm := func() os.FileMode {
+		t.Helper()
+		info, err := os.Stat(dest)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return info.Mode().Perm()
+	}
+	if err := os.WriteFile(dest, []byte("same"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	args := map[string]interface{}{"dest": dest, "content": "same", "mode": "0600"}
+	res, err := NewCopyModule().Execute(context.Background(), host, args)
+	if err != nil || !res.Changed || perm() != 0o600 {
+		t.Fatalf("mode on unchanged content: changed=%v perm=%o err=%v", res.Changed, perm(), err)
+	}
+	if res, _ = NewCopyModule().Execute(context.Background(), host, args); res.Changed {
+		t.Fatal("a second run with the mode in place must not change")
+	}
+	if err := os.Chmod(dest, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	args["content"] = "new"
+	if res, err = NewCopyModule().Execute(context.Background(), host, args); err != nil || !res.Changed || perm() != 0o600 {
+		t.Fatalf("mode on a rewritten file: changed=%v perm=%o err=%v", res.Changed, perm(), err)
+	}
+}

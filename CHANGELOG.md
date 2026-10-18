@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - `apply` whose output reader goes away (`| head`, `| grep -q`) runs to the end instead of being killed by SIGPIPE mid-run, which left hosts half-changed, the state unsaved and the state lock held
+- `copy` on a local host applies `mode` when the content is already right and when it rewrites an existing file, as it does over SSH
 - Canceling a run (Ctrl-C, `serve` cancel or timeout) stops a local command or `script` together with the processes it started; before, a shell child kept the run waiting until it finished on its own
 
 ### Added
