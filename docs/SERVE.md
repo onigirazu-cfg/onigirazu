@@ -362,9 +362,16 @@ newest executed result in `last`, including checks.
 
 The Runs and Audit tabs have compact filters with shareable hash links and an Older button that appends earlier entries.
 
-Page: the page at `/` uses the same API: Jobs (with Run/Approve/Reject/Cancel buttons when
-`allowed`), a Check button next to Run for apply jobs and a second Check submit button
-in their ad-hoc forms, Hosts, Inventory, Runs and Audit. Check runs have a `check` badge in the jobs table, result list and run header.
+Page: the page at `/` uses the same API. A top bar holds the fleet name, a search box (`/`
+focuses it; it filters the current list), the activity counts, Pause/Resume for operators, the
+theme switch (system, light, dark; kept in the browser) and the user menu with the bearer token.
+A sidebar leads to Jobs, Runs, Hosts, Inventory and Audit; it shrinks to icons below 900 px and
+becomes a drawer below 600 px. Jobs is a table (cards on phones) with Run and a menu for Run…,
+Run at…, Check and Cancel when `allowed`; pending approvals are cards above it. Run… and Run at…
+open a side sheet with the limit picker, variables and the start time. A job page lists its runs on
+the left and shows the selected run (the newest when the page opens) on the right, with Rerun
+failed hosts, Cancel, Approve/Reject and the report tabs; on phones the two stack. Check runs have
+a `check` badge in the jobs table, run list and run header.
 
 Inventory shows one card per inventory source with its jobs, groups, hosts and a host filter.
 Snapshots load lazily and are reused for five minutes, including failed loads; concurrent
