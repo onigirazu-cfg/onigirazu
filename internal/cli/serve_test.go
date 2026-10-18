@@ -3724,3 +3724,215 @@ func TestServeAuditFiltersAndPaging(t *testing.T) {
 		t.Fatal("before zero")
 	}
 }
+
+func TestServeVarDeclarations(t *testing.T) {
+	for _, tc := range []struct{ declaration, rule string }{
+		{`{name: v, type: float}`, "type"},
+		{`{name: v, type: choice}`, "choices"},
+		{`{name: v, choices: [a]}`, "choices"},
+		{`{name: v, type: choice, choices: []}`, "choices"},
+		{`{name: v, pattern: '['}`, "pattern"},
+		{`{name: v, type: int, min: 5, max: 2}`, "min"},
+		{`{name: v, min: 1}`, "type int"},
+		{`{name: v, type: bool, secret: true}`, "secret"},
+		{`{name: v, type: choice, choices: [a], secret: true}`, "secret"},
+		{`{name: v, type: int, default: secret-invalid-default, secret: true}`, "invalid default"},
+		{`{name: v, type: int, min: 2, default: 1}`, ">= 2"},
+		{`{name: v, type: bool, default: yes}`, "true or false"},
+		{`{name: v, type: choice, choices: [a], default: b}`, "choices"},
+		{`{name: v, pattern: '[a-z]+', default: A}`, "pattern"},
+	} {
+		t.Run(tc.declaration, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "serve.yml")
+			data := "jobs:\n  - name: patch\n    playbook: patch.yml\n    adhoc:\n      extra_vars: [" + tc.declaration + "]\n"
+			if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			_, err := loadServeConfig(path)
+			if err == nil || !strings.Contains(err.Error(), tc.rule) || !strings.Contains(err.Error(), `"v"`) || strings.Contains(err.Error(), "secret-invalid-default") {
+				t.Fatalf("declaration error: %v", err)
+			}
+		})
+	}
+}
+
+func TestServeTypedVars(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "serve.yml")
+	data := `jobs:
+  - name: patch
+    kind: apply
+    playbook: patch.yml
+    approval: required
+    adhoc:
+      extra_vars:
+        - legacy
+        - {name: old_secret, secret: true}
+        - {name: count, type: int, min: 1, max: 3, default: 2, description: Batch size}
+        - {name: reboot, type: bool, default: false}
+        - {name: wave, type: choice, choices: [blue, green]}
+        - {name: tag, pattern: '[a-z]+', required: true}
+        - {name: pin, secret: true, pattern: '[0-9]+', default: '1234'}
+`
+	if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := loadServeConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.DataDir = filepath.Join(dir, "data")
+	s, err := newServer(cfg, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := s.mux()
+	for _, tc := range []struct{ vars, rule string }{
+		{`"count":"0","tag":"ok"`, ">= 1"},
+		{`"count":"4","tag":"ok"`, "<= 3"},
+		{`"count":"1.5","tag":"ok"`, "integer"},
+		{`"reboot":"yes please","tag":"ok"`, "true or false"},
+		{`"wave":"red","tag":"ok"`, "choices"},
+		{`"tag":"ok!"`, "pattern"},
+		{`"pin":"secret-invalid-value","tag":"ok"`, "pattern"},
+		{`"legacy":"ok"`, "required"},
+	} {
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, httptest.NewRequest("POST", "/api/jobs/patch/run", strings.NewReader(`{"extra_vars":{`+tc.vars+`}}`)))
+		var response map[string]string
+		if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+			t.Fatal(err)
+		}
+		if w.Code != 400 || !strings.Contains(response["error"], tc.rule) || strings.Contains(w.Body.String(), "secret-invalid-value") {
+			t.Fatalf("validation: %d %s", w.Code, w.Body.String())
+		}
+	}
+	for _, body := range []string{"", "{}"} {
+		if _, err := s.runParams(httptest.NewRequest("POST", "/", strings.NewReader(body)), s.job("patch")); err == nil || !strings.Contains(err.Error(), "required") {
+			t.Fatalf("empty body: %v", err)
+		}
+	}
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, httptest.NewRequest("GET", "/api/jobs", nil))
+	var view []jobView
+	if err := json.Unmarshal(w.Body.Bytes(), &view); err != nil {
+		t.Fatal(err)
+	}
+	a := view[0].Adhoc
+	if len(a.ExtraVars) != 7 || !slices.Equal(a.SecretVars, []string{"old_secret", "pin"}) || len(a.Vars) != 7 || a.Vars[6].Default != nil || strings.Contains(w.Body.String(), "1234") {
+		t.Fatalf("jobs metadata: %s", w.Body.String())
+	}
+	w = httptest.NewRecorder()
+	handler.ServeHTTP(w, httptest.NewRequest("POST", "/api/jobs/patch/run", strings.NewReader(`{"extra_vars":{"tag":"ok","wave":"green","legacy":"unchanged"}}`)))
+	if w.Code != 202 {
+		t.Fatalf("default launch: %d %s", w.Code, w.Body.String())
+	}
+	run := s.results["patch"][0]
+	if run.Params.ExtraVars["count"] != "2" || run.Params.ExtraVars["reboot"] != "false" || run.Params.ExtraVars["pin"] != "***" || s.secrets[run.ID]["pin"] != "1234" {
+		t.Fatalf("defaults: %+v", run.Params)
+	}
+	// Defaults also apply when the entire request body is absent.
+	j := *s.job("patch")
+	j.Adhoc.Vars = slices.Clone(j.Adhoc.Vars)
+	j.Adhoc.Vars[5].Required = false
+	p, err := s.runParams(httptest.NewRequest("POST", "/", nil), &j)
+	if err != nil || p.ExtraVars["count"] != "2" {
+		t.Fatalf("empty body defaults: %+v %v", p, err)
+	}
+}
+
+func TestServeRerunFailed(t *testing.T) {
+	for _, scenario := range []string{"success", "secret", "forbidden", "no failed", "not executed", "busy", "approval", "window", "outside limit", "stale var"} {
+		t.Run(scenario, func(t *testing.T) {
+			dir := t.TempDir()
+			inv := filepath.Join(dir, "hosts.yml")
+			if err := os.WriteFile(inv, []byte("web:\n  hosts:\n    web1: {}\n    web2: {}\n    web3: {}\ndb:\n  hosts:\n    db1: {}\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			j := ServeJob{Name: "patch", Kind: "apply", Inventory: inv, Playbook: "patch.yml", Limit: "web", ApprovalTimeout: time.Hour,
+				Adhoc: ServeAdhoc{ExtraVars: []string{"reboot"}, Vars: []adhocVar{{Name: "reboot", Type: "bool"}}}}
+			cfg := &ServeConfig{DataDir: dir, Retain: 50, Jobs: []ServeJob{j}}
+			cfg.Auth = ServeAuth{UserHeader: "X-User", GroupsHeader: "X-Groups", Operators: []string{"ops"}}
+			switch scenario {
+			case "forbidden":
+				cfg.Jobs[0].Operators = []string{"bob"}
+			case "approval":
+				cfg.Jobs[0].CheckApproval = "required"
+			case "window":
+				cfg.Jobs[0].Windows = []string{strings.ToLower(time.Now().UTC().Add(24*time.Hour).Format("Mon")) + " 00:00-00:01"}
+				var err error
+				cfg.Jobs[0].windows, cfg.Jobs[0].windowsLoc, err = parseServeWindows(cfg.Jobs[0].Windows, "UTC")
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			s, err := newServer(cfg, io.Discard)
+			if err != nil {
+				t.Fatal(err)
+			}
+			parent := &JobResult{ID: "parent", Job: "patch", Kind: "apply", Mode: "check", Status: "failed", Hosts: map[string]string{"web1": "failed", "web2": "unreachable", "web3": "ok"}, Params: &RunParams{ExtraVars: map[string]string{"reboot": "false"}}}
+			code := 202
+			if scenario == "window" {
+				parent.Mode = ""
+			}
+			switch scenario {
+			case "secret":
+				parent.Params.SecretVars = []string{"token"}
+				code = 400
+			case "forbidden":
+				code = 403
+			case "no failed":
+				parent.Hosts = map[string]string{"web1": "ok"}
+				code = 400
+			case "not executed":
+				parent.Status = "pending"
+				code = 400
+			case "busy":
+				s.running["patch"] = true
+				code = 409
+			case "outside limit":
+				parent.Hosts["db1"] = "failed"
+				code = 400
+			case "stale var": // valid when the parent ran, not under today's declaration
+				parent.Params.ExtraVars["reboot"] = "maybe"
+				code = 400
+			}
+			s.results["patch"] = []*JobResult{parent}
+			req := httptest.NewRequest("POST", "/api/runs/parent/rerun-failed", nil)
+			req.Header.Set("X-User", "alice")
+			req.Header.Set("X-Groups", "ops")
+			w := httptest.NewRecorder()
+			s.mux().ServeHTTP(w, req)
+			if w.Code != code {
+				t.Fatalf("rerun: %d %s, want %d", w.Code, w.Body.String(), code)
+			}
+			if scenario == "secret" && w.Body.String() != "{\"error\":\"the run had secret parameters; start it again from the form\"}\n" {
+				t.Fatalf("secret error: %s", w.Body.String())
+			}
+			if code == 202 {
+				child := s.results["patch"][0]
+				if child.Parent != "parent" || child.Trigger != "rerun:alice" || child.Mode != parent.Mode || !slices.Equal(child.Params.Hosts, []string{"web1", "web2"}) || child.Params.ExtraVars["reboot"] != "false" {
+					t.Fatalf("child: %+v params: %+v", child, child.Params)
+				}
+				saved, err := os.ReadFile(filepath.Join(dir, "results", child.ID+".json"))
+				if err != nil || !strings.Contains(string(saved), `"parent": "parent"`) && !strings.Contains(string(saved), `"parent":"parent"`) {
+					t.Fatalf("stored parent: %s %v", saved, err)
+				}
+				if scenario == "window" && child.Status != "scheduled" {
+					t.Fatalf("window: %s", child.Status)
+				}
+				if scenario == "approval" && child.Status != "pending" {
+					t.Fatalf("approval: %s", child.Status)
+				}
+				effective, err := s.effectiveJob(s.job("patch"), child.Params, child.ID)
+				if err != nil || effective.Limit != "web1,web2" {
+					t.Fatalf("effective hosts: %+v %v", effective, err)
+				}
+			}
+			log, err := os.ReadFile(filepath.Join(dir, "audit.log"))
+			if err != nil || !strings.Contains(string(log), `"action":"rerun_failed"`) || !strings.Contains(string(log), "parent=parent") {
+				t.Fatalf("audit: %s %v", log, err)
+			}
+		})
+	}
+}

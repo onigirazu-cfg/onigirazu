@@ -184,6 +184,9 @@ func (s *server) requestAction(r *http.Request, id serveIdentity) serveAction {
 	a := serveAction{User: id.User, Addr: addr}
 	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 	a.Action = parts[len(parts)-1]
+	if a.Action == "rerun-failed" {
+		a.Action = "rerun_failed"
+	}
 	if r.URL.Path == "/api/inventory/refresh" {
 		a.Action = "inventory_refresh"
 	}
@@ -195,7 +198,7 @@ func (s *server) requestAction(r *http.Request, id serveIdentity) serveAction {
 			a.Run = parts[2]
 			s.mu.Lock()
 			for job := range s.results {
-				if run := s.resultByID(job, a.Run); run != nil && (a.Action == "cancel" || run.Status == "pending") {
+				if run := s.resultByID(job, a.Run); run != nil && (a.Action == "cancel" || a.Action == "rerun_failed" || run.Status == "pending") {
 					a.Job = job
 					break
 				}
