@@ -493,3 +493,28 @@ func TestStorage_ListRecords_SortAndFilters(t *testing.T) {
 		t.Errorf("host filter: got %q", got)
 	}
 }
+
+func TestListRecordsByIDs(t *testing.T) {
+	s, err := NewStorage(t.TempDir(), &mockLogger{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	for i, id := range []string{"a", "b", "c"} {
+		if err := s.SaveRecord(&ExecutionRecord{ID: id, StartTime: base.Add(time.Duration(i) * time.Hour), Status: StatusSuccess}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := s.ListRecords(FilterOptions{IDs: map[string]bool{"a": true, "c": true}, SortBy: "time", SortOrder: "desc"})
+	if err != nil || len(got) != 2 || got[0].ID != "c" || got[1].ID != "a" {
+		t.Fatalf("by ids: %v %v", got, err)
+	}
+	page, err := s.ListRecords(FilterOptions{IDs: map[string]bool{"a": true, "c": true}, Limit: 1, Offset: 1, SortBy: "time", SortOrder: "desc"})
+	if err != nil || len(page) != 1 || page[0].ID != "a" {
+		t.Fatalf("paged by ids: %v %v", page, err)
+	}
+	none, err := s.ListRecords(FilterOptions{IDs: map[string]bool{}})
+	if err != nil || len(none) != 0 {
+		t.Fatalf("an empty set keeps none: %v %v", none, err)
+	}
+}

@@ -24,6 +24,7 @@ button.run{border:1px solid var(--line);background:var(--card);color:var(--fg);p
 .muted{color:var(--muted)}pre{background:var(--card);border:1px solid var(--line);padding:12px;border-radius:8px;overflow:auto;max-height:60vh}
 .adhoc-form{display:flex;gap:8px;align-items:end;flex-wrap:wrap}.adhoc-form label{display:grid;gap:4px}.adhoc-form input{padding:4px 8px;border:1px solid var(--line);border-radius:4px;background:var(--card);color:var(--fg)}
 .limit-picker{display:grid;gap:4px;flex:1 1 100%;min-width:0;max-width:calc(100vw - 50px)}.limit-chips{display:flex;gap:4px;flex-wrap:wrap}.limit-chips button{max-width:100%;overflow-wrap:anywhere}.limit-chips [aria-pressed="true"]{border-color:var(--accent);color:var(--accent)}.limit-picker input{width:100%;min-width:0}
+.filters{display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin-bottom:12px}.filters label{display:grid;gap:3px;flex:1 1 130px;min-width:0}.filters input,.filters select{width:100%;min-width:0;padding:5px 8px;border:1px solid var(--line);border-radius:4px;background:var(--card);color:var(--fg)}
 .empty{padding:24px;color:var(--muted);text-align:center}
 
 header,nav{flex-wrap:wrap}header{overflow-wrap:anywhere}main,header>*{min-width:0}main{overflow-wrap:anywhere}a{color:var(--accent)}
@@ -43,7 +44,8 @@ summary{cursor:pointer}pre{max-width:100%}.diff span{display:inline-block;min-wi
 <script>
 const $=s=>document.querySelector(s), main=$('#main');
 const request=async(p,o={})=>{const headers=new Headers(o.headers), token=sessionStorage.getItem('serveToken');if(token)headers.set('Authorization','Bearer '+token);return fetch(p,{...o,headers})};
-const api=async(p,o)=>{const r=await request(p,o);if(!r.ok)throw new Error(r.status+' '+(await r.text()));return r.json()};
+const apiPage=async(p,o)=>{const r=await request(p,o);if(!r.ok)throw new Error(r.status+' '+(await r.text()));return {data:await r.json(),headers:r.headers}};
+const api=async(p,o)=>(await apiPage(p,o)).data;
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const span=d=>d<90?Math.round(d)+'s':d<5400?Math.round(d/60)+'m':d<172800?Math.round(d/3600)+'h':Math.round(d/86400)+'d';
 const ago=t=>{if(!t)return'';const d=(Date.now()-new Date(t))/1000;return d<0?'in '+span(-d):span(d)+' ago'};
@@ -363,26 +365,58 @@ async function hosts(){
   main.querySelectorAll('[data-host]').forEach(a=>a.onclick=e=>{e.preventDefault();host(a.dataset.host).catch(showError)});
 }
 async function runs(host){
-  if(host){view='host-audit';hash('#host-audit/'+encodeURIComponent(host))}
-  const list=await api('/api/runs'+(host?'?host='+encodeURIComponent(host):''));
-  main.innerHTML=(host?`<p><a href="#" id="back">← hosts</a> &nbsp; runs touching <b>${esc(host)}</b></p>`:'')+(list.length?`<table><tr><th>Started</th><th>Playbook</th><th>User</th><th>Status</th><th>Hosts</th><th>Tasks</th><th>Failed</th><th>Duration</th><th>Serve run</th></tr>${list.map(r=>`<tr>
-    <td><a href="#run/${encodeURIComponent(r.id)}" data-run="${esc(r.id)}">${date(r.start)}</a></td><td class="muted">${esc(r.playbook)}</td><td>${esc(r.user)}</td><td>${badge(r.status)}</td><td>${r.hosts}</td><td>${r.tasks}</td><td>${r.failed}</td><td>${(r.duration||0).toFixed(1)}s</td><td>${r.serve_run?`<a href="#run/${encodeURIComponent(r.serve_run)}">${esc(r.serve_run)}</a>`:''}</td></tr>`).join('')}</table>`:'<div class="empty">No runs in the audit store</div>');
-  if(host)$('#back').onclick=e=>{e.preventDefault();show('hosts')};
-  main.querySelectorAll('[data-run]').forEach(a=>a.onclick=e=>{e.preventDefault();auditRun(a.dataset.run).catch(showError)});
+  if(host)hash('#runs?'+new URLSearchParams({host}));
+  return historyView('runs');
 }
-async function audit(){
-  const list=await api('/api/audit');
-  main.innerHTML=list.length?`<table><tr><th>Time</th><th>User</th><th>Action</th><th>Job</th><th>Run</th><th>Result</th><th>Reason</th><th>Addr</th></tr>${list.map(a=>`<tr><td>${date(a.time)}</td><td>${esc(a.user)}</td><td>${esc(a.action)}</td><td>${esc(a.job)}</td><td>${a.run?`<a href="#run/${encodeURIComponent(a.run)}">${esc(a.run)}</a>`:''}</td><td>${badge(a.ok?'ok':'refused')}</td><td>${esc(a.reason)}</td><td>${esc(a.addr)}</td></tr>`).join('')}</table>`:'<div class="empty">No actions yet</div>';
+async function audit(){return historyView('audit')}
+async function historyView(kind){
+  view=kind;
+  const params=new URLSearchParams(location.hash.split('?')[1]||''), isRuns=kind==='runs';
+  const fields=isRuns?['host','playbook','status','job','from','to','limit','offset']:['user','action','job','run','ok','from','to','limit','before'];
+  const choices={status:['success','failure','running','skipped'],action:['run','approve','reject','cancel','pause','resume'],ok:['true','false']};
+  const bar=`<form class="filters" id="filters">${fields.map(name=>`<label>${esc(name)}${choices[name]?`<select name="${name}"><option value="">All</option>${choices[name].map(v=>`<option value="${v}" ${params.get(name)===v?'selected':''}>${v}</option>`).join('')}</select>`:`<input name="${name}" value="${esc(params.get(name)||'')}" ${['from','to'].includes(name)?'placeholder="YYYY-MM-DDTHH:mm:ssZ"':name==='limit'?'type="number" min="1" max="1000" placeholder="100"':name==='offset'?'type="number" min="0" placeholder="0"':''}>`}</label>`).join('')}<button class="run">Apply</button></form>`;
+  const heads=isRuns?['Started','Playbook','User','Status','Hosts','Tasks','Failed','Duration','Serve run']:['Time','User','Action','Job','Run','Result','Reason','Addr'];
+  const row=isRuns?r=>`<tr><td><a href="#run/${encodeURIComponent(r.id)}">${date(r.start)}</a></td><td class="muted">${esc(r.playbook)}</td><td>${esc(r.user)}</td><td>${badge(r.status)}</td><td>${esc(r.hosts)}</td><td>${esc(r.tasks)}</td><td>${esc(r.failed)}</td><td>${(r.duration||0).toFixed(1)}s</td><td>${r.serve_run?`<a href="#run/${encodeURIComponent(r.serve_run)}">${esc(r.serve_run)}</a>`:''}</td></tr>`:a=>`<tr><td>${date(a.time)}</td><td>${esc(a.user)}</td><td>${esc(a.action)}</td><td>${esc(a.job)}</td><td>${a.run?`<a href="#run/${encodeURIComponent(a.run)}">${esc(a.run)}</a>`:''}</td><td>${badge(a.ok?'ok':'refused')}</td><td>${esc(a.reason)}</td><td>${esc(a.addr)}</td></tr>`;
+  const expected=location.hash;
+  main.innerHTML=bar+table(heads,[])+'<p class="muted" id="history-state" role="status">Loading…</p><button class="run" id="older" hidden>Older</button>';
+  const form=$('#filters'), body=main.querySelector('tbody'), older=$('#older'), state=$('#history-state');
+  form.onsubmit=e=>{
+    e.preventDefault();
+    const query=new URLSearchParams();
+    for(const [key,value] of new FormData(form))if(value)query.set(key,value);
+    hash('#'+kind+(query.size?'?'+query.toString():''));
+    historyView(kind).catch(showError);
+  };
+  let next, count=0;
+  const load=async()=>{
+    older.disabled=true;
+    try{
+      const {data,headers}=await apiPage('/api/'+kind+'?'+params);
+      if(view!==kind||location.hash!==expected)return;
+      body.insertAdjacentHTML('beforeend',data.map(row).join(''));
+      count+=data.length;
+      state.textContent=count?'':isRuns?'No runs in the audit store':'No actions yet';
+      next=headers.get(isRuns?'X-Next-Offset':'X-Next-Cursor');
+      older.hidden=!next;
+    }finally{older.disabled=false}
+  };
+  older.onclick=async()=>{
+    params.set(isRuns?'offset':'before',next);
+    try{await load()}catch(e){state.textContent=e.message}
+  };
+  await load();
 }
 const wrapTables=()=>main.querySelectorAll('table').forEach(t=>{if(t.parentElement.classList.contains('table-scroll'))return;const wrapper=document.createElement('div');wrapper.className='table-scroll';t.before(wrapper);wrapper.append(t)});
 new MutationObserver(wrapTables).observe(main,{childList:true,subtree:true});
 const views={jobs,hosts,runs:()=>runs(),audit};
-function show(v){stopProgress();view=v;if(v!=='jobs')hash('');document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));views[v]().catch(e=>main.innerHTML=`<div class="empty">${esc(e.message)}</div>`)}
+function show(v){stopProgress();view=v;if(v==='runs'||v==='audit')hash('#'+v);else if(v!=='jobs')hash('');document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));views[v]().catch(e=>main.innerHTML=`<div class="empty">${esc(e.message)}</div>`)}
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>show(b.dataset.v));
 function showError(e){main.innerHTML=`<div class="empty">${esc(e.message)}</div>`}
 function route(){
   stopProgress();
   const [type,...parts]=location.hash.slice(1).split('/'), id=decodeURIComponent(parts.join('/'));
+  const historyKind=type.split('?')[0];
+  if(historyKind==='runs'||historyKind==='audit'){view=historyKind;document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===historyKind));views[historyKind]().catch(showError);return}
   if(type==='job'&&id)results(id).catch(showError);
   else if(type==='run'&&id)run(id).catch(showError);
   else if(type==='host'&&id)host(id).catch(showError);
