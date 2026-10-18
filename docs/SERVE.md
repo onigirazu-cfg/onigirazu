@@ -4,8 +4,9 @@
 (drift checks, applies, `verify`, compliance profiles), up to `concurrency` of them at a time,
 their results are kept, and a web page and a REST API show them per job and per host together
 with the run history of the audit store. Guarded jobs wait for an operator's approval, ad-hoc
-runs take a host limit and variables (secret ones never touch the disk), a queued or running
-run can be cancelled, execution can be paused. One process, one YAML file, no database.
+runs take a host limit and variables (secret ones never touch the disk). Runs can be requested
+for later, apply jobs can stay within maintenance windows, and scheduled, queued or running
+runs can be cancelled. Execution can be paused. One process, one YAML file, no database.
 
 ```yaml
 # serve.yml
@@ -63,6 +64,8 @@ jobs:
     approval: required
     check_approval: required           # optional: also guard check runs
     approval_timeout: 2h
+    windows: ["mon-fri 23:00-02:00", "sat,sun 01:00-04:00"]
+    windows_tz: Europe/Madrid          # default UTC
   - name: deploy-web
     kind: apply
     playbook: deploy.yml
@@ -82,7 +85,7 @@ so a job never overlaps itself. Pause stops new runs from starting while executi
 finish; resume drains the queue. Server shutdown cancels executing runs and records them
 as `error` with summary `interrupted: serve stopping`.
 
-Run time limits start when execution starts, excluding time queued or pending approval.
+Run time limits start when execution starts, excluding time scheduled, queued or pending approval.
 An unfinished run that reaches its limit becomes `timed_out` with summary
 `timed out after <duration>` and keeps any partial hosts and report (drift, apply and verify
 jobs; a compliance run keeps none); partial hosts do not count as host verdicts. Operator cancellation
@@ -104,8 +107,53 @@ Retention applies at startup and when a result is stored. `retain` keeps the new
 50 results per job by default: with `every: 30m`, that is about a day. Rejected and expired
 requests consume slots too. Optional `retain_age` also removes finished results older
 than the duration, measured from their request time. Go durations use hours, such as
-`168h` for seven days. Pending, queued and running results are never pruned by age;
-the count limit still applies.
+`168h` for seven days. Pending, scheduled, queued and running results are never pruned by age;
+active results are also exempt from the count limit.
+
+## Run later and maintenance windows
+
+Operators can schedule any job kind with `POST /api/jobs/{name}/run` and a body such as
+`{"not_before":"2026-10-24T23:00:00+02:00"}`. The RFC 3339 time must be in the future
+and at most 30 days ahead; invalid, past or too distant times return `400`. It can be
+combined with `mode`, `limit` and `extra_vars`. The record keeps `not_before` and has
+status `scheduled`. A guarded run waits as `pending` first; approval schedules it if
+its time is still ahead, otherwise it can queue immediately.
+
+Only one future request per job is accepted. A second request with `not_before` returns
+`409 {"error":"a run is already scheduled for this job"}`; the `every` schedule likewise keeps
+a single deferral outside a window instead of adding one per tick. Scheduled runs do not hold
+the job slot: manual runs and `every` schedules continue. Every five seconds, due runs
+queue when the job is free; busy jobs leave them scheduled with summary
+`waiting for the job to be free` until a later tick. Cancel works on scheduled runs.
+If an immediate run misses its window while another run is already scheduled, both
+are preserved as scheduled runs. The same applies to a run approved after its window
+closes. In this collision case, `/api/jobs` also returns `scheduled_runs` with all
+deferred records; the page shows each one with its own Cancel button.
+A restart re-arms scheduled runs; scheduled runs with secret parameters instead become
+`error`, because the secret values were kept only in memory.
+
+Apply jobs can set `windows` to a list of `"<days> HH:MM-HH:MM"` specifications.
+Days are `mon` through `sun`, ranges such as `mon-fri`, comma-separated lists such as
+`sat,sun`, or `*` for every day. An end earlier than the start crosses midnight, with
+the day referring to the start. `windows_tz` selects an IANA time zone, default `UTC`;
+invalid specifications or unknown zones fail configuration loading. For example,
+`windows: ["mon-fri 23:00-02:00"]` with `windows_tz: Europe/Madrid` permits starts
+from 23:00 on weekdays until 02:00 the following day, following local daylight saving time.
+
+Windows gate apply runs, including `every` triggers and approved runs. Check-mode
+runs and other job kinds ignore them. Outside a window, the run becomes `scheduled`
+with `not_before` set to the next window start. The worker checks again at pickup:
+a queued run that missed the window returns to `scheduled`. An executing run can
+finish after the window ends. The next start is searched up to 15 days ahead (a weekly
+window skipped by a DST change is found the week after); without one the run stays
+`scheduled` and is checked again a day later, never started outside its windows. Jobs
+expose `windows`, `windows_tz` and, while no window is open, `next_window` (the next start)
+in the API, and the page shows their windows.
+
+The page offers Run at… next to Run for every job, and a Run at field in the ad-hoc
+form. These use local date/time inputs and send RFC 3339 with the local UTC offset.
+The jobs table shows a scheduled run's time and relative wait, links to its record,
+and offers Cancel. The header counts scheduled runs alongside running and queued runs.
 
 ## Guarded runs
 
@@ -113,9 +161,10 @@ A job with `approval: required` creates a pending run when requested, including 
 schedule. An operator approves it to queue execution, or rejects it with an optional comment.
 A pending run expires after the job's `approval_timeout`, or the server default (1h).
 The flow is requested → pending → approved/rejected/expired; approved or unguarded runs go
-through queued → running → result, with cancellation possible while queued or running.
+through optional scheduled → queued → running → result, with cancellation possible while
+scheduled, queued or running.
 Each job has at most one pending run; the schedule skips it while one waits. The record keeps `approval.by`, `approval.at`
-and `approval.comment`. A restart keeps pending runs and marks queued or executing runs as
+and `approval.comment`. A restart keeps pending and scheduled runs and marks queued or executing runs as
 `error` with `interrupted: serve restarted`; `cancelling` runs become `cancelled` with the same summary.
 
 Apply jobs accept `{"mode":"check"}` at `POST /api/jobs/{name}/run` to preview changes
@@ -157,7 +206,7 @@ inputs. Secret values appear as `***` in `params.extra_vars`, result files and e
 the action log reason, notifications and the page. The record keeps only their names
 in optional `params.secret_vars`, so restart detection still works if the configuration
 changes. The actual values stay in memory until the run ends, is rejected, expires or is cancelled, and are merged into the job's
-variables only for execution. They are not kept across restarts: a pending or queued
+variables only for execution. They are not kept across restarts: a pending, scheduled or queued
 run with secret parameters becomes `error` with summary
 `interrupted: serve restarted (secret parameters are not kept)`.
 Masking covers the serve records, reports, action log and notifications. Playbook-generated
@@ -166,12 +215,13 @@ task output still uses the execution engine's existing logging, audit and cache 
 Notifications: server-wide `notify:` targets and a job's targets add up. Targets accept a
 plain URL or a mapping with `url`, `format` (`mattermost`, the default, or `json`) and `on`.
 Webhook URLs expand `${VAR}` from the environment. Events are `pending`, `start`, `success`,
-`drift`, `failure` (failed, error or timed_out), `rejected`, `expired` and `cancelled`. Without `on`, targets receive
+`drift`, `failure` (failed, error or timed_out), `rejected`, `expired`, `cancelled` and `scheduled`. Without `on`, targets receive
 `pending`, `drift` and `failure`; `notify_always: true` on the job adds `success` and `cancelled` to targets
 without `on`. An explicit `on: []` sends nothing.
 
 Mattermost messages include a headline, a colored attachment with the job kind, target,
-hosts, trigger, duration and, for pending runs, expiry. For example:
+hosts, trigger, duration, scheduled `not_before` and, for pending runs, expiry. The `scheduled`
+event is opt-in with `on: [scheduled]`, like `cancelled`. For example:
 `:white_check_mark: **patch-wave** ok — 12 in sync, 0 changed, 0 failed`; cancellation reads
 `:no_entry: **patch-wave** cancelled by alice — cancelled by alice: maintenance`.
 Timeouts use the `failure` event with headline `patch-wave timed out`.
@@ -196,7 +246,7 @@ schedule and approvals keep working, runs queue up in order, and pending runs st
 `onigirazu_serve_paused` is 1 while paused, 0 otherwise.
 
 Cancel: an operator of the job uses Cancel on the page or `POST /api/runs/{id}/cancel`
-with an optional `{comment: "..."}`. A queued run becomes `cancelled` without starting and
+with an optional `{comment: "..."}`. A scheduled or queued run becomes `cancelled` without starting and
 frees the job immediately; a running run becomes `cancelling` until its context stops, then
 `cancelled`. The record keeps `cancel.by`, `cancel.at`, optional `cancel.comment`, elapsed duration
 and any partial hosts/report (drift, apply and verify jobs); partial hosts do not count as host verdicts. The schedule can
@@ -208,7 +258,7 @@ Without `auth` everyone is an operator — put the server behind a reverse proxy
 With `token`, `Authorization: Bearer <token>` is an operator (automation, curl). With
 `user_header`, the user the proxy sets (Authentik's outpost, oauth2-proxy, nginx auth_request) is
 a viewer; when one of the groups in `groups_header` (comma, pipe or space separated) is in
-`operators`, an operator. Viewers read everything; operators also start jobs, approve or reject pending runs and cancel queued or running ones.
+`operators`, an operator. Viewers read everything; operators also start jobs, approve or reject pending runs and cancel scheduled, queued or running ones.
 
 Named bearer tokens in `auth.tokens` have a `name`, a `token` value (expands `${VAR}`),
 and optional `groups`. Each is a server-level operator. Names must be unique and values
@@ -222,13 +272,13 @@ only a server-level operator.
 
 Every run, approve, reject, cancel, pause and resume action and refused attempt is recorded in
 `data_dir/audit.log` as JSON lines, with identity, job, run ID, result, comment or reason,
-and client address. Unauthenticated probes are omitted. Viewers can read the entries,
+and client address. Scheduling details include `not_before=<time>`. Unauthenticated probes are omitted. Viewers can read the entries,
 newest first, through `GET /api/audit` or the Audit tab. The file is append-only and
 reopened for every entry, so logrotate can move it aside (no `copytruncate` needed).
 
 ## Live progress
 
-Queued and running run pages open a Progress tab with each host's current task,
+Pending, scheduled, queued and running run pages open a Progress tab with each host's current task,
 result counts and a live task event log. Events carry play and task names, host,
 status, timing and a per-run sequence number. Secret parameter values in names
 are masked. Output, error text, diffs and variables are never sent. Progress is
@@ -241,21 +291,21 @@ with `after` when a stream drops and opens the report when the run ends.
 | Method and path | Returns |
 |---|---|
 | `GET /api/audit` | action log array, newest first (viewers too); filters `user`, `action`, `job`, `run`, `ok=true/false`, `from`, `to` (RFC 3339); `limit` defaults to 100, max 1000; pass `X-Next-Cursor` as `before` for older entries; `400` for invalid cursor, `ok` or dates |
-| `GET /api/me` | the caller: `user`, `operator`, `title`, `paused` (bool), `running` and `queued` counts, `concurrency`, `storage_error` (last result storage error, empty when fine) |
+| `GET /api/me` | the caller: `user`, `operator`, `title`, `paused` (bool), `running`, `queued` and `scheduled` counts, `concurrency`, `storage_error` (last result storage error, empty when fine) |
 | `GET /api/pause` | pause state: `paused`, optional `reason`, `by`, `at` (viewers too) |
 | `POST /api/pause` | pauses execution (operators); optional JSON `{reason: "..."}`; `200` with the state; pausing again updates reason and identity; `500` with the state and `error` when `pause.json` could not be written (the pause still holds in this process) |
 | `POST /api/resume` | resumes execution (operators); `200` with the state; already resumed is a no-op; `500` as for pause |
-| `GET /api/jobs` | the jobs with schedule, next run, optional job `timeout` (duration string), `running` flag (queued, running or cancelling), optional `active` record (without report; `active.requested` and `active.started` give queue and execution timing), `queued` flag (waiting for the worker), last executed result, `recent: [{status, mode, started}]` (up to 20 executed runs, newest first, including checks), optional `pending` record (without reports), and `approval: "required"` for guarded jobs; optional `operators` list and caller-specific `allowed` bool; `adhoc: {limit, extra_vars, secret_vars}` (`extra_vars` remains a list of names) when enabled |
+| `GET /api/jobs` | the jobs with schedule, next run, optional job `timeout` (duration string), `running` flag (queued, running or cancelling), optional `active` record (without report; `active.requested` and `active.started` give queue and execution timing), `queued` flag (waiting for the worker), last executed result, `recent: [{status, mode, started}]` (up to 20 executed runs, newest first, including checks), optional `pending` and `scheduled` records (without reports), `scheduled_runs` when automatic deferrals collide, optional `windows`, `windows_tz` and `next_window` for gated jobs, and `approval: "required"` for guarded jobs; optional `operators` list and caller-specific `allowed` bool; `adhoc: {limit, extra_vars, secret_vars}` (`extra_vars` remains a list of names) when enabled |
 | `GET /api/jobs/{name}/inventory` | operators of jobs with `adhoc.limit: true` only; sorted reachable host names and nonempty groups that lie entirely within the job's limit (recursive, excluding `all`); `?limit=pattern` previews resolved host names; `400` for invalid limits or jobs without ad-hoc limits; `403` for callers not allowed to operate the job; `500` for inventory load errors |
-| `POST /api/jobs/{name}/run` | requests the job (operators); optional JSON `{mode: "check", limit: "host pattern", extra_vars: {k: "v"}}` with limit/variables as allowed by `adhoc`; mode is `check` (apply jobs only), `apply` or empty; `400` for invalid parameters or a limit with no hosts or hosts outside the job's limit; `202` with `{queued: name, run: id}` or `{pending: id, run: id}`; `409` when running, queued or pending; `503` when the queue is full; `500` with the record and `error` when storage fails (the run remains in memory); `403` with `{"error":"not an operator of this job"}` when the job disallows the operator |
+| `POST /api/jobs/{name}/run` | requests the job (operators); optional JSON `{mode: "check", limit: "host pattern", extra_vars: {k: "v"}, not_before: "RFC 3339 time"}` with limit/variables as allowed by `adhoc`; mode is `check` (apply jobs only), `apply` or empty; `400` for invalid parameters or a limit with no hosts or hosts outside the job's limit; `202` with `{queued: name, run: id}` or `{pending: id, run: id}` or `{scheduled: id, run: id}`; `409` when running, queued or pending for an immediate request, or when another run is already scheduled for a request with `not_before`; `503` when the queue is full; `500` with the record and `error` when storage fails (the run remains in memory); `403` with `{"error":"not an operator of this job"}` when the job disallows the operator |
 | `GET /api/jobs/{name}/history?limit=N` | light retained history, newest first (viewers allowed); default 50, maximum 500: `[{id, status, mode, trigger, requested, started, duration_seconds, summary, hosts_count, failed_hosts, params, approval}]`; `params` as stored (secret values masked) and `approval` appear when set; reports and host lists are never included |
 | `GET /api/jobs/{name}/compare?a=<id>&b=<id>` | compare two different executed drift/apply runs of this job with reports (viewers allowed; `400` when `a` equals `b`): `{a: {id, started, status, playbook_hash}, b: {...}, same_playbook, hosts: [{host, a, b}], appeared: [{host, key, play, task, module}], resolved: [...]}`; only changed host verdicts are listed (empty verdict means absent); items match by host and task key when both have keys, otherwise host, play and task; `404` for unknown runs, `400` for another job, unsupported kind, unexecuted runs or missing reports |
 | `GET /api/jobs/{name}/results` | the kept results, newest first |
 | `GET /api/jobs/{name}/results/{id}` | one result with its full report (the drift, verify or comply report as JSON) |
-| `GET /api/results/{id}` | one job result with its full report, optional `mode: "check"`, optional `audit_execution_id`, and optional `params` (`limit`, `extra_vars`, sorted `hosts`, optional `secret_vars` names); `404` if absent |
-| `POST /api/runs/{id}/approve` | queues a pending run (operators); optional JSON `{comment: "..."}`; `200` with the record without report, `404` if absent, `409` when the run expired meanwhile (it is marked expired), `503` if the queue is full; `500` with the record and `error` on storage failure; `403` with `{"error":"not an operator of this job"}` when the job disallows the operator |
+| `GET /api/results/{id}` | one job result with its full report, optional `mode: "check"`, optional `not_before`, optional `audit_execution_id`, and optional `params` (`limit`, `extra_vars`, sorted `hosts`, optional `secret_vars` names); `404` if absent |
+| `POST /api/runs/{id}/approve` | queues or schedules an approved pending run (operators); optional JSON `{comment: "..."}`; `200` with the record without report, `404` if absent, `409` when the run expired meanwhile (it is marked expired), `503` if the queue is full; `500` with the record and `error` on storage failure; `403` with `{"error":"not an operator of this job"}` when the job disallows the operator |
 | `POST /api/runs/{id}/reject` | rejects a pending run (operators); optional JSON `{comment: "..."}`; `200` with the record without report, `404` if absent; `500` with the record and `error` on storage failure; `403` with `{"error":"not an operator of this job"}` when the job disallows the operator |
-| `POST /api/runs/{id}/cancel` | cancels a queued or running run (job operators); optional JSON `{comment: "..."}`; `200` with the cancelled record for queued runs, `202` with the cancelling record for running runs (without report); `404` if absent, `409` if not cancellable (reject a pending run instead), `500` with the record and `error` on storage failure; `403` if disallowed |
+| `POST /api/runs/{id}/cancel` | cancels a scheduled, queued or running run (job operators); optional JSON `{comment: "..."}`; `200` with the cancelled record for scheduled or queued runs, `202` with the cancelling record for running runs (without report); `404` if absent, `409` if not cancellable (reject a pending run instead), `500` with the record and `error` on storage failure; `403` if disallowed |
 | `GET /api/hosts/{name}/results` | that host’s retained results across all jobs, newest `started` first, at most 200: `[{id, job, kind, status, host_status, started, summary}]`; an unknown host returns `[]` |
 | `GET /api/results/{id}/events?after=N` | live NDJSON progress (viewers allowed): snapshot, replay after sequence N, gap marker when replay was truncated, task events and final end; idle pings every 15 seconds |
 | `GET /api/inventory` | inventory sources shared by jobs (viewers too), with sorted groups, direct host membership, recursive host groups and variable names; addresses are included only for operators; each entry has `source`, `jobs`, `loaded_at`, `groups`, `hosts`, and `error` if loading failed |
@@ -263,7 +313,7 @@ with `after` when a stream drops and opens the report when the run ends.
 | `GET /api/hosts` | every host seen by a job's last executed result (cancelled and check runs are skipped), with its worst status (`ok`, `changed`, `drift`, `failed`, `unreachable`) and the status per job |
 | `GET /api/runs` | audit store run array, newest first (viewers too); filters `host`, `playbook` (path substring), `status`, `job` (linked serve runs), `from`, `to` (RFC 3339); `limit` defaults to 100, max 1000, `offset` defaults to 0; `X-Next-Offset` gives the next offset when more exist; `400` for invalid dates or a non-numeric, negative or overflowing offset; optional `serve_run` links to the retained serve result |
 | `GET /api/runs/{id}` | one audit record, with optional `serve_run` |
-| `GET /metrics` | `onigirazu_serve_job_last_status{job,kind}` (0 ok, 1 drift/changed, 2 failed, 3 error, 4 cancelled, 5 timed_out), `onigirazu_serve_job_last_run_timestamp_seconds{job}`, `onigirazu_serve_host_status{job,host}`, `onigirazu_serve_job_pending{job}` (guarded jobs only: 1 pending, 0 otherwise); `onigirazu_serve_paused` (1 paused, 0 otherwise); `onigirazu_serve_running` (executing or cancelling runs), `onigirazu_serve_concurrency` (configured limit); `onigirazu_serve_storage_error` (1 while the last result storage operation failed, 0 otherwise); all include configured metric labels |
+| `GET /metrics` | `onigirazu_serve_job_last_status{job,kind}` (0 ok, 1 drift/changed, 2 failed, 3 error, 4 cancelled, 5 timed_out), `onigirazu_serve_job_last_run_timestamp_seconds{job}`, `onigirazu_serve_host_status{job,host}`, `onigirazu_serve_job_pending{job}` (guarded jobs only: 1 pending, 0 otherwise); `onigirazu_serve_paused` (1 paused, 0 otherwise); `onigirazu_serve_running` (executing or cancelling runs), `onigirazu_serve_concurrency` (configured limit), `onigirazu_serve_scheduled` (scheduled run count); `onigirazu_serve_storage_error` (1 while the last result storage operation failed, 0 otherwise); all include configured metric labels |
 | `GET /healthz` | `ok` |
 
 Run, approve, reject and cancel return `403` with `{"error":"not an operator of this job"}` when
@@ -307,7 +357,7 @@ screens; at 700px and below the Jobs Target column is hidden and dates are short
 
 A job result: `{id, job, kind, mode, requested, started, duration_seconds, status, summary, trigger,
 hosts, report, approval, cancel, params, audit_execution_id, playbook_hash}`. `requested` is the request time; `started` becomes the execution
-start time when the worker begins. `trigger` is `schedule` or `api:<user>`. Status is `pending`,
+start time when the worker begins. `trigger` is `schedule` or `api:<user>`. Status is `pending`, `scheduled`,
 `queued`, `running`, `cancelling`, `cancelled`, `timed_out`, `rejected`, `expired`, `ok`, `drift`, `changed`, `failed` or `error`.
 The optional approval object has `required`, `expires`, and, after a decision, `decision`
 (`approved`, `rejected`, `expired`), `by` (operator identity; absent for expiry), `at` and an

@@ -134,6 +134,7 @@ func (a *ServeAdhoc) UnmarshalYAML(node *yaml.Node) error {
 
 // RunParams is what the caller set on a run, with the limit resolved
 type RunParams struct {
+	NotBefore  *time.Time        `json:"-"`
 	Mode       string            `json:"-"`
 	SecretVars []string          `json:"secret_vars,omitempty"`
 	Limit      string            `json:"limit,omitempty"`
@@ -153,6 +154,10 @@ func (p *RunParams) values() []string {
 
 // ServeJob is a scheduled run
 type ServeJob struct {
+	Windows         []string `yaml:"windows"`
+	WindowsTZ       string   `yaml:"windows_tz"`
+	windows         []serveWindow
+	windowsLoc      *time.Location
 	Name            string            `yaml:"name"`
 	Kind            string            `yaml:"kind"` // drift (default), apply, verify, comply
 	Playbook        string            `yaml:"playbook"`
@@ -187,10 +192,11 @@ type JobResult struct {
 	Job              string            `json:"job"`
 	Kind             string            `json:"kind"`
 	Mode             string            `json:"mode,omitempty"`
+	NotBefore        *time.Time        `json:"not_before,omitempty"`
 	Requested        time.Time         `json:"requested"` // when it was asked for
 	Started          time.Time         `json:"started"`   // the request time until the run starts
 	Duration         float64           `json:"duration_seconds"`
-	Status           string            `json:"status"` // pending, queued, running, statusCancelling, statusCancelled, timed_out, ok, drift, changed, failed, error, rejected, expired
+	Status           string            `json:"status"` // pending, scheduled, queued, running, statusCancelling, statusCancelled, timed_out, ok, drift, changed, failed, error, rejected, expired
 	Summary          string            `json:"summary"`
 	Trigger          string            `json:"trigger"`          // schedule, api:<user>
 	Params           *RunParams        `json:"params,omitempty"` // what the caller set
@@ -229,6 +235,10 @@ func (r *JobResult) executed() bool {
 // resultCopy is a copy safe to hand out of the lock
 func resultCopy(r *JobResult) *JobResult {
 	copy := *r
+	if r.NotBefore != nil {
+		at := *r.NotBefore
+		copy.NotBefore = &at
+	}
 	copy.Hosts = maps.Clone(r.Hosts)
 	if r.Params != nil {
 		params := *r.Params
@@ -355,6 +365,13 @@ func loadServeConfig(path string) (*ServeConfig, error) {
 	names := map[string]bool{}
 	for i := range cfg.Jobs {
 		j := &cfg.Jobs[i]
+		if j.WindowsTZ == "" {
+			j.WindowsTZ = "UTC"
+		}
+		j.windows, j.windowsLoc, err = parseServeWindows(j.Windows, j.WindowsTZ)
+		if err != nil {
+			return nil, fmt.Errorf("job %s: %w", j.Name, err)
+		}
 		if err := validateNotifyTargets(j.Notify); err != nil {
 			return nil, fmt.Errorf("job %s: notify: %w", j.Name, err)
 		}
@@ -425,6 +442,7 @@ type server struct {
 	pending          map[string]*JobResult
 	lastID           map[string]string // job -> the base of the last id given (ids stay unique when records are pruned)
 	lastSeq          map[string]int
+	schedulerTick    time.Duration
 	nextRun          map[string]time.Time
 	pause            servePause
 	resumed          chan struct{}
@@ -456,6 +474,17 @@ func newServer(cfg *ServeConfig, out io.Writer) (*server, error) {
 	}
 	if cfg.Concurrency == 0 {
 		cfg.Concurrency = 1
+	}
+	for i := range cfg.Jobs {
+		j := &cfg.Jobs[i]
+		if j.WindowsTZ == "" {
+			j.WindowsTZ = "UTC"
+		}
+		var err error
+		j.windows, j.windowsLoc, err = parseServeWindows(j.Windows, j.WindowsTZ)
+		if err != nil {
+			return nil, fmt.Errorf("job %s: %w", j.Name, err)
+		}
 	}
 	s := &server{cancels: map[string]context.CancelFunc{}, cfg: cfg, out: out, results: map[string][]*JobResult{}, running: map[string]bool{}, pending: map[string]*JobResult{}, lastID: map[string]string{}, lastSeq: map[string]int{}, nextRun: map[string]time.Time{}, queue: make(chan queued, 64), resumed: make(chan struct{})}
 	s.secrets = map[string]map[string]string{}
@@ -562,13 +591,18 @@ func (s *server) loadResults() {
 	}
 	for _, list := range s.results {
 		for _, r := range append([]*JobResult(nil), list...) {
-			if (r.Status == "pending" || r.Status == "queued") && s.hasSecretParams(r) {
+			if (r.Status == "pending" || r.Status == "scheduled" || r.Status == "queued") && s.hasSecretParams(r) {
 				r.Status = "error"
 				r.Summary = "interrupted: serve restarted (secret parameters are not kept)"
 				s.saveResult(r)
 				continue
 			}
 			switch r.Status {
+			case "scheduled":
+				if s.job(r.Job) == nil {
+					r.Status, r.Summary = "error", "interrupted: job removed from serve.yml"
+					s.saveResult(r)
+				}
 			case "pending":
 				if s.job(r.Job) == nil { // removed from serve.yml meanwhile
 					r.Status, r.Summary = "error", "interrupted: job removed from serve.yml"
@@ -658,10 +692,16 @@ func (s *server) pruneResults(job string, now time.Time) error {
 	list := s.results[job]
 	kept := make([]*JobResult, 0, len(list))
 	var errs []error
-	for i, r := range list {
-		active := r.Status == "pending" || r.Status == "queued" || r.Status == "running"
+	finished := 0 // active runs do not use up the count limit
+	for _, r := range list {
+		active := r.Status == "pending" || r.Status == "scheduled" || r.Status == "queued" || r.Status == "running" || r.Status == statusCancelling
 		old := s.cfg.RetainAge > 0 && !active && r.Requested.Before(now.Add(-s.cfg.RetainAge))
-		if i < s.cfg.Retain && !old {
+		if active {
+			kept = append(kept, r)
+			continue
+		}
+		finished++
+		if finished <= s.cfg.Retain && !old {
 			kept = append(kept, r)
 			continue
 		}
@@ -684,8 +724,9 @@ func (s *server) job(name string) *ServeJob {
 }
 
 var (
+	errAlreadyScheduled  = errors.New("a run is already scheduled for this job")
 	errNoSuchRun         = errors.New("no such run")
-	errRunNotCancellable = errors.New("run is not queued or running; for a pending run, reject it instead")
+	errRunNotCancellable = errors.New("run is not scheduled, queued or running; for a pending run, reject it instead")
 	errJobBusy           = errors.New("already running, queued or pending")
 	errNoPendingRun      = errors.New("no such pending run")
 	errRunExpired        = errors.New("the run expired before the decision")
@@ -723,16 +764,29 @@ func (s *server) nextID(job string, now time.Time) string {
 	return id
 }
 
-// request creates a run: pending when the job wants approval, else queued
+// request creates a run, awaiting approval, its start time or a worker.
 func (s *server) request(j *ServeJob, trigger string, params *RunParams) (*JobResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.running[j.Name] {
+	now := time.Now().UTC()
+	var notBefore *time.Time
+	mode := ""
+	if params != nil {
+		notBefore, mode = params.NotBefore, params.Mode
+	}
+	future := notBefore != nil && notBefore.After(now)
+	gated := j.gated(mode) && !j.windowOpen(now)
+	// one explicit request for later per job; the schedule keeps one deferral, a
+	// caller's run outside the window is deferred next to it
+	if (notBefore != nil || (gated && trigger == "schedule")) && s.scheduledRun(j.Name) != nil {
+		return nil, errAlreadyScheduled
+	}
+	needsApproval := (mode == "check" && j.CheckApproval == "required") || (mode != "check" && j.Approval == "required")
+	if s.running[j.Name] && (needsApproval || (!future && !gated)) {
 		return nil, errJobBusy
 	}
-	now := time.Now().UTC()
 	id := s.nextID(j.Name, now)
-	r := &JobResult{ID: id, Job: j.Name, Kind: j.Kind, Requested: now, Started: now, Trigger: trigger, Status: "queued", Params: params}
+	r := &JobResult{ID: id, Job: j.Name, Kind: j.Kind, Requested: now, Started: now, Trigger: trigger, Status: "queued", Params: params, NotBefore: notBefore}
 	if params != nil {
 		r.Mode = params.Mode
 		r.Params = resultCopy(r).Params
@@ -755,23 +809,28 @@ func (s *server) request(j *ServeJob, trigger string, params *RunParams) (*JobRe
 		r.Status = "pending"
 		r.Approval = &RunApproval{Required: true, Expires: now.Add(j.ApprovalTimeout)}
 		s.pending[j.Name] = r
+		s.running[j.Name] = true
+	} else if at := j.deferUntil(r, now); at != nil {
+		s.schedule(r, *at)
 	} else {
 		select {
 		case s.queue <- queued{job: j, run: r}:
+			s.running[j.Name] = true
 		default:
 			delete(s.secrets, id)
 			return nil, errQueueFull
 		}
 	}
-	s.running[j.Name] = true
 	err := s.store(r)
 	if r.Status == "pending" {
 		s.notify(eventPending, j, resultCopy(r))
+	} else if r.Status == "scheduled" {
+		s.notify(eventScheduled, j, resultCopy(r))
 	}
 	return resultCopy(r), err
 }
 
-// cancel stops a queued or running run.
+// cancel stops a scheduled, queued or running run.
 func (s *server) cancel(id, by, comment string) (*JobResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -780,7 +839,7 @@ func (s *server) cancel(id, by, comment string) (*JobResult, error) {
 			if r.ID != id {
 				continue
 			}
-			if r.Status != "queued" && r.Status != "running" {
+			if r.Status != "scheduled" && r.Status != "queued" && r.Status != "running" {
 				return nil, errRunNotCancellable
 			}
 			// the comment is printed to the log and sent in messages: one line
@@ -796,9 +855,11 @@ func (s *server) cancel(id, by, comment string) (*JobResult, error) {
 				r.Summary += ": " + comment
 			}
 			var err error
-			if r.Status == "queued" {
+			if r.Status == "queued" || r.Status == "scheduled" {
+				if r.Status == "queued" {
+					s.running[job] = false
+				}
 				r.Status = statusCancelled
-				s.running[job] = false
 				delete(s.secrets, r.ID)
 				err = s.store(r)
 				s.notify(eventCancelled, s.job(job), resultCopy(r))
@@ -842,12 +903,17 @@ func (s *server) decide(id, by, comment, decision string) (*JobResult, error) {
 			return nil, errRunExpired
 		}
 		if decision == "approved" {
-			select {
-			case s.queue <- queued{job: s.job(job), run: r}:
-			default:
-				return nil, errQueueFull
+			if at := s.job(job).deferUntil(r, now); at != nil {
+				s.schedule(r, *at)
+				s.running[job] = false
+			} else {
+				select {
+				case s.queue <- queued{job: s.job(job), run: r}:
+				default:
+					return nil, errQueueFull
+				}
+				r.Status = "queued"
 			}
-			r.Status = "queued"
 		} else {
 			r.Status = "rejected"
 			delete(s.secrets, r.ID)
@@ -858,6 +924,8 @@ func (s *server) decide(id, by, comment, decision string) (*JobResult, error) {
 		err := s.store(r)
 		if decision == "rejected" {
 			s.notify(eventRejected, s.job(job), resultCopy(r))
+		} else if r.Status == "scheduled" {
+			s.notify(eventScheduled, s.job(job), resultCopy(r))
 		}
 		return resultCopy(r), err
 	}
@@ -959,6 +1027,15 @@ next:
 				continue next
 			}
 			r := q.run
+			if at := q.job.deferUntil(r, time.Now().UTC()); at != nil {
+				s.schedule(r, *at)
+				s.running[q.job.Name] = false
+				s.saveResult(r)
+				s.notify(eventScheduled, q.job, resultCopy(r))
+				s.mu.Unlock()
+				s.pickupMu.Unlock()
+				continue next
+			}
 			timeout := q.job.Timeout
 			if timeout == 0 {
 				timeout = s.cfg.RunTimeout
@@ -1112,7 +1189,11 @@ func (s *server) scheduler(ctx context.Context) {
 		}
 	}
 	s.mu.Unlock()
-	t := time.NewTicker(5 * time.Second)
+	tick := s.schedulerTick
+	if tick <= 0 {
+		tick = 5 * time.Second
+	}
+	t := time.NewTicker(tick)
 	defer t.Stop()
 	for {
 		select {
@@ -1120,6 +1201,7 @@ func (s *server) scheduler(ctx context.Context) {
 			return
 		case now := <-t.C:
 			s.expirePending(now)
+			s.releaseScheduled(now)
 			s.mu.Lock()
 			var due []*ServeJob
 			for i := range s.cfg.Jobs {
@@ -1321,6 +1403,7 @@ func (s *server) jobInventoryView(w http.ResponseWriter, r *http.Request, j *Ser
 // extra vars the job allows
 func (s *server) runParams(r *http.Request, j *ServeJob) (*RunParams, error) {
 	var body struct {
+		NotBefore *time.Time        `json:"not_before"`
 		Mode      string            `json:"mode"`
 		Limit     string            `json:"limit"`
 		ExtraVars map[string]string `json:"extra_vars"`
@@ -1336,6 +1419,12 @@ func (s *server) runParams(r *http.Request, j *ServeJob) (*RunParams, error) {
 	var trailing interface{}
 	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
 		return nil, errors.New("expected one JSON body")
+	}
+	if body.NotBefore != nil {
+		now := time.Now()
+		if !body.NotBefore.After(now) || body.NotBefore.After(now.Add(30*24*time.Hour)) {
+			return nil, errors.New("not_before must be in the future and at most 30 days ahead")
+		}
 	}
 	switch body.Mode {
 	case "", "apply":
@@ -1361,10 +1450,10 @@ func (s *server) runParams(r *http.Request, j *ServeJob) (*RunParams, error) {
 			return nil, fmt.Errorf("extra var %q is not allowed for this job", k)
 		}
 	}
-	if body.Mode == "" && body.Limit == "" && len(body.ExtraVars) == 0 {
+	if body.NotBefore == nil && body.Mode == "" && body.Limit == "" && len(body.ExtraVars) == 0 {
 		return nil, nil
 	}
-	params := &RunParams{Mode: body.Mode, Limit: body.Limit, ExtraVars: body.ExtraVars}
+	params := &RunParams{NotBefore: body.NotBefore, Mode: body.Mode, Limit: body.Limit, ExtraVars: body.ExtraVars}
 	if body.Limit != "" {
 		hosts, err := s.resolveLimit(j, body.Limit)
 		if err != nil {
@@ -1619,7 +1708,7 @@ func (s *server) mux() *http.ServeMux {
 	mux.HandleFunc("/api/me", auth(false, func(w http.ResponseWriter, _ *http.Request, id serveIdentity) {
 		s.mu.Lock()
 		running, queued := s.activity()
-		status := map[string]interface{}{"user": id.User, "operator": id.Operator, "title": s.cfg.Title, "paused": s.pause.Paused, "running": running, "queued": queued, "concurrency": s.cfg.Concurrency, "storage_error": s.storeErr}
+		status := map[string]interface{}{"user": id.User, "operator": id.Operator, "title": s.cfg.Title, "paused": s.pause.Paused, "running": running, "queued": queued, "scheduled": s.scheduledCount(), "concurrency": s.cfg.Concurrency, "storage_error": s.storeErr}
 		s.mu.Unlock()
 		writeJSON(w, http.StatusOK, status)
 	}))
@@ -1711,7 +1800,7 @@ func (s *server) mux() *http.ServeMux {
 					code := http.StatusServiceUnavailable
 					a.Reason = err.Error()
 					s.logAction(a)
-					if errors.Is(err, errJobBusy) {
+					if errors.Is(err, errJobBusy) || errors.Is(err, errAlreadyScheduled) {
 						code = http.StatusConflict
 					}
 					if run != nil {
@@ -1735,8 +1824,13 @@ func (s *server) mux() *http.ServeMux {
 					}
 					a.Reason = strings.Join(details, " ")
 				}
+				if run.NotBefore != nil {
+					a.Reason = strings.TrimSpace(a.Reason + " not_before=" + run.NotBefore.Format(time.RFC3339Nano))
+				}
 				s.logAction(a)
-				if run.Status == "pending" {
+				if run.Status == "scheduled" {
+					writeJSON(w, http.StatusAccepted, map[string]string{"scheduled": run.ID, "run": run.ID})
+				} else if run.Status == "pending" {
 					writeJSON(w, http.StatusAccepted, map[string]string{"pending": run.ID, "run": run.ID})
 				} else {
 					writeJSON(w, http.StatusAccepted, map[string]string{"queued": j.Name, "run": run.ID})
@@ -1917,6 +2011,9 @@ func (s *server) mux() *http.ServeMux {
 				}
 				result, err := decide(runID, id.User, body.Comment)
 				a.OK, a.Reason = err == nil, body.Comment
+				if result != nil && result.NotBefore != nil {
+					a.Reason = strings.TrimSpace(a.Reason + " not_before=" + result.NotBefore.Format(time.RFC3339Nano))
+				}
 				if err != nil {
 					a.Reason = err.Error()
 				}
@@ -2197,22 +2294,27 @@ func driftDifference(from, other *DriftReport) []compareItem {
 }
 
 type jobView struct {
-	Name      string      `json:"name"`
-	Kind      string      `json:"kind"`
-	Target    string      `json:"target"`
-	Approval  string      `json:"approval,omitempty"`  // required
-	Operators []string    `json:"operators,omitempty"` // the job's own list
-	Allowed   bool        `json:"allowed"`             // the caller may run, approve, reject
-	Adhoc     *ServeAdhoc `json:"adhoc,omitempty"`     // what a run may set, when anything
-	Every     string      `json:"every,omitempty"`
-	Timeout   string      `json:"timeout,omitempty"`
-	Next      *time.Time  `json:"next,omitempty"`
-	Queued    bool        `json:"queued"`
-	Running   bool        `json:"running"`           // queued, running or stopping
-	Pending   *JobResult  `json:"pending,omitempty"` // the run that waits for approval
-	Active    *JobResult  `json:"active,omitempty"`  // queued or executing, without report
-	Recent    []jobRecent `json:"recent"`
-	Last      *JobResult  `json:"last,omitempty"` // the last executed run
+	Windows       []string     `json:"windows,omitempty"`
+	WindowsTZ     string       `json:"windows_tz,omitempty"`
+	NextWindow    *time.Time   `json:"next_window,omitempty"`
+	Scheduled     *JobResult   `json:"scheduled,omitempty"`
+	ScheduledRuns []*JobResult `json:"scheduled_runs,omitempty"`
+	Name          string       `json:"name"`
+	Kind          string       `json:"kind"`
+	Target        string       `json:"target"`
+	Approval      string       `json:"approval,omitempty"`  // required
+	Operators     []string     `json:"operators,omitempty"` // the job's own list
+	Allowed       bool         `json:"allowed"`             // the caller may run, approve, reject
+	Adhoc         *ServeAdhoc  `json:"adhoc,omitempty"`     // what a run may set, when anything
+	Every         string       `json:"every,omitempty"`
+	Timeout       string       `json:"timeout,omitempty"`
+	Next          *time.Time   `json:"next,omitempty"`
+	Queued        bool         `json:"queued"`
+	Running       bool         `json:"running"`           // queued, running or stopping
+	Pending       *JobResult   `json:"pending,omitempty"` // the run that waits for approval
+	Active        *JobResult   `json:"active,omitempty"`  // queued or executing, without report
+	Recent        []jobRecent  `json:"recent"`
+	Last          *JobResult   `json:"last,omitempty"` // the last executed run
 }
 
 func (s *server) jobsView(id serveIdentity) []jobView {
@@ -2225,10 +2327,31 @@ func (s *server) jobsView(id serveIdentity) []jobView {
 		if j.Adhoc.Limit || len(j.Adhoc.ExtraVars) > 0 {
 			v.Adhoc = &j.Adhoc
 		}
-		if list := s.results[j.Name]; v.Running && len(list) > 0 {
-			v.Queued = list[0].Status == "queued"
-			v.Active = resultCopy(list[0])
-			v.Active.Report = nil
+		if j.gated("") {
+			v.Windows, v.WindowsTZ = j.Windows, j.WindowsTZ
+			if now := time.Now(); !j.windowOpen(now) { // open now: no next start to show
+				next := j.nextWindow(now)
+				v.NextWindow = &next
+			}
+		}
+		for _, r := range s.results[j.Name] {
+			if r.Status == "scheduled" {
+				scheduled := resultCopy(r)
+				scheduled.Report = nil
+				if v.Scheduled == nil {
+					v.Scheduled = scheduled
+				}
+				v.ScheduledRuns = append(v.ScheduledRuns, scheduled)
+			}
+			if v.Running && (r.Status == "queued" || r.Status == "running" || r.Status == statusCancelling) {
+				v.Queued = r.Status == "queued"
+				v.Active = resultCopy(r)
+				v.Active.Report = nil
+			}
+		}
+
+		if len(v.ScheduledRuns) < 2 {
+			v.ScheduledRuns = nil
 		}
 		if j.Kind == "comply" {
 			v.Target = j.Profile
@@ -2396,6 +2519,8 @@ func (s *server) metricsHandler(w http.ResponseWriter, _ *http.Request) {
 	}
 	promLine(&b, "onigirazu_serve_storage_error", s.cfg.Metrics.Labels, storageError)
 	b.WriteString("# TYPE onigirazu_serve_running gauge\n# TYPE onigirazu_serve_concurrency gauge\n")
+	b.WriteString("# TYPE onigirazu_serve_scheduled gauge\n")
+	promLine(&b, "onigirazu_serve_scheduled", s.cfg.Metrics.Labels, float64(s.scheduledCount()))
 	running, _ := s.activity()
 	promLine(&b, "onigirazu_serve_running", s.cfg.Metrics.Labels, float64(running))
 	promLine(&b, "onigirazu_serve_concurrency", s.cfg.Metrics.Labels, float64(s.cfg.Concurrency))
