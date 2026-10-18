@@ -5,11 +5,17 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
+	"syscall"
 
 	"github.com/onigirazu-cfg/onigirazu/internal/cli"
 )
 
 func main() {
+	// a reader that goes away (apply | head, | grep -q) must not kill a run
+	// halfway: it would leave hosts half-changed, the state unsaved and the
+	// state lock held; writes to the closed pipe just fail instead
+	signal.Ignore(syscall.SIGPIPE)
 	code := 0
 	if err := cli.Execute(); err != nil {
 		var exit *cli.ExitError

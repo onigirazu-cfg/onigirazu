@@ -108,7 +108,8 @@ In S3 the lock is an object per run under `<state>.lock/`: a run holds it when a
 after its write shows no other. It needs no conditional writes (Garage ignores `If-None-Match`),
 only read-after-write consistency, which AWS, Garage and MinIO have.
 `scripts/garage-s3-test.sh` checks the S3 store and its lock against a throwaway Garage (CI runs it).
-`plan` and `drift` do not lock. A lock left by a run that died:
+`plan` and `drift` do not lock. A run whose output reader goes away (`apply ... | head`, `| grep -q`)
+is not stopped by it: it finishes, saves its state and releases the lock. A lock left by a run that died:
 
 ```
 onigirazu state unlock site.yml 3f2a9c1d0b7e4a55   # the ID from the error
