@@ -1975,7 +1975,7 @@ type jobHistoryRow struct {
 func (s *server) jobHistory(job string, limit int) []jobHistoryRow {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	rows := make([]jobHistoryRow, 0, min(limit, len(s.results[job])))
+	rows := make([]jobHistoryRow, 0) // no capacity from the caller's limit
 	for _, r := range s.results[job] {
 		if len(rows) == limit {
 			break
