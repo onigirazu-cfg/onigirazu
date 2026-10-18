@@ -34,6 +34,7 @@ func (e *ExitError) Error() string { return fmt.Sprintf("exit %d: %s", e.Code, e
 
 // DriftItem is one task that would change one host
 type DriftItem struct {
+	Key    string `json:"key,omitempty"`
 	Play   string `json:"play,omitempty"`
 	Task   string `json:"task"`
 	Module string `json:"module,omitempty"`
@@ -141,7 +142,7 @@ func buildDriftReport(playbook string, result *types.PlaybookResult) *DriftRepor
 		for _, host := range play.Hosts {
 			hosts[host.Host] = true
 			for _, t := range host.Tasks {
-				item := DriftItem{Play: play.Name, Task: t.TaskName, Module: t.Module, Detail: taskDetail(t), Diff: diffview.TaskDiff(t)}
+				item := DriftItem{Key: t.TaskKey, Play: play.Name, Task: t.TaskName, Module: t.Module, Detail: taskDetail(t), Diff: diffview.TaskDiff(t)}
 				switch {
 				case t.Failed && !t.Ignored:
 					report.Errors[host.Host] = append(report.Errors[host.Host], item)

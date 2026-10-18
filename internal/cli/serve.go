@@ -3,6 +3,7 @@ package cli
 import (
 	"cmp"
 	"context"
+	"crypto/sha256"
 	"crypto/subtle"
 	_ "embed"
 	"encoding/json"
@@ -180,6 +181,7 @@ const (
 // JobResult is one run of a job, as stored
 type JobResult struct {
 	AuditExecutionID string            `json:"audit_execution_id,omitempty"`
+	PlaybookHash     string            `json:"playbook_hash,omitempty"`
 	ID               string            `json:"id"`
 	Job              string            `json:"job"`
 	Kind             string            `json:"kind"`
@@ -983,6 +985,9 @@ next:
 			}
 			s.mu.Lock()
 			delete(s.cancels, r.ID)
+			if result != nil {
+				r.PlaybookHash = result.PlaybookHash
+			}
 			// a run that finished keeps its result, even when a cancel,
 			// deadline or shutdown arrived between its end and here
 			switch {
@@ -1376,6 +1381,12 @@ func extraVarsArg(vars map[string]string) string {
 func (s *server) execute(ctx context.Context, j *ServeJob, mode string) (*JobResult, error) {
 	started := time.Now().UTC()
 	r := &JobResult{Job: j.Name, Kind: j.Kind, Mode: mode, Started: started, Hosts: map[string]string{}}
+	if j.Kind == "drift" || j.Kind == "apply" || j.Kind == "verify" {
+		if content, err := os.ReadFile(j.Playbook); err == nil {
+			sum := sha256.Sum256(content)
+			r.PlaybookHash = fmt.Sprintf("%x", sum)[:16]
+		}
+	}
 	var runErr error
 	o := driftCheckOptions{limit: j.Limit, become: j.Become}
 	if j.Inventory != "" {
@@ -1726,6 +1737,17 @@ func (s *server) mux() *http.ServeMux {
 					writeJSON(w, http.StatusAccepted, map[string]string{"queued": j.Name, "run": run.ID})
 				}
 			})(w, r)
+		case action == "history" && r.Method == http.MethodGet:
+			limit, err := strconv.Atoi(r.URL.Query().Get("limit"))
+			if err != nil || limit <= 0 {
+				limit = 50
+			}
+			if limit > 500 {
+				limit = 500
+			}
+			writeJSON(w, http.StatusOK, s.jobHistory(j.Name, limit))
+		case action == "compare" && r.Method == http.MethodGet:
+			s.compareRuns(w, r, j.Name)
 		case action == "results" || action == "":
 			s.mu.Lock()
 			list := make([]*JobResult, 0, len(s.results[j.Name]))
@@ -1929,6 +1951,185 @@ func (s *server) auditServeRuns() map[string]string {
 	return runs
 }
 
+type jobRecent struct {
+	Status  string    `json:"status"`
+	Mode    string    `json:"mode"`
+	Started time.Time `json:"started"`
+}
+
+type jobHistoryRow struct {
+	ID          string       `json:"id"`
+	Status      string       `json:"status"`
+	Mode        string       `json:"mode"`
+	Trigger     string       `json:"trigger"`
+	Requested   time.Time    `json:"requested"`
+	Started     time.Time    `json:"started"`
+	Duration    float64      `json:"duration_seconds"`
+	Summary     string       `json:"summary"`
+	HostsCount  int          `json:"hosts_count"`
+	FailedHosts int          `json:"failed_hosts"`
+	Params      *RunParams   `json:"params,omitempty"`   // as stored: secret values are already masked
+	Approval    *RunApproval `json:"approval,omitempty"` // who approved or rejected it
+}
+
+func (s *server) jobHistory(job string, limit int) []jobHistoryRow {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	rows := make([]jobHistoryRow, 0, min(limit, len(s.results[job])))
+	for _, r := range s.results[job] {
+		if len(rows) == limit {
+			break
+		}
+		failed := 0
+		for _, status := range r.Hosts {
+			if status == "failed" || status == "unreachable" {
+				failed++
+			}
+		}
+		row := jobHistoryRow{ID: r.ID, Status: r.Status, Mode: r.Mode, Trigger: r.Trigger,
+			Requested: r.Requested, Started: r.Started, Duration: r.Duration, Summary: r.Summary,
+			HostsCount: len(r.Hosts), FailedHosts: failed}
+		if r.Params != nil || r.Approval != nil { // copies: the rows are encoded after mu is released
+			light := *r
+			light.Report = nil
+			c := resultCopy(&light)
+			row.Params, row.Approval = c.Params, c.Approval
+		}
+		rows = append(rows, row)
+	}
+	return rows
+}
+
+type compareRunView struct {
+	ID           string    `json:"id"`
+	Started      time.Time `json:"started"`
+	Status       string    `json:"status"`
+	PlaybookHash string    `json:"playbook_hash"`
+}
+
+type compareHost struct {
+	Host string `json:"host"`
+	A    string `json:"a"`
+	B    string `json:"b"`
+}
+
+type compareItem struct {
+	Host   string `json:"host"`
+	Key    string `json:"key"`
+	Play   string `json:"play"`
+	Task   string `json:"task"`
+	Module string `json:"module"`
+}
+
+type runComparison struct {
+	A            compareRunView `json:"a"`
+	B            compareRunView `json:"b"`
+	SamePlaybook bool           `json:"same_playbook"`
+	Hosts        []compareHost  `json:"hosts"`
+	Appeared     []compareItem  `json:"appeared"`
+	Resolved     []compareItem  `json:"resolved"`
+}
+
+func (s *server) compareRuns(w http.ResponseWriter, req *http.Request, job string) {
+	ids := []string{req.URL.Query().Get("a"), req.URL.Query().Get("b")}
+	if ids[0] == "" || ids[1] == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "both a and b run IDs are required"})
+		return
+	}
+	if ids[0] == ids[1] {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "a and b must be different runs"})
+		return
+	}
+	runs := make([]*JobResult, 2)
+	s.mu.Lock()
+	for _, list := range s.results {
+		for _, r := range list {
+			for i, id := range ids {
+				if r.ID == id {
+					runs[i] = resultCopy(r)
+				}
+			}
+		}
+	}
+	s.mu.Unlock()
+	for _, r := range runs {
+		if r == nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "no such result"})
+			return
+		}
+	}
+	reports := make([]*DriftReport, 2)
+	for i, r := range runs {
+		if r.Job != job || (r.Kind != "drift" && r.Kind != "apply") || !r.executed() ||
+			len(r.Report) == 0 || json.Unmarshal(r.Report, &reports[i]) != nil || reports[i] == nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "comparison requires executed drift or apply runs of this job with reports"})
+			return
+		}
+	}
+	a, b := runs[0], runs[1]
+	view := func(r *JobResult) compareRunView {
+		return compareRunView{ID: r.ID, Started: r.Started, Status: r.Status, PlaybookHash: r.PlaybookHash}
+	}
+	out := runComparison{A: view(a), B: view(b), SamePlaybook: a.PlaybookHash != "" && a.PlaybookHash == b.PlaybookHash,
+		Hosts: []compareHost{}, Appeared: []compareItem{}, Resolved: []compareItem{}}
+	hosts := maps.Clone(a.Hosts)
+	if hosts == nil {
+		hosts = make(map[string]string, len(b.Hosts))
+	}
+	for host, status := range b.Hosts {
+		hosts[host] = status
+	}
+	for host := range hosts {
+		av, aok := a.Hosts[host]
+		bv, bok := b.Hosts[host]
+		if av != bv || aok != bok {
+			out.Hosts = append(out.Hosts, compareHost{Host: host, A: av, B: bv})
+		}
+	}
+	sort.Slice(out.Hosts, func(i, j int) bool { return out.Hosts[i].Host < out.Hosts[j].Host })
+	out.Appeared = driftDifference(reports[1], reports[0])
+	out.Resolved = driftDifference(reports[0], reports[1])
+	writeJSON(w, http.StatusOK, out)
+}
+
+// driftDifference returns drift items in one report that are absent from the other.
+func driftDifference(from, other *DriftReport) []compareItem {
+	type taskName struct{ host, play, task string }
+	type taskKey struct{ host, key string }
+	keys := make(map[taskKey]bool)
+	names := make(map[taskName]bool)
+	unkeyed := make(map[taskName]bool)
+	for host, items := range other.Drift {
+		for _, item := range items {
+			name := taskName{host, item.Play, item.Task}
+			names[name] = true
+			if item.Key == "" {
+				unkeyed[name] = true
+			} else {
+				keys[taskKey{host, item.Key}] = true
+			}
+		}
+	}
+	out := make([]compareItem, 0)
+	for host, items := range from.Drift {
+		for _, item := range items {
+			name := taskName{host, item.Play, item.Task}
+			matched := names[name]
+			if item.Key != "" {
+				matched = keys[taskKey{host, item.Key}] || unkeyed[name]
+			}
+			if !matched {
+				out = append(out, compareItem{Host: host, Key: item.Key, Play: item.Play, Task: item.Task, Module: item.Module})
+			}
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		a, b := out[i], out[j]
+		return cmp.Or(strings.Compare(a.Host, b.Host), strings.Compare(a.Play, b.Play), strings.Compare(a.Task, b.Task), strings.Compare(a.Key, b.Key), strings.Compare(a.Module, b.Module)) < 0
+	})
+	return out
+}
+
 type jobView struct {
 	Name      string      `json:"name"`
 	Kind      string      `json:"kind"`
@@ -1944,7 +2145,8 @@ type jobView struct {
 	Running   bool        `json:"running"`           // queued, running or stopping
 	Pending   *JobResult  `json:"pending,omitempty"` // the run that waits for approval
 	Active    *JobResult  `json:"active,omitempty"`  // queued or executing, without report
-	Last      *JobResult  `json:"last,omitempty"`    // the last executed run
+	Recent    []jobRecent `json:"recent"`
+	Last      *JobResult  `json:"last,omitempty"` // the last executed run
 }
 
 func (s *server) jobsView(id serveIdentity) []jobView {
@@ -1983,6 +2185,15 @@ func (s *server) jobsView(id serveIdentity) []jobView {
 			last := resultCopy(result)
 			last.Report = nil
 			v.Last = last
+		}
+		v.Recent = make([]jobRecent, 0, 20)
+		for _, result := range s.results[j.Name] {
+			if result.executed() {
+				v.Recent = append(v.Recent, jobRecent{Status: result.Status, Mode: result.Mode, Started: result.Started})
+				if len(v.Recent) == 20 {
+					break
+				}
+			}
 		}
 		out = append(out, v)
 	}
