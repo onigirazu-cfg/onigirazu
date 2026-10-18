@@ -27,6 +27,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/onigirazu-cfg/onigirazu/internal/audit"
+	"github.com/onigirazu-cfg/onigirazu/internal/inventory"
 	"github.com/onigirazu-cfg/onigirazu/internal/logger"
 )
 
@@ -1103,18 +1104,28 @@ func (s *server) effectiveJob(j *ServeJob, p *RunParams, runID string) (*ServeJo
 	return &jj, nil
 }
 
-// resolveLimit names the hosts of an ad-hoc limit and checks they stay
-// inside the job's own limit
-func (s *server) resolveLimit(j *ServeJob, limit string) ([]string, error) {
+type serveInventoryError struct{ error }
+
+func (s *server) jobInventory(j *ServeJob) (*inventory.Manager, error) {
 	log, err := logger.NewEnhancedLogger("error", "text", os.Stderr)
 	if err != nil {
-		return nil, err
+		return nil, serveInventoryError{err}
 	}
 	paths := s.inventory
 	if j.Inventory != "" {
 		paths = []string{j.Inventory}
 	}
 	manager, err := loadInventoryFrom(context.Background(), log, inventorySources(log, j.Playbook, paths))
+	if err != nil {
+		return nil, serveInventoryError{err}
+	}
+	return manager, nil
+}
+
+// resolveLimit names the hosts of an ad-hoc limit and checks they stay
+// inside the job's own limit
+func (s *server) resolveLimit(j *ServeJob, limit string) ([]string, error) {
+	manager, err := s.jobInventory(j)
 	if err != nil {
 		return nil, err
 	}
@@ -1152,6 +1163,99 @@ func (s *server) resolveLimit(j *ServeJob, limit string) ([]string, error) {
 	return names, nil
 }
 
+func validateServeLimit(limit string) error {
+	if strings.ContainsFunc(limit, func(r rune) bool {
+		return !(unicode.IsLetter(r) || unicode.IsDigit(r) || strings.ContainsRune("._-*:,!&~[]@", r))
+	}) {
+		return errors.New("limit has characters a host pattern cannot have")
+	}
+	return nil
+}
+
+type serveInventoryGroup struct {
+	Name  string   `json:"name"`
+	Hosts []string `json:"hosts"`
+}
+
+func (s *server) jobInventoryView(w http.ResponseWriter, r *http.Request, j *ServeJob) {
+	if !j.Adhoc.Limit {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "this job does not accept a limit"})
+		return
+	}
+	if r.URL.Query().Has("limit") {
+		limit := r.URL.Query().Get("limit")
+		if err := validateServeLimit(limit); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		// Keep line breaks out of inventory logs, also for the static analyser.
+		limit = strings.ReplaceAll(strings.ReplaceAll(limit, "\n", ""), "\r", "")
+		pattern := limit
+		if pattern == "" {
+			pattern = j.Limit
+			if pattern == "" {
+				pattern = "all"
+			}
+		}
+		hosts, err := s.resolveLimit(j, pattern)
+		if err != nil {
+			code := http.StatusBadRequest
+			var loadErr serveInventoryError
+			if errors.As(err, &loadErr) {
+				code = http.StatusInternalServerError
+			}
+			writeJSON(w, code, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, struct {
+			Limit string   `json:"limit"`
+			Hosts []string `json:"hosts"`
+		}{limit, hosts})
+		return
+	}
+	manager, err := s.jobInventory(j)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	pattern := j.Limit
+	if pattern == "" {
+		pattern = "all"
+	}
+	hosts, err := manager.GetHosts(pattern)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	names := make([]string, 0, len(hosts))
+	reachable := make(map[string]bool, len(hosts))
+	for _, h := range hosts {
+		names = append(names, h.Name)
+		reachable[h.Name] = true
+	}
+	sort.Strings(names)
+	groups := make([]serveInventoryGroup, 0)
+	for _, name := range manager.ListGroups() {
+		if name == "all" {
+			continue
+		}
+		members, err := manager.GetAllHostsInGroup(name)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		// a group reaching past the job's limit would be refused as a limit
+		if len(members) > 0 && !slices.ContainsFunc(members, func(host string) bool { return !reachable[host] }) {
+			sort.Strings(members)
+			groups = append(groups, serveInventoryGroup{name, members})
+		}
+	}
+	writeJSON(w, http.StatusOK, struct {
+		Hosts  []string              `json:"hosts"`
+		Groups []serveInventoryGroup `json:"groups"`
+	}{names, groups})
+}
+
 // runParams reads the body of a run request: nothing, or the limit and
 // extra vars the job allows
 func (s *server) runParams(r *http.Request, j *ServeJob) (*RunParams, error) {
@@ -1174,10 +1278,8 @@ func (s *server) runParams(r *http.Request, j *ServeJob) (*RunParams, error) {
 	if body.Limit != "" && !j.Adhoc.Limit {
 		return nil, errors.New("this job does not accept a limit")
 	}
-	if strings.ContainsFunc(body.Limit, func(r rune) bool {
-		return !(unicode.IsLetter(r) || unicode.IsDigit(r) || strings.ContainsRune("._-*:,!&~[]@", r))
-	}) {
-		return nil, errors.New("limit has characters a host pattern cannot have")
+	if err := validateServeLimit(body.Limit); err != nil {
+		return nil, err
 	}
 	// the pattern is logged by the inventory: no line breaks can reach a log
 	// (the check above already refuses them; this is for the static analyser)
@@ -1497,6 +1599,12 @@ func (s *server) mux() *http.ServeMux {
 			return
 		}
 		switch {
+		case action == "inventory" && r.Method == http.MethodGet:
+			if !s.allowed(id, j) {
+				writeJSON(w, http.StatusForbidden, map[string]string{"error": "not an operator of this job"})
+				return
+			}
+			s.jobInventoryView(w, r, j)
 		case action == "run" && r.Method == http.MethodPost:
 			auth(true, func(w http.ResponseWriter, r *http.Request, id serveIdentity) {
 				a := s.requestAction(r, id)

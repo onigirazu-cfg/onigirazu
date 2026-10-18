@@ -1261,6 +1261,89 @@ func TestServeAudit(t *testing.T) {
 	}
 }
 
+func TestServeAdhocInventory(t *testing.T) {
+	dir := t.TempDir()
+	inventory := `all:
+  children:
+    fleet:
+      children:
+        web:
+          hosts:
+            web2: {}
+            web1:
+              ansible_password: inventory-secret
+        db:
+          hosts:
+            db1: {}
+    empty:
+      hosts: {}
+`
+	path := filepath.Join(dir, "hosts.yml")
+	if err := os.WriteFile(path, []byte(inventory), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &ServeConfig{DataDir: filepath.Join(dir, "data"), Retain: 10,
+		Auth: ServeAuth{UserHeader: "X-User", GroupsHeader: "X-Groups", Operators: []string{"admins"}},
+		Jobs: []ServeJob{
+			{Name: "patch", Inventory: path, Limit: "web", Adhoc: ServeAdhoc{Limit: true}, Operators: []string{"alice"}},
+			{Name: "fixed", Inventory: path},
+			{Name: "fleet", Inventory: path, Adhoc: ServeAdhoc{Limit: true}},
+			{Name: "broken", Inventory: filepath.Join(dir, "missing.yml"), Adhoc: ServeAdhoc{Limit: true}},
+		},
+	}
+	s, err := newServer(cfg, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := s.mux()
+	for _, tc := range []struct {
+		name, user, path string
+		code             int
+		want             string
+	}{
+		{"listing", "alice", "patch/inventory", 200, `{"hosts":["web1","web2"],"groups":[{"name":"web","hosts":["web1","web2"]}]}`},
+		{"group past the limit", "alice", "patch/inventory?limit=fleet", 400, "outside the job's limit"},
+		{"unlimited", "alice", "fleet/inventory", 200, `{"hosts":["db1","web1","web2"],"groups":[{"name":"db","hosts":["db1"]},{"name":"fleet","hosts":["db1","web1","web2"]},{"name":"web","hosts":["web1","web2"]}]}`},
+		{"preview", "alice", "patch/inventory?limit=web2,web1", 200, `{"limit":"web2,web1","hosts":["web1","web2"]}`},
+		{"group preview", "alice", "patch/inventory?limit=web", 200, `{"limit":"web","hosts":["web1","web2"]}`},
+		{"empty preview", "alice", "patch/inventory?limit=", 200, `{"limit":"","hosts":["web1","web2"]}`},
+		{"unlimited empty preview", "alice", "fleet/inventory?limit=", 200, `{"limit":"","hosts":["db1","web1","web2"]}`},
+		{"outside", "alice", "patch/inventory?limit=db1", 400, "outside the job's limit"},
+		{"no match", "alice", "patch/inventory?limit=missing", 400, "matches no host"},
+		{"characters", "alice", "patch/inventory?limit=web%0A", 400, "characters a host pattern cannot have"},
+		{"fixed", "alice", "fixed/inventory", 400, `{"error":"this job does not accept a limit"}`},
+		{"other operator", "bob", "patch/inventory", 403, `{"error":"not an operator of this job"}`},
+		{"viewer", "viewer", "patch/inventory?limit=web1", 403, `{"error":"not an operator of this job"}`},
+		{"denied before load", "viewer", "broken/inventory", 403, `{"error":"not an operator of this job"}`},
+		{"load failure", "alice", "broken/inventory", 500, "failed to load inventory"},
+		{"preview load failure", "alice", "broken/inventory?limit=web1", 500, "failed to load inventory"},
+		{"validate before load", "alice", "broken/inventory?limit=web%0A", 400, "characters a host pattern cannot have"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/api/jobs/"+tc.path, nil)
+			req.Header.Set("X-User", tc.user)
+			if tc.user != "viewer" {
+				req.Header.Set("X-Groups", "admins")
+			}
+			w := httptest.NewRecorder()
+			handler.ServeHTTP(w, req)
+			body := strings.TrimSpace(w.Body.String())
+			if w.Code != tc.code || !strings.Contains(body, tc.want) {
+				t.Fatalf("got %d %s, want %d %s", w.Code, body, tc.code, tc.want)
+			}
+			if strings.HasPrefix(tc.want, "{") && body != tc.want {
+				t.Fatalf("unexpected JSON fields: %s", body)
+			}
+			if strings.Contains(body, "ansible_password") || strings.Contains(body, "inventory-secret") {
+				t.Fatalf("inventory variables exposed: %s", body)
+			}
+		})
+	}
+	if len(s.actions(100)) != 0 || len(s.results) != 0 || len(s.queue) != 0 {
+		t.Fatal("inventory requests created audit actions or runs")
+	}
+}
+
 func TestServeAdhocRun(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "serve.yml")
