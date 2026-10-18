@@ -240,7 +240,7 @@ with `after` when a stream drops and opens the report when the run ends.
 
 | Method and path | Returns |
 |---|---|
-| `GET /api/audit?limit=N` | action log, newest first; default 100 entries, max 1000 (viewers too) |
+| `GET /api/audit` | action log array, newest first (viewers too); filters `user`, `action`, `job`, `run`, `ok=true/false`, `from`, `to` (RFC 3339); `limit` defaults to 100, max 1000; pass `X-Next-Cursor` as `before` for older entries; `400` for invalid cursor, `ok` or dates |
 | `GET /api/me` | the caller: `user`, `operator`, `title`, `paused` (bool), `running` and `queued` counts, `concurrency`, `storage_error` (last result storage error, empty when fine) |
 | `GET /api/pause` | pause state: `paused`, optional `reason`, `by`, `at` (viewers too) |
 | `POST /api/pause` | pauses execution (operators); optional JSON `{reason: "..."}`; `200` with the state; pausing again updates reason and identity; `500` with the state and `error` when `pause.json` could not be written (the pause still holds in this process) |
@@ -259,7 +259,7 @@ with `after` when a stream drops and opens the report when the run ends.
 | `GET /api/hosts/{name}/results` | that host’s retained results across all jobs, newest `started` first, at most 200: `[{id, job, kind, status, host_status, started, summary}]`; an unknown host returns `[]` |
 | `GET /api/results/{id}/events?after=N` | live NDJSON progress (viewers allowed): snapshot, replay after sequence N, gap marker when replay was truncated, task events and final end; idle pings every 15 seconds |
 | `GET /api/hosts` | every host seen by a job's last executed result (cancelled and check runs are skipped), with its worst status (`ok`, `changed`, `drift`, `failed`, `unreachable`) and the status per job |
-| `GET /api/runs[?host=&playbook=]` | the audit store's last 100 runs (every `apply`, not only the server's); optional `serve_run` links to the retained serve result |
+| `GET /api/runs` | audit store run array, newest first (viewers too); filters `host`, `playbook` (path substring), `status`, `job` (linked serve runs), `from`, `to` (RFC 3339); `limit` defaults to 100, max 1000, `offset` defaults to 0; `X-Next-Offset` gives the next offset when more exist; `400` for invalid dates or a non-numeric, negative or overflowing offset; optional `serve_run` links to the retained serve result |
 | `GET /api/runs/{id}` | one audit record, with optional `serve_run` |
 | `GET /metrics` | `onigirazu_serve_job_last_status{job,kind}` (0 ok, 1 drift/changed, 2 failed, 3 error, 4 cancelled, 5 timed_out), `onigirazu_serve_job_last_run_timestamp_seconds{job}`, `onigirazu_serve_host_status{job,host}`, `onigirazu_serve_job_pending{job}` (guarded jobs only: 1 pending, 0 otherwise); `onigirazu_serve_paused` (1 paused, 0 otherwise); `onigirazu_serve_running` (executing or cancelling runs), `onigirazu_serve_concurrency` (configured limit); `onigirazu_serve_storage_error` (1 while the last result storage operation failed, 0 otherwise); all include configured metric labels |
 | `GET /healthz` | `ok` |
@@ -272,6 +272,8 @@ returns `404` before the per-job check.
 Check runs are excluded from job last-status, last-run timestamp and host-status metrics
 and host verdicts. Apply checks do not push drift metrics. The jobs API still shows the
 newest executed result in `last`, including checks.
+
+The Runs and Audit tabs have compact filters with shareable hash links and an Older button that appends earlier entries.
 
 Page: the page at `/` uses the same API: Jobs (with Run/Approve/Reject/Cancel buttons when
 `allowed`), a Check button next to Run for apply jobs and a second Check submit button
