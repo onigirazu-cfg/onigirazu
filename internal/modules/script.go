@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/onigirazu-cfg/onigirazu/internal/executor"
 	sshpkg "github.com/onigirazu-cfg/onigirazu/internal/ssh"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
@@ -113,6 +114,7 @@ func (m *ScriptModule) Execute(ctx context.Context, host types.Host, args map[st
 	} else {
 		cmd = exec.CommandContext(ctx, "bash", scriptPath)
 	}
+	executor.StopWithContext(cmd)
 
 	// Capture output
 	var stdout bytes.Buffer

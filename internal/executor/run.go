@@ -44,3 +44,7 @@ func (e *CommandExecutor) Run(ctx context.Context, commandLine string) (RunResul
 	}
 	return RunResult{string(out), string(errOut), rc}, nil
 }
+
+// StopWithContext is stopWithContext for local commands built outside the
+// executor (the script module runs its interpreter itself)
+func StopWithContext(cmd *exec.Cmd) { stopWithContext(cmd) }
