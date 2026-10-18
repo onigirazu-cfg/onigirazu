@@ -57,7 +57,7 @@ func TestServeConfigAndAPI(t *testing.T) {
 		t.Fatal(err)
 	}
 	ran := make(chan string, 4)
-	s.runJob = func(_ context.Context, j *ServeJob) (*JobResult, error) {
+	s.runJob = func(_ context.Context, j *ServeJob, _ string) (*JobResult, error) {
 		ran <- j.Name
 		return &JobResult{Job: j.Name, Kind: j.Kind, Started: time.Now().UTC(), Status: "drift", Summary: "1 drifting",
 			Hosts: map[string]string{"web1": "drift", "web2": "ok"}, Report: json.RawMessage(`{"x":1}`)}, nil
@@ -179,7 +179,7 @@ jobs:
 		t.Fatal(err)
 	}
 	ran := make(chan struct{}, 4)
-	s.runJob = func(_ context.Context, j *ServeJob) (*JobResult, error) {
+	s.runJob = func(_ context.Context, j *ServeJob, _ string) (*JobResult, error) {
 		ran <- struct{}{}
 		return &JobResult{Started: time.Now().UTC(), Status: "drift", Summary: "drifting", Hosts: map[string]string{"web": "drift"}, Report: json.RawMessage(`{"x":1}`)}, nil
 	}
@@ -436,7 +436,7 @@ func TestServeWorkerError(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	s.runJob = func(_ context.Context, _ *ServeJob) (*JobResult, error) {
+	s.runJob = func(_ context.Context, _ *ServeJob, _ string) (*JobResult, error) {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		r := s.results["patch"][0]
@@ -479,7 +479,7 @@ func TestServePause(t *testing.T) {
 		t.Fatal(err)
 	}
 	ran := make(chan string, 4)
-	s.runJob = func(_ context.Context, j *ServeJob) (*JobResult, error) {
+	s.runJob = func(_ context.Context, j *ServeJob, _ string) (*JobResult, error) {
 		ran <- j.Name
 		return &JobResult{Started: time.Now().UTC(), Status: "drift", Summary: "1 drifting", Hosts: map[string]string{"web1": "drift"}}, nil
 	}
@@ -734,7 +734,7 @@ jobs:
 	defer cancel()
 	started := make(chan struct{}, 1)
 	finish := make(chan struct{}, 1)
-	s.runJob = func(_ context.Context, j *ServeJob) (*JobResult, error) {
+	s.runJob = func(_ context.Context, j *ServeJob, _ string) (*JobResult, error) {
 		started <- struct{}{}
 		select {
 		case <-finish:
@@ -943,7 +943,7 @@ func TestServeNotifyRouting(t *testing.T) {
 			s.notifyClient = &http.Client{Timeout: time.Second, Transport: transport}
 			ctx, cancel := contextTimeout(t)
 			defer cancel()
-			s.runJob = func(_ context.Context, _ *ServeJob) (*JobResult, error) {
+			s.runJob = func(_ context.Context, _ *ServeJob, _ string) (*JobResult, error) {
 				return &JobResult{Status: tc.status, Report: json.RawMessage(`{"secret":"report"}`)}, tc.err
 			}
 			if _, err := s.request(&cfg.Jobs[0], "schedule", nil); err != nil {
@@ -1046,7 +1046,9 @@ jobs:
 		t.Fatal(err)
 	}
 	ctx, cancel := contextTimeout(t)
-	s.runJob = func(_ context.Context, _ *ServeJob) (*JobResult, error) { return &JobResult{Status: "ok"}, nil }
+	s.runJob = func(_ context.Context, _ *ServeJob, _ string) (*JobResult, error) {
+		return &JobResult{Status: "ok"}, nil
+	}
 	done := make(chan struct{})
 	go func() { defer close(done); s.worker(ctx) }()
 	defer func() { cancel(); <-done }()
@@ -1385,7 +1387,7 @@ func TestServeAdhocRun(t *testing.T) {
 		t.Fatal(err)
 	}
 	ran := make(chan ServeJob, 8)
-	s.runJob = func(_ context.Context, j *ServeJob) (*JobResult, error) {
+	s.runJob = func(_ context.Context, j *ServeJob, _ string) (*JobResult, error) {
 		ran <- *j
 		return &JobResult{Started: time.Now().UTC(), Status: "ok"}, nil
 	}
@@ -1599,7 +1601,7 @@ func TestServeExecuteDoesNotWriteGlobals(t *testing.T) {
 		t.Fatalf("server inventory: %v", s.inventory)
 	}
 	j := &ServeJob{Name: "x", Kind: "apply", Playbook: filepath.Join(cfg.DataDir, "missing.yml"), Inventory: filepath.Join(cfg.DataDir, "missing-hosts.yml")}
-	if _, err := s.execute(context.Background(), j); err == nil {
+	if _, err := s.execute(context.Background(), j, ""); err == nil {
 		t.Fatal("a missing playbook must fail")
 	}
 	if !slices.Equal(inventoryPaths, []string{"orig,"}) || statePath != "" {
@@ -1655,7 +1657,7 @@ func blockedServe(t *testing.T, concurrency int) (*server, <-chan string, map[st
 		t.Fatal(err)
 	}
 	started := make(chan string, len(cfg.Jobs))
-	s.runJob = func(ctx context.Context, j *ServeJob) (*JobResult, error) {
+	s.runJob = func(ctx context.Context, j *ServeJob, _ string) (*JobResult, error) {
 		started <- j.Name
 		select {
 		case <-ctx.Done():
@@ -1899,7 +1901,7 @@ func TestServeCancelQueued(t *testing.T) {
 		t.Fatal(err)
 	}
 	started, release := make(chan struct{}), make(chan struct{})
-	s.runJob = func(ctx context.Context, _ *ServeJob) (*JobResult, error) {
+	s.runJob = func(ctx context.Context, _ *ServeJob, _ string) (*JobResult, error) {
 		close(started)
 		select {
 		case <-ctx.Done():
@@ -1980,7 +1982,7 @@ func TestServeCancelOperatorRunning(t *testing.T) {
 			// A canceled partial result must not replace this host verdict.
 			s.store(&JobResult{ID: "previous", Job: "patch", Status: "ok", Hosts: map[string]string{"web": "ok"}})
 			started, observed, release := make(chan struct{}), make(chan struct{}), make(chan struct{})
-			s.runJob = func(ctx context.Context, _ *ServeJob) (*JobResult, error) {
+			s.runJob = func(ctx context.Context, _ *ServeJob, _ string) (*JobResult, error) {
 				close(started)
 				<-ctx.Done()
 				close(observed)
@@ -2170,7 +2172,7 @@ func TestServeAuditExecutionIdentity(t *testing.T) {
 	if err := s.audit.SaveRecord(&audit.ExecutionRecord{ID: executionID, PlaybookPath: "site.yml", StartTime: time.Now().UTC(), Status: audit.StatusSuccess}); err != nil {
 		t.Fatal(err)
 	}
-	s.runJob = func(_ context.Context, _ *ServeJob) (*JobResult, error) {
+	s.runJob = func(_ context.Context, _ *ServeJob, _ string) (*JobResult, error) {
 		return &JobResult{Status: "ok", AuditExecutionID: executionID}, nil
 	}
 	requested, err := s.request(&cfg.Jobs[0], "schedule", nil)
@@ -2387,7 +2389,7 @@ func TestServeWorkerKeepsUnsavedResult(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s.runJob = func(context.Context, *ServeJob) (*JobResult, error) {
+	s.runJob = func(context.Context, *ServeJob, string) (*JobResult, error) {
 		return &JobResult{Started: time.Now(), Status: "ok", Summary: "completed in memory"}, nil
 	}
 	r, err := s.request(&cfg.Jobs[0], "schedule", nil)
@@ -2522,7 +2524,7 @@ func TestServeSecretParameters(t *testing.T) {
 	}
 	s.notifyClient = &http.Client{Transport: transport}
 	ran := make(chan map[string]string, 1)
-	s.runJob = func(_ context.Context, j *ServeJob) (*JobResult, error) {
+	s.runJob = func(_ context.Context, j *ServeJob, _ string) (*JobResult, error) {
 		ran <- j.ExtraVars
 		return &JobResult{Started: time.Now().UTC(), Status: "ok"}, nil
 	}
@@ -2657,7 +2659,7 @@ func TestServeSecretCleanupAndRestart(t *testing.T) {
 					t.Fatal(err)
 				}
 				started := make(chan struct{})
-				s.runJob = func(ctx context.Context, j *ServeJob) (*JobResult, error) {
+				s.runJob = func(ctx context.Context, j *ServeJob, _ string) (*JobResult, error) {
 					if j.ExtraVars["token"] != "private-value" {
 						t.Error("missing execution secret")
 					}
@@ -2731,7 +2733,7 @@ func TestServeSecretExecutionEcho(t *testing.T) {
 				t.Fatal(err)
 			}
 			const secret = "quoted\"secret\\value"
-			s.runJob = func(_ context.Context, j *ServeJob) (*JobResult, error) {
+			s.runJob = func(_ context.Context, j *ServeJob, _ string) (*JobResult, error) {
 				value := j.ExtraVars["token"]
 				if failure {
 					return nil, fmt.Errorf("invalid token %s", value)
@@ -2923,5 +2925,195 @@ func TestServeJobsActiveTiming(t *testing.T) {
 	s.running["job"] = false
 	if s.jobsView(serveIdentity{})[0].Active != nil {
 		t.Fatal("inactive job exposes active record")
+	}
+}
+
+func TestServeCheckRun(t *testing.T) {
+	cfg := &ServeConfig{DataDir: t.TempDir(), Retain: 50, Concurrency: 1, Jobs: []ServeJob{
+		{Name: "patch", Kind: "apply", Approval: "required", ApprovalTimeout: time.Hour},
+		{Name: "guarded", Kind: "apply", CheckApproval: "required", ApprovalTimeout: time.Hour},
+		{Name: "drift", Kind: "drift"}, {Name: "verify", Kind: "verify"}, {Name: "comply", Kind: "comply"},
+	}}
+	s, err := newServer(cfg, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := s.mux()
+	post := func(job, body string, code int) string {
+		t.Helper()
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, httptest.NewRequest("POST", "/api/jobs/"+job+"/run", strings.NewReader(body)))
+		if w.Code != code {
+			t.Fatalf("%s: %d %s, want %d", job, w.Code, w.Body.String(), code)
+		}
+		return w.Body.String()
+	}
+	for _, kind := range []string{"drift", "verify", "comply"} {
+		if body := post(kind, `{"mode":"check"}`, 400); !strings.Contains(body, "only apply jobs have a check mode") {
+			t.Fatal(body)
+		}
+	}
+	post("patch", `{"mode":"unknown"}`, 400)
+	post("patch", `{"mode":"check"}`, 202)
+	post("patch", `{"mode":"check"}`, 409)
+	if r := s.results["patch"][0]; r.Status != "queued" || r.Approval != nil || r.Mode != "check" {
+		t.Fatalf("check queued: %+v", r)
+	}
+	post("guarded", `{"mode":"check"}`, 202)
+	if r := s.pending["guarded"]; r == nil || r.Mode != "check" {
+		t.Fatalf("check pending: %+v", r)
+	}
+	ran := make(chan string, 1)
+	s.runJob = func(_ context.Context, j *ServeJob, mode string) (*JobResult, error) {
+		ran <- mode
+		return &JobResult{Started: time.Now().UTC(), Status: "drift", Hosts: map[string]string{"web1": "drift"}}, nil
+	}
+	ctx, cancel := contextTimeout(t)
+	done := make(chan struct{})
+	go func() { defer close(done); s.worker(ctx) }()
+	defer func() { cancel(); <-done }()
+	select {
+	case mode := <-ran:
+		if mode != "check" {
+			t.Fatalf("execution mode: %q", mode)
+		}
+	case <-ctx.Done():
+		t.Fatal("check did not execute")
+	}
+	for {
+		s.mu.Lock()
+		busy := s.running["patch"]
+		s.mu.Unlock()
+		if !busy {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			t.Fatal("check did not finish")
+		case <-time.After(time.Millisecond):
+		}
+	}
+	reloaded, err := newServer(cfg, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r := reloaded.results["patch"][0]; r.Mode != "check" || r.Status != "drift" {
+		t.Fatalf("persisted check: %+v", r)
+	}
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, httptest.NewRequest("GET", "/api/audit", nil))
+	if !strings.Contains(w.Body.String(), `"reason":"mode=check"`) {
+		t.Fatalf("check audit: %s", w.Body.String())
+	}
+	post("patch", `{"mode":"apply"}`, 202)
+	if r := s.pending["patch"]; r == nil || r.Mode != "" {
+		t.Fatalf("normal run still needs approval: %+v", r)
+	}
+}
+
+func TestServeCheckMetrics(t *testing.T) {
+	s, err := newServer(&ServeConfig{DataDir: t.TempDir(), Retain: 50}, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	normal := &JobResult{Job: "patch", Kind: "apply", Status: "ok", Started: time.Unix(100, 0), Hosts: map[string]string{"web1": "ok"}}
+	check := &JobResult{Job: "patch", Kind: "apply", Mode: "check", Status: "drift", Started: time.Unix(200, 0), Hosts: map[string]string{"web1": "drift"}}
+	s.results["patch"] = []*JobResult{check, normal}
+	if s.lastHostResult("patch") != normal || s.lastExecuted("patch") != check {
+		t.Fatal("check must be visible in history but excluded from host verdicts")
+	}
+	w := httptest.NewRecorder()
+	s.metricsHandler(w, httptest.NewRequest("GET", "/metrics", nil))
+	for _, want := range []string{
+		`onigirazu_serve_job_last_status{job="patch",kind="apply"} 0`,
+		`onigirazu_serve_job_last_run_timestamp_seconds{job="patch"} 100`,
+		`onigirazu_serve_host_status{host="web1",job="patch"} 0`,
+	} {
+		if !strings.Contains(w.Body.String(), want) {
+			t.Errorf("missing %s in %s", want, w.Body.String())
+		}
+	}
+	s.results["patch"] = []*JobResult{check}
+	w = httptest.NewRecorder()
+	s.metricsHandler(w, httptest.NewRequest("GET", "/metrics", nil))
+	if strings.Contains(w.Body.String(), `job="patch"`) || s.lastHostResult("patch") != nil {
+		t.Fatalf("check-only metrics: %s", w.Body.String())
+	}
+}
+
+func TestServeCheckNotification(t *testing.T) {
+	s := &server{cfg: &ServeConfig{}}
+	r := &JobResult{Mode: "check", Status: "drift"}
+	for _, format := range []string{"json", "mattermost"} {
+		body, err := s.notifyBody(eventDrift, &ServeJob{Name: "patch", Kind: "apply"}, r, format)
+		if err != nil || !strings.Contains(string(body), "(check)") {
+			t.Fatalf("%s: %s %v", format, body, err)
+		}
+		if format == "json" && !strings.Contains(string(body), `"mode":"check"`) {
+			t.Fatalf("missing notification mode: %s", body)
+		}
+	}
+}
+
+func TestServeCheckConfig(t *testing.T) {
+	for _, value := range []string{"", "required", "always"} {
+		t.Run(value, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "serve.yml")
+			data := "jobs:\n  - name: patch\n    kind: apply\n    playbook: patch.yml\n    check_approval: " + value + "\n"
+			if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			cfg, err := loadServeConfig(path)
+			if value == "always" {
+				if err == nil || !strings.Contains(err.Error(), "check_approval") {
+					t.Fatalf("invalid check approval: %v", err)
+				}
+			} else if err != nil || cfg.Jobs[0].CheckApproval != value {
+				t.Fatalf("check approval %q: %+v %v", value, cfg, err)
+			}
+		})
+	}
+}
+
+func TestServeCheckParams(t *testing.T) {
+	dir := t.TempDir()
+	inventory := filepath.Join(dir, "hosts.yml")
+	if err := os.WriteFile(inventory, []byte("all:\n  hosts:\n    web1: {}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s := &server{}
+	job := &ServeJob{Kind: "apply", Inventory: inventory, Adhoc: ServeAdhoc{Limit: true, ExtraVars: []string{"reboot"}}}
+	p, err := s.runParams(httptest.NewRequest("POST", "/", strings.NewReader(`{"mode":"check","limit":"web1","extra_vars":{"reboot":"true"}}`)), job)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Mode != "check" || p.Limit != "web1" || !slices.Equal(p.Hosts, []string{"web1"}) || p.ExtraVars["reboot"] != "true" {
+		t.Fatalf("check parameters: %+v", p)
+	}
+}
+
+func TestServeCheckRunSkipsVerify(t *testing.T) {
+	dir := t.TempDir()
+	playbook := filepath.Join(dir, "site.yml")
+	inventory := filepath.Join(dir, "hosts.yml")
+	missing := filepath.Join(dir, "never-created")
+	if err := os.WriteFile(playbook, []byte("- hosts: localhost\n  gather_facts: false\n  tasks:\n    - name: quick\n      command: \"true\"\n      changed_when: false\n  verify:\n    - file: {path: "+missing+"}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(inventory, []byte("all:\n  hosts:\n    localhost:\n      ansible_connection: local\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s, err := newServer(&ServeConfig{DataDir: filepath.Join(dir, "data"), Retain: 5}, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	j := &ServeJob{Name: "site", Kind: "apply", Playbook: playbook, Inventory: inventory}
+	check, err := s.execute(context.Background(), j, "check")
+	if err != nil || check.Status != "ok" || check.Hosts["localhost"] != "ok" {
+		t.Fatalf("check run: %+v %v", check, err)
+	}
+	apply, err := s.execute(context.Background(), j, "")
+	if err != nil || apply.Status != "failed" {
+		t.Fatalf("a normal run keeps its verify: %+v %v", apply, err)
 	}
 }

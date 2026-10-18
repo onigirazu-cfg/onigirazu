@@ -73,6 +73,7 @@ func newApplyCommand(onResult func(*types.PlaybookResult)) *cobra.Command {
 		privateKey     string
 		startAtTask    string
 		verifyOnly     bool // onigirazu verify: only the plays' verify: checks
+		skipVerify     bool // serve check runs: the plays' verify: checks do not run
 		parallel       int
 		timeout        time.Duration
 		interactive    bool
@@ -513,6 +514,7 @@ Examples:
 			executionEngine.SetForceBecome(become || becomeUser != "", becomeUser)
 			executionEngine.SetStartAtTask(startAtTask)
 			executionEngine.SetVerifyOnly(verifyOnly)
+			executionEngine.SetSkipVerify(skipVerify)
 
 			if policySource != "" {
 				log.Info("Security policy loaded from %s", policySource)
@@ -1241,6 +1243,9 @@ Examples:
 	cmd.Flags().StringVar(&startAtTask, "start-at-task", "", "Skip tasks until the one with this name")
 	cmd.Flags().BoolVar(&verifyOnly, "verify-only", false, "Run only the plays' verify: checks (what `onigirazu verify` does)")
 	_ = cmd.Flags().MarkHidden("verify-only")
+	cmd.Flags().BoolVar(&skipVerify, "skip-verify", false, "Do not run the plays' verify: checks")
+	_ = cmd.Flags().MarkHidden("skip-verify")
+	cmd.MarkFlagsMutuallyExclusive("verify-only", "skip-verify")
 	cmd.Flags().IntVarP(&parallel, "parallel", "f", 10, "Number of parallel executions")
 	cmd.Flags().DurationVarP(&timeout, "timeout", "t", 30*time.Minute, "Execution timeout")
 	cmd.Flags().BoolVar(&interactive, "interactive", false, "Interactive mode with beautiful TUI")

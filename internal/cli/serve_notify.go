@@ -200,6 +200,9 @@ func (s *server) notifyBody(event string, j *ServeJob, r *JobResult, format stri
 }
 
 func notifyHeadline(event, name string, r *JobResult) (text, emoji, color string) {
+	if r.Mode == "check" {
+		name += " (check)"
+	}
 	switch event {
 	case eventPending:
 		wait := ""
