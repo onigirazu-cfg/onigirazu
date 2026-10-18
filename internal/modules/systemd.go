@@ -114,7 +114,7 @@ func (m *SystemdModule) handleService(ctx context.Context, exec *executor.Comman
 
 		switch state {
 		case "started":
-			if currentState != "active" {
+			if !unitRunning(currentState) {
 				if _, err := m.systemctl(exec, args, "start", name); err != nil {
 					return m.failResult(result, fmt.Sprintf("failed to start service: %v", err))
 				}
@@ -122,7 +122,7 @@ func (m *SystemdModule) handleService(ctx context.Context, exec *executor.Comman
 				result.Output["action"] = "started"
 			}
 		case "stopped":
-			if currentState == "active" {
+			if unitRunning(currentState) || currentState == "deactivating" {
 				if _, err := m.systemctl(exec, args, "stop", name); err != nil {
 					return m.failResult(result, fmt.Sprintf("failed to stop service: %v", err))
 				}
@@ -318,7 +318,7 @@ func (m *SystemdModule) handleTimer(ctx context.Context, exec *executor.CommandE
 
 		switch state {
 		case "started":
-			if currentState != "active" {
+			if !unitRunning(currentState) {
 				if _, err := m.systemctl(exec, args, "start", name); err != nil {
 					return m.failResult(result, fmt.Sprintf("failed to start timer: %v", err))
 				}
@@ -326,7 +326,7 @@ func (m *SystemdModule) handleTimer(ctx context.Context, exec *executor.CommandE
 				result.Output["action"] = "started"
 			}
 		case "stopped":
-			if currentState == "active" {
+			if unitRunning(currentState) || currentState == "deactivating" {
 				if _, err := m.systemctl(exec, args, "stop", name); err != nil {
 					return m.failResult(result, fmt.Sprintf("failed to stop timer: %v", err))
 				}
@@ -401,11 +401,12 @@ func (m *SystemdModule) handleStatus(ctx context.Context, exec *executor.Command
 
 // Helper methods
 func (m *SystemdModule) getServiceState(exec *executor.CommandExecutor, name string) (string, error) {
-	output, err := exec.Execute("systemctl", "is-active", name)
-	if err != nil {
-		return "inactive", nil
+	// printed with a non-zero exit for every state but active
+	output, _ := exec.Execute("systemctl", "is-active", name)
+	if st := activeState(output); st != "" {
+		return st, nil
 	}
-	return strings.TrimSpace(output), nil
+	return "inactive", nil
 }
 
 func (m *SystemdModule) isServiceEnabled(exec *executor.CommandExecutor, name string) (bool, error) {

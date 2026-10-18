@@ -90,6 +90,7 @@ func (m *ServiceModuleFixed) PreCheckState(ctx context.Context, host types.Host,
 	}
 
 	var isRunning, isEnabled bool
+	unitState := "" // systemctl is-active, when asked
 
 	// Use test service manager if available (for testing)
 	if m.testServiceManager != nil {
@@ -107,10 +108,12 @@ func (m *ServiceModuleFixed) PreCheckState(ctx context.Context, host types.Host,
 	} else if running, enabled, ok := capturedService(args, name); ok {
 		// the capture before the task asked systemctl already
 		isRunning, isEnabled = running, enabled
+		unitState, _ = args["_before"].(map[string]interface{})["active"].(string)
 	} else {
 		// Check if service is running (fast: ~50ms via systemctl)
-		_, runErr := runOnHost(ctx, host, args, "systemctl", "is-active", name)
-		isRunning = runErr == nil
+		out, runErr := runOnHost(ctx, host, args, "systemctl", "is-active", name)
+		unitState = activeState(out)
+		isRunning = runErr == nil || unitRunning(unitState)
 
 		// Check if service is enabled (fast: ~50ms via systemctl)
 		_, enabledErr := runOnHost(ctx, host, args, "systemctl", "is-enabled", name)
@@ -132,7 +135,7 @@ func (m *ServiceModuleFixed) PreCheckState(ctx context.Context, host types.Host,
 			allCorrect = false
 		}
 	case "stopped":
-		if isRunning {
+		if isRunning || unitState == "deactivating" { // Ansible stops a deactivating unit too
 			allCorrect = false
 		}
 	}
@@ -375,11 +378,8 @@ func (s *SystemdManagerFixed) IsRunning(name string) (bool, error) {
 	if s.executor == nil {
 		return false, fmt.Errorf("executor not initialized")
 	}
-	output, err := s.executor.Execute("systemctl", "is-active", name)
-	if err != nil {
-		return false, nil // Service not running
-	}
-	return strings.TrimSpace(output) == "active", nil
+	output, _ := s.executor.Execute("systemctl", "is-active", name)
+	return unitRunning(activeState(output)), nil
 }
 
 func (s *SystemdManagerFixed) IsEnabled(name string) (bool, error) {
@@ -783,6 +783,19 @@ func (m *ServiceModuleFixed) failResult(result types.TaskResult, message string)
 
 // capturedService reads the capture of a systemd unit (args["_before"]) as
 // systemctl is-active / is-enabled would answer by their exit status
+// unitRunning reads a systemd ActiveState as Ansible's systemd module does:
+// active or still activating counts as started
+func unitRunning(state string) bool {
+	return state == "active" || state == "activating"
+}
+
+// activeState is what `systemctl is-active` printed: it exits non-zero for
+// every state but active, the state is still on its first line
+func activeState(out string) string {
+	line, _, _ := strings.Cut(strings.TrimSpace(out), "\n")
+	return strings.TrimSpace(line)
+}
+
 func capturedService(args map[string]interface{}, name string) (running, enabled, ok bool) {
 	before, isMap := args["_before"].(map[string]interface{})
 	if !isMap || before["kind"] != "service" || before["name"] != name || before["error"] != nil {
@@ -797,5 +810,5 @@ func capturedService(args map[string]interface{}, name string) (running, enabled
 	case "enabled", "enabled-runtime", "alias", "static", "indirect", "generated", "transient":
 		enabled = true
 	}
-	return active == "active" || active == "reloading", enabled, true
+	return unitRunning(active), enabled, true
 }
