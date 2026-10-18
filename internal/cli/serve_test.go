@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -654,7 +655,7 @@ func TestServePause(t *testing.T) {
 	body = do("POST", "/api/pause", `{"reason":"disk"}`, "admins", 500)
 	contains(body, `"paused":true`)
 	contains(body, `not saved`)
-	if entries := s.actions(1); len(entries) != 1 || entries[0].OK || entries[0].Action != "pause" || !strings.Contains(entries[0].Reason, "not saved") {
+	if entries := serveAuditEntries(s, 1); len(entries) != 1 || entries[0].OK || entries[0].Action != "pause" || !strings.Contains(entries[0].Reason, "not saved") {
 		t.Fatalf("a pause that was not saved is logged as such: %+v", entries)
 	}
 	contains(do("GET", "/api/pause", "", "users", 200), `"paused":true`)
@@ -1232,7 +1233,7 @@ func TestServeAudit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := s.actions(100); len(got) != 0 {
+	if got := serveAuditEntries(s, 100); len(got) != 0 {
 		t.Fatalf("empty audit: %v", got)
 	}
 	for i := range 1005 {
@@ -1342,7 +1343,7 @@ func TestServeAdhocInventory(t *testing.T) {
 			}
 		})
 	}
-	if len(s.actions(100)) != 0 || len(s.results) != 0 || len(s.queue) != 0 {
+	if len(serveAuditEntries(s, 100)) != 0 || len(s.results) != 0 || len(s.queue) != 0 {
 		t.Fatal("inventory requests created audit actions or runs")
 	}
 }
@@ -1456,7 +1457,7 @@ func TestServeAdhocRun(t *testing.T) {
 	if result.Params == nil || result.Params.Limit != "web1" || result.Params.ExtraVars["reboot"] != "true" || !slices.Equal(result.Params.Hosts, []string{"web1"}) {
 		t.Fatalf("params: %s", data)
 	}
-	actions := s.actions(100)
+	actions := serveAuditEntries(s, 100)
 	if len(actions) != 1 || actions[0].Run != id || actions[0].Reason != "limit=web1 reboot=true" {
 		t.Fatalf("actions: %+v", actions)
 	}
@@ -1863,7 +1864,7 @@ func TestServeCancelQueued(t *testing.T) {
 		if w.Code != 403 {
 			t.Fatalf("denied: %d %s", w.Code, w.Body.String())
 		}
-		a := s.actions(1)[0]
+		a := serveAuditEntries(s, 1)[0]
 		if a.OK || a.Action != "cancel" || a.Job != j.Name || a.Run != run.ID || a.User != user {
 			t.Fatalf("denied audit: %+v", a)
 		}
@@ -1876,7 +1877,7 @@ func TestServeCancelQueued(t *testing.T) {
 	if w.Code != 200 || got.Status != statusCancelled || got.Summary != statusCancelled+" by alice: maintenance" || got.Cancel == nil || got.Cancel.By != "alice" || got.Cancel.At.IsZero() || got.Cancel.Comment != "maintenance" {
 		t.Fatalf("queued cancel: %d %s", w.Code, w.Body.String())
 	}
-	a := s.actions(1)[0]
+	a := serveAuditEntries(s, 1)[0]
 	if !a.OK || a.Action != "cancel" || a.Reason != "maintenance" || a.Run != run.ID || a.Job != j.Name {
 		t.Fatalf("audit: %+v", a)
 	}
@@ -2151,7 +2152,7 @@ func TestServeCancelFinished(t *testing.T) {
 			if w.Code != http.StatusConflict || r.Status != status || r.Cancel != nil {
 				t.Fatalf("finished cancellation: %d %s", w.Code, w.Body.String())
 			}
-			a := s.actions(1)[0]
+			a := serveAuditEntries(s, 1)[0]
 			if a.OK || a.Action != "cancel" || a.Run != r.ID || a.Reason != errRunNotCancellable.Error() {
 				t.Fatalf("refused audit: %+v", a)
 			}
@@ -3532,5 +3533,194 @@ func TestServeJobCompare(t *testing.T) {
 	var scoped struct{ Appeared, Resolved []comparedItem }
 	if w.Code != http.StatusOK || json.Unmarshal(w.Body.Bytes(), &scoped) != nil || len(scoped.Appeared) != 1 || len(scoped.Resolved) != 1 || scoped.Appeared[0].Host != "db" || scoped.Resolved[0].Host != "web" {
 		t.Fatalf("keys must be scoped by host: %d %s", w.Code, w.Body.String())
+	}
+}
+
+func serveAuditEntries(s *server, limit int) []serveAction {
+	entries, _ := s.actions(serveActionFilter{Limit: limit})
+	return entries
+}
+
+func TestServeRunsFiltersAndPaging(t *testing.T) {
+	s, err := newServer(&ServeConfig{DataDir: t.TempDir(), Auth: ServeAuth{UserHeader: "X-User"}}, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.audit, err = audit.NewStorage(t.TempDir(), logger.NewWithWriter(false, io.Discard))
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	for i := range 6 {
+		host, playbook, status := "web1", "site.yml", audit.StatusSuccess
+		if i%2 == 1 {
+			host, playbook, status = "db1", "db.yml", audit.StatusFailure
+		}
+		id := strconv.Itoa(i)
+		err := s.audit.SaveRecord(&audit.ExecutionRecord{ID: id, PlaybookPath: playbook, StartTime: base.Add(time.Duration(i) * time.Hour), Status: status, Plays: []audit.PlayExecution{{Hosts: []string{host}}}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if i%2 == 0 {
+			s.results["deploy"] = append(s.results["deploy"], &JobResult{ID: "serve-" + id, AuditExecutionID: id})
+		}
+	}
+	handler := s.mux()
+	for _, tc := range []struct{ query, ids, next string }{
+		{"", "5,4,3,2,1,0", ""},
+		{"host=web1", "4,2,0", ""}, {"playbook=db", "5,3,1", ""},
+		{"status=failure", "5,3,1", ""}, {"job=deploy", "4,2,0", ""},
+		{"from=" + url.QueryEscape(base.Add(3*time.Hour).Format(time.RFC3339)), "5,4,3", ""},
+		{"to=" + url.QueryEscape(base.Add(2*time.Hour).Format(time.RFC3339)), "2,1,0", ""},
+		{"limit=2", "5,4", "2"}, {"limit=2&offset=2", "3,2", "4"}, {"limit=2&offset=4", "1,0", ""},
+		{"job=deploy&limit=1&offset=1", "2", "2"}, {"job=deploy&limit=1&offset=2", "0", ""},
+		{"job=deploy&status=failure", "", ""}, {"offset=99", "", ""}, {"job=missing", "", ""},
+	} {
+		t.Run(tc.query, func(t *testing.T) {
+			r := httptest.NewRequest("GET", "/api/runs?"+tc.query, nil)
+			r.Header.Set("X-User", "viewer")
+			w := httptest.NewRecorder()
+			handler.ServeHTTP(w, r)
+			var rows []struct {
+				ID       string `json:"id"`
+				ServeRun string `json:"serve_run"`
+			}
+			if err := json.Unmarshal(w.Body.Bytes(), &rows); err != nil || w.Code != 200 {
+				t.Fatalf("%d %s: %v", w.Code, w.Body.String(), err)
+			}
+			ids := make([]string, 0, len(rows))
+			for _, row := range rows {
+				ids = append(ids, row.ID)
+			}
+			if strings.Join(ids, ",") != tc.ids || w.Header().Get("X-Next-Offset") != tc.next {
+				t.Fatalf("ids %v next %q, want %s / %s", ids, w.Header().Get("X-Next-Offset"), tc.ids, tc.next)
+			}
+			if strings.Contains(tc.query, "job=deploy") && len(rows) > 0 && rows[0].ServeRun != "serve-"+rows[0].ID {
+				t.Fatalf("missing serve link: %v", rows)
+			}
+		})
+	}
+	for _, query := range []string{"from=bad", "to=bad", "offset=abc", "offset=-1", "offset=99999999999999999999999999"} {
+		r := httptest.NewRequest("GET", "/api/runs?"+query, nil)
+		r.Header.Set("X-User", "viewer")
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, r)
+		if w.Code != 400 {
+			t.Fatalf("%s: %d", query, w.Code)
+		}
+	}
+}
+
+func TestServeAuditFiltersAndPaging(t *testing.T) {
+	s, err := newServer(&ServeConfig{DataDir: t.TempDir(), Auth: ServeAuth{UserHeader: "X-User"}}, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	var entries []serveAction
+	for i := range 137 {
+		a := serveAction{Time: base.Add(time.Duration(i) * time.Second), User: "alice", Action: "run", Job: "deploy", Run: strconv.Itoa(i), OK: true, Reason: strings.Repeat("x", 2000)}
+		if i%2 == 1 {
+			a.User, a.Action, a.Job, a.OK = "bob", "cancel", "other", false
+		}
+		if i == 68 {
+			a.Reason = strings.Repeat("x", 70000)
+		}
+		entries = append(entries, a)
+		s.logAction(a)
+	}
+	handler := s.mux()
+	get := func(query string) (*httptest.ResponseRecorder, []serveAction) {
+		t.Helper()
+		r := httptest.NewRequest("GET", "/api/audit?"+query, nil)
+		r.Header.Set("X-User", "viewer")
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, r)
+		var got []serveAction
+		if w.Code == 200 {
+			if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return w, got
+	}
+	for _, tc := range []struct {
+		query string
+		match func(serveAction) bool
+	}{
+		{"user=alice", func(a serveAction) bool { return a.User == "alice" }},
+		{"action=cancel", func(a serveAction) bool { return a.Action == "cancel" }},
+		{"job=deploy", func(a serveAction) bool { return a.Job == "deploy" }},
+		{"run=68", func(a serveAction) bool { return a.Run == "68" }},
+		{"ok=false", func(a serveAction) bool { return !a.OK }},
+		{"ok=true", func(a serveAction) bool { return a.OK }},
+		{"from=" + url.QueryEscape(base.Add(60*time.Second).Format(time.RFC3339)), func(a serveAction) bool { return !a.Time.Before(base.Add(60 * time.Second)) }},
+		{"to=" + url.QueryEscape(base.Add(60*time.Second).Format(time.RFC3339)), func(a serveAction) bool { return !a.Time.After(base.Add(60 * time.Second)) }},
+		{"user=alice&ok=false", func(a serveAction) bool { return false }},
+	} {
+		t.Run(tc.query, func(t *testing.T) {
+			w, got := get(tc.query + "&limit=1000")
+			var want []serveAction
+			for i := len(entries) - 1; i >= 0; i-- {
+				if tc.match(entries[i]) {
+					want = append(want, entries[i])
+				}
+			}
+			if w.Code != 200 || len(got) != len(want) {
+				t.Fatalf("status %d count %d want %d", w.Code, len(got), len(want))
+			}
+			for i := range got {
+				if got[i].Run != want[i].Run {
+					t.Fatalf("entry %d: %s want %s", i, got[i].Run, want[i].Run)
+				}
+			}
+			if w.Header().Get("X-Next-Cursor") != "" {
+				t.Fatal("unexpected cursor")
+			}
+		})
+	}
+	for _, filter := range []string{"", "user=alice&", "from=" + url.QueryEscape(base.Add(30*time.Second).Format(time.RFC3339)) + "&"} {
+		var want []string
+		for i := len(entries) - 1; i >= 0; i-- {
+			if filter == "user=alice&" && entries[i].User != "alice" {
+				continue
+			}
+			if strings.HasPrefix(filter, "from=") && i < 30 {
+				continue
+			}
+			want = append(want, entries[i].Run)
+		}
+		var got []string
+		cursor := ""
+		for page := 0; page < 20; page++ {
+			query := filter + "limit=17"
+			if cursor != "" {
+				query += "&before=" + cursor
+			}
+			w, rows := get(query)
+			if w.Code != 200 {
+				t.Fatalf("paging: %d %s", w.Code, w.Body.String())
+			}
+			for _, a := range rows {
+				got = append(got, a.Run)
+			}
+			cursor = w.Header().Get("X-Next-Cursor")
+			if cursor == "" {
+				break
+			}
+		}
+		if cursor != "" || !slices.Equal(got, want) {
+			t.Fatalf("paging %s: got %v, want %v, cursor %s", filter, got, want, cursor)
+		}
+	}
+	for _, query := range []string{"before=bad", "before=", "before=1", "before=-1", "before=99999999999999999999999", "before=999999999", "ok=1", "ok=TRUE", "from=bad", "to=bad"} {
+		w, _ := get(query)
+		if w.Code != 400 {
+			t.Fatalf("%s: %d", query, w.Code)
+		}
+	}
+	w, got := get("before=0")
+	if w.Code != 200 || len(got) != 0 || w.Header().Get("X-Next-Cursor") != "" {
+		t.Fatal("before zero")
 	}
 }

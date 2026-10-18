@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -54,57 +55,124 @@ func (s *server) logAction(a serveAction) {
 	}
 }
 
-// actions is the tail of the log, newest first: the file is read backwards
-// in chunks until enough lines are in hand, so a log that grew for years
-// costs the same as a young one
-func (s *server) actions(limit int) []serveAction {
+type serveActionFilter struct {
+	User, Action, Job, Run string
+	OK                     *bool
+	From, To               time.Time
+	Limit                  int
+	Before                 *int64
+}
+
+// actions scans complete lines backwards, retaining only matching entries.
+func (s *server) actions(filter serveActionFilter) ([]serveAction, string) {
 	s.auditMu.Lock()
 	defer s.auditMu.Unlock()
 	out := make([]serveAction, 0)
-	if limit <= 0 {
-		return out
+	if filter.Limit <= 0 {
+		return out, ""
 	}
 	f, err := os.Open(filepath.Join(s.cfg.DataDir, "audit.log")) // #nosec G304 -- our own data directory
 	if err != nil {
-		return out
+		return out, ""
 	}
 	defer f.Close()
 	info, err := f.Stat()
 	if err != nil {
-		return out
+		return out, ""
+	}
+	end := info.Size()
+	if filter.Before != nil {
+		end = min(end, *filter.Before)
 	}
 	const chunk = 64 * 1024
-	end := info.Size()
-	var data []byte
+	var carry []byte
+	var oldest int64
 	for end > 0 {
 		start := max(end-chunk, 0)
 		buf := make([]byte, end-start)
 		if _, err := f.ReadAt(buf, start); err != nil && !errors.Is(err, io.EOF) {
-			return out
+			return out, ""
 		}
-		data = append(buf, data...)
+		buf = append(buf, carry...)
+		data := buf
+		lineEnd := len(data)
+		if lineEnd > 0 && data[lineEnd-1] == '\n' {
+			lineEnd--
+		}
+		for lineEnd > 0 {
+			i := bytes.LastIndexByte(data[:lineEnd], '\n')
+			if i < 0 && start > 0 {
+				break
+			}
+			var a serveAction
+			if json.Unmarshal(data[i+1:lineEnd], &a) == nil {
+				if !filter.From.IsZero() && a.Time.Before(filter.From) {
+					return out, ""
+				}
+				if (filter.User == "" || a.User == filter.User) &&
+					(filter.Action == "" || a.Action == filter.Action) &&
+					(filter.Job == "" || a.Job == filter.Job) &&
+					(filter.Run == "" || a.Run == filter.Run) &&
+					(filter.OK == nil || a.OK == *filter.OK) &&
+					(filter.To.IsZero() || !a.Time.After(filter.To)) {
+					if len(out) == filter.Limit {
+						return out, strconv.FormatInt(oldest, 10)
+					}
+					out = append(out, a)
+					oldest = start + int64(i+1)
+				}
+			}
+			lineEnd = i
+		}
+		// Keep the cut first line for the next chunk, including its delimiter.
+		carry = data[:min(max(lineEnd+1, 0), len(data))]
 		end = start
-		complete := bytes.Count(data, []byte{'\n'})
-		if end > 0 {
-			complete-- // the first line may be cut
-		}
-		if complete >= limit {
-			break
+	}
+	return out, ""
+}
+
+// actionCursor accepts decimal offsets at line boundaries.
+func (s *server) actionCursor(value string) (int64, error) {
+	before, err := strconv.ParseInt(value, 10, 64)
+	invalid := errors.New("invalid before cursor")
+	if err != nil || before < 0 || strconv.FormatInt(before, 10) != value {
+		return 0, invalid
+	}
+	if before == 0 {
+		return before, nil
+	}
+	f, err := os.Open(filepath.Join(s.cfg.DataDir, "audit.log")) // #nosec G304 -- our own data directory
+	if err != nil {
+		return 0, invalid
+	}
+	defer f.Close()
+	var previous [1]byte
+	if _, err := f.ReadAt(previous[:], before-1); err != nil || previous[0] != '\n' {
+		return 0, invalid
+	}
+	return before, nil
+}
+
+// servePageOptions shares the default page size and RFC 3339 date validation.
+func servePageOptions(r *http.Request) (limit int, from, to time.Time, err error) {
+	q := r.URL.Query()
+	limit, _ = strconv.Atoi(q.Get("limit"))
+	if limit <= 0 {
+		limit = 100
+	}
+	limit = min(limit, 1000)
+	for _, field := range []struct {
+		name   string
+		target *time.Time
+	}{{"from", &from}, {"to", &to}} {
+		if q.Has(field.name) {
+			*field.target, err = time.Parse(time.RFC3339, q.Get(field.name))
+			if err != nil {
+				return limit, from, to, fmt.Errorf("invalid %s: expected RFC 3339", field.name)
+			}
 		}
 	}
-	if end > 0 { // drop the cut first line
-		if i := bytes.IndexByte(data, '\n'); i >= 0 {
-			data = data[i+1:]
-		}
-	}
-	lines := bytes.Split(data, []byte{'\n'})
-	for i := len(lines) - 1; i >= 0 && len(out) < limit; i-- {
-		var a serveAction
-		if json.Unmarshal(lines[i], &a) == nil {
-			out = append(out, a)
-		}
-	}
-	return out
+	return
 }
 
 // requestAction is the entry a request describes: who, what, which job or run

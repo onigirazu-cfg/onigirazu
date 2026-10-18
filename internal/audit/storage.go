@@ -212,6 +212,17 @@ func (s *Storage) loadRecordMetadata(recordID string) (map[string]interface{}, e
 // matchesMetadataFilter checks if metadata matches the filter criteria
 func matchesMetadataFilter(metadata map[string]interface{}, filter FilterOptions) bool {
 	// Quick field-based filtering without loading full record
+	if filter.IDs != nil {
+		if id, _ := metadata["id"].(string); !filter.IDs[id] {
+			return false
+		}
+	}
+	if !filter.DateFrom.IsZero() || !filter.DateTo.IsZero() {
+		started, err := time.Parse(time.RFC3339Nano, fmt.Sprint(metadata["start_time"]))
+		if err != nil || (!filter.DateFrom.IsZero() && started.Before(filter.DateFrom)) || (!filter.DateTo.IsZero() && started.After(filter.DateTo)) {
+			return false
+		}
+	}
 	if filter.Status != "" {
 		if status, ok := metadata["status"].(string); ok {
 			if ExecutionStatus(status) != filter.Status {

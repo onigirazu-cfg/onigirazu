@@ -1800,16 +1800,45 @@ func (s *server) mux() *http.ServeMux {
 		writeJSON(w, http.StatusOK, s.hostResults(r.PathValue("name")))
 	}))
 	mux.HandleFunc("/api/runs", auth(false, func(w http.ResponseWriter, r *http.Request, _ serveIdentity) {
+		limit, from, to, err := servePageOptions(r)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		q := r.URL.Query()
+		offset := 0
+		if q.Has("offset") {
+			offset, err = strconv.Atoi(q.Get("offset"))
+		}
+		if err != nil || offset < 0 || offset > int(^uint(0)>>1)-1001 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid offset"})
+			return
+		}
 		if s.audit == nil {
 			writeJSON(w, http.StatusOK, []interface{}{})
 			return
 		}
-		records, err := s.audit.ListRecords(audit.FilterOptions{Limit: 100, HostFilter: r.URL.Query().Get("host"), PlaybookPath: r.URL.Query().Get("playbook"), SortBy: "time", SortOrder: "desc"})
+		filter := audit.FilterOptions{Limit: limit + 1, Offset: offset, HostFilter: q.Get("host"), PlaybookPath: q.Get("playbook"), Status: audit.ExecutionStatus(q.Get("status")), DateFrom: from, DateTo: to, SortBy: "time", SortOrder: "desc"}
+		if job := q.Get("job"); job != "" { // the store pages over this job's executions only
+			filter.IDs = make(map[string]bool)
+			s.mu.Lock()
+			for _, result := range s.results[job] {
+				if result.AuditExecutionID != "" {
+					filter.IDs[result.AuditExecutionID] = true
+				}
+			}
+			s.mu.Unlock()
+		}
+		records, err := s.audit.ListRecords(filter)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}
 		serveRuns := s.auditServeRuns()
+		if len(records) > limit {
+			w.Header().Set("X-Next-Offset", strconv.Itoa(offset+limit))
+			records = records[:limit]
+		}
 		type row struct {
 			ServeRun string    `json:"serve_run,omitempty"`
 			ID       string    `json:"id"`
@@ -1924,14 +1953,34 @@ func (s *server) mux() *http.ServeMux {
 		writeJSON(w, http.StatusOK, detail)
 	}))
 	mux.HandleFunc("GET /api/audit", auth(false, func(w http.ResponseWriter, r *http.Request, _ serveIdentity) {
-		limit, err := strconv.Atoi(r.URL.Query().Get("limit"))
-		if err != nil || limit <= 0 {
-			limit = 100
+		limit, from, to, err := servePageOptions(r)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
 		}
-		if limit > 1000 {
-			limit = 1000
+		q := r.URL.Query()
+		filter := serveActionFilter{Limit: limit, From: from, To: to, User: q.Get("user"), Action: q.Get("action"), Job: q.Get("job"), Run: q.Get("run")}
+		if q.Has("ok") {
+			if q.Get("ok") != "true" && q.Get("ok") != "false" {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid ok: expected true or false"})
+				return
+			}
+			ok := q.Get("ok") == "true"
+			filter.OK = &ok
 		}
-		writeJSON(w, http.StatusOK, s.actions(limit))
+		if q.Has("before") {
+			before, err := s.actionCursor(q.Get("before"))
+			if err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+				return
+			}
+			filter.Before = &before
+		}
+		entries, next := s.actions(filter)
+		if next != "" {
+			w.Header().Set("X-Next-Cursor", next)
+		}
+		writeJSON(w, http.StatusOK, entries)
 	}))
 	return mux
 }

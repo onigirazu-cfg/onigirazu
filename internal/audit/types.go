@@ -121,6 +121,8 @@ type HostAuditStatistics struct {
 
 // FilterOptions for querying audit records
 type FilterOptions struct {
+	// IDs, when not nil, keeps only these executions (an empty set keeps none)
+	IDs          map[string]bool
 	PlaybookPath string
 	Status       ExecutionStatus
 	HostFilter   string
