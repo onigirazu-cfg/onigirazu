@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"maps"
+	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
@@ -21,6 +22,7 @@ import (
 type serveInventorySnapshot struct {
 	mu        sync.Mutex // one load of this source at a time
 	inventory *types.Inventory
+	sources   inventory.InventorySources
 	err       error
 	loadedAt  time.Time
 }
@@ -35,17 +37,19 @@ type serveInventorySource struct {
 }
 
 type serveInventoryDetailGroup struct {
-	Name     string   `json:"name"`
-	Children []string `json:"children"`
-	Hosts    []string `json:"hosts"`
-	Vars     []string `json:"vars"`
+	Name       string             `json:"name"`
+	Children   []string           `json:"children"`
+	Hosts      []string           `json:"hosts"`
+	Vars       []string           `json:"vars"`
+	VarSources *map[string]string `json:"var_sources,omitempty"`
 }
 
 type serveInventoryHost struct {
-	Name    string   `json:"name"`
-	Address *string  `json:"address,omitempty"`
-	Groups  []string `json:"groups"`
-	Vars    []string `json:"vars"`
+	Name      string                          `json:"name"`
+	Address   *string                         `json:"address,omitempty"`
+	Groups    []string                        `json:"groups"`
+	Vars      []string                        `json:"vars"`
+	Effective *[]inventory.VariableProvenance `json:"effective,omitempty"`
 }
 
 func (s *server) inventoryPaths(j *ServeJob) []string {
@@ -70,7 +74,7 @@ const inventoryLoadTimeout = time.Minute
 // inventorySnapshot returns the source's snapshot, loading it when missing or
 // older than 5 minutes; readers of the same source wait for one load, other
 // sources are not held up by it
-func (s *server) inventorySnapshot(paths []string) (inv *types.Inventory, loadedAt time.Time, err error) {
+func (s *server) inventorySnapshot(paths []string) (inv *types.Inventory, sources inventory.InventorySources, loadedAt time.Time, err error) {
 	key := inventorySourceKey(paths)
 	s.inventoryMu.Lock()
 	if s.inventorySnapshots == nil {
@@ -85,7 +89,7 @@ func (s *server) inventorySnapshot(paths []string) (inv *types.Inventory, loaded
 	snapshot.mu.Lock()
 	defer snapshot.mu.Unlock()
 	if !snapshot.loadedAt.IsZero() && time.Since(snapshot.loadedAt) < 5*time.Minute {
-		return snapshot.inventory, snapshot.loadedAt, snapshot.err
+		return snapshot.inventory, snapshot.sources, snapshot.loadedAt, snapshot.err
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), inventoryLoadTimeout)
 	defer cancel()
@@ -98,11 +102,13 @@ func (s *server) inventorySnapshot(paths []string) (inv *types.Inventory, loaded
 		} else {
 			p := parser.NewEnhancedParser(template.NewEngine(), log)
 			p.PreserveInventoryStructure()
-			snapshot.inventory, snapshot.err = inventory.NewMultiSourceLoader(p, log, cache.NewManager(5*time.Minute), 10*time.Minute).LoadFromMultipleSources(ctx, paths)
+			loader := inventory.NewMultiSourceLoader(p, log, cache.NewManager(5*time.Minute), 10*time.Minute).TrackSources()
+			snapshot.inventory, snapshot.err = loader.LoadFromMultipleSources(ctx, paths)
+			snapshot.sources = loader.Sources()
 		}
 	}
 	snapshot.loadedAt = time.Now().UTC()
-	return snapshot.inventory, snapshot.loadedAt, snapshot.err
+	return snapshot.inventory, snapshot.sources, snapshot.loadedAt, snapshot.err
 }
 
 // inventorySourceLabel: operators see every source; viewers see file paths but
@@ -120,6 +126,13 @@ func inventorySourceLabel(paths []string, operator bool) string {
 		}
 	}
 	return strings.Join(labels, ", ")
+}
+
+func inventoryVariableSourceLabel(source string, operator bool) string {
+	if filepath.IsAbs(source) {
+		return source
+	}
+	return inventorySourceLabel([]string{source}, operator)
 }
 
 func inventoryVarNames(vars map[string]interface{}) []string {
@@ -144,7 +157,7 @@ func (s *server) inventoryView(operator bool) []serveInventorySource {
 			out[index].Jobs = append(out[index].Jobs, j.Name)
 			continue
 		}
-		inv, loadedAt, loadErr := s.inventorySnapshot(paths)
+		inv, sources, loadedAt, loadErr := s.inventorySnapshot(paths)
 		source := serveInventorySource{Source: inventorySourceLabel(paths, operator), Jobs: []string{j.Name}, LoadedAt: loadedAt,
 			Groups: make([]serveInventoryDetailGroup, 0), Hosts: make([]serveInventoryHost, 0)}
 		if loadErr != nil {
@@ -172,7 +185,15 @@ func (s *server) inventoryView(operator bool) []serveInventorySource {
 				sort.Strings(hosts)
 				children := append([]string{}, group.Children...)
 				sort.Strings(children)
-				source.Groups = append(source.Groups, serveInventoryDetailGroup{name, children, hosts, inventoryVarNames(group.Vars)})
+				entry := serveInventoryDetailGroup{Name: name, Children: children, Hosts: hosts, Vars: inventoryVarNames(group.Vars)}
+				if operator {
+					labels := make(map[string]string, len(group.Vars))
+					for variable, path := range sources.Groups[name] {
+						labels[variable] = inventoryVariableSourceLabel(path, operator)
+					}
+					entry.VarSources = &labels
+				}
+				source.Groups = append(source.Groups, entry)
 				members := inventoryGroupHosts(inv, name, make(map[string]bool))
 				for _, host := range members {
 					groupsByHost[host] = append(groupsByHost[host], name)
@@ -189,6 +210,15 @@ func (s *server) inventoryView(operator bool) []serveInventorySource {
 				if operator {
 					address := host.Address
 					entry.Address = &address
+					effective, err := inventory.EffectiveProvenance(inv, name, sources)
+					if err != nil {
+						source.Error = "Failed to resolve inventory variables"
+						effective = []inventory.VariableProvenance{}
+					}
+					for i := range effective {
+						effective[i].Source = inventoryVariableSourceLabel(effective[i].Source, operator)
+					}
+					entry.Effective = &effective
 				}
 				source.Hosts = append(source.Hosts, entry)
 			}

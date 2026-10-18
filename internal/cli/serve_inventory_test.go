@@ -379,3 +379,113 @@ func TestServeInventorySlowSourceDoesNotBlockOthers(t *testing.T) {
 	}
 	close(release)
 }
+
+func TestServeInventoryProvenance(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "hosts.yml")
+	groupPath := filepath.Join(dir, "group_vars", "web.yml")
+	hostPath := filepath.Join(dir, "host_vars", "web1.yml")
+	files := map[string]string{
+		path: `all:
+  vars:
+    inherited: inventory-secret
+  children:
+    web:
+      vars:
+        shared: group-secret
+      hosts:
+        web1:
+          ansible_host: 192.0.2.10
+          ansible_password: connection-secret
+          shared: host-secret
+`,
+		groupPath: "from_file: group-file-secret\n",
+		hostPath:  "host_file: host-file-secret\n",
+	}
+	for path, body := range files {
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s, err := newServer(&ServeConfig{DataDir: filepath.Join(dir, "data"), Retain: 10,
+		Auth: ServeAuth{UserHeader: "X-User", GroupsHeader: "X-Groups", Operators: []string{"admins"}},
+		Jobs: []ServeJob{{Name: "job", Inventory: path}, {Name: "inline", Inventory: "deploy@192.0.2.8:2222,"}},
+	}, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, operator := range []bool{true, false} {
+		r := httptest.NewRequest("GET", "/api/inventory", nil)
+		r.Header.Set("X-User", "alice")
+		if operator {
+			r.Header.Set("X-Groups", "admins")
+		}
+		w := httptest.NewRecorder()
+		s.mux().ServeHTTP(w, r)
+		if w.Code != 200 {
+			t.Fatalf("GET: %d %s", w.Code, w.Body.String())
+		}
+		for _, secret := range []string{"inventory-secret", "group-secret", "host-secret", "connection-secret", "group-file-secret", "host-file-secret"} {
+			if strings.Contains(w.Body.String(), secret) {
+				t.Fatalf("leaked %s", secret)
+			}
+		}
+		if !operator {
+			for _, private := range []string{`"effective"`, `"var_sources"`, groupPath, hostPath, "deploy@"} {
+				if strings.Contains(w.Body.String(), private) {
+					t.Fatalf("viewer leaked %s: %s", private, w.Body.String())
+				}
+			}
+			if !strings.Contains(w.Body.String(), `"source":"inline"`) {
+				t.Fatal("viewer inline label missing")
+			}
+			continue
+		}
+		var sources []serveInventorySource
+		if err := json.Unmarshal(w.Body.Bytes(), &sources); err != nil {
+			t.Fatal(err)
+		}
+		found := false
+		for _, source := range sources {
+			if source.Source != path {
+				continue
+			}
+			found = true
+			if source.Error != "" || len(source.Hosts) != 1 || source.Hosts[0].Effective == nil {
+				t.Fatalf("source: %+v", source)
+			}
+			got := make(map[string]inventory.VariableProvenance)
+			for _, v := range *source.Hosts[0].Effective {
+				got[v.Name] = v
+			}
+			for name, want := range map[string]inventory.VariableProvenance{
+				"ansible_host": {Name: "ansible_host", From: "host", Source: path},
+				"shared":       {Name: "shared", From: "host", Source: path},
+				"inherited":    {Name: "inherited", From: "group:all", Source: path},
+				"from_file":    {Name: "from_file", From: "group:web", Source: groupPath},
+				"host_file":    {Name: "host_file", From: "host", Source: hostPath},
+			} {
+				if got[name] != want {
+					t.Errorf("%s: %+v, want %+v", name, got[name], want)
+				}
+			}
+			if _, ok := got["ansible_password"]; ok {
+				t.Fatal("password moved out of execution vars")
+			}
+			for _, g := range source.Groups {
+				if g.VarSources == nil {
+					t.Fatalf("group missing var_sources: %+v", g)
+				}
+				if g.Name == "web" && (*g.VarSources)["from_file"] != groupPath {
+					t.Fatalf("group sources: %+v", g.VarSources)
+				}
+			}
+		}
+		if !found {
+			t.Fatal("inventory source missing")
+		}
+	}
+}

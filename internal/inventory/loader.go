@@ -27,6 +27,9 @@ type MultiSourceLoader struct {
 	groupMap     map[string]*types.Group
 	hostOrder    []string // Track insertion order for last-occurrence-wins
 	loadingMutex sync.Mutex
+	trackSources bool
+	sources      InventorySources
+	varsSources  InventorySources
 
 	// variables from group_vars/ and host_vars/ next to the sources
 	groupVarsFiles map[string]map[string]interface{}
@@ -35,6 +38,15 @@ type MultiSourceLoader struct {
 	// read after the sources, so they win
 	extraVarsDirs []string
 }
+
+// TrackSources enables variable source tracking for subsequent loads.
+func (msl *MultiSourceLoader) TrackSources() *MultiSourceLoader {
+	msl.trackSources = true
+	return msl
+}
+
+// Sources returns the source labels from the most recent load.
+func (msl *MultiSourceLoader) Sources() InventorySources { return msl.sources }
 
 // AddVarsDir reads group_vars/ and host_vars/ in dir as well, after the
 // inventory sources (Ansible reads them next to the playbook too)
@@ -72,6 +84,13 @@ func (msl *MultiSourceLoader) LoadFromMultipleSources(
 ) (*types.Inventory, error) {
 	msl.loadingMutex.Lock()
 	defer msl.loadingMutex.Unlock()
+
+	msl.sources = InventorySources{}
+	msl.varsSources = InventorySources{}
+	if msl.trackSources {
+		msl.sources = newInventorySources()
+		msl.varsSources = newInventorySources()
+	}
 
 	// Reset state
 	msl.hostMap = make(map[string]*types.Host)
@@ -116,6 +135,13 @@ func (msl *MultiSourceLoader) LoadFromMultipleSources(
 		Groups: msl.groupMap,
 	}
 
+	if msl.trackSources {
+		for i := range inventory.Hosts {
+			h := &inventory.Hosts[i]
+			msl.sources.hostDefinitions[h] = msl.sources.hostDefinitions[msl.hostMap[h.Name]]
+		}
+	}
+
 	msl.logger.Info("Successfully merged inventory from %d source(s): %d hosts, %d groups",
 		len(inventoryPaths), len(inventory.Hosts), len(inventory.Groups))
 
@@ -139,7 +165,7 @@ func (msl *MultiSourceLoader) loadSingleSource(ctx context.Context, path string)
 			if err != nil {
 				return err
 			}
-			msl.mergeInventory(inv)
+			msl.mergeInventorySource(inv, path)
 			return nil
 		}
 		if os.IsNotExist(err) {
@@ -281,7 +307,7 @@ func (msl *MultiSourceLoader) loadStaticFile(ctx context.Context, filePath strin
 			if err := msl.parseDynamicInventoryOutput(out, inv); err != nil {
 				return fmt.Errorf("%s: %w", filePath, err)
 			}
-			msl.mergeInventory(inv)
+			msl.mergeInventorySource(inv, filePath)
 			return nil
 		}
 	}
@@ -293,7 +319,7 @@ func (msl *MultiSourceLoader) loadStaticFile(ctx context.Context, filePath strin
 	}
 
 	// Merge the loaded inventory
-	msl.mergeInventory(inventory)
+	msl.mergeInventorySource(inventory, filePath)
 
 	return nil
 }
@@ -309,7 +335,7 @@ func (msl *MultiSourceLoader) loadDynamicInventory(ctx context.Context, scriptPa
 	if cached, found := msl.cache.Get(ctx, cacheKey); found {
 		if inventory, ok := cached.(*types.Inventory); ok {
 			msl.logger.Debug("Using cached dynamic inventory from %s", scriptPath)
-			msl.mergeInventory(inventory)
+			msl.mergeInventorySource(inventory, scriptPath)
 			return nil
 		}
 	}
@@ -324,7 +350,7 @@ func (msl *MultiSourceLoader) loadDynamicInventory(ctx context.Context, scriptPa
 	_ = msl.cache.SetWithTTL(ctx, cacheKey, inventory, msl.dynamicTTL)
 
 	// Merge the loaded inventory
-	msl.mergeInventory(inventory)
+	msl.mergeInventorySource(inventory, scriptPath)
 
 	return nil
 }
@@ -407,6 +433,43 @@ func (msl *MultiSourceLoader) parseDynamicInventoryOutput(
 	}
 
 	return nil
+}
+
+func (msl *MultiSourceLoader) mergeInventorySource(inv *types.Inventory, source string) {
+	if msl.trackSources && inv != nil {
+		for i := range inv.Hosts {
+			host := &inv.Hosts[i]
+			name := host.Name
+			if name == "" {
+				name = host.Address
+			}
+			if name != "" {
+				recordVarSources(msl.sources.Hosts, name, host.Vars, source)
+				msl.sources.recordHostVars(host, host.Vars, source)
+			}
+		}
+		for name, group := range inv.Groups {
+			recordVarSources(msl.sources.Groups, name, group.Vars, source)
+			for name, host := range group.Hosts {
+				if host != nil {
+					recordVarSources(msl.sources.Hosts, name, host.Vars, source)
+					msl.sources.recordHostVars(host, host.Vars, source)
+				}
+			}
+		}
+	}
+	msl.mergeInventory(inv)
+	if msl.trackSources && inv != nil {
+		for _, host := range inv.Hosts {
+			name := host.Name
+			if name == "" {
+				name = host.Address
+			}
+			if merged := msl.hostMap[name]; merged != nil {
+				msl.sources.recordHostVars(merged, host.Vars, source)
+			}
+		}
+	}
 }
 
 // mergeInventory merges an inventory into the current state using last-occurrence-wins strategy
