@@ -252,7 +252,7 @@ func (s *server) progressHandler(w http.ResponseWriter, r *http.Request, id stri
 		if p != nil {
 			break
 		}
-		if status != "pending" && status != "queued" && status != "running" && status != statusCancelling {
+		if status != "pending" && status != "scheduled" && status != "queued" && status != "running" && status != statusCancelling {
 			if waiting {
 				send(progressEvent{Seq: 1, Type: "end", At: time.Now().UTC(), Status: status})
 				return

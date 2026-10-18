@@ -19,6 +19,7 @@ import (
 
 const (
 	eventCancelled = statusCancelled
+	eventScheduled = "scheduled"
 	eventPending   = "pending"
 	eventStart     = "start"
 	eventSuccess   = "success"
@@ -85,7 +86,7 @@ func validateNotifyTargets(targets []NotifyTarget) error {
 		}
 		for _, event := range t.On {
 			switch event {
-			case eventPending, eventStart, eventSuccess, eventDrift, eventFailure, eventRejected, eventExpired, eventCancelled:
+			case eventScheduled, eventPending, eventStart, eventSuccess, eventDrift, eventFailure, eventRejected, eventExpired, eventCancelled:
 			default:
 				return fmt.Errorf("target %d: unknown event %q", i+1, event)
 			}
@@ -183,6 +184,9 @@ func (s *server) notifyBody(event string, j *ServeJob, r *JobResult, format stri
 		details += "\nvars: " + strings.Join(r.Params.values(), ", ")
 	}
 	details += "\ntrigger: " + r.Trigger
+	if r.NotBefore != nil {
+		details += "\nnot_before: " + r.NotBefore.Format(time.RFC3339)
+	}
 	if event == eventPending && r.Approval != nil {
 		details += "\nexpires: " + r.Approval.Expires.Format(time.RFC3339)
 	} else if event != eventStart {
@@ -204,6 +208,8 @@ func notifyHeadline(event, name string, r *JobResult) (text, emoji, color string
 		name += " (check)"
 	}
 	switch event {
+	case eventScheduled:
+		return name + " scheduled — " + r.Summary, ":hourglass:", "#3b5bdb"
 	case eventPending:
 		wait := ""
 		if r.Approval != nil {
@@ -249,7 +255,7 @@ func notifyHeadline(event, name string, r *JobResult) (text, emoji, color string
 }
 
 func notifyHosts(event string, j *ServeJob, r *JobResult) string {
-	if event == eventPending || event == eventStart {
+	if event == eventScheduled || event == eventPending || event == eventStart {
 		if r.Params != nil && len(r.Params.Hosts) > 0 {
 			hosts := r.Params.Hosts
 			if len(hosts) > 10 {

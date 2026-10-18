@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `onigirazu serve`: live host task progress and structured result events in a Progress tab, with resumable NDJSON streams at `GET /api/results/{id}/events`
+- `onigirazu serve`: run later with `not_before`, persistent scheduled runs and apply maintenance windows (`windows`, `windows_tz`), with page controls, cancellation, notifications and metrics
 - `onigirazu serve`: Inventory tab with shared five-minute snapshots, groups, hosts, variable names and operator refresh
 - `onigirazu serve`: Runs and Audit filters, shareable filter links and older-entry pagination in the API and web page
 - `onigirazu serve`: light job history, status trends and duration sparklines, plus drift/apply run comparison by host verdict and stable task identity

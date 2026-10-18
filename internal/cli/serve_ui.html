@@ -17,7 +17,7 @@ main{padding:16px 24px;max-width:1200px;margin:0 auto}
 table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:8px;overflow:hidden}
 th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--line);vertical-align:top}th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase}
 tr:last-child td{border-bottom:0}.b{display:inline-block;padding:1px 8px;border-radius:10px;font-size:12px;color:#fff;background:var(--muted)}
-.ok{background:var(--ok)}.drift,.changed{background:var(--warn)}.refused,.failed,.error,.unreachable,.timed_out{background:var(--bad)}.cancelling,.pending{background:var(--warn)}.queued,.running{background:var(--accent)}.cancelled,.rejected,.expired{background:var(--muted)}
+.ok{background:var(--ok)}.drift,.changed{background:var(--warn)}.refused,.failed,.error,.unreachable,.timed_out{background:var(--bad)}.cancelling,.pending{background:var(--warn)}.queued,.running,.scheduled{background:var(--accent)}.cancelled,.rejected,.expired{background:var(--muted)}
 .recent{display:flex;gap:3px;flex-wrap:wrap;max-width:145px;margin-top:5px}.recent-square{display:block;flex:0 0 9px;height:9px;border:1px solid currentColor;border-radius:1px;background:currentColor;color:var(--muted)}.recent-square.ok{color:var(--ok)}.recent-square.drift,.recent-square.changed{color:var(--warn)}.recent-square.failed,.recent-square.error,.recent-square.timed_out,.recent-square.unreachable{color:var(--bad)}.recent-square.check{background:transparent}.sparkline{display:block;width:100%;height:40px}.sparkline rect{fill:var(--muted)}.sparkline rect.ok{fill:var(--ok)}.sparkline rect.drift,.sparkline rect.changed{fill:var(--warn)}.sparkline rect.failed,.sparkline rect.error,.sparkline rect.timed_out{fill:var(--bad)}.compare-controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:12px 0}.compare-warning{color:var(--warn)}
 .approval-card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:12px}
 button.run{border:1px solid var(--line);background:var(--card);color:var(--fg);padding:4px 10px;border-radius:6px;cursor:pointer}button.run:disabled{opacity:.5}
@@ -56,8 +56,8 @@ window.addEventListener('pagehide',stopProgress);
 function activityView(m){
   $('#storage-error').hidden=!m.storage_error;
   $('#storage-error').textContent=m.storage_error?'Results not saved: '+m.storage_error:'';
-  $('#activity').hidden=!(m.running+m.queued);
-  $('#activity').textContent=`${m.running} running / ${m.queued} queued`;
+  $('#activity').hidden=!(m.running+m.queued+(m.scheduled||0));
+  $('#activity').textContent=`${m.running} running / ${m.queued} queued / ${m.scheduled||0} scheduled`;
 }
 function pauseView(p){
   me.paused=p.paused;
@@ -74,6 +74,11 @@ $('#pause').onclick=async()=>{
 const paramsView=r=>r.params?`<div class="muted">${r.params.limit?`limit ${esc(r.params.limit)} → ${esc((r.params.hosts||[]).join(', '))}<br>`:''}${Object.keys(r.params.extra_vars||{}).length?'vars '+Object.entries(r.params.extra_vars).map(([k,v])=>esc(k)+'='+esc(v)).join(', '):''}</div>`:'';
 const checkBadge=r=>r?.mode==='check'?' '+badge('check'):'';
 const hasAdhoc=j=>j.adhoc?.limit||j.adhoc?.extra_vars?.length;
+const scheduledTime=t=>`scheduled for ${new Date(t).toLocaleString('en',{weekday:'short',hour:'2-digit',minute:'2-digit',hourCycle:'h23'})}, ${ago(t)}`;
+function localRFC3339(value){
+  const d=new Date(value), offset=-d.getTimezoneOffset(), pad=n=>String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:00${offset<0?'-':'+'}${pad(Math.floor(Math.abs(offset)/60))}:${pad(Math.abs(offset)%60)}`;
+}
 function targetPicker(form){
   const input=form.querySelector('[data-limit]');
   if(!input||form.dataset.picker)return;
@@ -110,12 +115,12 @@ async function jobs(){
   pauseView(p);activityView(m);
   if(!list.length){main.innerHTML='<div class="empty">No jobs in serve.yml</div>';return}
   const pending=list.filter(j=>j.pending);
-  main.innerHTML=(pending.length?`<h2>Pending approval</h2>${pending.map(j=>`<div class="approval-card"><b>${esc(j.name)}</b> · ${esc(j.kind)} · ${esc(j.target)}<br><span class="muted">requested by ${esc(j.pending.trigger)} ${esc(ago(j.pending.requested))} · expires in ${span(Math.max(0,(new Date(j.pending.approval.expires)-Date.now())/1000))}</span>${paramsView(j.pending)}${j.allowed?`<p><button class="run" data-decision="approve" data-id="${esc(j.pending.id)}">Approve</button> <button class="run" data-decision="reject" data-id="${esc(j.pending.id)}">Reject</button></p>`:''}</div>`).join('')}`:'')+`<table class="jobs-table"><tr><th>Job</th><th>Kind</th><th class="target">Target</th><th>Schedule</th><th>Last run</th><th>Result</th><th></th></tr>${list.map(j=>`<tr>
+  main.innerHTML=(pending.length?`<h2>Pending approval</h2>${pending.map(j=>`<div class="approval-card"><b>${esc(j.name)}</b> · ${esc(j.kind)} · ${esc(j.target)}<br><span class="muted">requested by ${esc(j.pending.trigger)} ${esc(ago(j.pending.requested))} · expires in ${span(Math.max(0,(new Date(j.pending.approval.expires)-Date.now())/1000))}</span>${j.pending.not_before?`<div class="muted">${esc(scheduledTime(j.pending.not_before))}</div>`:''}${paramsView(j.pending)}${j.allowed?`<p><button class="run" data-decision="approve" data-id="${esc(j.pending.id)}">Approve</button> <button class="run" data-decision="reject" data-id="${esc(j.pending.id)}">Reject</button></p>`:''}</div>`).join('')}`:'')+`<table class="jobs-table"><tr><th>Job</th><th>Kind</th><th class="target">Target</th><th>Schedule</th><th>Last run</th><th>Result</th><th></th></tr>${list.map(j=>`<tr>
     <td><a href="#job/${encodeURIComponent(j.name)}" data-job="${esc(j.name)}">${esc(j.name)}</a></td><td>${esc(j.kind)}</td><td class="muted target">${esc(j.target)}</td>
-    <td>${j.every?esc(j.every)+(j.next?'<br><span class="muted">next '+ago(j.next)+'</span>':''):'<span class="muted">on demand</span>'}</td>
+    <td>${j.every?esc(j.every)+(j.next?'<br><span class="muted">next '+ago(j.next)+'</span>':''):'<span class="muted">on demand</span>'}${j.windows?.length?`<div class="muted">${j.windows.map(esc).join('<br>')} (${esc(j.windows_tz||'UTC')})${j.next_window?'<br>next window '+date(j.next_window):''}</div>`:''}</td>
     <td>${lastRun(j)}${recentStrip(j.recent)}</td>
-    <td>${j.pending?badge('pending')+checkBadge(j.pending):j.running?badge(j.active?.status||(j.queued?'queued':'running'))+checkBadge(j.active)+activeTime(j):j.last?badge(j.last.status)+checkBadge(j.last)+' <span class="muted">'+esc(j.last.summary)+'</span>':''}</td>
-    <td>${j.allowed?`<button class="run" data-run="${esc(j.name)}" ${j.pending||j.running?'disabled':''}>Run${hasAdhoc(j)?'…':''}</button>${j.kind==='apply'?` <button class="run" data-check="${esc(j.name)}" ${j.pending||j.running?'disabled':''}>Check</button>`:''}${j.active&&['queued','running'].includes(j.active.status)?` <button class="run" data-stop="${esc(j.active.id)}" data-name="${esc(j.name)}" data-running="${j.active.status==='running'}">Cancel</button>`:''}`:''}</td></tr>${j.allowed&&hasAdhoc(j)?`<tr data-form-row="${esc(j.name)}" hidden><td colspan="7"><form class="adhoc-form" data-form="${esc(j.name)}">${j.adhoc.limit?'<div class="limit-picker"><div data-inventory class="limit-chips muted"></div><label>limit<input data-limit placeholder="host pattern, empty = the job&#39;s hosts"></label><div data-preview class="muted" role="status" aria-live="polite"></div></div>':''}${(j.adhoc.extra_vars||[]).map(k=>`<label>${esc(k)}<input type="${(j.adhoc.secret_vars||[]).includes(k)?'password':'text'}" data-var="${esc(k)}" placeholder="keep the job's value"></label>`).join('')}<button class="run" type="submit">Run</button>${j.kind==='apply'?'<button class="run" type="submit" data-mode="check">Check</button>':''}<button class="run" type="button" data-cancel>Cancel</button></form></td></tr>`:''}`).join('')}</table>`;
+    <td>${j.pending?badge('pending')+checkBadge(j.pending):j.running?badge(j.active?.status||(j.queued?'queued':'running'))+checkBadge(j.active)+activeTime(j):j.last?badge(j.last.status)+checkBadge(j.last)+' <span class="muted">'+esc(j.last.summary)+'</span>':''}${(j.scheduled_runs||(j.scheduled?[j.scheduled]:[])).map(r=>`<div>${badge('scheduled')}${checkBadge(r)} <a href="#run/${encodeURIComponent(r.id)}">${esc(scheduledTime(r.not_before))}</a>${r.summary?'<br><span class="muted">'+esc(r.summary)+'</span>':''}${j.allowed?` <button class="run" data-stop="${esc(r.id)}" data-name="${esc(j.name)}" data-running="false">Cancel</button>`:''}</div>`).join('')}</td>
+    <td>${j.allowed?`<button class="run" data-run="${esc(j.name)}" ${j.pending||j.running?'disabled':''}>Run${hasAdhoc(j)?'…':''}</button> <button class="run" data-run-at="${esc(j.name)}" ${j.scheduled||j.pending?'disabled':''}>Run at…</button>${j.kind==='apply'?` <button class="run" data-check="${esc(j.name)}" ${j.pending||j.running?'disabled':''}>Check</button>`:''}${j.active&&['queued','running'].includes(j.active.status)?` <button class="run" data-stop="${esc(j.active.id)}" data-name="${esc(j.name)}" data-running="${j.active.status==='running'}">Cancel</button>`:''}`:''}</td></tr>${j.allowed?`<tr data-form-row="${esc(j.name)}" hidden><td colspan="7"><form class="adhoc-form" data-form="${esc(j.name)}">${j.adhoc?.limit?'<div class="limit-picker"><div data-inventory class="limit-chips muted"></div><label>limit<input data-limit placeholder="host pattern, empty = the job&#39;s hosts"></label><div data-preview class="muted" role="status" aria-live="polite"></div></div>':''}${(j.adhoc?.extra_vars||[]).map(k=>`<label>${esc(k)}<input type="${(j.adhoc?.secret_vars||[]).includes(k)?'password':'text'}" data-var="${esc(k)}" placeholder="keep the job's value"></label>`).join('')}<label>Run at (local time)<input type="datetime-local" data-not-before></label><button class="run" type="submit">Run</button>${j.kind==='apply'?'<button class="run" type="submit" data-mode="check">Check</button>':''}<button class="run" type="button" data-cancel>Cancel</button></form></td></tr>`:''}`).join('')}</table>`;
   main.querySelectorAll('[data-decision]').forEach(b=>b.onclick=async()=>{
     let comment='';
     if(b.dataset.decision==='reject'){comment=prompt('Comment (optional)');if(comment===null)return}
@@ -130,8 +135,13 @@ async function jobs(){
   });
   main.querySelectorAll('[data-run]').forEach(b=>b.onclick=async()=>{
     const row=Array.from(main.querySelectorAll('[data-form-row]')).find(row=>row.dataset.formRow===b.dataset.run);
-    if(row){row.hidden=!row.hidden;if(!row.hidden)targetPicker(row.querySelector('form'));return}
+    if(row&&list.find(j=>j.name===b.dataset.run&&hasAdhoc(j))){row.hidden=!row.hidden;row.querySelector('[data-not-before]').required=false;if(!row.hidden)targetPicker(row.querySelector('form'));return}
     b.disabled=true;try{await api('/api/jobs/'+encodeURIComponent(b.dataset.run)+'/run',{method:'POST'})}catch(e){alert(e.message)}setTimeout(jobs,500)
+  });
+  main.querySelectorAll('[data-run-at]').forEach(b=>b.onclick=()=>{
+    const row=Array.from(main.querySelectorAll('[data-form-row]')).find(row=>row.dataset.formRow===b.dataset.runAt);
+    row.hidden=false;targetPicker(row.querySelector('form'));
+    const input=row.querySelector('[data-not-before]');input.required=true;input.focus();
   });
   main.querySelectorAll('[data-check]').forEach(b=>b.onclick=async()=>{
     b.disabled=true;try{await api('/api/jobs/'+encodeURIComponent(b.dataset.check)+'/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:'check'})})}catch(e){alert(e.message)}setTimeout(jobs,500)
@@ -142,6 +152,7 @@ async function jobs(){
       e.preventDefault();const body={}, vars=Object.create(null), limit=form.querySelector('[data-limit]')?.value;
       if(e.submitter?.dataset.mode==='check')body.mode='check';
       if(limit)body.limit=limit;
+      const later=form.querySelector('[data-not-before]').value;if(later)body.not_before=localRFC3339(later);
       form.querySelectorAll('[data-var]').forEach(input=>{if(input.value)vars[input.dataset.var]=input.value});
       if(Object.keys(vars).length)body.extra_vars=vars;
       const button=e.submitter||form.querySelector('[type="submit"]');button.disabled=true;
@@ -287,11 +298,11 @@ async function run(id){
   let r;
   try{r=await api('/api/results/'+encodeURIComponent(id))}catch(e){if(e.message.startsWith('404 '))return auditRun(id);throw e}
   const p=r.report&&typeof r.report==='object'?r.report:{}, tabs=r.kind==='drift'||r.kind==='apply'?driftTabs(r,p):r.kind==='verify'?verifyTabs(r,p):r.kind==='comply'?complyTabs(r,p):[];
-  const live=['pending','queued','running','cancelling'].includes(r.status);
+  const live=['pending','scheduled','queued','running','cancelling'].includes(r.status);
   if(live)tabs.unshift(['Progress','<p id="progress-state" class="muted" role="status">Waiting for progress…</p><div id="progress-hosts"></div><h3>Task events</h3><div id="progress-log"></div>']);
   tabs.push(['JSON',`<pre>${esc(JSON.stringify(r,null,2))}</pre>`]);
   const approval=r.approval?`<p>Approval: ${esc(r.approval.decision||'pending')} ${r.approval.by?'by '+esc(r.approval.by):''} ${r.approval.at?date(r.approval.at):''}${r.approval.expires?' · expires '+date(r.approval.expires):''}<br>${esc(r.approval.comment)}</p>`:'';
-  main.innerHTML=`<p><a href="#job/${encodeURIComponent(r.job)}" id="back">← ${esc(r.job)}</a>${r.audit_execution_id?` &nbsp; <a href="#run/${encodeURIComponent(r.audit_execution_id)}">Execution ${esc(r.audit_execution_id)}</a>`:''}</p><section class="report-card"><h2>${esc(r.job)} <small>${esc(r.kind)}</small> ${badge(r.status)}${checkBadge(r)}</h2><p class="text">${esc(r.summary)}</p><p>Started ${date(r.started)} · Duration ${esc((r.duration_seconds||0).toFixed(1))}s · Trigger ${esc(r.trigger)}<br>Requested ${date(r.requested)}</p>${paramsView(r)}${approval}${['cancelled','canceled'].includes(r.status)?`<p>Cancelled: ${esc(r.summary)}</p>`:''}</section>${reportErrors(r,p)}<div class="tabs" role="tablist">${tabs.map(([name],i)=>`<button class="run" role="tab" id="tab-${i}" aria-controls="panel-${i}" aria-selected="${i===0}" data-tab="${i}">${esc(name)}</button>`).join('')}</div>${tabs.map(([,html],i)=>`<section role="tabpanel" id="panel-${i}" aria-labelledby="tab-${i}" ${i?'hidden':''}>${html}</section>`).join('')}`;
+  main.innerHTML=`<p><a href="#job/${encodeURIComponent(r.job)}" id="back">← ${esc(r.job)}</a>${r.audit_execution_id?` &nbsp; <a href="#run/${encodeURIComponent(r.audit_execution_id)}">Execution ${esc(r.audit_execution_id)}</a>`:''}</p><section class="report-card"><h2>${esc(r.job)} <small>${esc(r.kind)}</small> ${badge(r.status)}${checkBadge(r)}</h2><p class="text">${esc(r.summary)}</p><p>Started ${date(r.started)} · Duration ${esc((r.duration_seconds||0).toFixed(1))}s · Trigger ${esc(r.trigger)}<br>Requested ${date(r.requested)}</p>${r.not_before?`<p>${esc(scheduledTime(r.not_before))} · ${date(r.not_before)}</p>`:''}${paramsView(r)}${approval}${['cancelled','canceled'].includes(r.status)?`<p>Cancelled: ${esc(r.summary)}</p>`:''}</section>${reportErrors(r,p)}<div class="tabs" role="tablist">${tabs.map(([name],i)=>`<button class="run" role="tab" id="tab-${i}" aria-controls="panel-${i}" aria-selected="${i===0}" data-tab="${i}">${esc(name)}</button>`).join('')}</div>${tabs.map(([,html],i)=>`<section role="tabpanel" id="panel-${i}" aria-labelledby="tab-${i}" ${i?'hidden':''}>${html}</section>`).join('')}`;
   $('#back').onclick=e=>{e.preventDefault();results(r.job).catch(showError)};
   main.querySelectorAll('[data-expand]').forEach(row=>row.onclick=e=>{if(e.target.closest('a,details'))return;const d=row.querySelector('details');if(d)d.open=!d.open});
   main.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{main.querySelectorAll('[data-tab]').forEach(t=>t.setAttribute('aria-selected',String(t===b)));main.querySelectorAll('[role="tabpanel"]').forEach((p,i)=>p.hidden=i!==Number(b.dataset.tab))});
