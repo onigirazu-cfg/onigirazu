@@ -316,6 +316,14 @@ so they win). They override variables written in the inventory itself.
   and then every executable in the directory tree is loaded. Other files, hidden
   directories and `group_vars/`/`host_vars/` are skipped.
 
+For a host's effective variables, the engine applies `all` first, then its groups in
+ascending inheritance depth and name order, then the host's own variables. Later
+assignments win, so child groups override parents and host variables override groups.
+The loader can record each variable's last source path with the opt-in
+`MultiSourceLoader.TrackSources()`. After loading, `Sources()` returns host and group
+variable source maps, including `group_vars`/`host_vars` file paths and dynamic script
+paths. Tracking is off by default; values and merge order are unchanged.
+
 ## Without -i
 
 `ANSIBLE_INVENTORY` (a comma separated list of sources) is the default of `-i`. Without it,

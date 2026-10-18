@@ -342,7 +342,7 @@ with `after` when a stream drops and opens the report when the run ends.
 | `POST /api/runs/{id}/cancel` | cancels a scheduled, queued or running run (job operators); optional JSON `{comment: "..."}`; `200` with the cancelled record for scheduled or queued runs, `202` with the cancelling record for running runs (without report); `404` if absent, `409` if not cancellable (reject a pending run instead), `500` with the record and `error` on storage failure; `403` if disallowed |
 | `GET /api/hosts/{name}/results` | that host’s retained results across all jobs, newest `started` first, at most 200: `[{id, job, kind, status, host_status, started, summary}]`; an unknown host returns `[]` |
 | `GET /api/results/{id}/events?after=N` | live NDJSON progress (viewers allowed): snapshot, replay after sequence N, gap marker when replay was truncated, task events and final end; idle pings every 15 seconds |
-| `GET /api/inventory` | inventory sources shared by jobs (viewers too), with sorted groups, direct host membership, recursive host groups and variable names; addresses are included only for operators; each entry has `source`, `jobs`, `loaded_at`, `groups`, `hosts`, and `error` if loading failed |
+| `GET /api/inventory` | inventory sources shared by jobs (viewers too), with sorted groups, direct host membership, recursive host groups and variable names; operators also receive host addresses, host `effective` entries (`name`, `from`: `host` or `group:<name>`, `source`) sorted by name, and group `var_sources` maps from variable name to source path; values are never included; each entry has `source`, `jobs`, `loaded_at`, `groups`, `hosts`, and `error` if loading failed |
 | `POST /api/inventory/refresh` | clears inventory snapshots (operators); the next GET reloads; `200 {"ok":true}`; audited as `inventory_refresh` |
 | `GET /api/hosts` | every host seen by a job's last executed result (cancelled and check runs are skipped), with its worst status (`ok`, `changed`, `drift`, `failed`, `unreachable`) and the status per job |
 | `GET /api/runs` | audit store run array, newest first (viewers too); filters `host`, `playbook` (path substring), `status`, `job` (linked serve runs), `from`, `to` (RFC 3339); `limit` defaults to 100, max 1000, `offset` defaults to 0; `X-Next-Offset` gives the next offset when more exist; `400` for invalid dates or a non-numeric, negative or overflowing offset; optional `serve_run` links to the retained serve result |
@@ -368,9 +368,14 @@ in their ad-hoc forms, Hosts, Inventory, Runs and Audit. Check runs have a `chec
 Inventory shows one card per inventory source with its jobs, groups, hosts and a host filter.
 Snapshots load lazily and are reused for five minutes, including failed loads; concurrent
 requests for the same source share one load, other sources are not held up by it, and a load
-gives up after one minute. Variable names are shown without values or connection credentials;
-only operators see host addresses and inline inventories (viewers see `inline` instead). Operators can use Refresh to clear snapshots for the next
-request.
+gives up after one minute. Variable names are shown without values or connection credentials.
+Operators can expand a host's effective variables to see whether each comes from the host
+or a group, and its source file (full path in the tooltip). Sources include inventory files,
+dynamic scripts and `group_vars`/`host_vars` files. Only operators see these paths, host
+addresses and inline inventories (viewers see `inline` instead). Operators can use Refresh
+to clear snapshots for the next request. Conflicting native host definitions report a
+provenance error when their effective sources depend on the selected group; the engine's
+resolution behavior is unchanged.
 
 Jobs show up to 20 status squares, newest on the right, with hollow squares for check
 runs and status/date tooltips. The job page uses light history with a duration sparkline
