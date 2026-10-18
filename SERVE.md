@@ -58,7 +58,10 @@ jobs:
     adhoc:
       limit: true
       extra_vars:
-        - reboot
+        - {name: reboot, type: bool, default: false, description: Reboot after patching}
+        - {name: batch_size, type: int, min: 1, max: 20, default: 5}
+        - {name: wave, type: choice, choices: [blue, green], required: true}
+        - {name: ticket, pattern: 'OPS-[0-9]+', required: true}
         - {name: token, secret: true}
     operators: [tier0-admins, denys]
     approval: required
@@ -73,6 +76,25 @@ jobs:
     limit: web
     become: true
 ```
+
+Variable declarations in `adhoc.extra_vars` accept a plain name (an optional string)
+or a mapping with `name` and optional `secret`, `type`, `choices`, `default`, `pattern`,
+`min`, `max`, `description` and `required`. `type` defaults to `string`; supported types
+are `string`, `int`, `bool` and `choice`. `choices` must be nonempty for `choice` and
+cannot be used with other types. Integer bounds `min` and `max` are inclusive and
+require `min <= max`. `pattern` is an RE2 expression that must match the whole value.
+Secret variables support only `string` and `int`. Invalid types, patterns, bounds,
+choices and defaults reject the configuration at startup.
+
+The server validates every supplied value: integers must parse as signed 64-bit integers
+within bounds, booleans must be exactly `true` or `false`, choices must be declared,
+and patterns must match. API values remain strings, including integers and booleans.
+A missing required variable returns `400` unless it has a declared default. Defaults
+are applied server-side only for omitted variables, including requests without a body,
+and recorded in `params.extra_vars`. Validation errors identify the variable and rule
+without exposing secret values. The page shows selects, checkboxes, number inputs,
+text or password fields, with defaults, descriptions and required markers. Secret
+defaults are never sent to the page; leaving a secret field empty uses its server default.
 
 ```bash
 onigirazu serve --config-file serve.yml
@@ -183,7 +205,7 @@ The ad-hoc form lists clickable groups and hosts within the job's limit and prev
 Limited runs: `POST /api/jobs/{name}/run` accepts an optional JSON body
 `{"limit":"web1","extra_vars":{"reboot":"true"}}`. The job must allow `limit` with
 `adhoc.limit: true` and list each caller-set variable in `adhoc.extra_vars`. Unfilled
-parameters keep the job's values; caller variables override its defaults. The limit is
+parameters use declared defaults when present, otherwise keep the job's values; caller variables override its defaults. The limit is
 resolved against the job's inventory (or the global inventory); no matching host or any
 host outside the job's own `limit` returns `400`, as does a pattern with characters a host
 pattern cannot have (letters, digits and `. _ - * : , ! & ~ [ ] @` are allowed). Unknown
@@ -245,6 +267,17 @@ unreadable pauses the server at start (fail closed) until an operator resumes it
 schedule and approvals keep working, runs queue up in order, and pending runs still expire.
 `onigirazu_serve_paused` is 1 while paused, 0 otherwise.
 
+Rerun failed hosts: the run page offers **Rerun failed hosts (N)** to job operators
+after an executed run with `failed` or `unreachable` hosts. `POST /api/runs/{id}/rerun-failed`
+creates a run on just those hosts, retaining the mode and non-secret caller variables.
+The hosts are validated against the current job limit, even when `adhoc.limit` is off, and the
+caller variables against the job's current declarations (a value that no longer fits returns `400`).
+Approval, maintenance windows and busy rules still apply. The new record has
+`parent: "<id>"` and `trigger: "rerun:<user>"`; the page links back to its parent.
+An unexecuted run or one without failed hosts returns `400`. A parent with secret
+parameters returns `400` with `{"error":"the run had secret parameters; start it again from the form"}`.
+The audit action is `rerun_failed`, with the parent ID in its reason.
+
 Cancel: an operator of the job uses Cancel on the page or `POST /api/runs/{id}/cancel`
 with an optional `{comment: "..."}`. A scheduled or queued run becomes `cancelled` without starting and
 frees the job immediately; a running run becomes `cancelling` until its context stops, then
@@ -295,14 +328,15 @@ with `after` when a stream drops and opens the report when the run ends.
 | `GET /api/pause` | pause state: `paused`, optional `reason`, `by`, `at` (viewers too) |
 | `POST /api/pause` | pauses execution (operators); optional JSON `{reason: "..."}`; `200` with the state; pausing again updates reason and identity; `500` with the state and `error` when `pause.json` could not be written (the pause still holds in this process) |
 | `POST /api/resume` | resumes execution (operators); `200` with the state; already resumed is a no-op; `500` as for pause |
-| `GET /api/jobs` | the jobs with schedule, next run, optional job `timeout` (duration string), `running` flag (queued, running or cancelling), optional `active` record (without report; `active.requested` and `active.started` give queue and execution timing), `queued` flag (waiting for the worker), last executed result, `recent: [{status, mode, started}]` (up to 20 executed runs, newest first, including checks), optional `pending` and `scheduled` records (without reports), `scheduled_runs` when automatic deferrals collide, optional `windows`, `windows_tz` and `next_window` for gated jobs, and `approval: "required"` for guarded jobs; optional `operators` list and caller-specific `allowed` bool; `adhoc: {limit, extra_vars, secret_vars}` (`extra_vars` remains a list of names) when enabled |
+| `GET /api/jobs` | the jobs with schedule, next run, optional job `timeout` (duration string), `running` flag (queued, running or cancelling), optional `active` record (without report; `active.requested` and `active.started` give queue and execution timing), `queued` flag (waiting for the worker), last executed result, `recent: [{status, mode, started}]` (up to 20 executed runs, newest first, including checks), optional `pending` and `scheduled` records (without reports), `scheduled_runs` when automatic deferrals collide, optional `windows`, `windows_tz` and `next_window` for gated jobs, and `approval: "required"` for guarded jobs; optional `operators` list and caller-specific `allowed` bool; `adhoc: {limit, extra_vars, secret_vars, vars}` (`extra_vars` remains a list of names; `vars` contains declarations with `name`, `type`, `choices`, `default`, `pattern`, `min`, `max`, `description`, `required`, `secret`; secret defaults are omitted) when enabled |
 | `GET /api/jobs/{name}/inventory` | operators of jobs with `adhoc.limit: true` only; sorted reachable host names and nonempty groups that lie entirely within the job's limit (recursive, excluding `all`); `?limit=pattern` previews resolved host names; `400` for invalid limits or jobs without ad-hoc limits; `403` for callers not allowed to operate the job; `500` for inventory load errors |
 | `POST /api/jobs/{name}/run` | requests the job (operators); optional JSON `{mode: "check", limit: "host pattern", extra_vars: {k: "v"}, not_before: "RFC 3339 time"}` with limit/variables as allowed by `adhoc`; mode is `check` (apply jobs only), `apply` or empty; `400` for invalid parameters or a limit with no hosts or hosts outside the job's limit; `202` with `{queued: name, run: id}` or `{pending: id, run: id}` or `{scheduled: id, run: id}`; `409` when running, queued or pending for an immediate request, or when another run is already scheduled for a request with `not_before`; `503` when the queue is full; `500` with the record and `error` when storage fails (the run remains in memory); `403` with `{"error":"not an operator of this job"}` when the job disallows the operator |
 | `GET /api/jobs/{name}/history?limit=N` | light retained history, newest first (viewers allowed); default 50, maximum 500: `[{id, status, mode, trigger, requested, started, duration_seconds, summary, hosts_count, failed_hosts, params, approval}]`; `params` as stored (secret values masked) and `approval` appear when set; reports and host lists are never included |
 | `GET /api/jobs/{name}/compare?a=<id>&b=<id>` | compare two different executed drift/apply runs of this job with reports (viewers allowed; `400` when `a` equals `b`): `{a: {id, started, status, playbook_hash}, b: {...}, same_playbook, hosts: [{host, a, b}], appeared: [{host, key, play, task, module}], resolved: [...]}`; only changed host verdicts are listed (empty verdict means absent); items match by host and task key when both have keys, otherwise host, play and task; `404` for unknown runs, `400` for another job, unsupported kind, unexecuted runs or missing reports |
 | `GET /api/jobs/{name}/results` | the kept results, newest first |
 | `GET /api/jobs/{name}/results/{id}` | one result with its full report (the drift, verify or comply report as JSON) |
-| `GET /api/results/{id}` | one job result with its full report, optional `mode: "check"`, optional `not_before`, optional `audit_execution_id`, and optional `params` (`limit`, `extra_vars`, sorted `hosts`, optional `secret_vars` names); `404` if absent |
+| `GET /api/results/{id}` | one job result with its full report, optional `mode: "check"`, optional `not_before`, optional `audit_execution_id`, optional `parent` run ID for reruns, and optional `params` (`limit`, `extra_vars`, sorted `hosts`, optional `secret_vars` names); `404` if absent |
+| `POST /api/runs/{id}/rerun-failed` | job operators; reruns only failed/unreachable hosts of an executed run with the same mode and non-secret variables; `202` with `{run: id}`; new record links to `parent`; `400` for unexecuted runs, no failed hosts, invalid host limits or secret parameters; `403` if disallowed, `404` if absent, `409` if busy, `503` if queue full; normal approval/windows apply |
 | `POST /api/runs/{id}/approve` | queues or schedules an approved pending run (operators); optional JSON `{comment: "..."}`; `200` with the record without report, `404` if absent, `409` when the run expired meanwhile (it is marked expired), `503` if the queue is full; `500` with the record and `error` on storage failure; `403` with `{"error":"not an operator of this job"}` when the job disallows the operator |
 | `POST /api/runs/{id}/reject` | rejects a pending run (operators); optional JSON `{comment: "..."}`; `200` with the record without report, `404` if absent; `500` with the record and `error` on storage failure; `403` with `{"error":"not an operator of this job"}` when the job disallows the operator |
 | `POST /api/runs/{id}/cancel` | cancels a scheduled, queued or running run (job operators); optional JSON `{comment: "..."}`; `200` with the cancelled record for scheduled or queued runs, `202` with the cancelling record for running runs (without report); `404` if absent, `409` if not cancellable (reject a pending run instead), `500` with the record and `error` on storage failure; `403` if disallowed |
