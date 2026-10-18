@@ -142,6 +142,7 @@ type ExecutionEngine struct {
 	restorer         Restorer
 	rolloutVars      map[string]interface{}
 	verifyOnly       bool   // run only the plays' verify: checks (onigirazu verify)
+	skipVerify       bool   // the plays' verify: checks do not run (serve check runs)
 	freeStrategy     bool   // the play runs with strategy: free
 	playThrottle     string // the play's throttle, for tasks without their own
 	rolloutUnhealthy []string
@@ -832,7 +833,7 @@ func (e *ExecutionEngine) executePlayOn(ctx context.Context, play *types.Play, h
 	}
 
 	// verify: the goss-style checks of the play, one task on every host
-	if len(play.Verify) > 0 {
+	if len(play.Verify) > 0 && !e.skipVerify {
 		// a plain list: the argument renderer walks []interface{} only
 		checks := make([]interface{}, len(play.Verify))
 		for i, c := range play.Verify {
@@ -2731,6 +2732,9 @@ func (e *ExecutionEngine) SetForceBecome(become bool, user string) {
 // SetStartAtTask skips every task before the one with this name
 // SetVerifyOnly makes every play run only its verify: checks
 func (e *ExecutionEngine) SetVerifyOnly(on bool) { e.verifyOnly = on }
+
+// SetSkipVerify leaves out every play's verify: checks
+func (e *ExecutionEngine) SetSkipVerify(on bool) { e.skipVerify = on }
 
 func (e *ExecutionEngine) SetStartAtTask(name string) {
 	e.startAt = strings.TrimSpace(name)

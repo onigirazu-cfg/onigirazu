@@ -1387,7 +1387,11 @@ func (s *server) execute(ctx context.Context, j *ServeJob, mode string) (*JobRes
 		r.Report, _ = json.Marshal(vr)
 	default: // drift, apply
 		check := j.Kind == "drift" || mode == "check"
-		result, err := runPlaybookContext(ctx, o.applyArgs(j.Playbook, check))
+		args := o.applyArgs(j.Playbook, check)
+		if mode == "check" { // the verify: checks would test the state before the changes
+			args = append(args, "--skip-verify")
+		}
+		result, err := runPlaybookContext(ctx, args)
 		if err != nil {
 			return nil, err
 		}
