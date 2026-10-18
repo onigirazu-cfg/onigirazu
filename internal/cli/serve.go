@@ -16,6 +16,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"sort"
 	"strconv"
@@ -84,15 +85,100 @@ type ServeMetric struct {
 
 // ServeAdhoc is what a caller of POST /api/jobs/{name}/run may set
 type ServeAdhoc struct {
-	Limit      bool     `yaml:"limit" json:"limit"`
-	ExtraVars  []string `yaml:"-" json:"extra_vars,omitempty"`
-	SecretVars []string `yaml:"-" json:"secret_vars,omitempty"`
+	Limit      bool       `yaml:"limit" json:"limit"`
+	ExtraVars  []string   `yaml:"-" json:"extra_vars,omitempty"`
+	SecretVars []string   `yaml:"-" json:"secret_vars,omitempty"`
+	Vars       []adhocVar `yaml:"-" json:"vars,omitempty"`
 }
 
-// adhocVar accepts a name or a declaration with secret metadata.
+// adhocVar accepts a name or a typed declaration.
 type adhocVar struct {
-	Name   string `yaml:"name"`
-	Secret bool   `yaml:"secret"`
+	Name        string   `yaml:"name" json:"name"`
+	Secret      bool     `yaml:"secret" json:"secret"`
+	Type        string   `yaml:"type" json:"type"`
+	Choices     []string `yaml:"choices" json:"choices,omitempty"`
+	Default     *string  `yaml:"default" json:"default,omitempty"`
+	Pattern     string   `yaml:"pattern" json:"pattern,omitempty"`
+	Min         *int64   `yaml:"min" json:"min,omitempty"`
+	Max         *int64   `yaml:"max" json:"max,omitempty"`
+	Description string   `yaml:"description" json:"description,omitempty"`
+	Required    bool     `yaml:"required" json:"required"`
+}
+
+func (v adhocVar) MarshalJSON() ([]byte, error) {
+	type plain adhocVar
+	if v.Secret {
+		v.Default = nil
+	}
+	return json.Marshal(plain(v))
+}
+
+func (v adhocVar) validate(value string) error {
+	rule := ""
+	switch v.Type {
+	case "int":
+		n, err := strconv.ParseInt(value, 10, 64)
+		switch {
+		case err != nil:
+			rule = "must be an integer"
+		case v.Min != nil && n < *v.Min:
+			rule = fmt.Sprintf("must be >= %d", *v.Min)
+		case v.Max != nil && n > *v.Max:
+			rule = fmt.Sprintf("must be <= %d", *v.Max)
+		}
+	case "bool":
+		if value != "true" && value != "false" {
+			rule = "must be true or false"
+		}
+	case "choice":
+		if !slices.Contains(v.Choices, value) {
+			rule = "must be one of the declared choices"
+		}
+	}
+	if rule == "" && v.Pattern != "" {
+		re, err := regexp.Compile(`\A(?:` + v.Pattern + `)\z`)
+		if err != nil || !re.MatchString(value) {
+			rule = "must match the declared pattern"
+		}
+	}
+	if rule != "" {
+		return fmt.Errorf("extra var %q %s", v.Name, rule)
+	}
+	return nil
+}
+
+func (v *adhocVar) validateDeclaration() error {
+	if v.Type == "" {
+		v.Type = "string"
+	}
+	switch v.Type {
+	case "string", "int", "bool", "choice":
+	default:
+		return fmt.Errorf("extra var %q: type must be string, int, bool or choice", v.Name)
+	}
+	if (v.Type == "choice" && len(v.Choices) == 0) || (v.Type != "choice" && v.Choices != nil) {
+		return fmt.Errorf("extra var %q: choices must be non-empty and only used with type choice", v.Name)
+	}
+	if v.Secret && (v.Type == "bool" || v.Type == "choice") {
+		return fmt.Errorf("extra var %q: secret cannot use type bool or choice", v.Name)
+	}
+	if v.Min != nil && v.Max != nil && *v.Min > *v.Max {
+		return fmt.Errorf("extra var %q: min must be <= max", v.Name)
+	}
+	if (v.Min != nil || v.Max != nil) && v.Type != "int" {
+		return fmt.Errorf("extra var %q: min and max require type int", v.Name)
+	}
+	if v.Pattern != "" {
+		if _, err := regexp.Compile(`\A(?:` + v.Pattern + `)\z`); err != nil {
+			return fmt.Errorf("extra var %q: pattern must be valid RE2", v.Name)
+		}
+	}
+	if v.Default != nil {
+		if err := v.validate(*v.Default); err != nil {
+			return fmt.Errorf("invalid default: %w", err)
+		}
+	}
+	return nil
 }
 
 func (v *adhocVar) UnmarshalYAML(node *yaml.Node) error {
@@ -124,6 +210,10 @@ func (a *ServeAdhoc) UnmarshalYAML(node *yaml.Node) error {
 		if slices.Contains(a.ExtraVars, v.Name) {
 			return fmt.Errorf("adhoc.extra_vars: duplicate name %q", v.Name)
 		}
+		if v.Type == "" {
+			v.Type = "string"
+		}
+		a.Vars = append(a.Vars, v)
 		a.ExtraVars = append(a.ExtraVars, v.Name)
 		if v.Secret {
 			a.SecretVars = append(a.SecretVars, v.Name)
@@ -189,6 +279,7 @@ type JobResult struct {
 	AuditExecutionID string            `json:"audit_execution_id,omitempty"`
 	PlaybookHash     string            `json:"playbook_hash,omitempty"`
 	ID               string            `json:"id"`
+	Parent           string            `json:"parent,omitempty"`
 	Job              string            `json:"job"`
 	Kind             string            `json:"kind"`
 	Mode             string            `json:"mode,omitempty"`
@@ -365,6 +456,11 @@ func loadServeConfig(path string) (*ServeConfig, error) {
 	names := map[string]bool{}
 	for i := range cfg.Jobs {
 		j := &cfg.Jobs[i]
+		for n := range j.Adhoc.Vars {
+			if err := j.Adhoc.Vars[n].validateDeclaration(); err != nil {
+				return nil, fmt.Errorf("job %s: %w", j.Name, err)
+			}
+		}
 		if j.WindowsTZ == "" {
 			j.WindowsTZ = "UTC"
 		}
@@ -766,6 +862,10 @@ func (s *server) nextID(job string, now time.Time) string {
 
 // request creates a run, awaiting approval, its start time or a worker.
 func (s *server) request(j *ServeJob, trigger string, params *RunParams) (*JobResult, error) {
+	return s.requestParent(j, trigger, params, "")
+}
+
+func (s *server) requestParent(j *ServeJob, trigger string, params *RunParams, parent string) (*JobResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	now := time.Now().UTC()
@@ -786,7 +886,7 @@ func (s *server) request(j *ServeJob, trigger string, params *RunParams) (*JobRe
 		return nil, errJobBusy
 	}
 	id := s.nextID(j.Name, now)
-	r := &JobResult{ID: id, Job: j.Name, Kind: j.Kind, Requested: now, Started: now, Trigger: trigger, Status: "queued", Params: params, NotBefore: notBefore}
+	r := &JobResult{ID: id, Parent: parent, Job: j.Name, Kind: j.Kind, Requested: now, Started: now, Trigger: trigger, Status: "queued", Params: params, NotBefore: notBefore}
 	if params != nil {
 		r.Mode = params.Mode
 		r.Params = resultCopy(r).Params
@@ -1411,10 +1511,12 @@ func (s *server) runParams(r *http.Request, j *ServeJob) (*RunParams, error) {
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&body); err != nil {
-		if errors.Is(err, io.EOF) {
-			return nil, nil
+		if !errors.Is(err, io.EOF) {
+			if strings.HasPrefix(err.Error(), "json: unknown field ") {
+				return nil, errors.New("invalid run parameters JSON: unknown field")
+			}
+			return nil, errors.New("invalid run parameters JSON")
 		}
-		return nil, err
 	}
 	var trailing interface{}
 	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
@@ -1450,6 +1552,25 @@ func (s *server) runParams(r *http.Request, j *ServeJob) (*RunParams, error) {
 			return nil, fmt.Errorf("extra var %q is not allowed for this job", k)
 		}
 	}
+	for _, v := range j.Adhoc.Vars {
+		value, provided := body.ExtraVars[v.Name]
+		if !provided && v.Default != nil {
+			value, provided = *v.Default, true
+			if body.ExtraVars == nil {
+				body.ExtraVars = make(map[string]string, len(j.Adhoc.Vars))
+			}
+			body.ExtraVars[v.Name] = value
+		}
+		if !provided {
+			if v.Required {
+				return nil, fmt.Errorf("extra var %q is required", v.Name)
+			}
+			continue
+		}
+		if err := v.validate(value); err != nil {
+			return nil, err
+		}
+	}
 	if body.NotBefore == nil && body.Mode == "" && body.Limit == "" && len(body.ExtraVars) == 0 {
 		return nil, nil
 	}
@@ -1462,6 +1583,96 @@ func (s *server) runParams(r *http.Request, j *ServeJob) (*RunParams, error) {
 		params.Hosts = hosts
 	}
 	return params, nil
+}
+
+func (s *server) rerunFailed(w http.ResponseWriter, r *http.Request, id serveIdentity) {
+	parentID := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/api/runs/"), "/rerun-failed")
+	a := s.requestAction(r, id)
+	a.Action, a.Run = "rerun_failed", parentID
+	defer func() { s.logAction(a) }()
+	fail := func(code int, reason string) {
+		a.Reason = "parent=" + parentID + " " + reason
+		writeJSON(w, code, map[string]string{"error": reason})
+	}
+	var parent *JobResult
+	s.mu.Lock()
+	for job := range s.results {
+		if found := s.resultByID(job, parentID); found != nil {
+			parent = resultCopy(found)
+			break
+		}
+	}
+	s.mu.Unlock()
+	if parent == nil {
+		fail(http.StatusNotFound, "no such run")
+		return
+	}
+	a.Job = parent.Job
+	j := s.job(parent.Job)
+	if j == nil || !s.allowed(id, j) {
+		fail(http.StatusForbidden, "not an operator of this job")
+		return
+	}
+	if !parent.executed() {
+		fail(http.StatusBadRequest, "the run has not executed")
+		return
+	}
+	if s.hasSecretParams(parent) {
+		fail(http.StatusBadRequest, "the run had secret parameters; start it again from the form")
+		return
+	}
+	var hosts []string
+	for host, status := range parent.Hosts {
+		if status == "failed" || status == "unreachable" {
+			hosts = append(hosts, host)
+		}
+	}
+	if len(hosts) == 0 {
+		fail(http.StatusBadRequest, "the run has no failed hosts")
+		return
+	}
+	sort.Strings(hosts)
+	limit := strings.Join(hosts, ",")
+	if err := validateServeLimit(limit); err != nil {
+		fail(http.StatusBadRequest, err.Error())
+		return
+	}
+	resolved, err := s.resolveLimit(j, limit)
+	if err != nil {
+		fail(http.StatusBadRequest, err.Error())
+		return
+	}
+	if !slices.Equal(resolved, hosts) {
+		fail(http.StatusBadRequest, "failed hosts no longer resolve to the same hosts")
+		return
+	}
+	params := &RunParams{Mode: parent.Mode, Limit: limit, Hosts: hosts}
+	if parent.Params != nil {
+		params.ExtraVars = maps.Clone(parent.Params.ExtraVars)
+	}
+	// A variable newly marked secret must also be entered through the form.
+	for _, name := range j.Adhoc.SecretVars {
+		if _, ok := params.ExtraVars[name]; ok {
+			fail(http.StatusBadRequest, "the run had secret parameters; start it again from the form")
+			return
+		}
+	}
+	result, err := s.requestParent(j, "rerun:"+id.User, params, parent.ID)
+	if err != nil {
+		if result != nil {
+			a.Reason = "parent=" + parent.ID + " " + err.Error()
+			writeResultError(w, result, err)
+			return
+		}
+		code := http.StatusServiceUnavailable
+		if errors.Is(err, errJobBusy) || errors.Is(err, errAlreadyScheduled) {
+			code = http.StatusConflict
+		}
+		fail(code, err.Error())
+		return
+	}
+	a.OK, a.Run, a.Reason = true, result.ID, "parent="+parent.ID
+	writeJSON(w, http.StatusAccepted, map[string]string{"run": result.ID})
 }
 
 // extraVarsArg is the -e value for a job's variables: one JSON object, so a
@@ -1977,6 +2188,14 @@ func (s *server) mux() *http.ServeMux {
 	mux.HandleFunc("/api/runs/", auth(false, func(w http.ResponseWriter, r *http.Request, id serveIdentity) {
 		path := strings.TrimPrefix(r.URL.Path, "/api/runs/")
 		runID, action, _ := strings.Cut(path, "/")
+		if action == "rerun-failed" {
+			if r.Method != http.MethodPost {
+				w.WriteHeader(http.StatusMethodNotAllowed)
+				return
+			}
+			auth(true, s.rerunFailed)(w, r)
+			return
+		}
 		if r.Method == http.MethodPost && (action == "approve" || action == "reject" || action == "cancel") {
 			auth(true, func(w http.ResponseWriter, r *http.Request, _ serveIdentity) {
 				a := s.requestAction(r, id)
