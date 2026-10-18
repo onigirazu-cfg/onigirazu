@@ -224,6 +224,9 @@ func notifyHeadline(event, name string, r *JobResult) (text, emoji, color string
 	case eventDrift:
 		return name + " drift — " + r.Summary, ":warning:", "#d98f1a"
 	case eventFailure:
+		if r.Status == statusTimedOut {
+			return name + " timed out — " + r.Summary, ":x:", "#d14343"
+		}
 		return name + " failed — " + r.Summary, ":x:", "#d14343"
 	case eventCancelled:
 		text = name + " " + statusCancelled

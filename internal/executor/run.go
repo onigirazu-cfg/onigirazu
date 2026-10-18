@@ -28,6 +28,7 @@ func (e *CommandExecutor) Run(ctx context.Context, commandLine string) (RunResul
 		if e.container != "" {
 			cmd = e.containerCmd(ctx, full)
 		}
+		stopWithContext(cmd)
 		cmd.Stdout, cmd.Stderr = &stdout, &stderr
 		err := cmd.Run()
 		var exitErr *exec.ExitError

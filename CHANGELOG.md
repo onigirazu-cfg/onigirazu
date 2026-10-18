@@ -12,8 +12,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - In-process playbook runs can overlap with their own output, secrets, role paths, bridge configuration and facts cache; cancellation follows the caller's context, and SSH pool settings are retained from the first initialization
 - `apply` takes its inventory and state file from its own `-i`/`--state` flags; `drift`, `verify`, `comply`, `serve`, `listen`, `pull`, `image`, `bootstrap` and `mcp` pass theirs the same way instead of writing the process's global `-i`/`--state` before running a playbook in-process
 
+### Fixed
+
+- Canceling a run (Ctrl-C, `serve` cancel or timeout) stops a local command together with the processes it started; before, a shell child kept the run waiting until it finished on its own
+
 ### Added
 
+- `onigirazu serve`: server `run_timeout` and per-job `timeout` bound execution time, keeping partial results as `timed_out` with failure notifications and metrics
 - `onigirazu serve`: ad-hoc target picker with reachable group and host chips and live limit previews via `GET /api/jobs/{name}/inventory`
 - `onigirazu serve`: operators cancel queued or running runs from the page or `POST /api/runs/{id}/cancel`; cancellation keeps who stopped the run and any partial result, with audit entries, optional notifications and metrics
 - `onigirazu serve`: report tabs for drift/apply, verify and compliance with bounded coloured diffs, retained host history at `/api/hosts/{name}/results`, job freshness and active timing, and narrow-screen layouts

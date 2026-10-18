@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"cmp"
 	"context"
 	"crypto/subtle"
 	_ "embed"
@@ -50,6 +51,7 @@ type ServeConfig struct {
 	Metrics         ServeMetric    `yaml:"metrics"`
 	Notify          []NotifyTarget `yaml:"notify"`           // targets for every job
 	ApprovalTimeout time.Duration  `yaml:"approval_timeout"` // how long a pending run waits, default 1h
+	RunTimeout      time.Duration  `yaml:"run_timeout"`      // 0: no run limit
 }
 
 // ServeAuth: a bearer token is an operator (the plain one is the user
@@ -161,6 +163,7 @@ type ServeJob struct {
 	Approval        string            `yaml:"approval"`         // required: a run waits for an operator
 	CheckApproval   string            `yaml:"check_approval"`   // required: check runs wait for an operator
 	ApprovalTimeout time.Duration     `yaml:"approval_timeout"` // 0: the server's
+	Timeout         time.Duration     `yaml:"timeout"`          // 0: the server's
 	Operators       []string          `yaml:"operators"`        // users or groups that may run, approve, reject; empty: every operator
 	Adhoc           ServeAdhoc        `yaml:"adhoc"`            // what a caller may set on a run
 	Notify          []NotifyTarget    `yaml:"notify"`
@@ -171,6 +174,7 @@ type ServeJob struct {
 const (
 	statusCancelling = "cancelling" //nolint:misspell // Public API spelling.
 	statusCancelled  = "cancelled"  //nolint:misspell // Public API spelling.
+	statusTimedOut   = "timed_out"
 )
 
 // JobResult is one run of a job, as stored
@@ -183,7 +187,7 @@ type JobResult struct {
 	Requested        time.Time         `json:"requested"` // when it was asked for
 	Started          time.Time         `json:"started"`   // the request time until the run starts
 	Duration         float64           `json:"duration_seconds"`
-	Status           string            `json:"status"` // pending, queued, running, statusCancelling, statusCancelled, ok, drift, changed, failed, error, rejected, expired
+	Status           string            `json:"status"` // pending, queued, running, statusCancelling, statusCancelled, timed_out, ok, drift, changed, failed, error, rejected, expired
 	Summary          string            `json:"summary"`
 	Trigger          string            `json:"trigger"`          // schedule, api:<user>
 	Params           *RunParams        `json:"params,omitempty"` // what the caller set
@@ -213,7 +217,7 @@ type RunApproval struct {
 // executed reports terminal results, including cancellation.
 func (r *JobResult) executed() bool {
 	switch r.Status {
-	case "ok", "drift", "changed", "failed", "error", statusCancelled:
+	case "ok", "drift", "changed", "failed", "error", statusCancelled, statusTimedOut:
 		return true
 	}
 	return false
@@ -311,6 +315,9 @@ func loadServeConfig(path string) (*ServeConfig, error) {
 	if cfg.ApprovalTimeout == 0 {
 		cfg.ApprovalTimeout = time.Hour
 	}
+	if cfg.RunTimeout < 0 {
+		return nil, fmt.Errorf("run_timeout must be >= 0")
+	}
 	if cfg.RetainAge < 0 {
 		return nil, fmt.Errorf("retain_age must be >= 0")
 	}
@@ -360,6 +367,9 @@ func loadServeConfig(path string) (*ServeConfig, error) {
 		}
 		if j.CheckApproval != "" && j.CheckApproval != "required" {
 			return nil, fmt.Errorf("job %s: check_approval %q (required or empty)", j.Name, j.CheckApproval)
+		}
+		if j.Timeout < 0 {
+			return nil, fmt.Errorf("job %s: timeout must be >= 0", j.Name)
 		}
 		if j.ApprovalTimeout == 0 {
 			j.ApprovalTimeout = cfg.ApprovalTimeout
@@ -939,7 +949,17 @@ next:
 				continue next
 			}
 			r := q.run
-			runCtx, cancel := context.WithCancel(ctx)
+			timeout := q.job.Timeout
+			if timeout == 0 {
+				timeout = s.cfg.RunTimeout
+			}
+			var runCtx context.Context
+			var cancel context.CancelFunc
+			if timeout > 0 {
+				runCtx, cancel = context.WithTimeout(ctx, timeout)
+			} else {
+				runCtx, cancel = context.WithCancel(ctx)
+			}
 			s.cancels[r.ID] = cancel
 			r.Status, r.Started = "running", time.Now().UTC()
 			if err := s.store(r); err != nil {
@@ -957,8 +977,8 @@ next:
 			}
 			s.mu.Lock()
 			delete(s.cancels, r.ID)
-			// a run that finished keeps its result, even when a cancel or
-			// the shutdown arrived in the moment between its end and here
+			// a run that finished keeps its result, even when a cancel,
+			// deadline or shutdown arrived between its end and here
 			switch {
 			case err == nil:
 				r.Started, r.Duration, r.Status, r.Summary, r.Hosts, r.Report = result.Started, result.Duration, result.Status, result.Summary, result.Hosts, result.Report
@@ -966,7 +986,13 @@ next:
 			case ctx.Err() != nil, runCtx.Err() != nil:
 				// stopped: what the partial result knows about the hosts stays
 				r.Status = statusCancelled
-				if ctx.Err() != nil && r.Cancel == nil {
+				deadline, _ := runCtx.Deadline()
+				parentDeadline, parentHasDeadline := ctx.Deadline()
+				if errors.Is(runCtx.Err(), context.DeadlineExceeded) && timeout > 0 &&
+					(!parentHasDeadline || deadline.Before(parentDeadline)) &&
+					(r.Cancel == nil || !r.Cancel.At.Before(deadline)) {
+					r.Status, r.Summary = statusTimedOut, "timed out after "+timeout.String()
+				} else if ctx.Err() != nil && r.Cancel == nil {
 					r.Status, r.Summary = "error", "interrupted: serve stopping"
 				}
 				r.Duration = time.Since(started).Seconds()
@@ -989,7 +1015,7 @@ next:
 				s.notify(eventSuccess, q.job, resultCopy(r))
 			case "drift":
 				s.notify(eventDrift, q.job, resultCopy(r))
-			case "failed", "error":
+			case "failed", "error", statusTimedOut:
 				s.notify(eventFailure, q.job, resultCopy(r))
 			}
 			s.running[q.job.Name] = false
@@ -1335,6 +1361,7 @@ func extraVarsArg(vars map[string]string) string {
 func (s *server) execute(ctx context.Context, j *ServeJob, mode string) (*JobResult, error) {
 	started := time.Now().UTC()
 	r := &JobResult{Job: j.Name, Kind: j.Kind, Mode: mode, Started: started, Hosts: map[string]string{}}
+	var runErr error
 	o := driftCheckOptions{limit: j.Limit, become: j.Become}
 	if j.Inventory != "" {
 		o.inventory = []string{j.Inventory}
@@ -1371,9 +1398,10 @@ func (s *server) execute(ctx context.Context, j *ServeJob, mode string) (*JobRes
 		s.pushMetrics(report.Metrics(s.cfg.Metrics.Labels))
 	case "verify":
 		result, err := runPlaybookContext(ctx, append(o.applyArgs(j.Playbook, false), "--verify-only"))
-		if err != nil {
-			return nil, err
+		if result == nil {
+			return nil, cmp.Or(err, errors.New("the playbook returned no result"))
 		}
+		runErr = err // stopped: the partial result goes back with the error
 		r.AuditExecutionID = result.ExecutionID
 		vr := buildVerifyReport(j.Playbook, result)
 		for host, h := range vr.Hosts {
@@ -1392,9 +1420,10 @@ func (s *server) execute(ctx context.Context, j *ServeJob, mode string) (*JobRes
 			args = append(args, "--skip-verify")
 		}
 		result, err := runPlaybookContext(ctx, args)
-		if err != nil {
-			return nil, err
+		if result == nil {
+			return nil, cmp.Or(err, errors.New("the playbook returned no result"))
 		}
+		runErr = err
 		r.AuditExecutionID = result.ExecutionID
 		report := buildDriftReport(j.Playbook, result)
 		report.Plan = check
@@ -1417,12 +1446,12 @@ func (s *server) execute(ctx context.Context, j *ServeJob, mode string) (*JobRes
 		}
 		r.Summary = fmt.Sprintf("%d in sync, %d %s, %d failed", len(report.InSync), len(report.Drift), map[bool]string{true: "drifting", false: "changed"}[check], len(report.Errors))
 		r.Report, _ = json.Marshal(report)
-		if j.Kind == "drift" {
+		if j.Kind == "drift" && runErr == nil {
 			s.pushMetrics(driftMetrics(report, s.cfg.Metrics.Labels))
 		}
 	}
 	r.Duration = time.Since(started).Seconds()
-	return r, nil
+	return r, runErr
 }
 
 func (s *server) pushMetrics(text string) {
@@ -1886,6 +1915,7 @@ type jobView struct {
 	Allowed   bool        `json:"allowed"`             // the caller may run, approve, reject
 	Adhoc     *ServeAdhoc `json:"adhoc,omitempty"`     // what a run may set, when anything
 	Every     string      `json:"every,omitempty"`
+	Timeout   string      `json:"timeout,omitempty"`
 	Next      *time.Time  `json:"next,omitempty"`
 	Queued    bool        `json:"queued"`
 	Running   bool        `json:"running"`           // queued, running or stopping
@@ -1911,6 +1941,9 @@ func (s *server) jobsView(id serveIdentity) []jobView {
 		}
 		if j.Kind == "comply" {
 			v.Target = j.Profile
+		}
+		if j.Timeout > 0 {
+			v.Timeout = j.Timeout.String()
 		}
 		if j.Every > 0 {
 			v.Every = j.Every.String()
@@ -1943,10 +1976,10 @@ func (s *server) lastExecuted(job string) *JobResult {
 	return nil
 }
 
-// lastHostResult excludes incomplete and check runs from host verdicts; caller holds mu.
+// lastHostResult excludes stopped, timed-out and check runs from host verdicts; caller holds mu.
 func (s *server) lastHostResult(job string) *JobResult {
 	for _, r := range s.results[job] {
-		if r.Status == statusCancelled || r.Mode == "check" {
+		if r.Status == statusCancelled || r.Status == statusTimedOut || r.Mode == "check" {
 			continue
 		}
 		if r.executed() {
@@ -2075,7 +2108,7 @@ func (s *server) metricsHandler(w http.ResponseWriter, _ *http.Request) {
 			promLine(&b, "onigirazu_serve_job_pending", withLabels(map[string]string{"job": j.Name}, s.cfg.Metrics.Labels), value)
 		}
 	}
-	codes := map[string]float64{"ok": 0, "drift": 1, "changed": 1, "failed": 2, "error": 3, "unreachable": 3, statusCancelled: 4}
+	codes := map[string]float64{"ok": 0, "drift": 1, "changed": 1, "failed": 2, "error": 3, "unreachable": 3, statusCancelled: 4, statusTimedOut: 5}
 	names := make([]string, 0, len(s.results))
 	for n := range s.results {
 		names = append(names, n)

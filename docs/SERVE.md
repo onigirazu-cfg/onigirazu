@@ -17,6 +17,7 @@ notify:
     on: [pending, failure]
 data_dir: /var/lib/onigirazu/serve     # results and job state; default ~/.onigirazu/serve
 approval_timeout: 1h                   # default wait for approval
+run_timeout: 0s                        # default run limit; 0: no limit, negative: invalid
 concurrency: 2                         # max jobs executing at once; default 1
 retain: 50                             # results kept per job
 retain_age: 168h                        # optional maximum result age (Go duration)
@@ -38,6 +39,7 @@ jobs:
     playbook: site.yml
     inventory: hosts.yml
     every: 30m                         # 0 / absent: on demand only
+    timeout: 10m                       # run limit; 0 / absent: server run_timeout; negative: invalid
     notify:
       - url: https://mattermost.example.com/hooks/${DRIFT_HOOK}
         on: [pending, drift, failure, cancelled]
@@ -79,6 +81,12 @@ are due or requested. A job that is pending, queued or running is not requested 
 so a job never overlaps itself. Pause stops new runs from starting while executing runs
 finish; resume drains the queue. Server shutdown cancels executing runs and records them
 as `error` with summary `interrupted: serve stopping`.
+
+Run time limits start when execution starts, excluding time queued or pending approval.
+An unfinished run that reaches its limit becomes `timed_out` with summary
+`timed out after <duration>` and keeps any partial hosts and report (drift, apply and verify
+jobs; a compliance run keeps none); partial hosts do not count as host verdicts. Operator cancellation
+and shutdown retain their usual outcomes; a completed run keeps its result.
 
 Paths in the file are relative to it. Every job's state file lives in
 `data_dir/state/<job>.state`. A job's inventory and state file are passed to the run as
@@ -158,7 +166,7 @@ task output still uses the execution engine's existing logging, audit and cache 
 Notifications: server-wide `notify:` targets and a job's targets add up. Targets accept a
 plain URL or a mapping with `url`, `format` (`mattermost`, the default, or `json`) and `on`.
 Webhook URLs expand `${VAR}` from the environment. Events are `pending`, `start`, `success`,
-`drift`, `failure` (failed or error), `rejected`, `expired` and `cancelled`. Without `on`, targets receive
+`drift`, `failure` (failed, error or timed_out), `rejected`, `expired` and `cancelled`. Without `on`, targets receive
 `pending`, `drift` and `failure`; `notify_always: true` on the job adds `success` and `cancelled` to targets
 without `on`. An explicit `on: []` sends nothing.
 
@@ -166,6 +174,7 @@ Mattermost messages include a headline, a colored attachment with the job kind, 
 hosts, trigger, duration and, for pending runs, expiry. For example:
 `:white_check_mark: **patch-wave** ok — 12 in sync, 0 changed, 0 failed`; cancellation reads
 `:no_entry: **patch-wave** cancelled by alice — cancelled by alice: maintenance`.
+Timeouts use the `failure` event with headline `patch-wave timed out`.
 Pending/start messages show resolved ad-hoc hosts (up to 10, then `… (+N)`), else
 the job's limit (or "all hosts"); caller variables appear as `vars: k=v`; final messages group host
 statuses, for example `3 ok, 1 drift, 1 failed`. Generic JSON has the shape
@@ -190,7 +199,7 @@ Cancel: an operator of the job uses Cancel on the page or `POST /api/runs/{id}/c
 with an optional `{comment: "..."}`. A queued run becomes `cancelled` without starting and
 frees the job immediately; a running run becomes `cancelling` until its context stops, then
 `cancelled`. The record keeps `cancel.by`, `cancel.at`, optional `cancel.comment`, elapsed duration
-and any partial hosts/report; partial hosts do not count as host verdicts. The schedule can
+and any partial hosts/report (drift, apply and verify jobs); partial hosts do not count as host verdicts. The schedule can
 request the job again. Pending runs must be rejected instead.
 
 ## Access
@@ -226,7 +235,7 @@ reopened for every entry, so logrotate can move it aside (no `copytruncate` need
 | `GET /api/pause` | pause state: `paused`, optional `reason`, `by`, `at` (viewers too) |
 | `POST /api/pause` | pauses execution (operators); optional JSON `{reason: "..."}`; `200` with the state; pausing again updates reason and identity; `500` with the state and `error` when `pause.json` could not be written (the pause still holds in this process) |
 | `POST /api/resume` | resumes execution (operators); `200` with the state; already resumed is a no-op; `500` as for pause |
-| `GET /api/jobs` | the jobs with schedule, next run, `running` flag (queued, running or cancelling), optional `active` record (without report; `active.requested` and `active.started` give queue and execution timing), `queued` flag (waiting for the worker), last executed result, optional `pending` record (without reports), and `approval: "required"` for guarded jobs; optional `operators` list and caller-specific `allowed` bool; `adhoc: {limit, extra_vars, secret_vars}` (`extra_vars` remains a list of names) when enabled |
+| `GET /api/jobs` | the jobs with schedule, next run, optional job `timeout` (duration string), `running` flag (queued, running or cancelling), optional `active` record (without report; `active.requested` and `active.started` give queue and execution timing), `queued` flag (waiting for the worker), last executed result, optional `pending` record (without reports), and `approval: "required"` for guarded jobs; optional `operators` list and caller-specific `allowed` bool; `adhoc: {limit, extra_vars, secret_vars}` (`extra_vars` remains a list of names) when enabled |
 | `GET /api/jobs/{name}/inventory` | operators of jobs with `adhoc.limit: true` only; sorted reachable host names and nonempty groups that lie entirely within the job's limit (recursive, excluding `all`); `?limit=pattern` previews resolved host names; `400` for invalid limits or jobs without ad-hoc limits; `403` for callers not allowed to operate the job; `500` for inventory load errors |
 | `POST /api/jobs/{name}/run` | requests the job (operators); optional JSON `{mode: "check", limit: "host pattern", extra_vars: {k: "v"}}` with limit/variables as allowed by `adhoc`; mode is `check` (apply jobs only), `apply` or empty; `400` for invalid parameters or a limit with no hosts or hosts outside the job's limit; `202` with `{queued: name, run: id}` or `{pending: id, run: id}`; `409` when running, queued or pending; `503` when the queue is full; `500` with the record and `error` when storage fails (the run remains in memory); `403` with `{"error":"not an operator of this job"}` when the job disallows the operator |
 | `GET /api/jobs/{name}/results` | the kept results, newest first |
@@ -239,7 +248,7 @@ reopened for every entry, so logrotate can move it aside (no `copytruncate` need
 | `GET /api/hosts` | every host seen by a job's last executed result (cancelled and check runs are skipped), with its worst status (`ok`, `changed`, `drift`, `failed`, `unreachable`) and the status per job |
 | `GET /api/runs[?host=&playbook=]` | the audit store's last 100 runs (every `apply`, not only the server's); optional `serve_run` links to the retained serve result |
 | `GET /api/runs/{id}` | one audit record, with optional `serve_run` |
-| `GET /metrics` | `onigirazu_serve_job_last_status{job,kind}` (0 ok, 1 drift/changed, 2 failed, 3 error, 4 cancelled), `onigirazu_serve_job_last_run_timestamp_seconds{job}`, `onigirazu_serve_host_status{job,host}`, `onigirazu_serve_job_pending{job}` (guarded jobs only: 1 pending, 0 otherwise); `onigirazu_serve_paused` (1 paused, 0 otherwise); `onigirazu_serve_running` (executing or cancelling runs), `onigirazu_serve_concurrency` (configured limit); `onigirazu_serve_storage_error` (1 while the last result storage operation failed, 0 otherwise); all include configured metric labels |
+| `GET /metrics` | `onigirazu_serve_job_last_status{job,kind}` (0 ok, 1 drift/changed, 2 failed, 3 error, 4 cancelled, 5 timed_out), `onigirazu_serve_job_last_run_timestamp_seconds{job}`, `onigirazu_serve_host_status{job,host}`, `onigirazu_serve_job_pending{job}` (guarded jobs only: 1 pending, 0 otherwise); `onigirazu_serve_paused` (1 paused, 0 otherwise); `onigirazu_serve_running` (executing or cancelling runs), `onigirazu_serve_concurrency` (configured limit); `onigirazu_serve_storage_error` (1 while the last result storage operation failed, 0 otherwise); all include configured metric labels |
 | `GET /healthz` | `ok` |
 
 Run, approve, reject and cancel return `403` with `{"error":"not an operator of this job"}` when
@@ -268,7 +277,7 @@ screens; at 700px and below the Jobs Target column is hidden and dates are short
 A job result: `{id, job, kind, mode, requested, started, duration_seconds, status, summary, trigger,
 hosts, report, approval, cancel, params, audit_execution_id}`. `requested` is the request time; `started` becomes the execution
 start time when the worker begins. `trigger` is `schedule` or `api:<user>`. Status is `pending`,
-`queued`, `running`, `cancelling`, `cancelled`, `rejected`, `expired`, `ok`, `drift`, `changed`, `failed` or `error`.
+`queued`, `running`, `cancelling`, `cancelled`, `timed_out`, `rejected`, `expired`, `ok`, `drift`, `changed`, `failed` or `error`.
 The optional approval object has `required`, `expires`, and, after a decision, `decision`
 (`approved`, `rejected`, `expired`), `by` (operator identity; absent for expiry), `at` and an
 optional `comment`. Job results open at `#job/<name>` and individual runs at `#run/<id>`.
