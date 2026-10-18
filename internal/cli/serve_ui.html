@@ -41,12 +41,15 @@ summary{cursor:pointer}pre{max-width:100%}.diff span{display:inline-block;min-wi
 <main id="main"></main>
 <script>
 const $=s=>document.querySelector(s), main=$('#main');
-const api=async(p,o)=>{const r=await fetch(p,o);if(!r.ok)throw new Error(r.status+' '+(await r.text()));return r.json()};
+const request=async(p,o={})=>{const headers=new Headers(o.headers), token=sessionStorage.getItem('serveToken');if(token)headers.set('Authorization','Bearer '+token);return fetch(p,{...o,headers})};
+const api=async(p,o)=>{const r=await request(p,o);if(!r.ok)throw new Error(r.status+' '+(await r.text()));return r.json()};
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const span=d=>d<90?Math.round(d)+'s':d<5400?Math.round(d/60)+'m':d<172800?Math.round(d/3600)+'h':Math.round(d/86400)+'d';
 const ago=t=>{if(!t)return'';const d=(Date.now()-new Date(t))/1000;return d<0?'in '+span(-d):span(d)+' ago'};
 const badge=s=>{s=s==='failure'?'failed':s==='success'?'ok':s;return `<span class="b ${esc(s)}">${esc(s)}</span>`};
-let me={operator:false}, view='jobs', timer;
+let me={operator:false}, view='jobs', timer, progressController;
+function stopProgress(){progressController?.abort();progressController=null}
+window.addEventListener('pagehide',stopProgress);
 function activityView(m){
   $('#storage-error').hidden=!m.storage_error;
   $('#storage-error').textContent=m.storage_error?'Results not saved: '+m.storage_error:'';
@@ -96,8 +99,9 @@ function targetPicker(form){
     mark();clearTimeout(debounce);update(++revision);
   }).catch(e=>{chips.textContent=e.message;chips.classList.add('error-text')});
 }
-function hash(value){if(location.hash!==value)history.pushState(null,'',value||location.pathname+location.search)}
+function hash(value){if(location.hash!==value){stopProgress();history.pushState(null,'',value||location.pathname+location.search)}}
 async function jobs(){
+  stopProgress();
   view='jobs';hash('');
   const [list,p,m]=await Promise.all([api('/api/jobs'),api('/api/pause'),api('/api/me')]);
   pauseView(p);activityView(m);
@@ -239,16 +243,68 @@ function complyTabs(r,p){
   return [['Matrix',matrix],['Remediation',remediation||empty('No failed controls')]];
 }
 async function run(id){
+  stopProgress();
   view='result';hash('#run/'+encodeURIComponent(id));
   let r;
   try{r=await api('/api/results/'+encodeURIComponent(id))}catch(e){if(e.message.startsWith('404 '))return auditRun(id);throw e}
   const p=r.report&&typeof r.report==='object'?r.report:{}, tabs=r.kind==='drift'||r.kind==='apply'?driftTabs(r,p):r.kind==='verify'?verifyTabs(r,p):r.kind==='comply'?complyTabs(r,p):[];
+  const live=['pending','queued','running','cancelling'].includes(r.status);
+  if(live)tabs.unshift(['Progress','<p id="progress-state" class="muted" role="status">Waiting for progress…</p><div id="progress-hosts"></div><h3>Task events</h3><div id="progress-log"></div>']);
   tabs.push(['JSON',`<pre>${esc(JSON.stringify(r,null,2))}</pre>`]);
   const approval=r.approval?`<p>Approval: ${esc(r.approval.decision||'pending')} ${r.approval.by?'by '+esc(r.approval.by):''} ${r.approval.at?date(r.approval.at):''}${r.approval.expires?' · expires '+date(r.approval.expires):''}<br>${esc(r.approval.comment)}</p>`:'';
   main.innerHTML=`<p><a href="#job/${encodeURIComponent(r.job)}" id="back">← ${esc(r.job)}</a>${r.audit_execution_id?` &nbsp; <a href="#run/${encodeURIComponent(r.audit_execution_id)}">Execution ${esc(r.audit_execution_id)}</a>`:''}</p><section class="report-card"><h2>${esc(r.job)} <small>${esc(r.kind)}</small> ${badge(r.status)}${checkBadge(r)}</h2><p class="text">${esc(r.summary)}</p><p>Started ${date(r.started)} · Duration ${esc((r.duration_seconds||0).toFixed(1))}s · Trigger ${esc(r.trigger)}<br>Requested ${date(r.requested)}</p>${paramsView(r)}${approval}${['cancelled','canceled'].includes(r.status)?`<p>Cancelled: ${esc(r.summary)}</p>`:''}</section>${reportErrors(r,p)}<div class="tabs" role="tablist">${tabs.map(([name],i)=>`<button class="run" role="tab" id="tab-${i}" aria-controls="panel-${i}" aria-selected="${i===0}" data-tab="${i}">${esc(name)}</button>`).join('')}</div>${tabs.map(([,html],i)=>`<section role="tabpanel" id="panel-${i}" aria-labelledby="tab-${i}" ${i?'hidden':''}>${html}</section>`).join('')}`;
   $('#back').onclick=e=>{e.preventDefault();results(r.job).catch(showError)};
   main.querySelectorAll('[data-expand]').forEach(row=>row.onclick=e=>{if(e.target.closest('a,details'))return;const d=row.querySelector('details');if(d)d.open=!d.open});
   main.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{main.querySelectorAll('[data-tab]').forEach(t=>t.setAttribute('aria-selected',String(t===b)));main.querySelectorAll('[role="tabpanel"]').forEach((p,i)=>p.hidden=i!==Number(b.dataset.tab))});
+  if(live)streamProgress(id);
+}
+async function streamProgress(id){
+  const controller=new AbortController();progressController=controller;
+  const {signal}=controller;
+  let after=0, snapshotSeq=0, backoff=1000, hosts={}, finished=0;
+  const draw=()=>{
+    $('#progress-hosts').innerHTML=table(['Host','Current task','OK','Changed','Failed','Skipped'],Object.entries(hosts).map(([host,h])=>`<tr><td>${esc(host)}</td><td class="text">${esc(h.done?'done':h.task)}</td><td>${h.ok}</td><td>${h.changed}</td><td>${h.failed}</td><td>${h.skipped}</td></tr>`));
+    $('#progress-state').textContent=`${finished} tasks finished`;
+  };
+  const receive=e=>{
+    if(e.type==='ping')return false;
+    if(e.type==='snapshot'){hosts=Object.assign(Object.create(null),e.hosts);finished=e.tasks_finished;snapshotSeq=e.seq;draw();if(e.status){run(id).catch(showError);return true}return false}
+    if(e.type==='gap'){$('#progress-state').textContent='Earlier events are no longer available; host totals are current.';return false}
+    if(e.seq<=after)return false;
+    after=e.seq;
+    if(e.seq>snapshotSeq)backoff=1000;
+    if(e.seq>snapshotSeq&&e.host){
+      const h=hosts[e.host]??={task:'',done:false,ok:0,changed:0,failed:0,skipped:0,tasks_finished:0};
+      if(e.type==='task_start'){h.task=e.task;h.done=false}
+      if(e.type==='task_end'){h.task='';h.done=true;h.tasks_finished++;finished++;h[e.status==='ignored'?'ok':e.status]++}
+      draw();
+    }
+    const row=document.createElement('div');row.className='item text';
+    row.textContent=[new Date(e.at).toLocaleTimeString(),e.type,e.play,e.host,e.task,e.status,e.duration_ms?e.duration_ms+'ms':''].filter(Boolean).join(' · ');
+    const log=$('#progress-log');log.prepend(row);while(log.children.length>300)log.lastElementChild.remove();
+    if(e.type==='end'){run(id).catch(showError);return true}
+    return false;
+  };
+  while(!signal.aborted){
+    try{
+      const response=await request('/api/results/'+encodeURIComponent(id)+'/events?after='+after,{signal});
+      if(!response.ok){
+        if(response.status===404){await run(id);return}
+        throw new Error(response.status+' '+await response.text());
+      }
+      const reader=response.body.getReader(), decoder=new TextDecoder();let pending='';
+      try{
+        while(!signal.aborted){
+          const {value,done}=await reader.read();if(done)break;
+          pending+=decoder.decode(value,{stream:true});
+          let newline;while((newline=pending.indexOf('\n'))>=0){const line=pending.slice(0,newline);pending=pending.slice(newline+1);if(line&&receive(JSON.parse(line)))return}
+        }
+      }finally{await reader.cancel().catch(()=>{});reader.releaseLock()}
+    }catch(e){if(signal.aborted)return;$('#progress-state').textContent='Reconnecting: '+e.message}
+    if(signal.aborted)return;
+    await new Promise(resolve=>{const done=()=>{clearTimeout(timeout);signal.removeEventListener('abort',done);resolve()},timeout=setTimeout(done,backoff);signal.addEventListener('abort',done,{once:true})});
+    backoff=Math.min(10000,backoff*2);
+  }
 }
 async function host(name){
   view='host';hash('#host/'+encodeURIComponent(name));
@@ -284,10 +340,11 @@ async function audit(){
 const wrapTables=()=>main.querySelectorAll('table').forEach(t=>{if(t.parentElement.classList.contains('table-scroll'))return;const wrapper=document.createElement('div');wrapper.className='table-scroll';t.before(wrapper);wrapper.append(t)});
 new MutationObserver(wrapTables).observe(main,{childList:true,subtree:true});
 const views={jobs,hosts,runs:()=>runs(),audit};
-function show(v){view=v;if(v!=='jobs')hash('');document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));views[v]().catch(e=>main.innerHTML=`<div class="empty">${esc(e.message)}</div>`)}
+function show(v){stopProgress();view=v;if(v!=='jobs')hash('');document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));views[v]().catch(e=>main.innerHTML=`<div class="empty">${esc(e.message)}</div>`)}
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>show(b.dataset.v));
 function showError(e){main.innerHTML=`<div class="empty">${esc(e.message)}</div>`}
 function route(){
+  stopProgress();
   const [type,...parts]=location.hash.slice(1).split('/'), id=decodeURIComponent(parts.join('/'));
   if(type==='job'&&id)results(id).catch(showError);
   else if(type==='run'&&id)run(id).catch(showError);

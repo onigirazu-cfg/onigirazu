@@ -226,6 +226,16 @@ and client address. Unauthenticated probes are omitted. Viewers can read the ent
 newest first, through `GET /api/audit` or the Audit tab. The file is append-only and
 reopened for every entry, so logrotate can move it aside (no `copytruncate` needed).
 
+## Live progress
+
+Queued and running run pages open a Progress tab with each host's current task,
+result counts and a live task event log. Events carry play and task names, host,
+status, timing and a per-run sequence number. Secret parameter values in names
+are masked. Output, error text, diffs and variables are never sent. Progress is
+memory-only: the latest 1000 events and host totals are kept for each active run
+and the last 20 finished runs, and disappear after restart. The page reconnects
+with `after` when a stream drops and opens the report when the run ends.
+
 ## API
 
 | Method and path | Returns |
@@ -245,6 +255,7 @@ reopened for every entry, so logrotate can move it aside (no `copytruncate` need
 | `POST /api/runs/{id}/reject` | rejects a pending run (operators); optional JSON `{comment: "..."}`; `200` with the record without report, `404` if absent; `500` with the record and `error` on storage failure; `403` with `{"error":"not an operator of this job"}` when the job disallows the operator |
 | `POST /api/runs/{id}/cancel` | cancels a queued or running run (job operators); optional JSON `{comment: "..."}`; `200` with the cancelled record for queued runs, `202` with the cancelling record for running runs (without report); `404` if absent, `409` if not cancellable (reject a pending run instead), `500` with the record and `error` on storage failure; `403` if disallowed |
 | `GET /api/hosts/{name}/results` | that host’s retained results across all jobs, newest `started` first, at most 200: `[{id, job, kind, status, host_status, started, summary}]`; an unknown host returns `[]` |
+| `GET /api/results/{id}/events?after=N` | live NDJSON progress (viewers allowed): snapshot, replay after sequence N, gap marker when replay was truncated, task events and final end; idle pings every 15 seconds |
 | `GET /api/hosts` | every host seen by a job's last executed result (cancelled and check runs are skipped), with its worst status (`ok`, `changed`, `drift`, `failed`, `unreachable`) and the status per job |
 | `GET /api/runs[?host=&playbook=]` | the audit store's last 100 runs (every `apply`, not only the server's); optional `serve_run` links to the retained serve result |
 | `GET /api/runs/{id}` | one audit record, with optional `serve_run` |

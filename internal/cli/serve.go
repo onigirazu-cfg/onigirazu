@@ -403,23 +403,25 @@ func loadServeConfig(path string) (*ServeConfig, error) {
 
 // server holds the jobs, their results and the audit store
 type server struct {
-	cfg      *ServeConfig
-	out      io.Writer
-	auditMu  sync.Mutex
-	pickupMu sync.Mutex // dequeue through the running transition, in FIFO order
-	mu       sync.Mutex
-	storeErr string
-	results  map[string][]*JobResult      // job -> newest first
-	running  map[string]bool              // job is pending, queued or running
-	secrets  map[string]map[string]string // run -> secret parameters, never stored
-	cancels  map[string]context.CancelFunc
-	pending  map[string]*JobResult
-	lastID   map[string]string // job -> the base of the last id given (ids stay unique when records are pruned)
-	lastSeq  map[string]int
-	nextRun  map[string]time.Time
-	pause    servePause
-	resumed  chan struct{}
-	queue    chan queued
+	cfg              *ServeConfig
+	out              io.Writer
+	auditMu          sync.Mutex
+	pickupMu         sync.Mutex // dequeue through the running transition, in FIFO order
+	mu               sync.Mutex
+	storeErr         string
+	results          map[string][]*JobResult      // job -> newest first
+	running          map[string]bool              // job is pending, queued or running
+	secrets          map[string]map[string]string // run -> secret parameters, never stored
+	progress         map[string]*runProgress
+	finishedProgress []string
+	cancels          map[string]context.CancelFunc
+	pending          map[string]*JobResult
+	lastID           map[string]string // job -> the base of the last id given (ids stay unique when records are pruned)
+	lastSeq          map[string]int
+	nextRun          map[string]time.Time
+	pause            servePause
+	resumed          chan struct{}
+	queue            chan queued
 	// runJob runs a job; tests replace it
 	runJob func(ctx context.Context, j *ServeJob, mode string) (*JobResult, error)
 	audit  *audit.Storage
@@ -450,6 +452,7 @@ func newServer(cfg *ServeConfig, out io.Writer) (*server, error) {
 	}
 	s := &server{cancels: map[string]context.CancelFunc{}, cfg: cfg, out: out, results: map[string][]*JobResult{}, running: map[string]bool{}, pending: map[string]*JobResult{}, lastID: map[string]string{}, lastSeq: map[string]int{}, nextRun: map[string]time.Time{}, queue: make(chan queued, 64), resumed: make(chan struct{})}
 	s.secrets = map[string]map[string]string{}
+	s.progress = make(map[string]*runProgress)
 	s.runJob = s.execute
 	s.inventory = slices.Clone(inventoryPaths)
 	if err := os.MkdirAll(filepath.Join(cfg.DataDir, "results"), 0o700); err != nil {
@@ -960,6 +963,9 @@ next:
 			} else {
 				runCtx, cancel = context.WithCancel(ctx)
 			}
+			progress := newRunProgress(s.runSecretMask(r.ID))
+			s.progress[r.ID] = progress
+			runCtx = withRunObserver(runCtx, progress)
 			s.cancels[r.ID] = cancel
 			r.Status, r.Started = "running", time.Now().UTC()
 			if err := s.store(r); err != nil {
@@ -1003,6 +1009,7 @@ next:
 				r.Status, r.Summary = "error", err.Error()
 			}
 			cancel()
+			s.retainProgress(r.ID, r.Status)
 			s.maskResult(r)
 			delete(s.secrets, r.ID)
 			if err := s.store(r); err != nil {
@@ -1025,9 +1032,9 @@ next:
 	}
 }
 
-// maskResult also hides parameters echoed in execution errors and reports; mu is held.
-func (s *server) maskResult(r *JobResult) {
-	values := slices.Collect(maps.Values(s.secrets[r.ID]))
+// runSecretMask uses the same secret values for reports and progress; mu is held.
+func (s *server) runSecretMask(id string) *strings.Replacer {
+	values := slices.Collect(maps.Values(s.secrets[id]))
 	slices.SortFunc(values, func(a, b string) int { return len(b) - len(a) })
 	var pairs []string
 	for _, value := range values {
@@ -1036,9 +1043,17 @@ func (s *server) maskResult(r *JobResult) {
 		}
 	}
 	if len(pairs) == 0 {
+		return nil
+	}
+	return strings.NewReplacer(pairs...)
+}
+
+// maskResult also hides parameters echoed in execution errors and reports; mu is held.
+func (s *server) maskResult(r *JobResult) {
+	mask := s.runSecretMask(r.ID)
+	if mask == nil {
 		return
 	}
-	mask := strings.NewReplacer(pairs...)
 	r.Summary = mask.Replace(r.Summary)
 	if len(r.Report) > 0 {
 		var report interface{}
@@ -1735,6 +1750,14 @@ func (s *server) mux() *http.ServeMux {
 		}
 	}))
 	mux.HandleFunc("/api/results/", auth(false, func(w http.ResponseWriter, r *http.Request, _ serveIdentity) {
+		if id, ok := strings.CutSuffix(strings.TrimPrefix(r.URL.Path, "/api/results/"), "/events"); ok {
+			if r.Method != http.MethodGet {
+				w.WriteHeader(http.StatusMethodNotAllowed)
+				return
+			}
+			s.progressHandler(w, r, id)
+			return
+		}
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		id := strings.TrimPrefix(r.URL.Path, "/api/results/")
