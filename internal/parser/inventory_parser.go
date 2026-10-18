@@ -23,7 +23,8 @@ import (
 
 // InventoryParser handles parsing of inventory files in multiple formats
 type InventoryParser struct {
-	logger interface {
+	preserveStructure bool
+	logger            interface {
 		Debug(format string, args ...interface{})
 		Info(format string, args ...interface{})
 		Warn(format string, args ...interface{})
@@ -508,7 +509,9 @@ func (p *InventoryParser) parseAnsibleTreeOrdered(all map[string]interface{}, ke
 				w.members["ungrouped"] = append(w.members["ungrouped"], name)
 			}
 		}
-		w.members["all"] = w.order
+		if !p.preserveStructure {
+			w.members["all"] = w.order
+		}
 		for groupName, names := range w.members {
 			for _, name := range names {
 				if host, ok := hosts[name]; ok {
@@ -517,7 +520,7 @@ func (p *InventoryParser) parseAnsibleTreeOrdered(all map[string]interface{}, ke
 			}
 		}
 		// "all" is implicit; it is kept as a group only to carry its vars
-		if len(inventory.Groups["all"].Vars) == 0 {
+		if !p.preserveStructure && len(inventory.Groups["all"].Vars) == 0 {
 			delete(inventory.Groups, "all")
 		}
 	}
@@ -553,6 +556,9 @@ func (p *InventoryParser) parseAnsibleHost(hostName string, hostData interface{}
 	for key, value := range hostMap {
 		switch key {
 		case "ansible_password", "ansible_ssh_pass", "ansible_become_password", "ansible_become_pass", "ansible_sudo_pass", "onigirazu_become_password":
+			if p.preserveStructure {
+				host.Vars[key] = nil
+			}
 		default:
 			host.Vars[key] = value
 		}

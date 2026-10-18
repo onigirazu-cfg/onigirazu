@@ -184,6 +184,9 @@ func (s *server) requestAction(r *http.Request, id serveIdentity) serveAction {
 	a := serveAction{User: id.User, Addr: addr}
 	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 	a.Action = parts[len(parts)-1]
+	if r.URL.Path == "/api/inventory/refresh" {
+		a.Action = "inventory_refresh"
+	}
 	if len(parts) == 4 {
 		switch parts[1] {
 		case "jobs":

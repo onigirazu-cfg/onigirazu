@@ -131,6 +131,12 @@ func (p *EnhancedParser) ParsePlaybook(ctx context.Context, filePath string) (*t
 	return &playbook, nil
 }
 
+// PreserveInventoryStructure keeps direct membership and the implicit all group
+// for inventory inspection. Password variable names remain with nil values.
+func (p *EnhancedParser) PreserveInventoryStructure() {
+	p.inventoryParser.preserveStructure = true
+}
+
 // ParseInventory parses an inventory file or inline specification
 // Supports file formats: YAML, TOML, JSON, INI, and simple list formats
 // Also supports inline host specifications like "192.168.1.1," or "host1,host2"

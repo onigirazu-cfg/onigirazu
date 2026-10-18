@@ -31,6 +31,7 @@ import (
 	"github.com/onigirazu-cfg/onigirazu/internal/audit"
 	"github.com/onigirazu-cfg/onigirazu/internal/inventory"
 	"github.com/onigirazu-cfg/onigirazu/internal/logger"
+	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
 // serve: a small fleet server in the same binary. It runs jobs on a schedule
@@ -405,6 +406,10 @@ func loadServeConfig(path string) (*ServeConfig, error) {
 
 // server holds the jobs, their results and the audit store
 type server struct {
+	inventoryMu        sync.Mutex
+	inventorySnapshots map[string]*serveInventorySnapshot
+	// inventoryLoad replaces the loader in tests.
+	inventoryLoad    func([]string) (*types.Inventory, error)
 	cfg              *ServeConfig
 	out              io.Writer
 	auditMu          sync.Mutex
@@ -1792,6 +1797,18 @@ func (s *server) mux() *http.ServeMux {
 			}
 		}
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no such result"})
+	}))
+	mux.HandleFunc("GET /api/inventory", auth(false, func(w http.ResponseWriter, _ *http.Request, id serveIdentity) {
+		writeJSON(w, http.StatusOK, s.inventoryView(id.Operator))
+	}))
+	mux.HandleFunc("POST /api/inventory/refresh", auth(true, func(w http.ResponseWriter, r *http.Request, id serveIdentity) {
+		s.inventoryMu.Lock()
+		s.inventorySnapshots = nil
+		s.inventoryMu.Unlock()
+		a := s.requestAction(r, id)
+		a.OK = true
+		s.logAction(a)
+		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 	}))
 	mux.HandleFunc("/api/hosts", auth(false, func(w http.ResponseWriter, _ *http.Request, _ serveIdentity) {
 		writeJSON(w, http.StatusOK, s.hostsView())
