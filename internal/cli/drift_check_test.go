@@ -23,7 +23,7 @@ import (
 func TestBuildDriftReport(t *testing.T) {
 	result := &types.PlaybookResult{Plays: []types.PlayResult{{Name: "p", Hosts: []types.HostResult{
 		{Host: "web1", Tasks: []types.TaskResult{
-			{TaskName: "conf", Module: "copy", Changed: true, Output: map[string]interface{}{"msg": "file would be updated"}},
+			{TaskName: "conf", TaskKey: "config-key", Module: "copy", Changed: true, Output: map[string]interface{}{"msg": "file would be updated"}},
 			{TaskName: "pkg", Module: "apt"},
 		}},
 		{Host: "web2", Tasks: []types.TaskResult{{TaskName: "conf", Module: "copy"}}},
@@ -32,7 +32,7 @@ func TestBuildDriftReport(t *testing.T) {
 	r := buildDriftReport("site.yml", result)
 	assert.Equal(t, 3, r.Hosts)
 	assert.Equal(t, []string{"web2"}, r.InSync)
-	assert.Equal(t, []DriftItem{{Play: "p", Task: "conf", Module: "copy", Detail: "file would be updated"}}, r.Drift["web1"])
+	assert.Equal(t, []DriftItem{{Key: "config-key", Play: "p", Task: "conf", Module: "copy", Detail: "file would be updated"}}, r.Drift["web1"])
 	assert.Equal(t, "unreachable", r.Errors["db"][0].Detail)
 
 	var out bytes.Buffer

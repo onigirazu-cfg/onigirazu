@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -2169,11 +2170,12 @@ func TestServeAuditExecutionIdentity(t *testing.T) {
 		t.Fatal(err)
 	}
 	const executionID = "execution-identity"
+	const playbookHash = "0123456789abcdef"
 	if err := s.audit.SaveRecord(&audit.ExecutionRecord{ID: executionID, PlaybookPath: "site.yml", StartTime: time.Now().UTC(), Status: audit.StatusSuccess}); err != nil {
 		t.Fatal(err)
 	}
 	s.runJob = func(_ context.Context, _ *ServeJob, _ string) (*JobResult, error) {
-		return &JobResult{Status: "ok", AuditExecutionID: executionID}, nil
+		return &JobResult{Status: "ok", AuditExecutionID: executionID, PlaybookHash: playbookHash}, nil
 	}
 	requested, err := s.request(&cfg.Jobs[0], "schedule", nil)
 	if err != nil {
@@ -2194,6 +2196,9 @@ func TestServeAuditExecutionIdentity(t *testing.T) {
 	}
 	if persisted.AuditExecutionID != executionID {
 		t.Fatalf("persisted execution identity: %+v", persisted)
+	}
+	if persisted.PlaybookHash != playbookHash {
+		t.Fatalf("persisted playbook hash: %+v", persisted)
 	}
 	handler := s.mux()
 	for _, path := range []string{"/api/jobs/identity/results", "/api/results/" + requested.ID} {
@@ -3293,6 +3298,14 @@ func TestServeExecuteKeepsPartialResult(t *testing.T) {
 	if r == nil || r.Hosts["localhost"] == "" || len(r.Report) == 0 {
 		t.Fatalf("partial result lost: %+v", r)
 	}
+	content, err := os.ReadFile(playbook)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantHash := fmt.Sprintf("%x", sha256.Sum256(content))[:16]
+	if r.PlaybookHash != wantHash {
+		t.Fatalf("playbook hash: got %q, want %q", r.PlaybookHash, wantHash)
+	}
 }
 
 func TestServeCheckRunSkipsVerify(t *testing.T) {
@@ -3318,5 +3331,206 @@ func TestServeCheckRunSkipsVerify(t *testing.T) {
 	apply, err := s.execute(context.Background(), j, "")
 	if err != nil || apply.Status != "failed" {
 		t.Fatalf("a normal run keeps its verify: %+v %v", apply, err)
+	}
+}
+
+func TestServeJobHistoryAndRecent(t *testing.T) {
+	cfg := &ServeConfig{DataDir: t.TempDir(), Auth: ServeAuth{UserHeader: "X-User"}, Jobs: []ServeJob{{Name: "site", Kind: "drift"}}}
+	s, err := newServer(cfg, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	for i := range 510 {
+		status, mode := "ok", ""
+		if i%2 == 0 {
+			status, mode = "drift", "check"
+		}
+		s.results["site"] = append(s.results["site"], &JobResult{
+			ID: strconv.Itoa(i), Job: "site", Kind: "drift", Status: status, Mode: mode,
+			Requested: now.Add(-time.Duration(i+1) * time.Minute), Started: now.Add(-time.Duration(i) * time.Minute),
+			Duration: 2.5, Summary: "three hosts", Trigger: "schedule",
+			Hosts:  map[string]string{"web": "ok", "db": "failed", "edge": "unreachable"},
+			Params: &RunParams{ExtraVars: map[string]string{"private": "value"}}, Report: json.RawMessage(`{"large":"report"}`),
+		})
+	}
+	s.results["site"] = append([]*JobResult{{ID: "pending", Job: "site", Status: "pending", Requested: now.Add(time.Minute)}}, s.results["site"]...)
+	handler := s.mux()
+	get := func(path string) *httptest.ResponseRecorder {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.Header.Set("X-User", "viewer")
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+		return w
+	}
+	for _, tc := range []struct {
+		query string
+		count int
+	}{{"", 50}, {"?limit=2", 2}, {"?limit=999", 500}, {"?limit=500", 500}} {
+		t.Run("history"+tc.query, func(t *testing.T) {
+			w := get("/api/jobs/site/history" + tc.query)
+			var rows []map[string]json.RawMessage
+			if w.Code != http.StatusOK || json.Unmarshal(w.Body.Bytes(), &rows) != nil {
+				t.Fatalf("viewer history: %d %s", w.Code, w.Body.String())
+			}
+			if len(rows) != tc.count || string(rows[0]["id"]) != `"pending"` || string(rows[1]["id"]) != `"0"` {
+				t.Fatalf("history limit/order: %s", w.Body.String())
+			}
+			for _, row := range rows {
+				for _, key := range []string{"report", "hosts"} {
+					if _, ok := row[key]; ok {
+						t.Fatalf("heavy field %s in history: %s", key, w.Body.String())
+					}
+				}
+			}
+			for _, key := range []string{"status", "mode", "trigger", "requested", "started", "duration_seconds", "summary", "hosts_count", "failed_hosts"} {
+				if _, ok := rows[1][key]; !ok {
+					t.Errorf("missing history field %s", key)
+				}
+			}
+			if string(rows[1]["params"]) != `{"extra_vars":{"private":"value"}}` {
+				t.Fatalf("history params: %s", rows[1]["params"])
+			}
+			if string(rows[1]["hosts_count"]) != "3" || string(rows[1]["failed_hosts"]) != "2" || string(rows[1]["duration_seconds"]) != "2.5" {
+				t.Fatalf("history counts/duration: %s", w.Body.String())
+			}
+		})
+	}
+	w := get("/api/jobs")
+	var jobs []struct {
+		Recent []struct {
+			Status string `json:"status"`
+			Mode   string `json:"mode"`
+		} `json:"recent"`
+	}
+	if w.Code != http.StatusOK || json.Unmarshal(w.Body.Bytes(), &jobs) != nil || len(jobs) != 1 || len(jobs[0].Recent) != 20 {
+		t.Fatalf("recent: %d %s", w.Code, w.Body.String())
+	}
+	for i, row := range jobs[0].Recent {
+		wantStatus, wantMode := "ok", ""
+		if i%2 == 0 {
+			wantStatus, wantMode = "drift", "check"
+		}
+		if row.Status != wantStatus || row.Mode != wantMode {
+			t.Errorf("recent row %d: %+v", i, row)
+		}
+	}
+	if w := get("/api/jobs/missing/history"); w.Code != http.StatusNotFound {
+		t.Errorf("unknown job history: %d", w.Code)
+	}
+}
+
+func TestServeJobCompare(t *testing.T) {
+	cfg := &ServeConfig{DataDir: t.TempDir(), Auth: ServeAuth{UserHeader: "X-User"}, Jobs: []ServeJob{{Name: "site", Kind: "drift"}, {Name: "other", Kind: "apply"}}}
+	s, err := newServer(cfg, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	report := func(items []DriftItem) json.RawMessage {
+		t.Helper()
+		data, err := json.Marshal(DriftReport{Drift: map[string][]DriftItem{"web": items}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return data
+	}
+	a := &JobResult{ID: "a", Job: "site", Kind: "drift", Status: "drift", Started: time.Now().UTC().Add(-time.Hour), PlaybookHash: "same", Hosts: map[string]string{"web": "drift", "old": "ok", "unchanged": "ok"}, Report: report([]DriftItem{
+		{Key: "stable", Play: "p", Task: "old label", Module: "copy"},
+		{Key: "removed", Play: "p", Task: "same label", Module: "copy"},
+		{Play: "legacy", Task: "fallback", Module: "copy"},
+		{Key: "fallback-key", Play: "legacy", Task: "missing new key", Module: "copy"},
+	})}
+	b := &JobResult{ID: "b", Job: "site", Kind: "apply", Status: "ok", Started: time.Now().UTC(), PlaybookHash: "same", Hosts: map[string]string{"web": "ok", "new": "drift", "unchanged": "ok"}, Report: report([]DriftItem{
+		{Key: "stable", Play: "renamed", Task: "new label", Module: "copy"},
+		{Key: "added", Play: "p", Task: "same label", Module: "copy"},
+		{Key: "new-key", Play: "legacy", Task: "fallback", Module: "copy"},
+		{Play: "legacy", Task: "missing new key", Module: "copy"},
+	})}
+	s.results["site"] = []*JobResult{b, a,
+		{ID: "pending", Job: "site", Kind: "drift", Status: "pending", Report: a.Report},
+		{ID: "no-report", Job: "site", Kind: "drift", Status: "ok"},
+		{ID: "verify", Job: "site", Kind: "verify", Status: "ok", Report: a.Report},
+		{ID: "comply", Job: "site", Kind: "comply", Status: "ok", Report: a.Report},
+		{ID: "malformed", Job: "site", Kind: "drift", Status: "ok", Report: json.RawMessage(`{"drift":`)},
+		{ID: "null", Job: "site", Kind: "drift", Status: "ok", Report: json.RawMessage(`null`)},
+	}
+	s.results["other"] = []*JobResult{{ID: "other-run", Job: "other", Kind: "apply", Status: "ok", Report: a.Report}}
+	handler := s.mux()
+	get := func(path string) *httptest.ResponseRecorder {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.Header.Set("X-User", "viewer")
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+		return w
+	}
+	type comparedItem struct {
+		Host, Key, Play, Task, Module string
+	}
+	for _, tc := range []struct {
+		aHash, hash string
+		same        bool
+	}{{"same", "same", true}, {"same", "different", false}, {"same", "", false}, {"", "", false}} {
+		a.PlaybookHash = tc.aHash
+		b.PlaybookHash = tc.hash
+		w := get("/api/jobs/site/compare?a=a&b=b")
+		var comparison struct {
+			A, B struct {
+				ID, Status   string
+				PlaybookHash string `json:"playbook_hash"`
+				Started      time.Time
+			}
+			SamePlaybook       bool `json:"same_playbook"`
+			Hosts              []struct{ Host, A, B string }
+			Appeared, Resolved []comparedItem
+		}
+		if w.Code != http.StatusOK || json.Unmarshal(w.Body.Bytes(), &comparison) != nil {
+			t.Fatalf("viewer compare: %d %s", w.Code, w.Body.String())
+		}
+		if comparison.A.ID != "a" || comparison.B.ID != "b" || comparison.A.Started.IsZero() || comparison.A.Status != "drift" || comparison.B.Status != "ok" || comparison.A.PlaybookHash != tc.aHash || comparison.B.PlaybookHash != tc.hash || comparison.SamePlaybook != tc.same {
+			t.Fatalf("comparison metadata: %s", w.Body.String())
+		}
+		gotHosts := make(map[string][2]string, len(comparison.Hosts))
+		for _, host := range comparison.Hosts {
+			gotHosts[host.Host] = [2]string{host.A, host.B}
+		}
+		if len(gotHosts) != 3 || gotHosts["web"] != [2]string{"drift", "ok"} || gotHosts["old"] != [2]string{"ok", ""} || gotHosts["new"] != [2]string{"", "drift"} {
+			t.Fatalf("verdict differences: %s", w.Body.String())
+		}
+		if len(comparison.Appeared) != 1 || comparison.Appeared[0] != (comparedItem{"web", "added", "p", "same label", "copy"}) || len(comparison.Resolved) != 1 || comparison.Resolved[0].Key != "removed" {
+			t.Fatalf("key/fallback matching: %s", w.Body.String())
+		}
+	}
+	for _, tc := range []struct {
+		path string
+		code int
+	}{
+		{"/api/jobs/site/compare?a=missing&b=b", 404},
+		{"/api/jobs/site/compare?a=a&b=missing", 404},
+		{"/api/jobs/missing/compare?a=a&b=b", 404},
+		{"/api/jobs/site/compare?a=other-run&b=b", 400},
+		{"/api/jobs/site/compare?a=a&b=pending", 400},
+		{"/api/jobs/site/compare?a=a&b=no-report", 400},
+		{"/api/jobs/site/compare?a=a&b=verify", 400},
+		{"/api/jobs/site/compare?a=a&b=comply", 400},
+		{"/api/jobs/site/compare?a=a&b=malformed", 400},
+		{"/api/jobs/site/compare?a=a&b=null", 400},
+		{"/api/jobs/site/compare?a=a", 400},
+		{"/api/jobs/site/compare?a=a&b=a", 400},
+	} {
+		if w := get(tc.path); w.Code != tc.code {
+			t.Errorf("%s: got %d, want %d: %s", tc.path, w.Code, tc.code, w.Body.String())
+		}
+	}
+	if w := get("/api/jobs/site/compare?a=b&b=a"); w.Code != http.StatusOK {
+		t.Errorf("reverse comparison: %d %s", w.Code, w.Body.String())
+	}
+	a.Report = json.RawMessage(`{"drift":{"web":[{"key":"shared","play":"p","task":"task"}]}}`)
+	b.Report = json.RawMessage(`{"drift":{"db":[{"key":"shared","play":"p","task":"task"}]}}`)
+	w := get("/api/jobs/site/compare?a=a&b=b")
+	var scoped struct{ Appeared, Resolved []comparedItem }
+	if w.Code != http.StatusOK || json.Unmarshal(w.Body.Bytes(), &scoped) != nil || len(scoped.Appeared) != 1 || len(scoped.Resolved) != 1 || scoped.Appeared[0].Host != "db" || scoped.Resolved[0].Host != "web" {
+		t.Fatalf("keys must be scoped by host: %d %s", w.Code, w.Body.String())
 	}
 }

@@ -18,6 +18,7 @@ table{width:100%;border-collapse:collapse;background:var(--card);border:1px soli
 th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--line);vertical-align:top}th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase}
 tr:last-child td{border-bottom:0}.b{display:inline-block;padding:1px 8px;border-radius:10px;font-size:12px;color:#fff;background:var(--muted)}
 .ok{background:var(--ok)}.drift,.changed{background:var(--warn)}.refused,.failed,.error,.unreachable,.timed_out{background:var(--bad)}.cancelling,.pending{background:var(--warn)}.queued,.running{background:var(--accent)}.cancelled,.rejected,.expired{background:var(--muted)}
+.recent{display:flex;gap:3px;flex-wrap:wrap;max-width:145px;margin-top:5px}.recent-square{display:block;flex:0 0 9px;height:9px;border:1px solid currentColor;border-radius:1px;background:currentColor;color:var(--muted)}.recent-square.ok{color:var(--ok)}.recent-square.drift,.recent-square.changed{color:var(--warn)}.recent-square.failed,.recent-square.error,.recent-square.timed_out,.recent-square.unreachable{color:var(--bad)}.recent-square.check{background:transparent}.sparkline{display:block;width:100%;height:40px}.sparkline rect{fill:var(--muted)}.sparkline rect.ok{fill:var(--ok)}.sparkline rect.drift,.sparkline rect.changed{fill:var(--warn)}.sparkline rect.failed,.sparkline rect.error,.sparkline rect.timed_out{fill:var(--bad)}.compare-controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:12px 0}.compare-warning{color:var(--warn)}
 .approval-card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:12px}
 button.run{border:1px solid var(--line);background:var(--card);color:var(--fg);padding:4px 10px;border-radius:6px;cursor:pointer}button.run:disabled{opacity:.5}
 .muted{color:var(--muted)}pre{background:var(--card);border:1px solid var(--line);padding:12px;border-radius:8px;overflow:auto;max-height:60vh}
@@ -110,7 +111,7 @@ async function jobs(){
   main.innerHTML=(pending.length?`<h2>Pending approval</h2>${pending.map(j=>`<div class="approval-card"><b>${esc(j.name)}</b> · ${esc(j.kind)} · ${esc(j.target)}<br><span class="muted">requested by ${esc(j.pending.trigger)} ${esc(ago(j.pending.requested))} · expires in ${span(Math.max(0,(new Date(j.pending.approval.expires)-Date.now())/1000))}</span>${paramsView(j.pending)}${j.allowed?`<p><button class="run" data-decision="approve" data-id="${esc(j.pending.id)}">Approve</button> <button class="run" data-decision="reject" data-id="${esc(j.pending.id)}">Reject</button></p>`:''}</div>`).join('')}`:'')+`<table class="jobs-table"><tr><th>Job</th><th>Kind</th><th class="target">Target</th><th>Schedule</th><th>Last run</th><th>Result</th><th></th></tr>${list.map(j=>`<tr>
     <td><a href="#job/${encodeURIComponent(j.name)}" data-job="${esc(j.name)}">${esc(j.name)}</a></td><td>${esc(j.kind)}</td><td class="muted target">${esc(j.target)}</td>
     <td>${j.every?esc(j.every)+(j.next?'<br><span class="muted">next '+ago(j.next)+'</span>':''):'<span class="muted">on demand</span>'}</td>
-    <td>${lastRun(j)}</td>
+    <td>${lastRun(j)}${recentStrip(j.recent)}</td>
     <td>${j.pending?badge('pending')+checkBadge(j.pending):j.running?badge(j.active?.status||(j.queued?'queued':'running'))+checkBadge(j.active)+activeTime(j):j.last?badge(j.last.status)+checkBadge(j.last)+' <span class="muted">'+esc(j.last.summary)+'</span>':''}</td>
     <td>${j.allowed?`<button class="run" data-run="${esc(j.name)}" ${j.pending||j.running?'disabled':''}>Run${hasAdhoc(j)?'…':''}</button>${j.kind==='apply'?` <button class="run" data-check="${esc(j.name)}" ${j.pending||j.running?'disabled':''}>Check</button>`:''}${j.active&&['queued','running'].includes(j.active.status)?` <button class="run" data-stop="${esc(j.active.id)}" data-name="${esc(j.name)}" data-running="${j.active.status==='running'}">Cancel</button>`:''}`:''}</td></tr>${j.allowed&&hasAdhoc(j)?`<tr data-form-row="${esc(j.name)}" hidden><td colspan="7"><form class="adhoc-form" data-form="${esc(j.name)}">${j.adhoc.limit?'<div class="limit-picker"><div data-inventory class="limit-chips muted"></div><label>limit<input data-limit placeholder="host pattern, empty = the job&#39;s hosts"></label><div data-preview class="muted" role="status" aria-live="polite"></div></div>':''}${(j.adhoc.extra_vars||[]).map(k=>`<label>${esc(k)}<input type="${(j.adhoc.secret_vars||[]).includes(k)?'password':'text'}" data-var="${esc(k)}" placeholder="keep the job's value"></label>`).join('')}<button class="run" type="submit">Run</button>${j.kind==='apply'?'<button class="run" type="submit" data-mode="check">Check</button>':''}<button class="run" type="button" data-cancel>Cancel</button></form></td></tr>`:''}`).join('')}</table>`;
   main.querySelectorAll('[data-decision]').forEach(b=>b.onclick=async()=>{
@@ -147,14 +148,50 @@ async function jobs(){
   });
   main.querySelectorAll('[data-job]').forEach(a=>a.onclick=e=>{e.preventDefault();results(a.dataset.job)});
 }
+function recentStrip(recent){
+  return `<div class="recent" aria-label="Recent runs, newest on the right">${(recent||[]).slice(0,20).reverse().map(r=>`<span class="recent-square ${esc(r.status)}${r.mode==='check'?' check':''}" title="${esc(r.status)}${r.mode==='check'?' (check)':''} · ${date(r.started)}"></span>`).join('')}</div>`;
+}
+function durationChart(list){
+  const runs=list.filter(r=>r.started&&!String(r.started).startsWith('0001-')&&['ok','drift','changed','failed','error','cancelled','timed_out'].includes(r.status)).slice(0,50).reverse();
+  if(!runs.length)return '';
+  const max=Math.max(...runs.map(r=>r.duration_seconds||0)), width=runs.length*10;
+  return `<section class="report-card"><div class="muted">Duration · ${runs.length} recent runs · newest right · max ${max.toFixed(1)}s</div><svg class="sparkline" viewBox="0 0 ${width} 40" preserveAspectRatio="none" role="img" aria-label="Recent run durations, newest on the right">${runs.map((r,i)=>{const height=Math.max(1,40*(r.duration_seconds||0)/(max||1));return `<rect class="${esc(r.status)}" x="${i*10+1}" y="${40-height}" width="8" height="${height}"><title>${esc(r.status)}${r.mode==='check'?' (check)':''} · ${date(r.started)} · ${(r.duration_seconds||0).toFixed(1)}s</title></rect>`}).join('')}</svg></section>`;
+}
+function comparisonView(c){
+  const items=(label,list)=>`<h3>${esc(label)} (${list.length})</h3>`+(list.length?list.map(i=>`<div class="item">${hostLink(i.host)} · <b>${esc(i.play?i.play+' › ':'')}${esc(i.task)}</b> <span class="muted">${esc(i.module)}</span>${i.key?`<div class="muted">${esc(i.key)}</div>`:''}</div>`).join(''):empty('None'));
+  return `<section class="report-card"><h2>Run comparison</h2><p>A: <a href="#run/${encodeURIComponent(c.a.id)}">${date(c.a.started)}</a> ${badge(c.a.status)} → B: <a href="#run/${encodeURIComponent(c.b.id)}">${date(c.b.started)}</a> ${badge(c.b.status)}</p>${c.same_playbook?'':'<p class="compare-warning" role="status">Playbook content differs or a playbook hash is unavailable; task changes may reflect playbook edits.</p>'}<h3>Changed host verdicts (${c.hosts.length})</h3>${c.hosts.length?table(['Host','A','B'],c.hosts.map(h=>`<tr><td>${hostLink(h.host)}</td><td>${h.a?badge(h.a):'<span class="muted">not present</span>'}</td><td>${h.b?badge(h.b):'<span class="muted">not present</span>'}</td></tr>`)):empty('No host verdict changes')}${items('Appeared',c.appeared)}${items('Resolved',c.resolved)}</section>`;
+}
 async function results(name){
+  stopProgress();
   view='results';hash('#job/'+encodeURIComponent(name));
-  const list=await api('/api/jobs/'+encodeURIComponent(name)+'/results');
-  main.innerHTML=`<p><a href="#" id="back">← jobs</a> &nbsp; <b>${esc(name)}</b></p>`+(list.length?`<table><tr><th>Started</th><th>Trigger</th><th>Status</th><th>Summary</th><th>Hosts</th><th>Duration</th></tr>${list.map(r=>`<tr>
-    <td><a href="#run/${encodeURIComponent(r.id)}" data-res="${esc(r.id)}">${date(r.started)}</a></td><td class="muted">${esc(r.trigger)}${paramsView(r)}${r.approval?.decision?'<br>'+esc(r.approval.decision==='expired'?'expired':r.approval.decision+' by '+r.approval.by):''}</td><td>${badge(r.status)}${checkBadge(r)}</td><td>${esc(r.summary)}</td>
-    <td>${Object.entries(r.hosts||{}).map(([h,s])=>`${esc(h)} ${badge(s)}`).join('<br>')}</td><td>${(r.duration_seconds||0).toFixed(1)}s</td></tr>`).join('')}</table>`:'<div class="empty">No runs yet</div>');
+  const [list,jobsList]=await Promise.all([api('/api/jobs/'+encodeURIComponent(name)+'/history?limit=50'),api('/api/jobs')]);
+  if(view!=='results'||location.hash!=='#job/'+encodeURIComponent(name))return;
+  const comparable=['drift','apply'].includes(jobsList.find(j=>j.name===name)?.kind);
+  const eligible=r=>comparable&&r.started&&!String(r.started).startsWith('0001-')&&['ok','drift','changed','failed','error','cancelled','timed_out'].includes(r.status);
+  main.innerHTML=`<p><a href="#" id="back">← jobs</a> &nbsp; <b>${esc(name)}</b></p>`+(list.length?durationChart(list)+(comparable?'<div class="compare-controls"><button class="run" id="compare" disabled>Compare</button><span class="muted" id="compare-hint">Select two executed runs to compare.</span></div>':'')+table(['Compare','Started','Trigger','Status','Summary','Hosts','Duration'],list.map(r=>`<tr>
+    <td><input type="checkbox" data-compare="${esc(r.id)}" aria-label="Select run ${esc(r.id)} for comparison" ${eligible(r)?'':'disabled'}></td><td><a href="#run/${encodeURIComponent(r.id)}" data-res="${esc(r.id)}">${date(r.started||r.requested)}</a></td><td class="muted">${esc(r.trigger)}${paramsView(r)}${r.approval?.decision?'<br>'+esc(r.approval.decision==='expired'?'expired':r.approval.decision+' by '+r.approval.by):''}</td><td>${badge(r.status)}${checkBadge(r)}</td><td>${esc(r.summary)}</td>
+    <td>${esc(r.hosts_count)} total${r.failed_hosts?' · '+esc(r.failed_hosts)+' failed':''}</td><td>${(r.duration_seconds||0).toFixed(1)}s</td></tr>`))+'<div id="comparison" aria-live="polite"></div>':'<div class="empty">No runs yet</div>');
   $('#back').onclick=e=>{e.preventDefault();jobs()};
   main.querySelectorAll('[data-res]').forEach(a=>a.onclick=e=>{e.preventDefault();run(a.dataset.res).catch(showError)});
+  if(!comparable||!list.length)return;
+  const button=$('#compare'), hint=$('#compare-hint'), output=$('#comparison'), checks=[...main.querySelectorAll('[data-compare]')];
+  let revision=0;
+  const selected=()=>checks.filter(c=>c.checked);
+  checks.forEach(c=>c.onchange=()=>{
+    revision++;output.innerHTML='';const count=selected().length;
+    button.disabled=count!==2;button.textContent='Compare';hint.textContent=count===2?'A is the older selected run; B is the newer.':'Select two executed runs to compare.';
+    checks.forEach(c=>c.disabled=!eligible(list.find(r=>r.id===c.dataset.compare))||count===2&&!c.checked);
+  });
+  button.onclick=async()=>{
+    const ids=selected().map(c=>c.dataset.compare).sort((a,b)=>list.findIndex(r=>r.id===b)-list.findIndex(r=>r.id===a));
+    if(ids.length!==2)return;
+    const version=++revision;button.disabled=true;button.textContent='Comparing…';output.innerHTML='';
+    try{
+      const result=await api('/api/jobs/'+encodeURIComponent(name)+'/compare?a='+encodeURIComponent(ids[0])+'&b='+encodeURIComponent(ids[1]));
+      if(version===revision&&output.isConnected)output.innerHTML=comparisonView(result);
+    }catch(e){if(version===revision&&output.isConnected)output.innerHTML=`<p class="error-text" role="alert">${esc(e.message)}</p>`}
+    finally{if(version===revision&&button.isConnected){button.disabled=selected().length!==2;button.textContent='Compare'}}
+  };
 }
 const empty=text=>`<div class="empty">${esc(text)}</div>`;
 const table=(heads,rows,footer='')=>`<div class="table-scroll"><table><thead><tr>${heads.map(h=>`<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody>${footer?`<tfoot>${footer}</tfoot>`:''}</table></div>`;

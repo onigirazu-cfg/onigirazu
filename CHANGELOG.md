@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `onigirazu serve`: live host task progress and structured result events in a Progress tab, with resumable NDJSON streams at `GET /api/results/{id}/events`
+- `onigirazu serve`: light job history, status trends and duration sparklines, plus drift/apply run comparison by host verdict and stable task identity
 - `onigirazu serve`: server `run_timeout` and per-job `timeout` bound execution time, keeping partial results as `timed_out` with failure notifications and metrics
 - `onigirazu serve`: ad-hoc target picker with reachable group and host chips and live limit previews via `GET /api/jobs/{name}/inventory`
 - `onigirazu serve`: operators cancel queued or running runs from the page or `POST /api/runs/{id}/cancel`; cancellation keeps who stopped the run and any partial result, with audit entries, optional notifications and metrics

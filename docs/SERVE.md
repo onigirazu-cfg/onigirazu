@@ -245,9 +245,11 @@ with `after` when a stream drops and opens the report when the run ends.
 | `GET /api/pause` | pause state: `paused`, optional `reason`, `by`, `at` (viewers too) |
 | `POST /api/pause` | pauses execution (operators); optional JSON `{reason: "..."}`; `200` with the state; pausing again updates reason and identity; `500` with the state and `error` when `pause.json` could not be written (the pause still holds in this process) |
 | `POST /api/resume` | resumes execution (operators); `200` with the state; already resumed is a no-op; `500` as for pause |
-| `GET /api/jobs` | the jobs with schedule, next run, optional job `timeout` (duration string), `running` flag (queued, running or cancelling), optional `active` record (without report; `active.requested` and `active.started` give queue and execution timing), `queued` flag (waiting for the worker), last executed result, optional `pending` record (without reports), and `approval: "required"` for guarded jobs; optional `operators` list and caller-specific `allowed` bool; `adhoc: {limit, extra_vars, secret_vars}` (`extra_vars` remains a list of names) when enabled |
+| `GET /api/jobs` | the jobs with schedule, next run, optional job `timeout` (duration string), `running` flag (queued, running or cancelling), optional `active` record (without report; `active.requested` and `active.started` give queue and execution timing), `queued` flag (waiting for the worker), last executed result, `recent: [{status, mode, started}]` (up to 20 executed runs, newest first, including checks), optional `pending` record (without reports), and `approval: "required"` for guarded jobs; optional `operators` list and caller-specific `allowed` bool; `adhoc: {limit, extra_vars, secret_vars}` (`extra_vars` remains a list of names) when enabled |
 | `GET /api/jobs/{name}/inventory` | operators of jobs with `adhoc.limit: true` only; sorted reachable host names and nonempty groups that lie entirely within the job's limit (recursive, excluding `all`); `?limit=pattern` previews resolved host names; `400` for invalid limits or jobs without ad-hoc limits; `403` for callers not allowed to operate the job; `500` for inventory load errors |
 | `POST /api/jobs/{name}/run` | requests the job (operators); optional JSON `{mode: "check", limit: "host pattern", extra_vars: {k: "v"}}` with limit/variables as allowed by `adhoc`; mode is `check` (apply jobs only), `apply` or empty; `400` for invalid parameters or a limit with no hosts or hosts outside the job's limit; `202` with `{queued: name, run: id}` or `{pending: id, run: id}`; `409` when running, queued or pending; `503` when the queue is full; `500` with the record and `error` when storage fails (the run remains in memory); `403` with `{"error":"not an operator of this job"}` when the job disallows the operator |
+| `GET /api/jobs/{name}/history?limit=N` | light retained history, newest first (viewers allowed); default 50, maximum 500: `[{id, status, mode, trigger, requested, started, duration_seconds, summary, hosts_count, failed_hosts, params, approval}]`; `params` as stored (secret values masked) and `approval` appear when set; reports and host lists are never included |
+| `GET /api/jobs/{name}/compare?a=<id>&b=<id>` | compare two different executed drift/apply runs of this job with reports (viewers allowed; `400` when `a` equals `b`): `{a: {id, started, status, playbook_hash}, b: {...}, same_playbook, hosts: [{host, a, b}], appeared: [{host, key, play, task, module}], resolved: [...]}`; only changed host verdicts are listed (empty verdict means absent); items match by host and task key when both have keys, otherwise host, play and task; `404` for unknown runs, `400` for another job, unsupported kind, unexecuted runs or missing reports |
 | `GET /api/jobs/{name}/results` | the kept results, newest first |
 | `GET /api/jobs/{name}/results/{id}` | one result with its full report (the drift, verify or comply report as JSON) |
 | `GET /api/results/{id}` | one job result with its full report, optional `mode: "check"`, optional `audit_execution_id`, and optional `params` (`limit`, `extra_vars`, sorted `hosts`, optional `secret_vars` names); `404` if absent |
@@ -274,6 +276,13 @@ newest executed result in `last`, including checks.
 Page: the page at `/` uses the same API: Jobs (with Run/Approve/Reject/Cancel buttons when
 `allowed`), a Check button next to Run for apply jobs and a second Check submit button
 in their ad-hoc forms, Hosts, Runs and Audit. Check runs have a `check` badge in the jobs table, result list and run header.
+
+Jobs show up to 20 status squares, newest on the right, with hollow squares for check
+runs and status/date tooltips. The job page uses light history with a duration sparkline
+for up to 50 runs. Select two executed drift/apply runs and choose Compare to see host
+verdict changes and appeared/resolved drift tasks; a warning appears when playbook hashes
+differ or are unavailable. Individual run pages still load full reports.
+
 Run pages show metadata and tabs by kind: drift/apply
 have expandable Hosts, Changes grouped by task, coloured Diff (limited to the first
 200 KB), and Orphans when present; verify has expandable Hosts and Checks across hosts;
@@ -286,12 +295,20 @@ queued and running jobs show wait and elapsed time. Tables scroll horizontally o
 screens; at 700px and below the Jobs Target column is hidden and dates are shortened.
 
 A job result: `{id, job, kind, mode, requested, started, duration_seconds, status, summary, trigger,
-hosts, report, approval, cancel, params, audit_execution_id}`. `requested` is the request time; `started` becomes the execution
+hosts, report, approval, cancel, params, audit_execution_id, playbook_hash}`. `requested` is the request time; `started` becomes the execution
 start time when the worker begins. `trigger` is `schedule` or `api:<user>`. Status is `pending`,
 `queued`, `running`, `cancelling`, `cancelled`, `timed_out`, `rejected`, `expired`, `ok`, `drift`, `changed`, `failed` or `error`.
 The optional approval object has `required`, `expires`, and, after a decision, `decision`
 (`approved`, `rejected`, `expired`), `by` (operator identity; absent for expiry), `at` and an
 optional `comment`. Job results open at `#job/<name>` and individual runs at `#run/<id>`.
+
+Drift/apply/verify results include optional `playbook_hash`: the first 16 hexadecimal
+characters of the SHA-256 of the playbook file at execution time (that file only: roles,
+included files and variables are not part of it). It is absent if the
+file could not be read or for comply jobs. Drift report items include optional `key`,
+the stable task key; older records may lack it. `same_playbook` is true only when both
+compared runs have equal, nonempty hashes. Comparison follows the requested A-to-B
+direction; the API does not require chronological order.
 
 Serve results include `audit_execution_id` when drift, apply or verify starts audit
 recording. Audit history rows expose the matching `serve_run` while that serve result
