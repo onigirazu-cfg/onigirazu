@@ -178,11 +178,9 @@ func complyReport(ctx context.Context, o *complyOptions) (*comply.Report, string
 		o.state = filepath.Join(dir, ".onigirazu-state")
 	}
 	result, err := runPlaybookContext(ctx, append(o.applyArgs(playbook, false), "--verify-only"))
+	// a result comes with an error only when ctx ended: the report is then partial
 	if result == nil {
 		return nil, "", err
-	}
-	if err != nil && ctx.Err() == nil {
-		return nil, result.ExecutionID, err
 	}
 	vr := buildVerifyReport(playbook, result)
 	hostChecks := map[string][]map[string]interface{}{}
