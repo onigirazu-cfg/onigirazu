@@ -3842,14 +3842,15 @@ func TestServeTypedVars(t *testing.T) {
 }
 
 func TestServeRerunFailed(t *testing.T) {
-	for _, scenario := range []string{"success", "secret", "forbidden", "no failed", "not executed", "busy", "approval", "window", "outside limit"} {
+	for _, scenario := range []string{"success", "secret", "forbidden", "no failed", "not executed", "busy", "approval", "window", "outside limit", "stale var"} {
 		t.Run(scenario, func(t *testing.T) {
 			dir := t.TempDir()
 			inv := filepath.Join(dir, "hosts.yml")
 			if err := os.WriteFile(inv, []byte("web:\n  hosts:\n    web1: {}\n    web2: {}\n    web3: {}\ndb:\n  hosts:\n    db1: {}\n"), 0o600); err != nil {
 				t.Fatal(err)
 			}
-			j := ServeJob{Name: "patch", Kind: "apply", Inventory: inv, Playbook: "patch.yml", Limit: "web", ApprovalTimeout: time.Hour}
+			j := ServeJob{Name: "patch", Kind: "apply", Inventory: inv, Playbook: "patch.yml", Limit: "web", ApprovalTimeout: time.Hour,
+				Adhoc: ServeAdhoc{ExtraVars: []string{"reboot"}, Vars: []adhocVar{{Name: "reboot", Type: "bool"}}}}
 			cfg := &ServeConfig{DataDir: dir, Retain: 50, Jobs: []ServeJob{j}}
 			cfg.Auth = ServeAuth{UserHeader: "X-User", GroupsHeader: "X-Groups", Operators: []string{"ops"}}
 			switch scenario {
@@ -3891,6 +3892,9 @@ func TestServeRerunFailed(t *testing.T) {
 				code = 409
 			case "outside limit":
 				parent.Hosts["db1"] = "failed"
+				code = 400
+			case "stale var": // valid when the parent ran, not under today's declaration
+				parent.Params.ExtraVars["reboot"] = "maybe"
 				code = 400
 			}
 			s.results["patch"] = []*JobResult{parent}

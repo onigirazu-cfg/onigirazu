@@ -1547,30 +1547,11 @@ func (s *server) runParams(r *http.Request, j *ServeJob) (*RunParams, error) {
 	// the pattern is logged by the inventory: no line breaks can reach a log
 	// (the check above already refuses them; this is for the static analyser)
 	body.Limit = strings.ReplaceAll(strings.ReplaceAll(body.Limit, "\n", ""), "\r", "")
-	for _, k := range slices.Sorted(maps.Keys(body.ExtraVars)) {
-		if !slices.Contains(j.Adhoc.ExtraVars, k) {
-			return nil, fmt.Errorf("extra var %q is not allowed for this job", k)
-		}
+	vars, err := checkExtraVars(j, body.ExtraVars)
+	if err != nil {
+		return nil, err
 	}
-	for _, v := range j.Adhoc.Vars {
-		value, provided := body.ExtraVars[v.Name]
-		if !provided && v.Default != nil {
-			value, provided = *v.Default, true
-			if body.ExtraVars == nil {
-				body.ExtraVars = make(map[string]string, len(j.Adhoc.Vars))
-			}
-			body.ExtraVars[v.Name] = value
-		}
-		if !provided {
-			if v.Required {
-				return nil, fmt.Errorf("extra var %q is required", v.Name)
-			}
-			continue
-		}
-		if err := v.validate(value); err != nil {
-			return nil, err
-		}
-	}
+	body.ExtraVars = vars
 	if body.NotBefore == nil && body.Mode == "" && body.Limit == "" && len(body.ExtraVars) == 0 {
 		return nil, nil
 	}
@@ -1650,6 +1631,11 @@ func (s *server) rerunFailed(w http.ResponseWriter, r *http.Request, id serveIde
 	if parent.Params != nil {
 		params.ExtraVars = maps.Clone(parent.Params.ExtraVars)
 	}
+	// the job's declarations as they are now, not as they were for the parent
+	if params.ExtraVars, err = checkExtraVars(j, params.ExtraVars); err != nil {
+		fail(http.StatusBadRequest, err.Error())
+		return
+	}
 	// A variable newly marked secret must also be entered through the form.
 	for _, name := range j.Adhoc.SecretVars {
 		if _, ok := params.ExtraVars[name]; ok {
@@ -1673,6 +1659,36 @@ func (s *server) rerunFailed(w http.ResponseWriter, r *http.Request, id serveIde
 	}
 	a.OK, a.Run, a.Reason = true, result.ID, "parent="+parent.ID
 	writeJSON(w, http.StatusAccepted, map[string]string{"run": result.ID})
+}
+
+// checkExtraVars holds caller variables to the job's declarations: only
+// declared names, each value valid, required ones present, defaults filled in
+func checkExtraVars(j *ServeJob, vars map[string]string) (map[string]string, error) {
+	for _, k := range slices.Sorted(maps.Keys(vars)) {
+		if !slices.Contains(j.Adhoc.ExtraVars, k) {
+			return nil, fmt.Errorf("extra var %q is not allowed for this job", k)
+		}
+	}
+	for _, v := range j.Adhoc.Vars {
+		value, provided := vars[v.Name]
+		if !provided && v.Default != nil {
+			value, provided = *v.Default, true
+			if vars == nil {
+				vars = make(map[string]string, len(j.Adhoc.Vars))
+			}
+			vars[v.Name] = value
+		}
+		if !provided {
+			if v.Required {
+				return nil, fmt.Errorf("extra var %q is required", v.Name)
+			}
+			continue
+		}
+		if err := v.validate(value); err != nil {
+			return nil, err
+		}
+	}
+	return vars, nil
 }
 
 // extraVarsArg is the -e value for a job's variables: one JSON object, so a

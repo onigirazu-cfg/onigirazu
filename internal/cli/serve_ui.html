@@ -79,7 +79,7 @@ function varInput(v){
   let input;
   if(v.secret)input=`<input type="password" ${attrs} autocomplete="new-password">`;
   else if(v.type==='choice')input=`<select ${attrs}><option value="">Choose…</option>${(v.choices||[]).map(c=>`<option value="${esc(c)}" ${c===value?'selected':''}>${esc(c)}</option>`).join('')}</select>`;
-  else if(v.type==='bool')input=`<input type="checkbox" ${attrs} ${value==='true'?'checked':''}>`;
+  else if(v.type==='bool')input=`<input type="checkbox" ${attrs} ${v.default!=null?`data-default="${esc(v.default)}"`:''} ${value==='true'?'checked':''}>`;
   else input=`<input type="${v.type==='int'?'number':'text'}" ${attrs} value="${esc(value)}" ${v.type==='int'?`step="1" ${v.min!=null?`min="${esc(v.min)}"`:''} ${v.max!=null?`max="${esc(v.max)}"`:''}`:v.pattern?`pattern="${esc(v.pattern)}"`:''}>`;
   return `<label>${esc(v.name)}${v.required?' *':''}${input}${v.description?`<small class="muted">${esc(v.description)}</small>`:''}</label>`;
 }
@@ -162,7 +162,7 @@ async function jobs(){
       if(e.submitter?.dataset.mode==='check')body.mode='check';
       if(limit)body.limit=limit;
       const later=form.querySelector('[data-not-before]').value;if(later)body.not_before=localRFC3339(later);
-      form.querySelectorAll('[data-var]').forEach(input=>{if(input.type==='checkbox')vars[input.dataset.var]=String(input.checked);else if(input.value||input.required)vars[input.dataset.var]=input.value});
+      form.querySelectorAll('[data-var]').forEach(input=>{if(input.type==='checkbox'){if(input.checked||input.dataset.default!==undefined)vars[input.dataset.var]=String(input.checked)}else if(input.value||input.required)vars[input.dataset.var]=input.value});
       if(Object.keys(vars).length)body.extra_vars=vars;
       const button=e.submitter||form.querySelector('[type="submit"]');button.disabled=true;
       try{await api('/api/jobs/'+encodeURIComponent(form.dataset.form)+'/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});await jobs()}catch(e){alert(e.message);button.disabled=false}

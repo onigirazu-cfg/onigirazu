@@ -270,7 +270,8 @@ schedule and approvals keep working, runs queue up in order, and pending runs st
 Rerun failed hosts: the run page offers **Rerun failed hosts (N)** to job operators
 after an executed run with `failed` or `unreachable` hosts. `POST /api/runs/{id}/rerun-failed`
 creates a run on just those hosts, retaining the mode and non-secret caller variables.
-The hosts are validated against the current job limit, even when `adhoc.limit` is off.
+The hosts are validated against the current job limit, even when `adhoc.limit` is off, and the
+caller variables against the job's current declarations (a value that no longer fits returns `400`).
 Approval, maintenance windows and busy rules still apply. The new record has
 `parent: "<id>"` and `trigger: "rerun:<user>"`; the page links back to its parent.
 An unexecuted run or one without failed hosts returns `400`. A parent with secret
