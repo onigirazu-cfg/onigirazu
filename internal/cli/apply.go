@@ -463,6 +463,9 @@ Examples:
 				executionPool,
 				cacheManager,
 			)
+			if obs, ok := cmd.Context().Value(runObserverKey{}).(engine.ExecutionObserverI); ok {
+				executionEngine.AttachObserver(obs)
+			}
 			executionEngine.SetOutput(out)
 			executionEngine.SetFactsCache(factsCache)
 			executionEngine.SetCallbacks(callbacks)
