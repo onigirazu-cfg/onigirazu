@@ -127,6 +127,15 @@ input:not([type=checkbox]),select{min-width:0;max-width:100%;border:1px solid va
 input[type=checkbox]{accent-color:var(--accent);width:15px;height:15px}
 select{padding-right:26px}
 .filters input,.filters select{width:100%}
+.history-dates{display:flex;align-items:end;flex-wrap:wrap;gap:12px;flex:1 1 100%;min-width:0}
+.history-dates label{flex:1 1 220px}
+.history-ranges,.history-filter-actions,.history-active{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.history-ranges{flex:1 1 100%}
+.history-ranges button,.history-active button{font-size:12px;box-shadow:none}
+.history-filter-error{flex:1 1 100%;margin:0;font-size:12px}
+.history-active{margin:0 0 12px}
+.history-active button{white-space:normal;text-align:left;overflow-wrap:anywhere}
+.history-filter-actions{margin-left:auto}
 .tabs{display:flex;gap:4px;overflow:auto;flex-wrap:nowrap;border-bottom:1px solid var(--line);margin:16px 0 20px;padding-bottom:8px}
 .tabs button.run{border-color:transparent;box-shadow:none;background:none;color:var(--muted)}
 .tabs [aria-selected=true]{background:var(--hover)!important;color:var(--fg)!important;border-color:var(--line)!important}
@@ -185,6 +194,9 @@ summary{cursor:pointer}
 .adhoc-form input,.adhoc-form select{width:100%}
 .adhoc-form input[type=checkbox]{width:16px}
 .required{color:var(--bad)}
+.history-filter-panel>summary{display:none;list-style:none;width:max-content;margin-bottom:12px}
+@media(max-width:600px){.history-filter-panel>summary{display:inline-flex}.history-filter-panel:not([open])>summary{margin-bottom:12px}}
+.ellipsis{max-width:28rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .limit-picker{min-width:0;max-width:100%}
 .limit-chips{display:flex;gap:6px;flex-wrap:wrap}
 .limit-chips button{max-width:100%;white-space:normal;overflow-wrap:anywhere;box-shadow:none;font-size:12px}
@@ -247,12 +259,15 @@ main{margin-left:0;padding:20px 12px}
 .page-header p{font-size:12px}
 .report-card,.approval-card{padding:16px}
 .filters{padding:12px;gap:10px}
+.history-filters>label,.history-dates label{flex-basis:100%}
+.history-filter-actions{width:100%;margin-left:0}
+.history-filter-actions button{flex:1}
 .task-row{grid-template-columns:minmax(0,1fr)}
 .task-meta{justify-content:flex-start}
 .run-detail{padding:12px}
 .table-footer{flex-wrap:wrap}
 .sheet-body{padding:0 12px 20px}
-.table-scroll .nowrap-table td{white-space:nowrap}
+.nowrap-table td{white-space:nowrap}.nowrap-table td.wrap{white-space:normal;min-width:16rem}
 .jobs-scroll{overflow:visible;border:0;background:none;box-shadow:none}
 .jobs-table,.jobs-table tbody{display:block;min-width:0;width:100%}
 .jobs-table thead{display:none}
@@ -756,48 +771,130 @@ async function runs(host){
   return historyView('runs');
 }
 async function audit(){return historyView('audit')}
+function historyLocalTime(value){
+  // Accept RFC 3339 instants only; malformed hashes leave the picker empty.
+  const match=/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/i.exec(value||'');
+  if(!match)return '';
+  const [,year,month,day,hour,minute,second]=match.map(Number);
+  const d=new Date(value);
+  if(!Number.isFinite(d.getTime())||month<1||month>12||day<1||day>new Date(Date.UTC(year,month,0)).getUTCDate()||hour>23||minute>59||second>59)return '';
+  const pad=n=>String(n).padStart(2,'0');
+  return `${String(d.getFullYear()).padStart(4,'0')}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 async function historyView(kind){
   stopProgress();
   view=kind;
   setNav(kind);
   const params=new URLSearchParams(location.hash.split('?')[1]||''), isRuns=kind==='runs';
-  const fields=isRuns?['host','playbook','status','job','from','to','limit','offset']:['user','action','job','run','ok','from','to','limit','before'];
-  const choices={status:['success','failure','running','skipped'],action:['run','approve','reject','cancel','pause','resume'],ok:['true','false']};
-  const bar=`<form class="filters" id="filters">${fields.map(name=>`<label>${esc(name)}${choices[name]?`<select name="${name}"><option value="">All</option>${choices[name].map(v=>`<option value="${v}" ${params.get(name)===v?'selected':''}>${v}</option>`).join('')}</select>`:`<input name="${name}" value="${esc(params.get(name)||'')}" ${['from','to'].includes(name)?'placeholder="YYYY-MM-DDTHH:mm:ssZ"':name==='limit'?'type="number" min="1" max="1000" placeholder="100"':name==='offset'?'type="number" min="0" placeholder="0"':''}>`}</label>`).join('')}<button class="run">Apply</button></form>`;
+  // a malformed time in a shared link is dropped instead of failing the whole page
+  for(const name of ['from','to'])if(params.has(name)&&!historyLocalTime(params.get(name)))params.delete(name);
+  const fields=isRuns?['host','playbook','status','job']:['user','action','job','run','ok'];
+  const labels={host:'Host',playbook:'Playbook',status:'Status',job:'Job',from:'From',to:'To',limit:'Per page',user:'User',action:'Action',run:'Run',ok:'Result'};
+  const choices={status:['success','failure','running','skipped'],action:['run','approve','reject','cancel','pause','resume'],ok:['true','false'],limit:['50','100','200','500','1000']};
+  const optionLabel=(name,value)=>name==='ok'?({true:'Succeeded',false:'Refused'}[value]||value):value;
+  const options=(name,values,selected,all=true)=>(all?'<option value="">All</option>':'')+values.map(value=>`<option value="${esc(value)}" ${selected===value?'selected':''}>${esc(optionLabel(name,value))}</option>`).join('');
+  const field=name=>`<label>${labels[name]}${choices[name]?`<select name="${name}">${options(name,choices[name],params.get(name))}</select>`:`<input type="text" name="${name}" value="${esc(params.get(name)||'')}" ${['host','playbook','user'].includes(name)?`list="history-${name}-suggestions"`:''}>`}</label>`;
+  const activeCount=fields.concat(['from','to','limit']).filter(name=>params.get(name)&&!(name==='limit'&&params.get(name)==='100')).length;
+  const bar=`<details class="history-filter-panel" ${matchMedia('(max-width:600px)').matches?'':'open'}><summary class="run">Filters${activeCount?` (${activeCount})`:''}</summary><form class="filters history-filters" id="filters">${fields.map(field).join('')}
+    <label>Per page<select name="limit">${options('limit',choices.limit,choices.limit.includes(params.get('limit'))?params.get('limit'):'100',false)}</select></label>
+    <div class="history-dates">${['from','to'].map(name=>`<label>${labels[name]}<input type="datetime-local" name="${name}" value="${esc(historyLocalTime(params.get(name)))}" aria-describedby="history-time-help history-filter-error"></label>`).join('')}
+      <small class="muted" id="history-time-help">Uses this browser’s time zone.</small>
+      <p class="history-filter-error error-text" id="history-filter-error" role="alert" hidden></p>
+      <div class="history-ranges" aria-label="Quick time ranges">${[['Last hour',1],['24 h',24],['7 days',168],['30 days',720],['Any time',0]].map(([label,hours])=>`<button class="run" type="button" data-range="${hours}">${label}</button>`).join('')}</div>
+    </div><div class="history-filter-actions"><button class="run primary" type="submit">Apply</button><button class="run" type="button" id="history-reset">Reset</button></div>
+    ${['host','playbook','user'].map(name=>`<datalist id="history-${name}-suggestions"></datalist>`).join('')}</form></details>`;
   const heads=isRuns?['Started','Playbook','User','Status','Hosts','Tasks','Failed','Duration','Serve run']:['Time','User','Action','Job','Run','Result','Reason','Addr'];
-  const row=isRuns?r=>`<tr><td><a href="#run/${encodeURIComponent(r.id)}">${date(r.start)}</a></td><td class="muted">${esc(r.playbook)}</td><td>${esc(r.user)}</td><td>${badge(r.status)}</td><td>${esc(r.hosts)}</td><td>${esc(r.tasks)}</td><td>${esc(r.failed)}</td><td>${(r.duration||0).toFixed(1)}s</td><td>${r.serve_run?`<a href="#run/${encodeURIComponent(r.serve_run)}">${esc(r.serve_run)}</a>`:''}</td></tr>`:a=>`<tr><td>${date(a.time)}</td><td>${esc(a.user)}</td><td>${esc(a.action)}</td><td>${esc(a.job)}</td><td>${a.run?`<a href="#run/${encodeURIComponent(a.run)}">${esc(a.run)}</a>`:''}</td><td>${badge(a.ok?'ok':'refused')}</td><td>${esc(a.reason)}</td><td>${esc(a.addr)}</td></tr>`;
+  const row=isRuns?r=>`<tr><td><a href="#run/${encodeURIComponent(r.id)}">${date(r.start)}</a></td><td class="muted ellipsis" title="${esc(r.playbook)}">${esc(r.playbook)}</td><td>${esc(r.user)}</td><td>${badge(r.status)}</td><td>${esc(r.hosts)}</td><td>${esc(r.tasks)}</td><td>${esc(r.failed)}</td><td>${(r.duration||0).toFixed(1)}s</td><td>${r.serve_run?`<a href="#run/${encodeURIComponent(r.serve_run)}">${esc(r.serve_run)}</a>`:''}</td></tr>`:a=>`<tr><td>${date(a.time)}</td><td>${esc(a.user)}</td><td>${esc(a.action)}</td><td>${esc(a.job)}</td><td>${a.run?`<a href="#run/${encodeURIComponent(a.run)}">${esc(a.run)}</a>`:''}</td><td>${badge(a.ok?'ok':'refused')}</td><td class="wrap">${esc(a.reason)}</td><td>${esc(a.addr)}</td></tr>`;
   const expected=location.hash;
-  main.innerHTML=pageHeader(isRuns?'Runs':'Audit',isRuns?'Execution history from the audit store':'Actions and decisions across the fleet')+bar+table(heads,[])+'<p class="muted" id="history-state" role="status">Loading…</p><button class="run" id="older" hidden>Older</button>';
+  const chipValue=(name,value)=>['from','to'].includes(name)&&historyLocalTime(value)?new Date(value).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).replace(',',''):optionLabel(name,value);
+  const active=fields.concat(['from','to','limit']).filter(name=>params.get(name)&&!(name==='limit'&&params.get(name)==='100'));
+  const chips=active.length?`<div class="history-active" aria-label="Active filters">${active.map(name=>`<button class="run" type="button" data-remove-filter="${name}" aria-label="${esc('Remove '+labels[name]+' filter')}">${labels[name]}: ${esc(chipValue(name,params.get(name)))} <span aria-hidden="true">×</span></button>`).join('')}</div>`:'';
+  main.innerHTML=pageHeader(isRuns?'Runs':'Audit',isRuns?'Execution history from the audit store':'Actions and decisions across the fleet')+bar+chips+table(heads,[])+'<p class="muted" id="history-state" role="status">Loading…</p><button class="run" id="older" hidden>Older</button>';
   main.querySelector('table').classList.add('nowrap-table');
-  const form=$('#filters'), body=main.querySelector('tbody'), older=$('#older'), state=$('#history-state');
-  form.onsubmit=e=>{
-    e.preventDefault();
-    const query=new URLSearchParams();
-    for(const [key,value] of new FormData(form))if(value)query.set(key,value);
+  const form=$('#filters'), body=main.querySelector('tbody'), older=$('#older'), state=$('#history-state'), error=$('#history-filter-error');
+  const current=()=>view===kind&&location.hash===expected&&$('#filters')===form;
+  const navigate=query=>{
+    query.delete('offset');query.delete('before');
+    if(query.get('limit')==='100')query.delete('limit'); // the default is no filter
     hash('#'+kind+(query.size?'?'+query.toString():''));
     historyView(kind).catch(showError);
   };
+  const apply=()=>{
+    error.hidden=true;
+    const from=form.elements.from.value,to=form.elements.to.value;
+    if(from&&to&&new Date(to)<new Date(from)){
+      error.textContent='To must be at or after From.';error.hidden=false;
+      form.elements.to.setAttribute('aria-invalid','true');return;
+    }
+    form.elements.to.removeAttribute('aria-invalid');
+    const query=new URLSearchParams();
+    for(const [key,value] of new FormData(form)){
+      if(!value)continue;
+      // an untouched time keeps the link's exact value (seconds and all); the picker has minutes only
+      const unchanged=['from','to'].includes(key)&&params.get(key)&&historyLocalTime(params.get(key))===value;
+      query.set(key,!['from','to'].includes(key)?value:unchanged?params.get(key):localRFC3339(value));
+    }
+    navigate(query);
+  };
+  form.onsubmit=e=>{e.preventDefault();apply()};
+  form.onchange=e=>{if(e.target.matches('select'))apply()};
+  form.querySelectorAll('[data-range]').forEach(button=>button.onclick=()=>{
+    const hours=Number(button.dataset.range);
+    form.elements.from.value=hours?historyLocalTime(new Date(Date.now()-hours*3600000).toISOString()):'';
+    form.elements.to.value='';apply();
+  });
+  $('#history-reset').onclick=()=>navigate(new URLSearchParams());
+  main.querySelectorAll('[data-remove-filter]').forEach(button=>button.onclick=()=>{
+    const query=new URLSearchParams(params);query.delete(button.dataset.removeFilter);navigate(query);
+  });
+  // suggestions accumulate from every source; a [value, label] pair shows the label beside the value
+  const suggestions={host:new Map(),playbook:new Map(),user:new Map()}, nouns={host:'hosts',playbook:'playbooks',user:'users'};
+  const suggest=(name,items)=>{
+    const known=suggestions[name];
+    for(const item of items){const [value,label]=Array.isArray(item)?item:[item,''];if(typeof value==='string'&&value&&!known.has(value))known.set(value,label||'')}
+    const sorted=[...known].sort((a,b)=>a[0].localeCompare(b[0]));
+    form.querySelector('#history-'+name+'-suggestions').innerHTML=sorted.map(([value,label])=>`<option value="${esc(value)}"${label&&label!==value?` label="${esc(label)}"`:''}></option>`).join('');
+    const input=form.elements[name];
+    if(input&&sorted.length)input.placeholder=`e.g. ${sorted[0][0]} · ${sorted.length} ${nouns[name]}`;
+  };
+  // the playbook filter matches part of the path: the file name is enough to type
+  const playbookItem=path=>[String(path||'').split('/').pop(),String(path||'')];
   let next, count=0;
+  const users=new Set();
   const load=async()=>{
     older.disabled=true;
     try{
       const {data,headers}=await apiPage('/api/'+kind+'?'+params);
-      if(view!==kind||location.hash!==expected)return;
+      if(!current())return;
       body.insertAdjacentHTML('beforeend',data.map(row).join(''));
+      if(!isRuns){data.forEach(record=>users.add(record.user));suggest('user',[...users])}
+      else suggest('playbook',data.map(record=>playbookItem(record.playbook)));
       count+=data.length;body.querySelectorAll('tr').forEach(tr=>tr.dataset.search=tr.textContent);
-  applySearch();
-      state.textContent=count?'Showing 1–'+count+' loaded records':isRuns?'No runs in the audit store':'No actions yet';
+      applySearch();
+      state.textContent=count?count+' records loaded':isRuns?'No runs in the audit store':'No actions yet';
       next=headers.get(isRuns?'X-Next-Offset':'X-Next-Cursor');
       older.hidden=!next;
     }
-  finally{older.disabled=false}
+    catch(e){if(current())throw e}
+    finally{older.disabled=false}
   };
   older.onclick=async()=>{
     params.set(isRuns?'offset':'before',next);
     try{await load()}
-  catch(e){state.textContent=e.message}
+    catch(e){if(current())state.textContent=e.message}
   };
-  await load();
+  const jobsRequest=api('/api/jobs').then(jobs=>{
+    if(!current()||!Array.isArray(jobs))return;
+    const input=form.elements.job, names=[...new Set(jobs.map(job=>job.name).filter(name=>typeof name==='string'&&name))].sort();
+    if(input.value&&!names.includes(input.value))names.push(input.value);
+    const select=document.createElement('select');select.name='job';select.innerHTML=options('job',names,input.value);
+    input.replaceWith(select);
+    if(isRuns)suggest('playbook',jobs.filter(job=>['drift','apply','verify'].includes(job.kind)).map(job=>playbookItem(job.target)));
+  }).catch(()=>{});
+  const hostsRequest=isRuns?api('/api/hosts').then(hosts=>{if(current()&&Array.isArray(hosts))suggest('host',hosts.map(host=>host.host))}).catch(()=>{}):Promise.resolve();
+  // inventory hosts too, also the ones no job has reached yet (snapshots are cached server-side)
+  const inventoryRequest=isRuns?api('/api/inventory').then(sources=>{if(current()&&Array.isArray(sources))suggest('host',sources.flatMap(source=>(source.hosts||[]).map(host=>host.name)))}).catch(()=>{}):Promise.resolve();
+  await Promise.all([load(),jobsRequest,hostsRequest,inventoryRequest]);
 }
 const wrapTables=()=>main.querySelectorAll('table').forEach(t=>{if(t.parentElement.classList.contains('table-scroll'))return;
   const wrapper=document.createElement('div');wrapper.className='table-scroll';t.before(wrapper);wrapper.append(t)});

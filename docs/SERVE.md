@@ -405,6 +405,7 @@ and host verdicts. Apply checks do not push drift metrics. The jobs API still sh
 newest executed result in `last`, including checks.
 
 The Runs and Audit tabs have compact filters with shareable hash links and an Older button that appends earlier entries.
+On Runs and Audit, From and To use the browser's date and time picker (local time, sent as RFC 3339) with quick ranges (last hour, 24 h, 7 days, 30 days); Job is a list of the jobs, Host suggests the hosts seen in results and in the inventory, Playbook suggests file names (the filter matches part of the path), User suggests the users already listed. Active filters show as removable chips; on phones the filters fold under a Filters button. Apply, Reset and the per-page selector control the loaded history; paging cursors stay out of the form.
 
 Page: the page at `/` uses the same API. A top bar holds the fleet name, a search box (`/`
 focuses it; it filters the current list), the activity counts, Pause/Resume for operators, the
