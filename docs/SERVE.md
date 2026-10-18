@@ -31,6 +31,8 @@ auth:
   user_header: X-Authentik-Username    # a reverse proxy's identity: a viewer ...
   groups_header: X-Authentik-Groups    # ... an operator when one of the groups is listed
   operators: [admins, tier0-admins]
+  trusted_proxies: [10.0.0.5, 172.18.0.0/16]   # proxy headers only from these (address or network)
+  sign_out_url: /outpost.goauthentik.io/sign_out   # optional "Sign out" in the page's user menu
 metrics:
   push: http://victoria:8428/api/v1/import/prometheus   # every job's metrics, optional
   labels: {env: prod}
@@ -291,8 +293,17 @@ request the job again. Pending runs must be rejected instead.
 Without `auth` everyone is an operator — put the server behind a reverse proxy or a firewall.
 With `token`, `Authorization: Bearer <token>` is an operator (automation, curl). With
 `user_header`, the user the proxy sets (Authentik's outpost, oauth2-proxy, nginx auth_request) is
-a viewer; when one of the groups in `groups_header` (comma, pipe or space separated) is in
-`operators`, an operator. Viewers read everything; operators also start jobs, approve or reject pending runs and cancel scheduled, queued or running ones.
+a viewer; when one of the groups in `groups_header` (separated by `|` as Authentik sends them, or by
+commas; a space belongs to the name, "Fleet Operators") is in `operators`, an operator.
+
+The proxy headers are only as trustworthy as the path to the server: anyone who reaches `serve`
+directly can send `X-Authentik-Groups: admins`. Set `trusted_proxies` to the proxy's address or
+network and headers from any other peer are ignored (the request is then unauthenticated, `401`
+unless it carries a bearer token); without it the server warns at start. Behind Authentik's proxy
+outpost: `user_header: X-Authentik-Username`, `groups_header: X-Authentik-Groups`, `operators` =
+the Authentik groups that may run jobs, `trusted_proxies` = the outpost's address, and
+`sign_out_url: /outpost.goauthentik.io/sign_out` for a Sign out entry in the user menu
+(`/api/me` returns it as `sign_out_url`; only `/…` or `http(s)://` links are shown). Viewers read everything; operators also start jobs, approve or reject pending runs and cancel scheduled, queued or running ones.
 
 Named bearer tokens in `auth.tokens` have a `name`, a `token` value (expands `${VAR}`),
 and optional `groups`. Each is a server-level operator. Names must be unique and values

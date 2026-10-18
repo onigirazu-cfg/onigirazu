@@ -12,6 +12,7 @@ import (
 	"io"
 	"maps"
 	"net/http"
+	"net/netip"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -68,6 +69,59 @@ type ServeAuth struct {
 	UserHeader   string       `yaml:"user_header"`
 	GroupsHeader string       `yaml:"groups_header"`
 	Operators    []string     `yaml:"operators"`
+	// TrustedProxies: the proxy headers count only from these addresses or networks
+	TrustedProxies []string `yaml:"trusted_proxies"`
+	// SignOutURL is linked from the page's user menu (the proxy's own sign-out)
+	SignOutURL string `yaml:"sign_out_url"`
+	trusted    []netip.Prefix
+}
+
+// parseTrustedProxies turns addresses and networks into prefixes
+func parseTrustedProxies(list []string) ([]netip.Prefix, error) {
+	out := make([]netip.Prefix, 0, len(list))
+	for _, v := range list {
+		v = strings.TrimSpace(v)
+		if p, err := netip.ParsePrefix(v); err == nil {
+			out = append(out, p.Masked())
+			continue
+		}
+		a, err := netip.ParseAddr(v)
+		if err != nil {
+			return nil, fmt.Errorf("auth.trusted_proxies: %q is neither an address nor a network", v)
+		}
+		out = append(out, netip.PrefixFrom(a.Unmap(), a.Unmap().BitLen()))
+	}
+	return out, nil
+}
+
+// fromTrustedProxy: no list trusts every peer (as before); else the peer must be in it
+func (a ServeAuth) fromTrustedProxy(r *http.Request) bool {
+	if len(a.trusted) == 0 {
+		return true
+	}
+	ap, err := netip.ParseAddrPort(r.RemoteAddr)
+	if err != nil {
+		return false
+	}
+	addr := ap.Addr().Unmap()
+	for _, p := range a.trusted {
+		if p.Contains(addr) {
+			return true
+		}
+	}
+	return false
+}
+
+// splitGroups reads a proxy's group list, joined with "|" (Authentik) or
+// ","; a space is part of a group name ("Fleet Operators")
+func splitGroups(v string) []string {
+	var out []string
+	for _, g := range strings.FieldsFunc(v, func(c rune) bool { return c == '|' || c == ',' }) {
+		if g = strings.TrimSpace(g); g != "" {
+			out = append(out, g)
+		}
+	}
+	return out
 }
 
 // ServeToken is a named bearer identity
@@ -436,6 +490,9 @@ func loadServeConfig(path string) (*ServeConfig, error) {
 		cfg.DataDir = filepath.Join(home, ".onigirazu", "serve")
 	}
 	cfg.Auth.Token = os.ExpandEnv(cfg.Auth.Token)
+	if _, err := parseTrustedProxies(cfg.Auth.TrustedProxies); err != nil {
+		return nil, err
+	}
 	tokenNames := map[string]bool{}
 	for i := range cfg.Auth.Tokens {
 		t := &cfg.Auth.Tokens[i]
@@ -565,6 +622,11 @@ type queued struct {
 }
 
 func newServer(cfg *ServeConfig, out io.Writer) (*server, error) {
+	trusted, err := parseTrustedProxies(cfg.Auth.TrustedProxies)
+	if err != nil {
+		return nil, err
+	}
+	cfg.Auth.trusted = trusted
 	if cfg.Retain <= 0 {
 		cfg.Retain = 50
 	}
@@ -1844,11 +1906,11 @@ func (s *server) identify(r *http.Request) (serveIdentity, error) {
 			}
 		}
 	}
-	if a.UserHeader != "" {
+	if a.UserHeader != "" && a.fromTrustedProxy(r) {
 		if user := r.Header.Get(a.UserHeader); user != "" {
 			id := serveIdentity{User: user}
 			if a.GroupsHeader != "" {
-				id.Groups = strings.FieldsFunc(r.Header.Get(a.GroupsHeader), func(c rune) bool { return c == ',' || c == '|' || c == ' ' })
+				id.Groups = splitGroups(r.Header.Get(a.GroupsHeader))
 				for _, g := range id.Groups {
 					for _, op := range a.Operators {
 						if strings.EqualFold(g, op) {
@@ -1943,7 +2005,7 @@ func (s *server) mux() *http.ServeMux {
 	mux.HandleFunc("/api/me", auth(false, func(w http.ResponseWriter, _ *http.Request, id serveIdentity) {
 		s.mu.Lock()
 		running, queued := s.activity()
-		status := map[string]interface{}{"user": id.User, "operator": id.Operator, "title": s.cfg.Title, "paused": s.pause.Paused, "running": running, "queued": queued, "scheduled": s.scheduledCount(), "concurrency": s.cfg.Concurrency, "storage_error": s.storeErr}
+		status := map[string]interface{}{"user": id.User, "operator": id.Operator, "title": s.cfg.Title, "paused": s.pause.Paused, "running": running, "queued": queued, "scheduled": s.scheduledCount(), "concurrency": s.cfg.Concurrency, "storage_error": s.storeErr, "sign_out_url": s.cfg.Auth.SignOutURL}
 		s.mu.Unlock()
 		writeJSON(w, http.StatusOK, status)
 	}))
@@ -2831,6 +2893,8 @@ func runServe(ctx context.Context, cfg *ServeConfig, out io.Writer) error {
 	open := ""
 	if cfg.Auth.Token == "" && len(cfg.Auth.Tokens) == 0 && cfg.Auth.UserHeader == "" {
 		open = " — no auth configured, everyone is an operator"
+	} else if cfg.Auth.UserHeader != "" && len(cfg.Auth.TrustedProxies) == 0 {
+		open = " — proxy headers are trusted from any address: set auth.trusted_proxies"
 	}
 	parallel := ""
 	if cfg.Concurrency > 1 {

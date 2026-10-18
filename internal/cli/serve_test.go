@@ -4049,3 +4049,54 @@ func TestServeComplyWithoutCompletedChecks(t *testing.T) {
 		t.Fatalf("unexpected verdict: %+v", report)
 	}
 }
+
+func TestServeProxyAuth(t *testing.T) {
+	if got := splitGroups("ops|Fleet Operators| web "); !slices.Equal(got, []string{"ops", "Fleet Operators", "web"}) {
+		t.Fatalf("pipe list: %q", got)
+	}
+	if got := splitGroups("ops, Domain Admins"); !slices.Equal(got, []string{"ops", "Domain Admins"}) {
+		t.Fatalf("comma list: %q", got)
+	}
+	if got := splitGroups(""); len(got) != 0 {
+		t.Fatalf("empty: %q", got)
+	}
+	if _, err := parseTrustedProxies([]string{"10.0.0.0/8", "192.0.2.10", "::1"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := parseTrustedProxies([]string{"proxy.example"}); err == nil {
+		t.Fatal("a host name is not an address")
+	}
+	for _, tc := range []struct {
+		name    string
+		trusted []string
+		remote  string
+		code    int
+	}{
+		{"no list trusts every peer", nil, "192.0.2.1:4000", 200},
+		{"peer in the list", []string{"10.0.0.0/8"}, "10.1.2.3:4000", 200},
+		{"single address", []string{"192.0.2.10"}, "192.0.2.10:4000", 200},
+		{"peer outside the list", []string{"10.0.0.0/8"}, "192.0.2.1:4000", 401},
+		{"IPv4 over IPv6", []string{"10.0.0.0/8"}, "[::ffff:10.0.0.7]:4000", 200},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := &ServeConfig{DataDir: t.TempDir(), Auth: ServeAuth{UserHeader: "X-Authentik-Username", GroupsHeader: "X-Authentik-Groups",
+				Operators: []string{"Fleet Operators"}, TrustedProxies: tc.trusted, SignOutURL: "/outpost.goauthentik.io/sign_out"}}
+			s, err := newServer(cfg, io.Discard)
+			if err != nil {
+				t.Fatal(err)
+			}
+			req := httptest.NewRequest("GET", "/api/me", nil)
+			req.RemoteAddr = tc.remote
+			req.Header.Set("X-Authentik-Username", "alice")
+			req.Header.Set("X-Authentik-Groups", "staff|Fleet Operators")
+			w := httptest.NewRecorder()
+			s.mux().ServeHTTP(w, req)
+			if w.Code != tc.code {
+				t.Fatalf("%d %s, want %d", w.Code, w.Body.String(), tc.code)
+			}
+			if tc.code == 200 && (!strings.Contains(w.Body.String(), `"operator":true`) || !strings.Contains(w.Body.String(), `"sign_out_url":"/outpost.goauthentik.io/sign_out"`)) {
+				t.Fatalf("identity: %s", w.Body.String())
+			}
+		})
+	}
+}
