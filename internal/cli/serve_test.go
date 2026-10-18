@@ -3091,3 +3091,29 @@ func TestServeCheckParams(t *testing.T) {
 		t.Fatalf("check parameters: %+v", p)
 	}
 }
+
+func TestServeCheckRunSkipsVerify(t *testing.T) {
+	dir := t.TempDir()
+	playbook := filepath.Join(dir, "site.yml")
+	inventory := filepath.Join(dir, "hosts.yml")
+	missing := filepath.Join(dir, "never-created")
+	if err := os.WriteFile(playbook, []byte("- hosts: localhost\n  gather_facts: false\n  tasks:\n    - name: quick\n      command: \"true\"\n      changed_when: false\n  verify:\n    - file: {path: "+missing+"}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(inventory, []byte("all:\n  hosts:\n    localhost:\n      ansible_connection: local\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s, err := newServer(&ServeConfig{DataDir: filepath.Join(dir, "data"), Retain: 5}, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	j := &ServeJob{Name: "site", Kind: "apply", Playbook: playbook, Inventory: inventory}
+	check, err := s.execute(context.Background(), j, "check")
+	if err != nil || check.Status != "ok" || check.Hosts["localhost"] != "ok" {
+		t.Fatalf("check run: %+v %v", check, err)
+	}
+	apply, err := s.execute(context.Background(), j, "")
+	if err != nil || apply.Status != "failed" {
+		t.Fatalf("a normal run keeps its verify: %+v %v", apply, err)
+	}
+}

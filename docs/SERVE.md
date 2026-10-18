@@ -111,7 +111,8 @@ and `approval.comment`. A restart keeps pending runs and marks queued or executi
 `error` with `interrupted: serve restarted`; `cancelling` runs become `cancelled` with the same summary.
 
 Apply jobs accept `{"mode":"check"}` at `POST /api/jobs/{name}/run` to preview changes
-without applying them. `mode: "apply"` or an empty mode keeps normal behavior; other
+without applying them. A check run skips the plays' `verify:` checks, which would test the
+state before the changes (drift jobs still run them). `mode: "apply"` or an empty mode keeps normal behavior; other
 values return `400`. Check mode is only valid for apply jobs (other kinds return
 `{"error":"only apply jobs have a check mode"}`). It uses the same job operators and
 busy rule as Run and needs no `adhoc` setting. A check can also include allowed
