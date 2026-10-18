@@ -3136,7 +3136,7 @@ func TestServeRunTimeout(t *testing.T) {
 					return nil, errors.New("missing deadline")
 				}
 				started <- time.Until(deadline)
-				result := &JobResult{Started: time.Now().UTC(), Status: "ok", Hosts: map[string]string{"web": "failed"}, Report: json.RawMessage(`{"partial":true}`)}
+				result := &JobResult{Started: time.Now().UTC(), Status: "ok", AuditExecutionID: "exec-1", Hosts: map[string]string{"web": "failed"}, Report: json.RawMessage(`{"partial":true}`)}
 				if tc.paused {
 					select {
 					case <-time.After(10 * time.Millisecond):
@@ -3217,7 +3217,7 @@ func TestServeRunTimeout(t *testing.T) {
 			case tc.paused, tc.finished:
 				want = "ok"
 			}
-			if got.Status != want || busy || got.Hosts["web"] != "failed" || string(got.Report) != `{"partial":true}` {
+			if got.Status != want || busy || got.Hosts["web"] != "failed" || string(got.Report) != `{"partial":true}` || got.AuditExecutionID != "exec-1" {
 				t.Fatalf("result: %+v, running=%v", got, busy)
 			}
 			if want == statusTimedOut {

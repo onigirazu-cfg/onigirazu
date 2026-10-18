@@ -1191,6 +1191,7 @@ next:
 				r.Duration = time.Since(started).Seconds()
 				if result != nil {
 					r.Hosts, r.Report = result.Hosts, result.Report
+					r.AuditExecutionID = result.AuditExecutionID
 				}
 			default:
 				r.Status, r.Summary = "error", err.Error()

@@ -298,13 +298,6 @@ func (e *CommandExecutor) ExecuteContext(ctx context.Context, command string, ar
 	return e.ExecuteWithContext(ctx, command, args...)
 }
 
-// ExecuteOutputContext is Execute that a canceled context stops: the error
-// carries the first lines of the output, as Execute's does
-func (e *CommandExecutor) ExecuteOutputContext(ctx context.Context, command string, args ...string) (string, error) {
-	out, err := e.ExecuteWithContext(ctx, command, args...)
-	return out, withOutput(err, out)
-}
-
 // ExecuteWithTimeout runs a command with timeout
 func (e *CommandExecutor) ExecuteWithTimeout(command string, timeout time.Duration, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)

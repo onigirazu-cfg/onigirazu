@@ -55,7 +55,7 @@ func runShellOnHost(ctx context.Context, host types.Host, args map[string]interf
 
 	// The executor quotes the script the same way locally and over SSH, adds the
 	// output to the error, and stops the command when ctx ends
-	return exec.ExecuteOutputContext(ctx, "sh", "-c", script)
+	return exec.ExecuteContext(ctx, "sh", "-c", script)
 }
 
 // probeOnHost describes path through the host's command server without a
