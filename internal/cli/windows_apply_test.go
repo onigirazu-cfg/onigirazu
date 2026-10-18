@@ -67,7 +67,8 @@ func TestApplyOnWindowsHost(t *testing.T) {
 	t.Chdir(dir)
 	t.Setenv("HOME", dir)
 	root := NewRootCommand()
-	root.SetArgs([]string{"apply", "pb.yml", "-i", "inv.yml", "--no-color"})
+	// --flush-cache: a repeated run (-count) must gather facts again, not reuse the cache
+	root.SetArgs([]string{"apply", "pb.yml", "-i", "inv.yml", "--no-color", "--flush-cache"})
 	if err := root.Execute(); err != nil {
 		t.Fatalf("apply: %v (commands: %d)", err, len(f.Commands))
 	}
