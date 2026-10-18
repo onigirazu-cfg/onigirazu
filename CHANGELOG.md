@@ -14,7 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Canceling a run (Ctrl-C, `serve` cancel or timeout) stops a local command together with the processes it started; before, a shell child kept the run waiting until it finished on its own
+- Canceling a run (Ctrl-C, `serve` cancel or timeout) stops a local command or `script` together with the processes it started; before, a shell child kept the run waiting until it finished on its own
 
 ### Added
 
