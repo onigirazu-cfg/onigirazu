@@ -45,7 +45,7 @@ Environment variables only change the defaults; a key in `onigirazu.yml` wins ov
 | `dry_run` | `ONIGIRAZU_DRY_RUN` | `false` | Tasks run in check mode. Prefer `apply --check`. |
 | `color_output` | `ONIGIRAZU_COLOR_OUTPUT` | `true` | Colored output. `--no-color` overrides it. |
 | `ssh_strict_host_key` | `ONIGIRAZU_SSH_STRICT_HOST_KEY` | `false` | Reject hosts whose key is not in the known_hosts file. |
-| `ssh_known_hosts_file` | `ONIGIRAZU_SSH_KNOWN_HOSTS_FILE` | `~/.ssh/known_hosts` | known_hosts file for host key checks. |
+| `ssh_known_hosts_file` | `ONIGIRAZU_SSH_KNOWN_HOSTS_FILE` | `~/.ssh/known_hosts` | known_hosts file for host key checks. For a known host only the key types the file holds are asked for, as OpenSSH does, so a server that prefers another type still presents the known key. |
 | `remote_server` | `ONIGIRAZU_REMOTE_SERVER` | `auto` | Command server on SSH hosts: `auto`, `python` or `sh` (see below). |
 | `enable_metrics` | `ONIGIRAZU_ENABLE_METRICS` | `false` | Start a Prometheus endpoint during `apply` (`/metrics`, `/health`, `/summary`). |
 | `metrics_listen_address` | `ONIGIRAZU_METRICS_LISTEN_ADDRESS` | `127.0.0.1` | Listen address of the metrics server. |

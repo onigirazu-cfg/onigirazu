@@ -2,6 +2,8 @@ package ssh
 
 import (
 	"bytes"
+	"crypto/ed25519"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"errors"
@@ -9,6 +11,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -27,6 +30,7 @@ func keysEqual(a, b ssh.PublicKey) bool {
 type HostKeyManager struct {
 	knownHostsFile string
 	callback       ssh.HostKeyCallback // from the file as it was loaded
+	authorities    map[string]bool     // @cert-authority keys of the file, by wire form
 	added          map[string]ssh.PublicKey
 	mutex          sync.RWMutex
 	strictMode     bool
@@ -82,9 +86,15 @@ func (hkm *HostKeyManager) loadKnownHosts() error {
 		return err
 	}
 	defer func() { _ = os.Remove(tmp.Name()) }()
+	authorities := map[string]bool{}
 	for _, line := range strings.Split(string(data), "\n") {
 		if validKnownHostsLine(line) {
 			_, _ = tmp.WriteString(line + "\n")
+			if f := strings.Fields(line); f[0] == "@cert-authority" {
+				if key, _, _, _, err := ssh.ParseAuthorizedKey([]byte(f[2] + " " + f[3])); err == nil {
+					authorities[string(key.Marshal())] = true
+				}
+			}
 		}
 	}
 	if err := tmp.Close(); err != nil {
@@ -95,6 +105,7 @@ func (hkm *HostKeyManager) loadKnownHosts() error {
 		return err
 	}
 	hkm.callback = cb
+	hkm.authorities = authorities
 	return nil
 }
 
@@ -188,4 +199,89 @@ func (hkm *HostKeyManager) SetStrictMode(strict bool) {
 	hkm.mutex.Lock()
 	defer hkm.mutex.Unlock()
 	hkm.strictMode = strict
+}
+
+// placeholderKey never matches a real host: asking known_hosts about it
+// returns the keys the file holds for the host
+var placeholderKey = sync.OnceValue(func() ssh.PublicKey {
+	pub, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		return nil
+	}
+	key, err := ssh.NewPublicKey(pub)
+	if err != nil {
+		return nil
+	}
+	return key
+})
+
+// HostKeyAlgorithms are the host key algorithms to ask address (host:port)
+// for: the key types known_hosts holds for it, as OpenSSH does, so a server
+// that prefers another type still presents the key we know; nil for an
+// unknown host (the library's own order)
+func (hkm *HostKeyManager) HostKeyAlgorithms(address string) []string {
+	if hkm == nil || hkm.insecure {
+		return nil
+	}
+	name := knownhosts.Normalize(address)
+	hkm.mutex.RLock()
+	cb := hkm.callback
+	added := hkm.added[name]
+	authorities := hkm.authorities
+	hkm.mutex.RUnlock()
+
+	var keyTypes []string
+	if added != nil {
+		keyTypes = append(keyTypes, added.Type())
+	}
+	if probe := placeholderKey(); cb != nil && probe != nil {
+		var keyErr *knownhosts.KeyError
+		if err := cb(address, probeAddr(address), probe); errors.As(err, &keyErr) {
+			for _, want := range keyErr.Want {
+				if authorities[string(want.Key.Marshal())] {
+					// a host certificate's key type is not the CA's: keep the
+					// library's order, which asks for certificates first
+					return nil
+				}
+				keyTypes = append(keyTypes, want.Key.Type())
+			}
+		}
+	}
+	return hostKeyAlgorithms(keyTypes)
+}
+
+// probeAddr is the remote address knownhosts matches IP entries against
+func probeAddr(address string) net.Addr {
+	host, port, err := net.SplitHostPort(address)
+	if err != nil {
+		host = address
+	}
+	n, _ := strconv.Atoi(port)
+	return &net.TCPAddr{IP: net.ParseIP(host), Port: n}
+}
+
+// hostKeyAlgorithms turns key types into the algorithms that present them:
+// an RSA key signs with SHA-2 first
+func hostKeyAlgorithms(keyTypes []string) []string {
+	var out []string
+	seen := map[string]bool{}
+	add := func(algos ...string) {
+		for _, a := range algos {
+			if !seen[a] {
+				seen[a] = true
+				out = append(out, a)
+			}
+		}
+	}
+	for _, t := range keyTypes {
+		switch t {
+		case ssh.KeyAlgoRSA:
+			add(ssh.KeyAlgoRSASHA512, ssh.KeyAlgoRSASHA256, ssh.KeyAlgoRSA)
+		case ssh.CertAlgoRSAv01:
+			add(ssh.CertAlgoRSASHA512v01, ssh.CertAlgoRSASHA256v01, ssh.CertAlgoRSAv01)
+		default:
+			add(t)
+		}
+	}
+	return out
 }

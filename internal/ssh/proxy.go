@@ -124,6 +124,9 @@ func jumpConfig(hop string, target types.Host, auth []ssh.AuthMethod, m *HostKey
 	portN, _ := strconv.Atoi(port)
 	jump := types.Host{Name: name, Address: address, Port: portN, User: user, InsecureIgnoreHostKey: target.InsecureIgnoreHostKey}
 	cfg := &ssh.ClientConfig{User: user, Auth: methods, HostKeyCallback: hostKeyCallback(jump, m), Timeout: timeout}
+	if !jump.InsecureIgnoreHostKey {
+		cfg.HostKeyAlgorithms = m.HostKeyAlgorithms(net.JoinHostPort(address, port))
+	}
 	return name, net.JoinHostPort(address, port), cfg, nil
 }
 

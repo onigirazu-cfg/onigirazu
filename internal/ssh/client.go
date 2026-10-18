@@ -198,6 +198,9 @@ func newClient(host types.Host, hostKeyManager *HostKeyManager, lg Logger, dial 
 		config.Timeout = opts.ConnectTimeout
 	}
 	address := dialAddress(host)
+	if !host.InsecureIgnoreHostKey {
+		config.HostKeyAlgorithms = hostKeyManager.HostKeyAlgorithms(address)
+	}
 	lg.Debug("Attempting to connect to %s as user %s", address, host.User)
 	client, jumps, err := dialHost(host, address, config, auth, hostKeyManager, opts)
 	if err != nil {
