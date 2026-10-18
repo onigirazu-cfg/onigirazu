@@ -215,6 +215,18 @@ func (m *CopyModule) copyTree(ctx context.Context, host types.Host, args map[str
 	return result, nil
 }
 
+// copyMode is the task's octal mode, when it gives a valid one
+func copyMode(mode string) (os.FileMode, bool) {
+	if mode == "" {
+		return 0, false
+	}
+	n, err := strconv.ParseUint(mode, 8, 32)
+	if err != nil {
+		return 0, false
+	}
+	return os.FileMode(n), true
+}
+
 // executeLocal handles file copying on local host
 func (m *CopyModule) executeLocal(dest string, sourceData []byte, backup, force bool, mode, owner, group, sourceChecksum string, result types.TaskResult) (types.TaskResult, error) {
 	// Check if destination exists
@@ -246,6 +258,18 @@ func (m *CopyModule) executeLocal(dest string, sourceData []byte, backup, force 
 	if !needsCopy {
 		result.Success = true
 		result.Output["msg"] = "file already exists with correct content"
+		// the content is right; the mode is still the task's to set, as over SSH
+		if fileMode, ok := copyMode(mode); ok {
+			if info, err := os.Stat(dest); err == nil && info.Mode().Perm() != fileMode.Perm() {
+				if err := os.Chmod(dest, fileMode); err != nil {
+					result.Failed = true
+					result.Error = fmt.Sprintf("failed to set mode on %s: %v", dest, err)
+					return result, err
+				}
+				result.Changed = true
+				result.Output["msg"] = "mode updated"
+			}
+		}
 		return result, nil
 	}
 
@@ -284,6 +308,14 @@ func (m *CopyModule) executeLocal(dest string, sourceData []byte, backup, force 
 		result.Failed = true
 		result.Error = fmt.Sprintf("failed to write file %s: %v", dest, err)
 		return result, err
+	}
+	// WriteFile sets the mode of a new file only: an existing one keeps its own
+	if _, ok := copyMode(mode); ok && destExists {
+		if err := os.Chmod(dest, fileMode); err != nil {
+			result.Failed = true
+			result.Error = fmt.Sprintf("failed to set mode on %s: %v", dest, err)
+			return result, err
+		}
 	}
 
 	result.Changed = true
