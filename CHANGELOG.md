@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `onigirazu serve`: Runs and Audit filters use local date pickers, quick ranges, suggestions, removable active-filter chips and a per-page selector, with paging cursors hidden
 - `onigirazu serve`: proxy group lists split on `|` and `,` only; a space is part of a group name
 - In-process playbook runs can overlap with their own output, secrets, role paths, bridge configuration and facts cache; cancellation follows the caller's context, and SSH pool settings are retained from the first initialization
 - `apply` takes its inventory and state file from its own `-i`/`--state` flags; `drift`, `verify`, `comply`, `serve`, `listen`, `pull`, `image`, `bootstrap` and `mcp` pass theirs the same way instead of writing the process's global `-i`/`--state` before running a playbook in-process
