@@ -34,11 +34,12 @@ func (e *ExitError) Error() string { return fmt.Sprintf("exit %d: %s", e.Code, e
 
 // DriftItem is one task that would change one host
 type DriftItem struct {
-	Key    string `json:"key,omitempty"`
-	Play   string `json:"play,omitempty"`
-	Task   string `json:"task"`
-	Module string `json:"module,omitempty"`
-	Detail string `json:"detail,omitempty"`
+	DurationMS int64  `json:"duration_ms,omitempty"`
+	Key        string `json:"key,omitempty"`
+	Play       string `json:"play,omitempty"`
+	Task       string `json:"task"`
+	Module     string `json:"module,omitempty"`
+	Detail     string `json:"detail,omitempty"`
 	// Diff is what the task would change, as a unified diff (file modules)
 	Diff string `json:"diff,omitempty"`
 	// Since is when the task was first seen drifting in the checks in a row
@@ -46,17 +47,29 @@ type DriftItem struct {
 	Since *time.Time `json:"since,omitempty"`
 }
 
+// TaskRun is a task's status and duration without its output or diff.
+type TaskRun struct {
+	Key        string `json:"key"`
+	Play       string `json:"play"`
+	Task       string `json:"task"`
+	Module     string `json:"module"`
+	Status     string `json:"status"`
+	DurationMS int64  `json:"duration_ms"`
+}
+
 // DriftReport is the outcome of a drift check
 type DriftReport struct {
-	Playbook   string                 `json:"playbook"`
-	CheckedAt  time.Time              `json:"checked_at"`
-	Hosts      int                    `json:"hosts"`
-	InSync     []string               `json:"in_sync"`
-	Drift      map[string][]DriftItem `json:"drift"`
-	Errors     map[string][]DriftItem `json:"errors,omitempty"`
-	Fixed      bool                   `json:"fixed,omitempty"`
-	Plan       bool                   `json:"plan,omitempty"`
-	DriftTasks int                    `json:"drift_tasks"`
+	Tasks          map[string][]TaskRun   `json:"tasks,omitempty"`
+	TasksTruncated bool                   `json:"tasks_truncated,omitempty"`
+	Playbook       string                 `json:"playbook"`
+	CheckedAt      time.Time              `json:"checked_at"`
+	Hosts          int                    `json:"hosts"`
+	InSync         []string               `json:"in_sync"`
+	Drift          map[string][]DriftItem `json:"drift"`
+	Errors         map[string][]DriftItem `json:"errors,omitempty"`
+	Fixed          bool                   `json:"fixed,omitempty"`
+	Plan           bool                   `json:"plan,omitempty"`
+	DriftTasks     int                    `json:"drift_tasks"`
 	// Orphans are managed resources no task claims any more
 	Orphans []types.ManagedOrphan `json:"orphans,omitempty"`
 }
@@ -135,6 +148,7 @@ func runPlaybookContext(ctx context.Context, args []string) (*types.PlaybookResu
 func buildDriftReport(playbook string, result *types.PlaybookResult) *DriftReport {
 	report := &DriftReport{
 		Playbook: playbook, CheckedAt: time.Now(),
+		Tasks: map[string][]TaskRun{},
 		Drift: map[string][]DriftItem{}, Errors: map[string][]DriftItem{}, InSync: []string{},
 	}
 	hosts := map[string]bool{}
@@ -142,7 +156,23 @@ func buildDriftReport(playbook string, result *types.PlaybookResult) *DriftRepor
 		for _, host := range play.Hosts {
 			hosts[host.Host] = true
 			for _, t := range host.Tasks {
-				item := DriftItem{Key: t.TaskKey, Play: play.Name, Task: t.TaskName, Module: t.Module, Detail: taskDetail(t), Diff: diffview.TaskDiff(t)}
+				status := "ok"
+				switch {
+				case t.Ignored:
+					status = "ignored"
+				case t.Failed:
+					status = "failed"
+				case t.Skipped:
+					status = "skipped"
+				case t.Changed:
+					status = "changed"
+				}
+				if len(report.Tasks[host.Host]) < 2000 {
+					report.Tasks[host.Host] = append(report.Tasks[host.Host], TaskRun{Key: t.TaskKey, Play: play.Name, Task: t.TaskName, Module: t.Module, Status: status, DurationMS: t.Duration.Milliseconds()})
+				} else {
+					report.TasksTruncated = true
+				}
+				item := DriftItem{DurationMS: t.Duration.Milliseconds(), Key: t.TaskKey, Play: play.Name, Task: t.TaskName, Module: t.Module, Detail: taskDetail(t), Diff: diffview.TaskDiff(t)}
 				switch {
 				case t.Failed && !t.Ignored:
 					report.Errors[host.Host] = append(report.Errors[host.Host], item)

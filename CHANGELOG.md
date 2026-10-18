@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `onigirazu serve`: apply diffs, per-host Tasks with statuses and durations, and compliance audit links with partial reports on cancel or timeout
 - `onigirazu serve`: live host task progress and structured result events in a Progress tab, with resumable NDJSON streams at `GET /api/results/{id}/events`
 - `onigirazu serve`: typed, validated launch forms with defaults and one-click failed-host reruns linked to their parent run
 - `onigirazu serve`: run later with `not_before`, persistent scheduled runs and apply maintenance windows (`windows`, `windows_tz`), with page controls, cancellation, notifications and metrics

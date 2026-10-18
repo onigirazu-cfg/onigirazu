@@ -109,8 +109,8 @@ as `error` with summary `interrupted: serve stopping`.
 
 Run time limits start when execution starts, excluding time scheduled, queued or pending approval.
 An unfinished run that reaches its limit becomes `timed_out` with summary
-`timed out after <duration>` and keeps any partial hosts and report (drift, apply and verify
-jobs; a compliance run keeps none); partial hosts do not count as host verdicts. Operator cancellation
+`timed out after <duration>` and keeps any partial hosts and report (drift, apply, verify and compliance
+jobs); partial hosts do not count as host verdicts. Operator cancellation
 and shutdown retain their usual outcomes; a completed run keeps its result.
 
 Paths in the file are relative to it. Every job's state file lives in
@@ -282,7 +282,7 @@ Cancel: an operator of the job uses Cancel on the page or `POST /api/runs/{id}/c
 with an optional `{comment: "..."}`. A scheduled or queued run becomes `cancelled` without starting and
 frees the job immediately; a running run becomes `cancelling` until its context stops, then
 `cancelled`. The record keeps `cancel.by`, `cancel.at`, optional `cancel.comment`, elapsed duration
-and any partial hosts/report (drift, apply and verify jobs); partial hosts do not count as host verdicts. The schedule can
+and any partial hosts/report (drift, apply, verify and compliance jobs); partial hosts do not count as host verdicts. The schedule can
 request the job again. Pending runs must be rejected instead.
 
 ## Access
@@ -380,9 +380,10 @@ differ or are unavailable. Individual run pages still load full reports.
 
 Run pages show metadata and tabs by kind: drift/apply
 have expandable Hosts, Changes grouped by task, coloured Diff (limited to the first
-200 KB), and Orphans when present; verify has expandable Hosts and Checks across hosts;
+200 KB), Tasks with collapsible per-host status and duration lists, host duration totals
+and the slowest 10 retained tasks, and Orphans when present; verify has expandable Hosts and Checks across hosts;
 comply has a control-by-host Matrix with unreachable hosts and scores, plus Remediation
-grouped by control. Every kind retains a full JSON tab. Audit records open as JSON.
+grouped by control. Apply runs include the diff of what they changed. Every kind retains a full JSON tab. Audit records open as JSON.
 Host names open `#host/<name>` with retained serve results across jobs and a separate
 “runs in the audit store” link. Jobs show a muted “never” badge before the first executed
 run and “stale” when a scheduled job’s last execution is older than twice its interval;
@@ -405,11 +406,17 @@ the stable task key; older records may lack it. `same_playbook` is true only whe
 compared runs have equal, nonempty hashes. Comparison follows the requested A-to-B
 direction; the API does not require chronological order.
 
-Serve results include `audit_execution_id` when drift, apply or verify starts audit
+Serve results include `audit_execution_id` when drift, apply, verify or compliance starts audit
 recording. Audit history rows expose the matching `serve_run` while that serve result
-is retained. Both pages link to each other at `#run/<id>`. Comply results currently
-omit `audit_execution_id` because the compliance report does not carry the playbook's
-execution ID.
+is retained. Both pages link to each other at `#run/<id>`. Compliance runs retain
+completed controls and the execution link when canceled or timed out;
+hosts without completed controls receive no verdict.
+
+Drift/apply report JSON includes optional `tasks`, keyed by host, with rows in run order:
+`{key, play, task, module, status, duration_ms}`. Status is `ok`, `changed`, `failed`,
+`skipped` or `ignored`. Rows exclude output and diffs and are capped at 2000 per host;
+`tasks_truncated: true` signals omitted rows. Host duration totals and the slowest
+list then cover retained rows only. Drift/error items also include optional `duration_ms`.
 
 `metrics.push` sends each drift job's drift metrics and each comply job's compliance metrics
-as `drift --metrics-push` and `comply --metrics-push` do.
+as `drift --metrics-push` and `comply --metrics-push` do. Stopped compliance runs do not push compliance metrics.

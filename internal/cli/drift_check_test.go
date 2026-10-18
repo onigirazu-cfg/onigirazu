@@ -284,3 +284,45 @@ func TestDriftHistoryStore(t *testing.T) {
 	writeDriftHistory(&out, "site.yml", h)
 	assert.Equal(t, 4, strings.Count(out.String(), "\n"))
 }
+
+func TestBuildDriftReportTaskRuns(t *testing.T) {
+	tasks := []types.TaskResult{
+		{TaskKey: "one", TaskName: "ok", Module: "command", Duration: 1500 * time.Microsecond},
+		{TaskName: "change", Changed: true, Duration: 2 * time.Second},
+		{TaskName: "fail", Failed: true, Duration: 3 * time.Millisecond},
+		{TaskName: "skip", Skipped: true, Changed: true, Duration: 4 * time.Millisecond},
+		{TaskName: "ignore", Failed: true, Ignored: true, Duration: 5 * time.Millisecond},
+	}
+	result := &types.PlaybookResult{Plays: []types.PlayResult{
+		{Name: "first", Hosts: []types.HostResult{{Host: "web", Tasks: tasks[:3]}}},
+		{Name: "second", Hosts: []types.HostResult{{Host: "web", Tasks: tasks[3:]}}},
+	}}
+	r := buildDriftReport("site.yml", result)
+	require.Len(t, r.Tasks["web"], 5)
+	for i, status := range []string{"ok", "changed", "failed", "skipped", "ignored"} {
+		assert.Equal(t, status, r.Tasks["web"][i].Status)
+		assert.Equal(t, tasks[i].Duration.Milliseconds(), r.Tasks["web"][i].DurationMS)
+		assert.Equal(t, tasks[i].TaskName, r.Tasks["web"][i].Task)
+	}
+	assert.Equal(t, TaskRun{Key: "one", Play: "first", Task: "ok", Module: "command", Status: "ok", DurationMS: 1}, r.Tasks["web"][0])
+	assert.Equal(t, "second", r.Tasks["web"][3].Play)
+	assert.Equal(t, int64(2000), r.Drift["web"][0].DurationMS)
+	assert.Equal(t, int64(3), r.Errors["web"][0].DurationMS)
+	assert.False(t, r.TasksTruncated)
+}
+
+func TestBuildDriftReportTaskCap(t *testing.T) {
+	tasks := make([]types.TaskResult, 2000)
+	result := &types.PlaybookResult{Plays: []types.PlayResult{{Hosts: []types.HostResult{{Host: "web", Tasks: tasks}}}}}
+	assert.False(t, buildDriftReport("site.yml", result).TasksTruncated)
+	result.Plays = append(result.Plays, types.PlayResult{Hosts: []types.HostResult{
+		{Host: "web", Tasks: []types.TaskResult{{Changed: true, Duration: time.Second}}},
+		{Host: "db", Tasks: []types.TaskResult{{TaskName: "other"}}},
+	}})
+	r := buildDriftReport("site.yml", result)
+	assert.Len(t, r.Tasks["web"], 2000)
+	assert.Len(t, r.Tasks["db"], 1)
+	assert.True(t, r.TasksTruncated)
+	assert.Equal(t, 1, r.DriftTasks)
+	assert.Equal(t, int64(1000), r.Drift["web"][0].DurationMS)
+}

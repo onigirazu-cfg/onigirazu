@@ -50,6 +50,12 @@ onigirazu drift site.yml -i hosts.yml --fix                    # apply when drif
 onigirazu drift site.yml --history                             # past checks
 ```
 
+Drift JSON includes optional `tasks`, keyed by host, with task rows in run order:
+`{key, play, task, module, status, duration_ms}`. Status is `ok`, `changed`, `failed`,
+`skipped` or `ignored`; rows carry no output or diff. Each host retains at most 2000
+rows; `tasks_truncated: true` indicates omitted rows. Drift/error items also include
+optional `duration_ms`. Existing report fields are unchanged.
+
 | Exit code | Meaning |
 |-----------|---------|
 | 0 | all hosts match the playbook |

@@ -101,7 +101,7 @@ severity or above) or a host cannot be checked.`,
 }
 
 func runComply(o *complyOptions, stdout io.Writer) error {
-	report, err := complyReport(context.Background(), o)
+	report, _, err := complyReport(context.Background(), o)
 	if err != nil {
 		return err
 	}
@@ -143,14 +143,14 @@ func runComply(o *complyOptions, stdout io.Writer) error {
 
 // complyReport runs the profile against the hosts and scores it; serve
 // uses it for scheduled compliance jobs too
-func complyReport(ctx context.Context, o *complyOptions) (*comply.Report, error) {
+func complyReport(ctx context.Context, o *complyOptions) (*comply.Report, string, error) {
 	profile, err := comply.Load(o.profile)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	profile = profile.Filter(o.tags, o.minSeverity)
 	if len(profile.Controls) == 0 {
-		return nil, fmt.Errorf("no control of %s matches the filters", profile.Name)
+		return nil, "", fmt.Errorf("no control of %s matches the filters", profile.Name)
 	}
 	checks, _ := profile.Checks()
 	become := o.become
@@ -161,16 +161,16 @@ func complyReport(ctx context.Context, o *complyOptions) (*comply.Report, error)
 	play := map[string]interface{}{"name": "comply " + profile.Name, "hosts": "all", "gather_facts": false, "become": become, "verify": checks}
 	data, err := yaml.Marshal(map[string]interface{}{"plays": []interface{}{play}})
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	dir, err := os.MkdirTemp("", "onigirazu-comply-")
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	defer os.RemoveAll(dir)
 	playbook := filepath.Join(dir, profile.Name+".yml")
 	if err := os.WriteFile(playbook, data, 0o600); err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	o.driftCheckOptions.become = false // the play carries become
 	// no state of its own and none from the root's --state: a throwaway one
@@ -178,15 +178,23 @@ func complyReport(ctx context.Context, o *complyOptions) (*comply.Report, error)
 		o.state = filepath.Join(dir, ".onigirazu-state")
 	}
 	result, err := runPlaybookContext(ctx, append(o.applyArgs(playbook, false), "--verify-only"))
-	if err != nil {
-		return nil, err
+	if result == nil {
+		return nil, "", err
+	}
+	if err != nil && ctx.Err() == nil {
+		return nil, result.ExecutionID, err
 	}
 	vr := buildVerifyReport(playbook, result)
 	hostChecks := map[string][]map[string]interface{}{}
 	for host, h := range vr.Hosts {
-		hostChecks[host] = h.Checks
+		if len(h.Checks) > 0 {
+			hostChecks[host] = h.Checks
+		}
 	}
 	report := comply.Build(profile, hostChecks, vr.Errors)
+	if err != nil {
+		report = comply.BuildPartial(profile, hostChecks, vr.Errors)
+	}
 	report.Threshold = o.failOn
-	return report, nil
+	return report, result.ExecutionID, err
 }

@@ -45,11 +45,25 @@ type ControlResult struct {
 // Build maps the verify module's check results (in the order of
 // Profile.Checks) back to controls, per host
 func Build(p *Profile, hostChecks map[string][]map[string]interface{}, errors map[string]string) *Report {
+	return build(p, hostChecks, errors, false)
+}
+
+// BuildPartial scores only controls whose checks finished before the run stopped.
+func BuildPartial(p *Profile, hostChecks map[string][]map[string]interface{}, errors map[string]string) *Report {
+	return build(p, hostChecks, errors, true)
+}
+
+func build(p *Profile, hostChecks map[string][]map[string]interface{}, errors map[string]string, partial bool) *Report {
 	_, index := p.Checks()
 	r := &Report{Profile: p.Name, Title: p.Title, Time: time.Now().UTC(), Hosts: map[string]*HostResult{}, Errors: errors}
 	for host, checks := range hostChecks {
 		h := &HostResult{}
 		results := make([]ControlResult, len(p.Controls))
+		completed := make([]int, len(p.Controls))
+		expected := make([]int, len(p.Controls))
+		for _, control := range index {
+			expected[control]++
+		}
 		for i, c := range p.Controls {
 			results[i] = ControlResult{ID: c.ID, Title: c.Title, Severity: strings.ToLower(c.Severity), Tags: c.Tags, OK: true, Remediation: c.Remediation}
 		}
@@ -57,6 +71,10 @@ func Build(p *Profile, hostChecks map[string][]map[string]interface{}, errors ma
 			if i >= len(index) {
 				break
 			}
+			if partial && check["detail"] == "no result" {
+				continue
+			}
+			completed[index[i]]++
 			ok, _ := check["ok"].(bool)
 			if !ok {
 				cr := &results[index[i]]
@@ -64,15 +82,21 @@ func Build(p *Profile, hostChecks map[string][]map[string]interface{}, errors ma
 				cr.Details = append(cr.Details, fmt.Sprintf("%v: %v", check["check"], check["detail"]))
 			}
 		}
-		for _, cr := range results {
+		for i, cr := range results {
+			if partial && completed[i] != expected[i] {
+				continue
+			}
+			h.Controls = append(h.Controls, cr)
 			if cr.OK {
 				h.Passed++
 			} else {
 				h.Failed++
 			}
 		}
+		if partial && len(h.Controls) == 0 {
+			continue
+		}
 		h.Score = percent(h.Passed, h.Failed)
-		h.Controls = results
 		r.Hosts[host] = h
 		r.Passed += h.Passed
 		r.Failed += h.Failed

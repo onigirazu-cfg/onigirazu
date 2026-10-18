@@ -107,3 +107,18 @@ controls:
 		t.Errorf("metrics:\n%s", m)
 	}
 }
+
+func TestBuildPartial(t *testing.T) {
+	p := &Profile{Name: "partial", Controls: []Control{
+		{ID: "done", Checks: []map[string]interface{}{{"file": map[string]interface{}{"path": "/tmp"}}}},
+		{ID: "unfinished", Checks: []map[string]interface{}{{"command": map[string]interface{}{"cmd": "true"}}, {"command": map[string]interface{}{"cmd": "sleep 30"}}}},
+	}}
+	r := BuildPartial(p, map[string][]map[string]interface{}{
+		"web":   {{"ok": true}, {"ok": true}, {"ok": false, "detail": "no result"}},
+		"idle":  {{"ok": false, "detail": "no result"}},
+		"empty": nil,
+	}, nil)
+	if len(r.Hosts) != 1 || r.Passed != 1 || r.Failed != 0 || len(r.Hosts["web"].Controls) != 1 {
+		t.Fatalf("partial report: %+v", r)
+	}
+}
