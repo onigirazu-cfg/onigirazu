@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - SSH asks a known host for the key types `known_hosts` holds, as OpenSSH does: a host known by its ed25519 key no longer fails with a key mismatch when its server prefers ecdsa or rsa
+- `systemd`/`service` follow Ansible's unit states: `state: started` on a unit that is still activating is ok, not changed; `state: stopped` also stops a deactivating unit; a reloading unit no longer counts as started; the state `systemctl is-active` prints is read even though it exits non-zero
 - `apply` whose output reader goes away (`| head`, `| grep -q`) runs to the end instead of being killed by SIGPIPE mid-run, which left hosts half-changed, the state unsaved and the state lock held
 - `copy` on a local host applies `mode` when the content is already right and when it rewrites an existing file, as it does over SSH, and reports its diff with `--diff`
 - Canceling a run (Ctrl-C, `serve` cancel or timeout) stops a local command, `script` or `verify:` command check together with the processes it started; before, a shell child kept the run waiting until it finished on its own
