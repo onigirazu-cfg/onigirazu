@@ -39,6 +39,7 @@ svg.icon{width:16px;height:16px;flex-shrink:0;fill:none;stroke:currentColor;stro
 .user-menu summary{list-style:none}
 .user-popover{position:absolute;right:0;top:42px;min-width:210px;padding:12px;background:var(--card);border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow)}
 .user-popover p{margin:0 0 10px}
+.user-popover .run{width:100%;margin-top:6px}
 .sidebar{position:fixed;left:0;top:56px;bottom:0;width:240px;background:var(--bg);border-right:1px solid var(--line);padding:16px 8px;display:flex;flex-direction:column;z-index:15}
 .sidebar nav{display:grid;gap:4px}
 .sidebar nav button{display:flex;gap:12px;align-items:center;text-align:left;color:var(--muted);background:none;border:0;padding:10px 14px;border-radius:6px;width:100%}
@@ -61,8 +62,9 @@ h3{font-size:15px}
 p{margin:12px 0}
 
 /* Components and report content. */
-button.run{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:5px 11px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg);box-shadow:var(--shadow);white-space:nowrap}
-button.run:hover:not(:disabled){background:var(--hover)}
+button.run,a.run{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:5px 11px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg);box-shadow:var(--shadow);white-space:nowrap}
+button.run:hover:not(:disabled),a.run:hover{background:var(--hover)}
+a.run{text-decoration:none;font:inherit}
 button.primary{background:var(--primary);color:var(--primary-fg);border-color:var(--primary)}
 button.primary:hover:not(:disabled){opacity:.85;background:var(--primary)}
 .table-scroll{width:100%;max-width:100%;overflow:auto;border:1px solid var(--line);border-radius:10px;background:var(--bg);margin:14px 0;box-shadow:var(--shadow)}
