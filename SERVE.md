@@ -338,6 +338,69 @@ outpost's own paths, such as `/outpost.goauthentik.io/sign_out`, must reach the 
 Automation with a bearer token goes around Authentik: call `serve` on its own address, or give
 `/api/` a route on the reverse proxy that skips Authentik (the token is still required there).
 
+### Other identity proxies
+
+Any reverse proxy that signs people in and passes who they are in headers works the same way: point
+`user_header` and `groups_header` at its headers, `sign_out_url` at its sign-out path, and
+`trusted_proxies` at its address. Groups may come as one header joined by `|` or `,`, or as several
+header lines (all are read).
+
+| Proxy | `user_header` | `groups_header` | `sign_out_url` |
+|---|---|---|---|
+| Authentik outpost | `X-Authentik-Username` | `X-Authentik-Groups` | `/outpost.goauthentik.io/sign_out` |
+| oauth2-proxy (`--pass-user-headers`, proxy mode) | `X-Forwarded-Email` or `X-Forwarded-User` | `X-Forwarded-Groups` | `/oauth2/sign_out` |
+| oauth2-proxy (`--set-xauthrequest`, nginx `auth_request`) | `X-Auth-Request-Email` | `X-Auth-Request-Groups` | `/oauth2/sign_out` |
+| Authelia (forward auth) | `Remote-User` | `Remote-Groups` | the Authelia portal's `/logout` |
+| Pomerium (`pass_identity_headers` + `jwt_claims_headers`) | `X-Pomerium-Claim-Email` | `X-Pomerium-Claim-Groups` | `/.pomerium/sign_out` |
+| Cloudflare Access | `Cf-Access-Authenticated-User-Email` | none | `/cdn-cgi/access/logout` |
+| Tailscale Serve | `Tailscale-User-Login` | none | none |
+
+Without a groups header every signed-in user is a viewer; operators then use bearer tokens, or put a
+proxy that passes groups in front. Behind Cloudflare Access only cloudflared should reach `serve`;
+Tailscale Serve strips client-sent identity headers and expects the backend on localhost.
+
+**oauth2-proxy** (Keycloak, Entra ID, Okta, GitLab, any OIDC provider; Google below). In proxy mode it
+forwards to `serve` itself:
+
+```sh
+oauth2-proxy --provider=oidc --oidc-issuer-url=https://sso.example.com/realms/ops \
+  --client-id=serve --client-secret-file=/run/secrets/serve-oidc --cookie-secret-file=/run/secrets/cookie \
+  --email-domain=example.com --upstream=http://192.0.2.20:8086 --http-address=0.0.0.0:4180 \
+  --pass-user-headers --oidc-groups-claim=groups
+```
+
+```yaml
+auth:
+  user_header: X-Forwarded-Email
+  groups_header: X-Forwarded-Groups
+  operators: [fleet-operators]
+  trusted_proxies: [192.0.2.5]           # the oauth2-proxy host
+  sign_out_url: /oauth2/sign_out
+```
+
+The OIDC provider must put the groups into the `groups` claim (Keycloak: a group membership mapper).
+In nginx `auth_request` mode copy `X-Auth-Request-Email` and `X-Auth-Request-Groups` from the auth
+response into the request to `serve`, and check the result with `GET /api/me` (user and operator).
+
+**Google** goes through oauth2-proxy with `--provider=google`. The e-mail always arrives
+(`X-Forwarded-Email`); groups only for Google Workspace: oauth2-proxy reads them from the Admin SDK with
+a service account (`--google-service-account-json`, domain-wide delegation with the
+`https://www.googleapis.com/auth/admin.directory.group.member.readonly` scope, `--google-admin-email`) and passes the user's groups,
+limited to `--google-group` when set. Plain Gmail accounts have no groups, so they sign in as viewers.
+Alternatively add Google as a sign-in source in Authentik and keep the groups there.
+
+**Authelia** with Traefik forward auth: the middleware copies the identity headers to `serve`
+(`authResponseHeaders: Remote-User,Remote-Groups,Remote-Email`), and `trusted_proxies` is Traefik:
+
+```yaml
+auth:
+  user_header: Remote-User
+  groups_header: Remote-Groups
+  operators: [fleet-operators]
+  trusted_proxies: [192.0.2.5]           # Traefik
+  sign_out_url: https://auth.example.com/logout
+```
+
 Named bearer tokens in `auth.tokens` have a `name`, a `token` value (expands `${VAR}`),
 and optional `groups`. Each is a server-level operator. Names must be unique and values
 must be nonempty. Tokens are checked before proxy headers.
