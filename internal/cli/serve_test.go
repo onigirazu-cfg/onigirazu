@@ -4100,3 +4100,18 @@ func TestServeProxyAuth(t *testing.T) {
 		})
 	}
 }
+
+func TestServeProxyGroupsAcrossHeaderLines(t *testing.T) {
+	s, err := newServer(&ServeConfig{DataDir: t.TempDir(), Auth: ServeAuth{UserHeader: "X-Forwarded-Email", GroupsHeader: "X-Forwarded-Groups", Operators: []string{"fleet-operators"}}}, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest("GET", "/api/me", nil)
+	req.Header.Set("X-Forwarded-Email", "alice@example.com")
+	req.Header.Add("X-Forwarded-Groups", "staff")
+	req.Header.Add("X-Forwarded-Groups", "fleet-operators")
+	id, err := s.identify(req)
+	if err != nil || !id.Operator || !slices.Equal(id.Groups, []string{"staff", "fleet-operators"}) {
+		t.Fatalf("identity: %+v %v", id, err)
+	}
+}

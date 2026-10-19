@@ -1910,7 +1910,8 @@ func (s *server) identify(r *http.Request) (serveIdentity, error) {
 		if user := r.Header.Get(a.UserHeader); user != "" {
 			id := serveIdentity{User: user}
 			if a.GroupsHeader != "" {
-				id.Groups = splitGroups(r.Header.Get(a.GroupsHeader))
+				// oauth2-proxy sends one header line per group: read them all
+				id.Groups = splitGroups(strings.Join(r.Header.Values(a.GroupsHeader), ","))
 				for _, g := range id.Groups {
 					for _, op := range a.Operators {
 						if strings.EqualFold(g, op) {
