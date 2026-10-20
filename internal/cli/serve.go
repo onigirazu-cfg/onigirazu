@@ -56,6 +56,7 @@ type ServeConfig struct {
 	Notify          []NotifyTarget `yaml:"notify"`           // targets for every job
 	ApprovalTimeout time.Duration  `yaml:"approval_timeout"` // how long a pending run waits, default 1h
 	RunTimeout      time.Duration  `yaml:"run_timeout"`      // 0: no run limit
+	warnings        []string
 }
 
 // ServeAuth: a bearer token is an operator (the plain one is the user
@@ -427,6 +428,7 @@ a reverse proxy such as Authentik's outpost (viewer; operator by group).`,
 			if err != nil {
 				return err
 			}
+			cfg.printWarnings(cmd.ErrOrStderr())
 			if o.addr != "" {
 				cfg.Listen = o.addr
 			}
@@ -440,7 +442,7 @@ a reverse proxy such as Authentik's outpost (viewer; operator by group).`,
 		Short: "Write and start a systemd service that runs serve with this file",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return installServeService(o, cmd.OutOrStdout())
+			return installServeService(o, cmd.OutOrStdout(), cmd.ErrOrStderr())
 		},
 	}
 	install.Flags().StringVarP(&o.config, "config-file", "f", "/etc/onigirazu/serve.yml", "The serve.yml the service reads")
@@ -506,9 +508,12 @@ func loadServeConfig(path string) (*ServeConfig, error) {
 		}
 		tokenNames[name] = true
 	}
-	if err := validateNotifyTargets(cfg.Notify); err != nil {
+	var warnings []string
+	cfg.Notify, warnings, err = validateNotifyTargets(cfg.Notify, "(server-wide)")
+	if err != nil {
 		return nil, fmt.Errorf("notify: %w", err)
 	}
+	cfg.warnings = append(cfg.warnings, warnings...)
 	base := filepath.Dir(path)
 	names := map[string]bool{}
 	for i := range cfg.Jobs {
@@ -525,9 +530,11 @@ func loadServeConfig(path string) (*ServeConfig, error) {
 		if err != nil {
 			return nil, fmt.Errorf("job %s: %w", j.Name, err)
 		}
-		if err := validateNotifyTargets(j.Notify); err != nil {
+		j.Notify, warnings, err = validateNotifyTargets(j.Notify, "of job "+j.Name)
+		if err != nil {
 			return nil, fmt.Errorf("job %s: notify: %w", j.Name, err)
 		}
+		cfg.warnings = append(cfg.warnings, warnings...)
 		if j.Name == "" {
 			return nil, fmt.Errorf("%s: job %d has no name", path, i+1)
 		}
@@ -2912,13 +2919,21 @@ func runServe(ctx context.Context, cfg *ServeConfig, out io.Writer) error {
 	}
 }
 
-func installServeService(o *serveOptions, out io.Writer) error {
+func (cfg *ServeConfig) printWarnings(out io.Writer) {
+	for _, warning := range cfg.warnings {
+		fmt.Fprintln(out, warning)
+	}
+}
+
+func installServeService(o *serveOptions, out, errOut io.Writer) error {
 	if _, err := os.Stat("/run/systemd/system"); err != nil {
 		return fmt.Errorf("serve install needs systemd")
 	}
-	if _, err := loadServeConfig(o.config); err != nil {
+	cfg, err := loadServeConfig(o.config)
+	if err != nil {
 		return err
 	}
+	cfg.printWarnings(errOut)
 	self, err := os.Executable()
 	if err != nil {
 		return err

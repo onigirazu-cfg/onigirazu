@@ -239,7 +239,12 @@ task output still uses the execution engine's existing logging, audit and cache 
 
 Notifications: server-wide `notify:` targets and a job's targets add up. Targets accept a
 plain URL or a mapping with `url`, `format` (`mattermost`, the default, or `json`) and `on`.
-Webhook URLs expand `${VAR}` from the environment. Events are `pending`, `start`, `success`,
+Webhook URLs expand `${VAR}` and `$VAR` from the environment. A URL that expands to
+empty (after trimming whitespace) disables that target with a startup warning naming
+the job (or server-wide target) and each unset or empty variable, without printing values.
+This lets `notify:` stay in `serve.yml` before the webhook exists. A literally empty URL
+or a partly expanded URL with an unset variable is an error. Format and event validation
+still applies to disabled targets. Events are `pending`, `start`, `success`,
 `drift`, `failure` (failed, error or timed_out), `rejected`, `expired`, `cancelled` and `scheduled`. Without `on`, targets receive
 `pending`, `drift` and `failure`; `notify_always: true` on the job adds `success` and `cancelled` to targets
 without `on`. An explicit `on: []` sends nothing.
