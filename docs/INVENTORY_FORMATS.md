@@ -300,6 +300,30 @@ As in Ansible, these variables given with `-e` override the inventory for every 
 (`-e ansible_user=ansible`, `-e @bootstrap.yml` with `ansible_password` and
 `ansible_become_password`).
 
+Connection address, user, port, password, private key and become password variables listed
+above, plus `ansible_ssh_common_args` and `ansible_ssh_extra_args`, may be templates.
+They are rendered per host before connecting, with the same precedence as task variables:
+play vars, then inventory vars (group vars < host vars), then `set_fact` from earlier plays,
+and `-e` extra vars last; `-e` wins. Plain strings are used as they are; a template that
+fails to render fails that host with `connection variables: ...`. With `delegate_to`, the
+delegate's own connection variables are used, rendered when the delegated task runs.
+A play's own hosts are resolved once at play start, so task `vars:` and `set_fact` within
+that play do not change their connection. A template may use other templated variables
+(`ansible_user: "{{ login }}"` with `login: "{{ deploy_user }}"`).
+
+```yaml
+all:
+  vars: {controller_on_lan: false}
+  hosts:
+    target:
+      ansible_host: 192.0.2.10
+      ansible_user: deploy
+      ansible_ssh_common_args: "{{ '' if controller_on_lan | default(false) else '-o ProxyJump=bastion' }}"
+```
+
+`onigirazu apply p.yml -i inv.yml -e controller_on_lan=true` renders the SSH arguments
+as an empty string before connecting.
+
 ## group_vars and host_vars
 
 As in Ansible, variables are also read from `group_vars/<group>.yml` and

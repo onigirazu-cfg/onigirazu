@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/onigirazu-cfg/onigirazu/internal/interfaces"
+	"github.com/onigirazu-cfg/onigirazu/internal/logger"
 	"github.com/onigirazu-cfg/onigirazu/internal/template"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
@@ -35,6 +36,7 @@ type Manager struct {
 	groupParents map[string][]string
 	// connection variables given with -e: they win over the inventory
 	connOverrides map[string]interface{}
+	extraVars     map[string]interface{}
 }
 
 // HostFilter defines a function type for filtering hosts
@@ -330,23 +332,34 @@ func (m *Manager) ApplyHostOverrides(user, keyFile string) {
 		return
 	}
 
-	for i := range m.inventory.Hosts {
+	apply := func(host *types.Host) {
+		vars := m.hostView(host).Vars
+		if host.Vars == nil {
+			host.Vars = make(map[string]interface{})
+		}
 		if user != "" {
-			m.inventory.Hosts[i].User = user
+			host.User = user
+			for _, name := range []string{"onigirazu_user", "ansible_user", "ansible_ssh_user"} {
+				if _, ok := vars[name]; ok {
+					host.Vars[name] = user
+				}
+			}
 		}
 		if keyFile != "" {
-			m.inventory.Hosts[i].KeyFile = keyFile
+			host.KeyFile = keyFile
+			for _, name := range []string{"onigirazu_ssh_private_key_file", "ansible_ssh_private_key_file", "ansible_private_key_file"} {
+				if _, ok := vars[name]; ok {
+					host.Vars[name] = keyFile
+				}
+			}
 		}
 	}
-
+	for i := range m.inventory.Hosts {
+		apply(&m.inventory.Hosts[i])
+	}
 	for _, group := range m.inventory.Groups {
 		for _, host := range group.Hosts {
-			if user != "" {
-				host.User = user
-			}
-			if keyFile != "" {
-				host.KeyFile = keyFile
-			}
+			apply(host)
 		}
 	}
 }
@@ -549,18 +562,18 @@ func (m *Manager) validateHosts(inventory *types.Inventory) error {
 				hostName, groupName, host.Vars, host.User, host.Address)
 
 			// Process Onigirazu-style variables from host.Vars
-			if onigirazuHost, ok := host.Vars["onigirazu_host"].(string); ok && onigirazuHost != "" {
+			if onigirazuHost, ok := host.Vars["onigirazu_host"].(string); ok && onigirazuHost != "" && !strings.Contains(onigirazuHost, "{{") && !strings.Contains(onigirazuHost, "{%") {
 				m.logger.Debug("Setting host.Address from onigirazu_host: %s", onigirazuHost)
 				host.Address = onigirazuHost
 			}
-			if onigirazuUser, ok := host.Vars["onigirazu_user"].(string); ok && onigirazuUser != "" {
+			if onigirazuUser, ok := host.Vars["onigirazu_user"].(string); ok && onigirazuUser != "" && !strings.Contains(onigirazuUser, "{{") && !strings.Contains(onigirazuUser, "{%") {
 				m.logger.Debug("Setting host.User from onigirazu_user: %s", onigirazuUser)
 				host.User = onigirazuUser
 			}
 			if onigirazuPort, ok := host.Vars["onigirazu_port"].(int); ok && onigirazuPort > 0 {
 				host.Port = onigirazuPort
 			}
-			if keyFile, ok := host.Vars["onigirazu_ssh_private_key_file"].(string); ok && keyFile != "" {
+			if keyFile, ok := host.Vars["onigirazu_ssh_private_key_file"].(string); ok && keyFile != "" && !strings.Contains(keyFile, "{{") && !strings.Contains(keyFile, "{%") {
 				m.logger.Debug("Found onigirazu_ssh_private_key_file: %s", keyFile)
 				// Expand ~ to home directory
 				if strings.HasPrefix(keyFile, "~/") {
@@ -574,7 +587,7 @@ func (m *Manager) validateHosts(inventory *types.Inventory) error {
 			} else {
 				m.logger.Debug("No onigirazu_ssh_private_key_file found in Vars for host %s", hostName)
 			}
-			if password, ok := host.Vars["onigirazu_password"].(string); ok && password != "" {
+			if password, ok := host.Vars["onigirazu_password"].(string); ok && password != "" && !strings.Contains(password, "{{") && !strings.Contains(password, "{%") {
 				host.Password = password
 			}
 
@@ -687,10 +700,23 @@ func (m *Manager) hostView(host *types.Host) types.Host {
 		hostCopy.Vars[k] = v
 	}
 
-	applyGroupConnectionVars(&hostCopy, host, renderConnectionVars(merged, hostCopy.Vars))
-	if len(m.connOverrides) > 0 {
+	connectionVars := make(map[string]interface{}, len(hostCopy.Vars))
+	for name, value := range hostCopy.Vars {
+		connectionVars[name] = value
+	}
+	overrides := make(map[string]interface{}, len(m.connOverrides))
+	for name, value := range m.connOverrides {
+		switch name {
+		case "ansible_ssh_common_args", "ansible_ssh_extra_args":
+			connectionVars[name] = value
+		default:
+			overrides[name] = value
+		}
+	}
+	applyGroupConnectionVars(&hostCopy, host, renderConnectionVars(connectionVars, hostCopy.Vars, m.extraVars))
+	if len(overrides) > 0 {
 		empty := types.Host{Name: host.Name, Vars: map[string]interface{}{}}
-		applyGroupConnectionVars(&hostCopy, &empty, m.connOverrides)
+		applyGroupConnectionVars(&hostCopy, &empty, renderConnectionVars(overrides, hostCopy.Vars, m.extraVars))
 	}
 
 	names := append([]string(nil), groups...)
@@ -791,12 +817,16 @@ func applyGroupConnectionVars(hostCopy, host *types.Host, vars map[string]interf
 	}
 	// both kinds of arguments, as ssh gets them
 	var sshArgs []string
+	hasSSHArgs := false
 	for _, name := range []string{"ansible_ssh_common_args", "ansible_ssh_extra_args"} {
-		if v, ok := groupVar(vars, name); ok {
-			sshArgs = append(sshArgs, fmt.Sprint(v))
+		if v, ok := vars[name]; ok && v != nil {
+			hasSSHArgs = true
+			if arg := strings.TrimSpace(fmt.Sprint(v)); arg != "" {
+				sshArgs = append(sshArgs, arg)
+			}
 		}
 	}
-	if len(sshArgs) > 0 && host.SSHArgs == "" {
+	if hasSSHArgs && host.SSHArgs == "" {
 		hostCopy.SSHArgs = strings.Join(sshArgs, " ")
 	}
 	// true, or "true"/"yes" once rendered or read from INI
@@ -1175,6 +1205,10 @@ func (m *Manager) SetConnectionOverrides(extraVars map[string]interface{}) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	m.connOverrides = nil
+	m.extraVars = make(map[string]interface{}, len(extraVars))
+	for name, value := range extraVars {
+		m.extraVars[name] = value
+	}
 	for _, name := range connectionVarNames {
 		if v, ok := extraVars[name]; ok {
 			if m.connOverrides == nil {
@@ -1191,24 +1225,38 @@ var connectionTemplates = template.NewEngine()
 
 // renderConnectionVars returns vars with its templated connection variables
 // rendered with the host's variables; the rest is left as it is
-func renderConnectionVars(vars, hostVars map[string]interface{}) map[string]interface{} {
+func renderConnectionVars(vars, hostVars map[string]interface{}, extraVars ...map[string]interface{}) map[string]interface{} {
+	renderVars := make(map[string]interface{}, len(hostVars))
+	for name, value := range hostVars {
+		renderVars[name] = value
+	}
+	for _, extras := range extraVars {
+		for name, value := range extras {
+			renderVars[name] = value
+		}
+	}
 	var out map[string]interface{}
 	for _, name := range connectionVarNames {
 		s, ok := vars[name].(string)
-		if !ok || !strings.Contains(s, "{{") {
+		if !ok || !(strings.Contains(s, "{{") || strings.Contains(s, "{%")) {
 			continue
 		}
-		rendered, err := connectionTemplates.Render(context.Background(), s, hostVars)
-		if err != nil {
-			continue
-		}
+		rendered, err := connectionTemplates.Render(context.Background(), s, renderVars)
 		if out == nil {
 			out = make(map[string]interface{}, len(vars))
 			for k, v := range vars {
 				out[k] = v
 			}
 		}
+		if err != nil {
+			delete(out, name)
+			continue
+		}
 		out[name] = strings.TrimSpace(rendered)
+		switch name {
+		case "onigirazu_password", "ansible_password", "ansible_ssh_pass", "onigirazu_become_password", "ansible_become_password", "ansible_become_pass", "ansible_sudo_pass":
+			logger.Redact(strings.TrimSpace(rendered))
+		}
 	}
 	if out == nil {
 		return vars

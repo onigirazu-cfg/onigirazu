@@ -729,3 +729,31 @@ func TestConnectionPoolDialTimeoutIsPerPool(t *testing.T) {
 		t.Fatal("zero dial timeout must use the default")
 	}
 }
+
+func TestConnectionKeyIncludesArgsAndKeyFile(t *testing.T) {
+	pool := &ConnectionPool{}
+	host := types.Host{User: "deploy", Address: "192.0.2.10", Port: 22}
+	base := pool.getConnectionKey(host)
+	if base != "deploy@192.0.2.10:22" {
+		t.Fatalf("key = %q", base)
+	}
+	seen := map[string]bool{base: true}
+	for _, tc := range []struct{ args, keyFile string }{
+		{"-J bastion", ""}, {"-J other.example.com", ""}, {"", "/tmp/key-one"}, {"", "/tmp/key-two"}, {"-J bastion", "/tmp/key-one"},
+	} {
+		t.Run(tc.args+tc.keyFile, func(t *testing.T) {
+			host.SSHArgs, host.KeyFile = tc.args, tc.keyFile
+			key := pool.getConnectionKey(host)
+			if seen[key] {
+				t.Fatalf("connection key collision: %q", key)
+			}
+			seen[key] = true
+			if key != pool.getConnectionKey(host) {
+				t.Fatal("identical hosts must have identical keys")
+			}
+			if !strings.HasPrefix(key, base+"|") {
+				t.Fatalf("key lost readable prefix: %q", key)
+			}
+		})
+	}
+}

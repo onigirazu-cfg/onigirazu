@@ -29,6 +29,8 @@ type Host struct {
 	// (ConnectTimeout, ProxyJump, ProxyCommand are used)
 	SSHArgs string                 `yaml:"-" json:"-"`
 	Vars    map[string]interface{} `yaml:"vars,omitempty"`
+	// ConnectionSecrets preserves host-level password variables outside inventory listings.
+	ConnectionSecrets map[string]interface{} `yaml:"-" json:"-"`
 	// BecomePassword is given to sudo (ansible_become_password); never
 	// written anywhere
 	BecomePassword string `yaml:"-" json:"-"`

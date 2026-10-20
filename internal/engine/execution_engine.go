@@ -642,6 +642,26 @@ func (e *ExecutionEngine) executePlayOn(ctx context.Context, play *types.Play, h
 		Success:   true,
 	}
 
+	playVars0 := e.mergeVariables(e.variables, play.Vars, e.extraVars)
+	resolved := make([]types.Host, 0, len(hosts))
+	connectionErrors := make(map[string]error)
+	for _, host := range hosts {
+		h, err := e.resolveConnection(ctx, host, playVars0)
+		if err != nil {
+			connectionErrors[host.Name] = err
+		} else {
+			resolved = append(resolved, h)
+		}
+	}
+	e.mutex.Lock()
+	e.policy.anyErrorsFatal = play.AnyErrorsFatal
+	e.mutex.Unlock()
+	if err := e.hostsLeftAfterPreparation(connectionErrors, hosts, result, "Connection variables", "connection variables: ", ""); err != nil {
+		result.EndTime = time.Now()
+		return result, err
+	}
+	hosts = resolved
+
 	// Gather facts if enabled (before setting play variables so they can use facts)
 	if play.GatherFacts {
 		if err := e.hostsLeftAfterFacts(e.gatherFacts(ctx, hosts), hosts, result); err != nil {
@@ -1244,7 +1264,10 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 		if err != nil {
 			return failed(fmt.Errorf("delegate_to: %w", err))
 		}
-		target = e.delegateHost(strings.TrimSpace(delegate))
+		target, err = e.delegateHost(ctx, strings.TrimSpace(delegate), variables)
+		if err != nil {
+			return failed(fmt.Errorf("delegate_to: %w", err))
+		}
 	}
 
 	moduleTask := &types.Task{
@@ -2513,6 +2536,13 @@ func (e *ExecutionEngine) getHostVar(host, key string) interface{} {
 // variables, inventory host vars, gathered facts (also as onigirazu_facts),
 // then what register and set_fact stored for the host
 func (e *ExecutionEngine) hostVariables(host *types.Host, variables map[string]interface{}) map[string]interface{} {
+	return e.layerHostVariables(host, variables, true)
+}
+
+// layerHostVariables is hostVariables; without facts (connection resolution)
+// it leaves out facts and the onigirazu_host/onigirazu_hostname defaults,
+// which would win over ansible_host, and adds the host's literal passwords
+func (e *ExecutionEngine) layerHostVariables(host *types.Host, variables map[string]interface{}, withFacts bool) map[string]interface{} {
 	e.mutex.RLock()
 	defer e.mutex.RUnlock()
 	facts, hasFacts := e.hostFactsOf(host.Name)
@@ -2520,7 +2550,12 @@ func (e *ExecutionEngine) hostVariables(host *types.Host, variables map[string]i
 	// one map, filled in order of precedence: it is built for every task
 	// and loop item, and merging step by step copied it four times
 	vars := make(map[string]interface{}, max(len(variables), len(e.variables), len(host.Vars), len(facts)))
-	for _, m := range []map[string]interface{}{variables, e.variables, host.Vars} {
+	layers := []map[string]interface{}{variables, e.variables, host.Vars}
+	if !withFacts {
+		// literal passwords are for the connection only: tasks never had them
+		layers = append(layers, host.ConnectionSecrets)
+	}
+	for _, m := range layers {
 		for k, v := range m {
 			vars[k] = v
 		}
@@ -2528,13 +2563,13 @@ func (e *ExecutionEngine) hostVariables(host *types.Host, variables map[string]i
 	// always defined, facts or not
 	vars["inventory_hostname"] = host.Name
 	e.addMagicVars(vars)
-	if _, ok := vars["onigirazu_hostname"]; !ok {
+	if _, ok := vars["onigirazu_hostname"]; withFacts && !ok {
 		vars["onigirazu_hostname"] = host.Name
 	}
-	if _, ok := vars["onigirazu_host"]; !ok {
+	if _, ok := vars["onigirazu_host"]; withFacts && !ok {
 		vars["onigirazu_host"] = host.Address
 	}
-	if hasFacts {
+	if withFacts && hasFacts {
 		vars["onigirazu_facts"] = facts
 		for k, v := range facts {
 			vars[k] = v
@@ -2570,19 +2605,19 @@ func runOnceTask(task *types.Task) *types.Task {
 
 // delegateHost resolves a delegate_to name: localhost, an inventory host,
 // or else an address to reach with the default connection settings
-func (e *ExecutionEngine) delegateHost(name string) types.Host {
+func (e *ExecutionEngine) delegateHost(ctx context.Context, name string, variables map[string]interface{}) (types.Host, error) {
 	switch name {
 	case "localhost", "127.0.0.1", "::1":
-		return types.Host{Name: name, Address: "127.0.0.1", Vars: map[string]interface{}{"onigirazu_connection": "local"}}
+		return types.Host{Name: name, Address: "127.0.0.1", Vars: map[string]interface{}{"onigirazu_connection": "local"}}, nil
 	}
 	if hosts, err := e.inventoryMgr.GetHosts(name); err == nil {
 		for _, h := range hosts {
 			if h.Name == name {
-				return h
+				return e.resolveConnection(ctx, h, variables)
 			}
 		}
 	}
-	return types.Host{Name: name, Address: name, Port: 22, Vars: map[string]interface{}{}}
+	return types.Host{Name: name, Address: name, Port: 22, Vars: map[string]interface{}{}}, nil
 }
 
 // executeBlock runs block / rescue / always for every host, hosts in
@@ -3025,6 +3060,10 @@ func isUnreachableError(msg string) bool {
 // UNREACHABLE, any other failure FAILED; neither runs another task. The
 // error is the play's when no host is left or any_errors_fatal is set.
 func (e *ExecutionEngine) hostsLeftAfterFacts(failed map[string]error, hosts []types.Host, result *types.PlayResult) error {
+	return e.hostsLeftAfterPreparation(failed, hosts, result, "Gathering Facts", "gathering facts failed: ", "setup")
+}
+
+func (e *ExecutionEngine) hostsLeftAfterPreparation(failed map[string]error, hosts []types.Host, result *types.PlayResult, taskName, prefix, module string) error {
 	if len(failed) == 0 {
 		return nil
 	}
@@ -3051,14 +3090,14 @@ func (e *ExecutionEngine) hostsLeftAfterFacts(failed map[string]error, hosts []t
 	for _, name := range names {
 		err := failed[name]
 		verdict := "failed"
-		msg := "gathering facts failed: " + err.Error()
-		if isUnreachableError(err.Error()) {
+		msg := prefix + err.Error()
+		if module == "setup" && isUnreachableError(err.Error()) {
 			verdict = "unreachable"
 			msg = "unreachable: " + err.Error()
 		}
 		e.logger.Error("Host %s is %s, no task runs on it: %v", name, verdict, err)
 		result.Hosts = append(result.Hosts, types.HostResult{Host: name, Failed: true, Tasks: []types.TaskResult{{
-			TaskName: "Gathering Facts", Host: name, Module: "setup", Failed: true, Error: msg, Timestamp: time.Now(),
+			TaskName: taskName, Host: name, Module: module, Failed: true, Error: msg, Timestamp: time.Now(),
 		}}})
 		if first == nil {
 			first = fmt.Errorf("host %s %s: %w", name, verdict, err)

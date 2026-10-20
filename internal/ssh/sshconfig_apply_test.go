@@ -1,9 +1,11 @@
 package ssh
 
 import (
+	"context"
 	"strings"
 	"testing"
 
+	"github.com/onigirazu-cfg/onigirazu/internal/template"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
@@ -47,5 +49,25 @@ func TestApplySSHConfigAliasInAddress(t *testing.T) {
 	applySSHConfig(ip, get)
 	if ip.Address != "10.0.0.1" {
 		t.Errorf("an IP is never an alias: %s", ip.Address)
+	}
+}
+
+func TestApplySSHConfigAfterEmptyArgsTemplate(t *testing.T) {
+	args, err := template.NewEngine().Render(context.Background(), "{{ '' if controller_on_lan else '-o ProxyJump=bastion' }}", map[string]interface{}{"controller_on_lan": true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if args != "" {
+		t.Fatalf("rendered arguments = %q, want empty", args)
+	}
+	host := types.Host{Name: "target", Address: "192.0.2.10", SSHArgs: args}
+	applySSHConfig(&host, func(alias, key string) string {
+		if alias == "target" && key == "ProxyJump" {
+			return "bastion"
+		}
+		return ""
+	})
+	if host.SSHArgs != "-J bastion" {
+		t.Fatalf("SSHArgs = %q, want config ProxyJump", host.SSHArgs)
 	}
 }
