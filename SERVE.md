@@ -101,7 +101,6 @@ defaults are never sent to the page; leaving a secret field empty uses its serve
 
 ```bash
 onigirazu serve --config-file serve.yml
-sudo onigirazu serve install -f /etc/onigirazu/serve.yml      # systemd service
 ```
 
 Up to `concurrency` jobs run at a time (default 1), picked up in FIFO order as they
@@ -134,6 +133,43 @@ requests consume slots too. Optional `retain_age` also removes finished results 
 than the duration, measured from their request time. Go durations use hours, such as
 `168h` for seven days. Pending, scheduled, queued and running results are never pruned by age;
 active results are also exempt from the count limit.
+
+## Install as a service
+
+`serve install` writes `/etc/systemd/system/onigirazu-serve.service`, reloads systemd,
+and enables and starts the service. The unit retains the global `-c/--config` file
+for in-process playbook runs and uses absolute paths. Review it first with `--print`;
+this validates serve.yml and prints the unit without creating directories, writing
+files or calling systemd.
+
+```bash
+sudo onigirazu -c /srv/app/onigirazu.yml serve install -f /srv/app/serve.yml \
+  --user app --environment-file /etc/onigirazu/serve.env \
+  --env PATH=/srv/app/.venv/bin:/usr/local/bin:/usr/bin:/bin \
+  --addr 127.0.0.1:8086 --print
+# Remove --print to install and start the service.
+```
+
+`--user NAME` selects the service account; its primary group is used unless
+`--group NAME` is given. Without `--user`, the service runs as root.
+`--working-directory DIR` defaults to the directory containing serve.yml.
+`--environment-file FILE` loads service variables, and repeatable `--env KEY=VALUE`
+adds variables; matching keys in the environment file take precedence, as in
+systemd. The installer applies both when validating `${VAR}` in serve.yml.
+Environment files follow systemd's rules with one assignment per line (no
+continuation lines or multi-line values): `KEY=VALUE`, single-quoted values taken
+literally, double-quoted values with `\"`, `\\`, `` \` `` and `\$` escapes, blank lines
+and comments starting with `#` or `;`; omit shell `export` prefixes.
+The working directory and environment file must already exist.
+
+The unit waits for the network and restarts on failure. It sets
+`NoNewPrivileges=yes`, `ProtectSystem=strict` and `PrivateTmp=yes`.
+`ReadWritePaths` allows writes to `data_dir`, the working directory and the service
+user's home when it exists or install creates it for `data_dir` (for the audit store
+and facts cache). Add repeatable
+`--read-write-path DIR` for any other writable location. When serve.yml omits
+`data_dir`, its default is the service user's `~/.onigirazu/serve`; installation
+creates the data directory and assigns it to the selected user and group.
 
 ## Run later and maintenance windows
 
