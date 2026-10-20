@@ -1430,3 +1430,30 @@ func TestJSONGroupsLinkHostsAndVars(t *testing.T) {
 		t.Errorf("group host = %+v", h)
 	}
 }
+
+func TestAnsibleHostConnectionTemplatesStayInVars(t *testing.T) {
+	log := &mockLogger{warnMessages: []string{}}
+	p := NewInventoryParser(log)
+	for _, opening := range []string{"{{ value }}", "{% if value %}2222{% endif %}"} {
+		t.Run(opening, func(t *testing.T) {
+			h := p.parseAnsibleHost("target", map[string]interface{}{
+				"ansible_host":                 opening,
+				"ansible_port":                 opening,
+				"ansible_user":                 opening,
+				"ansible_ssh_private_key_file": opening,
+				"ansible_password":             opening,
+				"ansible_become_password":      opening,
+			})
+			assert.Equal(t, "target", h.Address)
+			assert.Zero(t, h.Port)
+			assert.Empty(t, log.warnMessages)
+			assert.Empty(t, h.User)
+			assert.Empty(t, h.KeyFile)
+			assert.Empty(t, h.Password)
+			assert.Empty(t, h.BecomePassword)
+			for _, name := range []string{"ansible_host", "ansible_port", "ansible_user", "ansible_ssh_private_key_file", "ansible_password", "ansible_become_password"} {
+				assert.Equal(t, opening, h.Vars[name])
+			}
+		})
+	}
+}

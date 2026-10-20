@@ -551,16 +551,26 @@ func (p *InventoryParser) parseAnsibleHost(hostName string, hostData interface{}
 	}
 
 	// Map Ansible variables to Onigirazu fields; every variable but the
-	// passwords also stays under its own name, as Ansible has it
+	// literal passwords also stays under its own name, as Ansible has it
 	// (hostvars[h].ansible_host, ansible_connection, ansible_ssh_common_args)
 	for key, value := range hostMap {
 		switch key {
 		case "ansible_password", "ansible_ssh_pass", "ansible_become_password", "ansible_become_pass", "ansible_sudo_pass", "onigirazu_become_password":
 			if p.preserveStructure {
 				host.Vars[key] = types.InventoryNameOnly{}
+			} else if v, ok := value.(string); ok && (strings.Contains(v, "{{") || strings.Contains(v, "{%")) {
+				host.Vars[key] = value
+			} else {
+				if host.ConnectionSecrets == nil {
+					host.ConnectionSecrets = make(map[string]interface{})
+				}
+				host.ConnectionSecrets[key] = value
 			}
 		default:
 			host.Vars[key] = value
+		}
+		if v, ok := value.(string); ok && (strings.Contains(v, "{{") || strings.Contains(v, "{%")) {
+			continue
 		}
 		switch key {
 		case "ansible_host":
