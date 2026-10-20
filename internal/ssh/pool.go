@@ -256,8 +256,8 @@ func (p *ConnectionPool) getConnectionKey(host types.Host) string {
 		port = 22
 	}
 	key := fmt.Sprintf("%s@%s:%d", host.User, host.Address, port)
-	if host.KeyFile != "" || host.SSHArgs != "" || host.Password != "" {
-		sum := sha256.Sum256([]byte(host.SSHArgs + "\x00" + host.KeyFile + "\x00" + host.Password))
+	if host.KeyFile != "" || host.SSHArgs != "" {
+		sum := sha256.Sum256([]byte(host.SSHArgs + "\x00" + host.KeyFile))
 		key += fmt.Sprintf("|%x", sum[:8])
 	}
 	return key

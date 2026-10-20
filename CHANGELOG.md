@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Connection variables (`ansible_host`, `ansible_user`, `ansible_port`, keys, passwords, `ansible_ssh_common_args`/`ansible_ssh_extra_args`) are rendered per host before connecting with the precedence tasks use, so `-e` wins inside a template: `{{ '' if on_lan else '-o ProxyJump=bastion' }}` with `-e on_lan=true` no longer jumps; a template that fails to render fails that host instead of being used as raw text; pooled SSH connections are no longer shared between hosts with the same address but different arguments, keys or passwords
+- Connection variables (`ansible_host`, `ansible_user`, `ansible_port`, keys, passwords, `ansible_ssh_common_args`/`ansible_ssh_extra_args`) are rendered per host before connecting with the precedence tasks use, so `-e` wins inside a template: `{{ '' if on_lan else '-o ProxyJump=bastion' }}` with `-e on_lan=true` no longer jumps; a template that fails to render fails that host instead of being used as raw text; pooled SSH connections are no longer shared between hosts with the same address but different arguments or keys
 - `onigirazu serve`: notify URLs that expand to empty disable the target with a startup warning naming the job and unset or empty variables, so webhook configuration can stay in `serve.yml` before the webhook exists
 - `onigirazu serve`: Sign out in the user menu is a button like Set token, not a bare link beside it
 - `onigirazu serve`: proxy groups sent as several header lines (oauth2-proxy) are all read; only the first counted before
