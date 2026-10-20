@@ -14,7 +14,6 @@ import (
 	"net/http"
 	"net/netip"
 	"os"
-	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"regexp"
@@ -406,7 +405,10 @@ func resultCopy(r *JobResult) *JobResult {
 }
 
 type serveOptions struct {
-	config, addr string
+	config, addr                                   string
+	user, group, workingDirectory, environmentFile string
+	env, readWritePaths                            []string
+	print                                          bool
 }
 
 func newServeCmd() *cobra.Command {
@@ -447,6 +449,13 @@ a reverse proxy such as Authentik's outpost (viewer; operator by group).`,
 	}
 	install.Flags().StringVarP(&o.config, "config-file", "f", "/etc/onigirazu/serve.yml", "The serve.yml the service reads")
 	install.Flags().StringVar(&o.addr, "addr", "", "Address to serve on")
+	install.Flags().StringVar(&o.user, "user", "", "Service user (default root)")
+	install.Flags().StringVar(&o.group, "group", "", "Service group (default user's primary group)")
+	install.Flags().StringVar(&o.workingDirectory, "working-directory", "", "Working directory (default directory of serve.yml)")
+	install.Flags().StringVar(&o.environmentFile, "environment-file", "", "Environment file read by systemd and validation")
+	install.Flags().StringArrayVar(&o.env, "env", nil, "Service environment KEY=VALUE (repeatable)")
+	install.Flags().StringArrayVar(&o.readWritePaths, "read-write-path", nil, "Extra writable directory (repeatable)")
+	install.Flags().BoolVar(&o.print, "print", false, "Print the validated unit without installing it")
 	cmd.AddCommand(install)
 	return cmd
 }
@@ -2918,43 +2927,8 @@ func runServe(ctx context.Context, cfg *ServeConfig, out io.Writer) error {
 		return srv.Shutdown(shutdown)
 	}
 }
-
 func (cfg *ServeConfig) printWarnings(out io.Writer) {
 	for _, warning := range cfg.warnings {
 		fmt.Fprintln(out, warning)
 	}
-}
-
-func installServeService(o *serveOptions, out, errOut io.Writer) error {
-	if _, err := os.Stat("/run/systemd/system"); err != nil {
-		return fmt.Errorf("serve install needs systemd")
-	}
-	cfg, err := loadServeConfig(o.config)
-	if err != nil {
-		return err
-	}
-	cfg.printWarnings(errOut)
-	self, err := os.Executable()
-	if err != nil {
-		return err
-	}
-	config, err := filepath.Abs(o.config)
-	if err != nil {
-		return err
-	}
-	args := self + " serve --config-file " + config
-	if o.addr != "" {
-		args += " --addr " + o.addr
-	}
-	unit := "[Unit]\nDescription=onigirazu serve: fleet server\nAfter=network-online.target\nWants=network-online.target\n\n[Service]\nExecStart=" + args + "\nRestart=on-failure\nRestartSec=5s\n\n[Install]\nWantedBy=multi-user.target\n"
-	if err := os.WriteFile("/etc/systemd/system/onigirazu-serve.service", []byte(unit), 0o644); err != nil { // #nosec G306 -- unit files are world-readable
-		return err
-	}
-	for _, c := range [][]string{{"systemctl", "daemon-reload"}, {"systemctl", "enable", "--now", "onigirazu-serve.service"}} {
-		if o, err := exec.Command(c[0], c[1:]...).CombinedOutput(); err != nil { // #nosec G204 -- fixed systemctl arguments
-			return fmt.Errorf("%s: %v: %s", strings.Join(c, " "), err, strings.TrimSpace(string(o)))
-		}
-	}
-	fmt.Fprintf(out, "onigirazu-serve.service installed and started (%s)\n", config)
-	return nil
 }

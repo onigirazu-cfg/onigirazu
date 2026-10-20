@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `onigirazu serve install`: user/group, working directory, environment file, repeatable environment and writable-path flags, and `--print`; generated units retain global config and apply systemd hardening
 - `onigirazu serve`: `auth.trusted_proxies` limits proxy identity headers to the proxy's addresses, `auth.sign_out_url` adds Sign out to the user menu
 - `onigirazu serve`: redesigned page with a sidebar, search, light/dark themes, a split run view, a run sheet and phone layouts
 - `onigirazu serve`: apply diffs, per-host Tasks with statuses and durations, and compliance audit links with partial reports on cancel or timeout
