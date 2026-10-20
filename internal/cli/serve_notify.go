@@ -49,50 +49,55 @@ func (t *NotifyTarget) UnmarshalYAML(node *yaml.Node) error {
 	return node.Decode((*target)(t))
 }
 
-// expandEnvStrict is os.ExpandEnv that refuses a variable that is not set
-// (a webhook URL with a typo'd ${SECRET} would otherwise pass validation and
-// fail at every delivery)
-func expandEnvStrict(s string) (string, error) {
-	var missing []string
-	out := os.Expand(s, func(name string) string {
-		v, ok := os.LookupEnv(name)
-		if !ok {
-			missing = append(missing, name)
-		}
-		return v
-	})
-	if len(missing) > 0 {
-		return out, fmt.Errorf("environment variable %s is not set", strings.Join(missing, ", "))
-	}
-	return out, nil
-}
-
-func validateNotifyTargets(targets []NotifyTarget) error {
-	for i := range targets {
-		t := &targets[i]
-		url, err := expandEnvStrict(t.URL)
-		if err != nil {
-			return fmt.Errorf("target %d: %w", i+1, err)
-		}
-		t.URL = url
-		if strings.TrimSpace(t.URL) == "" {
-			return fmt.Errorf("target %d: URL is empty", i+1)
+// validateNotifyTargets drops empty environment-backed targets, but keeps strict
+// expansion for nonempty URLs so an unset variable still catches a typo.
+func validateNotifyTargets(targets []NotifyTarget, label string) ([]NotifyTarget, []string, error) {
+	var cleaned []NotifyTarget
+	var warnings []string
+	for i, t := range targets {
+		var names, states, missing []string
+		t.URL = os.Expand(t.URL, func(name string) string {
+			v, ok := os.LookupEnv(name)
+			if !slices.Contains(names, name) {
+				names = append(names, name)
+				if !ok {
+					missing = append(missing, name)
+					states = append(states, name+" is not set")
+				} else if strings.TrimSpace(v) == "" {
+					states = append(states, name+" is empty")
+				}
+			}
+			return v
+		})
+		disabled := strings.TrimSpace(t.URL) == "" && len(names) > 0
+		if !disabled {
+			if len(missing) > 0 {
+				return nil, nil, fmt.Errorf("target %d: environment variable %s is not set", i+1, strings.Join(missing, ", "))
+			}
+			if strings.TrimSpace(t.URL) == "" {
+				return nil, nil, fmt.Errorf("target %d: URL is empty", i+1)
+			}
 		}
 		if t.Format == "" {
 			t.Format = "mattermost"
 		}
 		if t.Format != "mattermost" && t.Format != "json" {
-			return fmt.Errorf("target %d: format %q (mattermost or json)", i+1, t.Format)
+			return nil, nil, fmt.Errorf("target %d: format %q (mattermost or json)", i+1, t.Format)
 		}
 		for _, event := range t.On {
 			switch event {
 			case eventScheduled, eventPending, eventStart, eventSuccess, eventDrift, eventFailure, eventRejected, eventExpired, eventCancelled:
 			default:
-				return fmt.Errorf("target %d: unknown event %q", i+1, event)
+				return nil, nil, fmt.Errorf("target %d: unknown event %q", i+1, event)
 			}
 		}
+		if disabled {
+			warnings = append(warnings, fmt.Sprintf("serve: notify target %d %s disabled: %s", i+1, label, strings.Join(states, ", ")))
+			continue
+		}
+		cleaned = append(cleaned, t)
 	}
-	return nil
+	return cleaned, warnings, nil
 }
 
 // notify receives a result copy taken under mu; delivery never holds the lock.

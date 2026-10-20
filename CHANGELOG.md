@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `onigirazu serve`: notify URLs that expand to empty disable the target with a startup warning naming the job and unset or empty variables, so webhook configuration can stay in `serve.yml` before the webhook exists
 - `onigirazu serve`: Sign out in the user menu is a button like Set token, not a bare link beside it
 - `onigirazu serve`: proxy groups sent as several header lines (oauth2-proxy) are all read; only the first counted before
 - SSH asks a known host for the key types `known_hosts` holds, as OpenSSH does: a host known by its ed25519 key no longer fails with a key mismatch when its server prefers ecdsa or rsa

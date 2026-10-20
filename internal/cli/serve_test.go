@@ -987,7 +987,6 @@ func TestServeNotifyConfig(t *testing.T) {
 		{"event", `[{url: "http://notify.test/secret", on: [sometimes]}]`, false},
 		{"format", `[{url: "http://notify.test/secret", format: xml}]`, false},
 		{"empty", `[{url: ""}]`, false},
-		{"missing environment", `["${SERVE_TEST_HOOK_MISSING}"]`, false},
 		{"missing environment inside the url", `["http://notify.test/hooks/${SERVE_TEST_HOOK_MISSING}"]`, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -2118,7 +2117,7 @@ func TestServeCancelRestartAndNotify(t *testing.T) {
 	if len(s2.hostsView()) != 0 {
 		t.Fatal("canceled run has host verdicts")
 	}
-	if err := validateNotifyTargets([]NotifyTarget{{URL: "http://notify.test", On: []string{eventCancelled}}}); err != nil {
+	if _, _, err := validateNotifyTargets([]NotifyTarget{{URL: "http://notify.test", On: []string{eventCancelled}}}, "(server-wide)"); err != nil {
 		t.Fatal(err)
 	}
 	body, err := s.notifyBody(eventCancelled, &s.cfg.Jobs[0], got, "mattermost")
