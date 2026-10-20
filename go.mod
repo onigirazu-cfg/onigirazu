@@ -100,7 +100,7 @@ require (
 	github.com/expr-lang/expr v1.17.8
 	github.com/kevinburke/ssh_config v1.6.0
 	github.com/masterzen/winrm v0.0.0-20260407182533-5570be7f80cf
-	github.com/minio/minio-go/v7 v7.3.0
+	github.com/minio/minio-go/v7 v7.4.1
 	github.com/pmezard/go-difflib v1.0.0
 	github.com/stretchr/testify v1.12.1
 )
