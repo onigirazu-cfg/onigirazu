@@ -156,7 +156,8 @@ sudo onigirazu -c /srv/app/onigirazu.yml serve install -f /srv/app/serve.yml \
 `--environment-file FILE` loads service variables, and repeatable `--env KEY=VALUE`
 adds variables; matching keys in the environment file take precedence, as in
 systemd. The installer applies both when validating `${VAR}` in serve.yml.
-Environment files follow systemd's rules: `KEY=VALUE`, single-quoted values taken
+Environment files follow systemd's rules with one assignment per line (no
+continuation lines or multi-line values): `KEY=VALUE`, single-quoted values taken
 literally, double-quoted values with `\"`, `\\`, `` \` `` and `\$` escapes, blank lines
 and comments starting with `#` or `;`; omit shell `export` prefixes.
 The working directory and environment file must already exist.
@@ -164,7 +165,8 @@ The working directory and environment file must already exist.
 The unit waits for the network and restarts on failure. It sets
 `NoNewPrivileges=yes`, `ProtectSystem=strict` and `PrivateTmp=yes`.
 `ReadWritePaths` allows writes to `data_dir`, the working directory and the service
-user's home when it exists (for the audit store and facts cache). Add repeatable
+user's home when it exists or install creates it for `data_dir` (for the audit store
+and facts cache). Add repeatable
 `--read-write-path DIR` for any other writable location. When serve.yml omits
 `data_dir`, its default is the service user's `~/.onigirazu/serve`; installation
 creates the data directory and assigns it to the selected user and group.

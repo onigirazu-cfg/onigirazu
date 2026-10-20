@@ -275,7 +275,8 @@ func installServeService(o *serveOptions, out, errOut io.Writer) error {
 	}
 	paths := []string{dataDir, working}
 	// A missing home (system users with /nonexistent) would stop the unit from starting.
-	if info, err := os.Stat(account.HomeDir); err == nil && info.IsDir() {
+	// Install creates it when data_dir is under it.
+	if info, err := os.Stat(account.HomeDir); (err == nil && info.IsDir()) || strings.HasPrefix(dataDir, filepath.Clean(account.HomeDir)+string(filepath.Separator)) {
 		paths = append(paths, account.HomeDir)
 	}
 	for _, path := range o.readWritePaths {
