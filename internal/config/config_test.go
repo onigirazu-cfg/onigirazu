@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -778,5 +779,49 @@ func TestCheckModeAndDryRunMeanTheSame(t *testing.T) {
 	}
 	if (&Config{}).GetDryRun() {
 		t.Error("no check mode by default")
+	}
+}
+
+func TestAnsiblePlaybookPath(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	for _, tc := range []struct{ value, want string }{
+		{".venv/bin/ansible-playbook", filepath.Join(dir, ".venv/bin/ansible-playbook")},
+		{"ansible-playbook", "ansible-playbook"},
+		{"~/.local/bin/ansible-playbook", filepath.Join(dir, ".local/bin/ansible-playbook")},
+	} {
+		t.Run(tc.value, func(t *testing.T) {
+			path := filepath.Join(dir, "onigirazu.yml")
+			if err := os.WriteFile(path, []byte("ansible_bridge:\n  ansible_playbook: "+tc.value+"\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			cfg, err := LoadConfig(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := cfg.AnsibleBridge.AnsiblePlaybook; got != tc.want {
+				t.Fatalf("ansible_playbook = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestSearchPathsExpandHome(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	path := filepath.Join(dir, "onigirazu.yml")
+	if err := os.WriteFile(path, []byte("collections_path:\n  - ./collections\n  - ~/.ansible/collections\nroles_path:\n  - ~/roles\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{filepath.Join(dir, "collections"), filepath.Join(dir, ".ansible", "collections")}
+	if len(cfg.CollectionsPath) != 2 || cfg.CollectionsPath[0] != want[0] || cfg.CollectionsPath[1] != want[1] {
+		t.Fatalf("collections_path = %q, want %q", cfg.CollectionsPath, want)
+	}
+	if len(cfg.RolesPath) != 1 || cfg.RolesPath[0] != filepath.Join(dir, "roles") {
+		t.Fatalf("roles_path = %q", cfg.RolesPath)
 	}
 }

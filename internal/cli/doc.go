@@ -11,6 +11,7 @@ import (
 	"github.com/onigirazu-cfg/onigirazu/internal/bridge"
 	"github.com/onigirazu-cfg/onigirazu/internal/config"
 	"github.com/onigirazu-cfg/onigirazu/internal/modules"
+	"github.com/onigirazu-cfg/onigirazu/internal/parser"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
 
@@ -21,6 +22,7 @@ func newDocCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if cfg, err := config.LoadConfigWithDiscovery(configPath, "."); err == nil {
+				cfg.AnsibleBridge.CollectionsPath = parser.CollectionSearchPaths(".", cfg.CollectionsPath)
 				bridge.Configure(cfg.AnsibleBridge)
 			}
 			return showDoc(cmd.OutOrStdout(), args[0])

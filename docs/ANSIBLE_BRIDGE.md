@@ -14,6 +14,15 @@ ansible_bridge:
   ansible_playbook: ~/.local/bin/ansible-playbook   # default: ansible-playbook from PATH
 ```
 
+A relative `ansible_playbook` path is resolved against the directory containing `onigirazu.yml`;
+a leading `~` expands to the home directory. A bare name is looked up in `PATH`.
+
+The bridge passes collection search paths to both `ansible-playbook` and `ansible-doc` through
+`ANSIBLE_COLLECTIONS_PATH`: `collections_path` from `onigirazu.yml`, then `ANSIBLE_COLLECTIONS_PATH`
+(and `ANSIBLE_COLLECTIONS_PATHS`) from the environment, then `ansible.cfg`, followed by the default
+user and system collection directories. Relative `ansible.cfg` entries are resolved against that
+file’s directory. Duplicate paths are removed, preserving their first occurrence.
+
 For each bridged task and host onigirazu runs `ansible-playbook` once, with:
 
 - a one-host inventory: the host's `ansible_*` variables (WinRM, connection plugins and so on), its
@@ -36,7 +45,7 @@ install`), and connections such as WinRM need their Python packages (`pywinrm`).
 `onigirazu lint` checks the arguments of bridged tasks against the module's spec from
 `ansible-doc -j`: unknown names (with the closest known one), missing required arguments, and literal
 values outside the module's choices; templated values are left to run time. Specs are cached per
-ansible-core version in the user cache directory (`onigirazu/ansible-doc/`), so later runs need no
+ansible-core version and collection search paths in the user cache directory (`onigirazu/ansible-doc/`), so later runs need no
 ansible-doc. `apply`, `validate` and `lint` read `ansible_bridge` from `onigirazu.yml` the same way.
 
 ```text

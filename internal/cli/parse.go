@@ -23,6 +23,7 @@ func parsePlaybook(ctx context.Context, path string) (*types.Playbook, error) {
 	p := parser.NewEnhancedParser(template.NewEngine(), log)
 	// onigirazu.yml: the modules allowed through the Ansible bridge are known
 	if cfg, err := config.LoadConfigWithDiscovery(configPath, filepath.Dir(path)); err == nil {
+		cfg.AnsibleBridge.CollectionsPath = parser.CollectionSearchPaths(filepath.Dir(path), cfg.CollectionsPath)
 		bridge.Configure(cfg.AnsibleBridge)
 	}
 	// unknown modules are reported as apply reports them

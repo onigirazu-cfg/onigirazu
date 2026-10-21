@@ -71,6 +71,9 @@ var (
 func (c Config) docBinary() string {
 	pb := c.AnsiblePlaybook
 	if pb != "" && strings.ContainsRune(pb, filepath.Separator) {
+		if abs, err := filepath.Abs(pb); err == nil {
+			pb = abs
+		}
 		return filepath.Join(filepath.Dir(pb), "ansible-doc")
 	}
 	return "ansible-doc"
@@ -90,17 +93,23 @@ func SpecFor(module string) (*Spec, error) {
 func (c Config) SpecFor(module string) (*Spec, error) {
 	specMu.Lock()
 	defer specMu.Unlock()
-	bin := c.docBinary()
-	key := bin + "\x00" + module
+	bin, err := resolveBinary(c.docBinary())
+	if err != nil {
+		return nil, ErrNoAnsibleDoc
+	}
+	paths := c.collectionsPath()
+	if paths == "" {
+		paths = os.Getenv("ANSIBLE_COLLECTIONS_PATH") + "\x00" + os.Getenv("ANSIBLE_COLLECTIONS_PATHS")
+	}
+	key := bin + "\x00" + paths + "\x00" + module
 	if s, ok := specCache[key]; ok {
 		return s, nil
 	}
-	if _, err := exec.LookPath(bin); err != nil {
-		return nil, ErrNoAnsibleDoc
-	}
 	version := docVersions[bin]
 	if version == "" {
-		out, err := exec.Command(bin, "--version").Output() // #nosec G204 -- ansible-doc from the configuration
+		cmd := exec.Command(bin, "--version") // #nosec G204 -- ansible-doc from the configuration
+		cmd.Env = c.environ()
+		out, err := cmd.Output()
 		if err != nil {
 			return nil, fmt.Errorf("ansible-doc --version: %w", err)
 		}
@@ -109,7 +118,7 @@ func (c Config) SpecFor(module string) (*Spec, error) {
 	}
 	cacheFile := ""
 	if dir, err := os.UserCacheDir(); err == nil {
-		sum := sha256.Sum256([]byte(bin + "\x00" + version))
+		sum := sha256.Sum256([]byte(bin + "\x00" + version + "\x00" + paths))
 		cacheFile = filepath.Join(dir, "onigirazu", "ansible-doc", hex.EncodeToString(sum[:6]), module+".json")
 		if data, err := os.ReadFile(cacheFile); err == nil { // #nosec G304 -- our own cache
 			s := &Spec{}
@@ -122,6 +131,7 @@ func (c Config) SpecFor(module string) (*Spec, error) {
 	var stderr bytes.Buffer
 	cmd := exec.Command(bin, "-j", module) // #nosec G204 -- a module name from the playbook, no shell
 	cmd.Stderr = &stderr
+	cmd.Env = c.environ()
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("ansible-doc %s: %v %s", module, err, strings.TrimSpace(stderr.String()))
