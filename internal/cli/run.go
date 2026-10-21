@@ -285,6 +285,8 @@ func runAdHocCommand(
 
 	// Initialize module registry
 	moduleRegistry := modules.NewRegistry()
+	cfg.AnsibleBridge.CollectionsPath = parser.CollectionSearchPaths(".", cfg.CollectionsPath)
+	moduleRegistry.SetBridgeConfig(cfg.AnsibleBridge)
 
 	// Initialize ad-hoc components
 	adhocParser := adhoc.NewParser()

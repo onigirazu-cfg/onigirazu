@@ -33,6 +33,8 @@ type Config struct {
 	Modules []string `yaml:"modules" json:"modules"`
 	// AnsiblePlaybook is the ansible-playbook to run (default: from PATH)
 	AnsiblePlaybook string `yaml:"ansible_playbook" json:"ansible_playbook"`
+	// CollectionsPath is filled by the CLI from the collection search paths.
+	CollectionsPath []string `yaml:"-" json:"-"`
 }
 
 var (
@@ -50,6 +52,7 @@ func Configure(c Config) {
 // Clone copies the configuration for an independent run.
 func (c Config) Clone() Config {
 	c.Modules = append([]string(nil), c.Modules...)
+	c.CollectionsPath = append([]string(nil), c.CollectionsPath...)
 	return c
 }
 
@@ -111,9 +114,12 @@ func (c Config) Run(ctx context.Context, t Task, host types.Host) types.TaskResu
 	if bin == "" {
 		bin = "ansible-playbook"
 	}
-	if _, err := exec.LookPath(bin); err != nil {
+	resolved, err := resolveBinary(bin)
+	if err != nil {
 		return fail("module %s runs through Ansible, but %s is not installed", t.Module, bin)
 	}
+
+	bin = resolved
 
 	dir, err := os.MkdirTemp("", "onigirazu-bridge-")
 	if err != nil {
@@ -147,7 +153,7 @@ func (c Config) Run(ctx context.Context, t Task, host types.Host) types.TaskResu
 	}
 	cmd := exec.CommandContext(ctx, bin, args...) // #nosec G204 -- ansible-playbook with generated files
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(),
+	cmd.Env = append(c.environ(),
 		"ANSIBLE_CALLBACK_PLUGINS="+filepath.Join(dir, "callback_plugins"),
 		"ANSIBLE_STDOUT_CALLBACK=onigirazu_bridge",
 		"ONIGIRAZU_BRIDGE_RESULT="+resultFile,
@@ -180,6 +186,43 @@ func (c Config) Run(ctx context.Context, t Task, host types.Host) types.TaskResu
 		return fail("bridge result: %v", err)
 	}
 	return Map(res, out.Status, out.Result, start)
+}
+
+// resolveBinary makes the binary absolute: the command runs in a temporary
+// directory. A bare name found only through "." in PATH stays refused
+// (exec.ErrDot).
+func resolveBinary(bin string) (string, error) {
+	p, err := exec.LookPath(bin)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Abs(p)
+}
+
+func (c Config) collectionsPath() string {
+	var paths []string
+	seen := map[string]bool{}
+	for _, p := range c.CollectionsPath {
+		if p == "" {
+			continue
+		}
+		if abs, err := filepath.Abs(p); err == nil {
+			p = abs
+		}
+		if !seen[p] {
+			seen[p] = true
+			paths = append(paths, p)
+		}
+	}
+	return strings.Join(paths, ":")
+}
+
+func (c Config) environ() []string {
+	env := os.Environ()
+	if paths := c.collectionsPath(); paths != "" {
+		env = append(env, "ANSIBLE_COLLECTIONS_PATH="+paths)
+	}
+	return env
 }
 
 // Map turns an Ansible task result into a TaskResult

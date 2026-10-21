@@ -3,6 +3,7 @@ package parser
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -61,5 +62,44 @@ func TestParserRoleSearchIsolation(t *testing.T) {
 			got, _ := findRoleWithSearch("same", filepath.Join(base, "roles"), p.roleLoader.search)
 			require.Equal(t, filepath.Join(dir, "same"), got)
 		})
+	}
+}
+
+func TestCollectionSearchPaths(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	cfgDir := filepath.Join(dir, "config")
+	require.NoError(t, os.Mkdir(cfgDir, 0o755))
+	cfg := filepath.Join(cfgDir, "ansible.cfg")
+	require.NoError(t, os.WriteFile(cfg, []byte("[defaults]\ncollections_path = ./collections:../shared\n"), 0o600))
+	t.Setenv("ANSIBLE_CONFIG", cfg)
+	t.Setenv("ANSIBLE_COLLECTIONS_PATH", "/env/one:/env/two")
+	t.Setenv("ANSIBLE_COLLECTIONS_PATHS", "/env/legacy")
+	t.Setenv("HOME", dir)
+	configured := []string{"/configured"}
+	got := CollectionSearchPaths(dir, configured)
+	require.Equal(t, []string{
+		"/configured", "/env/one", "/env/two", "/env/legacy",
+		filepath.Join(cfgDir, "collections"), filepath.Join(dir, "shared"),
+		filepath.Join(dir, ".ansible", "collections"), "/usr/share/ansible/collections",
+	}, got)
+	require.Equal(t, []string{"/configured"}, configured)
+}
+
+func TestAnsibleCfgIgnoredInWorldWritableCwd(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("ANSIBLE_CONFIG", "")
+	t.Setenv("HOME", t.TempDir())
+	if err := os.WriteFile(filepath.Join(dir, "ansible.cfg"), []byte("[defaults]\ncollections_path = ./evil\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(dir, 0o777); err != nil { // #nosec G302 -- the case under test
+		t.Fatal(err)
+	}
+	t.Chdir(dir)
+	for _, p := range CollectionSearchPaths("", nil) {
+		if strings.HasSuffix(p, "evil") {
+			t.Fatalf("collections from a world-writable ./ansible.cfg: %q", p)
+		}
 	}
 }

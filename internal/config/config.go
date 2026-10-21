@@ -361,10 +361,31 @@ func LoadConfigWithDiscovery(path, playbookDir string) (*Config, error) {
 	base := filepath.Dir(configPath)
 	for _, list := range []*[]string{&config.RolesPath, &config.CollectionsPath} {
 		for i, p := range *list {
-			if !filepath.IsAbs(p) && !strings.HasPrefix(p, "~") {
+			if p == "~" || strings.HasPrefix(p, "~/") {
+				if home, err := os.UserHomeDir(); err == nil {
+					(*list)[i] = filepath.Join(home, strings.TrimPrefix(p, "~"))
+				}
+			} else if !filepath.IsAbs(p) && !strings.HasPrefix(p, "~") {
 				(*list)[i] = filepath.Join(base, p)
 			}
 		}
+	}
+	if p := config.AnsibleBridge.AnsiblePlaybook; strings.ContainsRune(p, filepath.Separator) {
+		if strings.HasPrefix(p, "~") {
+			home, err := os.UserHomeDir()
+			if err != nil {
+				return nil, fmt.Errorf("resolve ansible_playbook: %w", err)
+			}
+			p = filepath.Join(home, strings.TrimPrefix(p, "~"))
+		}
+		if !filepath.IsAbs(p) {
+			p = filepath.Join(base, p)
+		}
+		p, err = filepath.Abs(p)
+		if err != nil {
+			return nil, fmt.Errorf("resolve ansible_playbook: %w", err)
+		}
+		config.AnsibleBridge.AnsiblePlaybook = p
 	}
 	for i, w := range config.Warnings {
 		config.Warnings[i] = configPath + ": " + w

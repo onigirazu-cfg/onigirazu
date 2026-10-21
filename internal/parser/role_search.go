@@ -58,6 +58,18 @@ func roleSearchPaths(playbookDir string, roles, collections []string) ([]string,
 	return roles, collections
 }
 
+// CollectionSearchPaths returns the collection paths used to find roles.
+func CollectionSearchPaths(playbookDir string, configured []string) []string {
+	_, collections := roleSearchPaths(playbookDir, nil, configured)
+	return collections
+}
+
+// worldWritableCwd tells whether the current directory is writable by others
+func worldWritableCwd() bool {
+	info, err := os.Stat(".")
+	return err == nil && info.Mode().Perm()&0o002 != 0
+}
+
 func envPaths(name string) []string {
 	return splitPaths(os.Getenv(name), "")
 }
@@ -100,6 +112,9 @@ func ansibleCfgPaths(playbookDir string) (roles, collections []string) {
 	}
 	candidates = append(candidates, "/etc/ansible/ansible.cfg")
 	for _, c := range candidates {
+		if c == "ansible.cfg" && worldWritableCwd() {
+			continue // Ansible ignores ./ansible.cfg in a world-writable directory
+		}
 		f, err := os.Open(c) // #nosec G304 -- Ansible's config file
 		if err != nil {
 			continue

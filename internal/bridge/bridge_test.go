@@ -3,6 +3,7 @@ package bridge
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -127,5 +128,47 @@ func TestRunReadsTheCallbackResult(t *testing.T) {
 	r = Run(context.Background(), Task{Module: "tempfile"}, types.Host{Name: "h"})
 	if !r.Failed || !strings.Contains(r.Error, "gave no result") {
 		t.Errorf("no result: %+v", r)
+	}
+}
+
+func TestRunRelativeBinaryAndCollections(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	t.Setenv("ANSIBLE_COLLECTIONS_PATH", "/inherited")
+	t.Setenv("PATH", "bin")
+	if err := os.Mkdir("bin", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	script := "#!/bin/sh\n" +
+		`printf '%s' "$ANSIBLE_COLLECTIONS_PATH" > "$BRIDGE_TEST_ENV"` + "\n" +
+		`echo '{"status":"ok","result":{"changed":false}}' > "$ONIGIRAZU_BRIDGE_RESULT"` + "\n"
+	if err := os.WriteFile(filepath.Join(dir, "bin", "ansible-playbook"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	dump := filepath.Join(dir, "env")
+	t.Setenv("BRIDGE_TEST_ENV", dump)
+	// an explicit relative path works from the temporary directory
+	cfg := Config{AnsiblePlaybook: "bin/ansible-playbook", CollectionsPath: []string{"/first", "/second", "/first"}}
+	r := cfg.Run(context.Background(), Task{Module: "community.demo.test"}, types.Host{Name: "h"})
+	if !r.Success {
+		t.Fatalf("relative path: %+v", r)
+	}
+	data, err := os.ReadFile(dump)
+	if err != nil || string(data) != "/first:/second" {
+		t.Fatalf("collections = %q, %v", data, err)
+	}
+	// a bare name found only through a relative PATH entry stays refused
+	cfg.AnsiblePlaybook = "ansible-playbook"
+	if r := cfg.Run(context.Background(), Task{Module: "community.demo.test"}, types.Host{Name: "h"}); r.Success {
+		t.Fatal("bare name through a relative PATH entry must be refused")
+	}
+}
+
+func TestCloneCollectionsPath(t *testing.T) {
+	cfg := Config{CollectionsPath: []string{"/first"}}
+	clone := cfg.Clone()
+	clone.CollectionsPath[0] = "/second"
+	if cfg.CollectionsPath[0] != "/first" {
+		t.Fatal("Clone shares collection paths")
 	}
 }

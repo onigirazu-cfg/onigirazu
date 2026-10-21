@@ -101,3 +101,49 @@ func TestSpecForUsesConfiguredBinary(t *testing.T) {
 		})
 	}
 }
+
+func TestSpecForCollectionPaths(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	t.Setenv("HOME", dir)
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(dir, "cache"))
+	t.Setenv("ANSIBLE_COLLECTIONS_PATH", "/inherited")
+	if err := os.Mkdir("bin", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	script := "#!/bin/sh\n" +
+		`if [ "$1" = --version ]; then echo 'ansible-doc [core test-paths]'; exit 0; fi` + "\n" +
+		`if [ "$ANSIBLE_COLLECTIONS_PATH" = /missing ]; then echo '{}'; exit 0; fi` + "\n" +
+		`printf '{"m":{"doc":{"short_description":"%s","options":{}}}}' "$ANSIBLE_COLLECTIONS_PATH"` + "\n"
+	if err := os.WriteFile(filepath.Join(dir, "bin", "ansible-doc"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := Config{AnsiblePlaybook: "bin/ansible-playbook", CollectionsPath: []string{"/missing"}}
+	if _, err := cfg.SpecFor("collection.paths"); err == nil {
+		t.Fatal("missing collection unexpectedly found")
+	}
+	for _, disk := range []bool{false, true} {
+		for _, path := range []string{"/first", "/second", "/first"} {
+			if disk {
+				specMu.Lock()
+				specCache = map[string]*Spec{}
+				specMu.Unlock()
+			}
+			cfg.CollectionsPath = []string{path, path}
+			spec, err := cfg.SpecFor("collection.paths")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := Text(spec.Description); got != path {
+				t.Fatalf("disk=%v: description = %q, want %q", disk, got, path)
+			}
+		}
+	}
+	cfg.CollectionsPath = []string{"/missing"}
+	if _, err := cfg.SpecFor("collection.paths"); err == nil {
+		t.Fatal("cached spec returned for missing collection")
+	}
+	if got := (Config{AnsiblePlaybook: "ansible-playbook"}).docBinary(); got != "ansible-doc" {
+		t.Fatalf("bare doc binary = %q", got)
+	}
+}

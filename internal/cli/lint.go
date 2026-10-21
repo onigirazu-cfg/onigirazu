@@ -9,6 +9,7 @@ import (
 	"github.com/onigirazu-cfg/onigirazu/internal/bridge"
 	"github.com/onigirazu-cfg/onigirazu/internal/config"
 	"github.com/onigirazu-cfg/onigirazu/internal/modules"
+	"github.com/onigirazu-cfg/onigirazu/internal/parser"
 
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 	"github.com/spf13/cobra"
@@ -186,6 +187,7 @@ func lintFile(filename string, enabledRules, disabledRules map[string]bool) *Lin
 
 	// onigirazu.yml next to the playbook: modules through the Ansible bridge
 	if cfg, err := config.LoadConfigWithDiscovery(configPath, filepath.Dir(filename)); err == nil {
+		cfg.AnsibleBridge.CollectionsPath = parser.CollectionSearchPaths(filepath.Dir(filename), cfg.CollectionsPath)
 		bridge.Configure(cfg.AnsibleBridge)
 	}
 

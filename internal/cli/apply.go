@@ -413,6 +413,7 @@ Examples:
 			executionPool := execution.NewPoolWithContext(ctx, cfg.MaxConcurrency, log)
 			progressTracker := progress.NewTrackerWithOptions(0, out, true)
 			moduleRegistry := modules.NewRegistry()
+			cfg.AnsibleBridge.CollectionsPath = parser.CollectionSearchPaths(filepath.Dir(playbookPath), cfg.CollectionsPath)
 			moduleRegistry.SetBridgeConfig(cfg.AnsibleBridge)
 			var callbacks []plugins.CallbackPlugin
 			if pluginManager != nil {
