@@ -830,6 +830,10 @@ func (sv *SecurityValidator) validatePlay(play types.Play) ValidationResult {
 		result.addWarning("privilege_escalation",
 			"Play uses privilege escalation (become: true)",
 			play.Become, "Ensure privilege escalation is necessary and properly secured")
+	} else if play.BecomeExpr != "" {
+		result.addWarning("privilege_escalation",
+			"Play may use privilege escalation (templated become)",
+			play.BecomeExpr, "Review privilege escalation for each host")
 	}
 
 	return result
@@ -841,6 +845,10 @@ func (sv *SecurityValidator) checkPrivilegeEscalation(playbook types.Playbook, r
 			result.addWarning("playbook_privilege_escalation",
 				fmt.Sprintf("Play '%s' uses privilege escalation", play.Name),
 				play.Name, "Review privilege escalation requirements")
+		} else if play.BecomeExpr != "" {
+			result.addWarning("playbook_privilege_escalation",
+				fmt.Sprintf("Play '%s' may use privilege escalation (templated become)", play.Name),
+				play.Name, "Review privilege escalation for each host")
 		}
 	}
 }

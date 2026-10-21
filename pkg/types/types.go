@@ -215,7 +215,8 @@ type Task struct {
 	Become      bool          `yaml:"become,omitempty"`
 	// BecomeSet tells become: false (run without escalation even in a play
 	// with become: true) from no become at all
-	BecomeSet bool `yaml:"-" json:"-"`
+	BecomeSet  bool   `yaml:"-" json:"-"`
+	BecomeExpr string `yaml:"-" json:"-"`
 	// IncludedRole is the role of an include_role/import_role task, loaded
 	// by the parser
 	IncludedRole *Role `yaml:"-" json:"-"`
@@ -479,8 +480,14 @@ func (t *Task) UnmarshalYAML(unmarshal func(interface{}) error) error {
 			t.RetriesExpr = r
 		}
 	}
-	if become, ok := yamlBool(taskMap["become"]); ok {
-		t.Become, t.BecomeSet = become, true
+	if value, present := taskMap["become"]; present {
+		if become, ok := yamlBool(value); ok {
+			t.Become, t.BecomeSet = become, true
+		} else if expr, ok := value.(string); ok && strings.Contains(expr, "{{") {
+			t.BecomeExpr, t.BecomeSet = expr, true
+		} else {
+			return fmt.Errorf("become: %v is not a boolean", value)
+		}
 	}
 	if becomeUser, ok := taskMap["become_user"].(string); ok {
 		t.BecomeUser = becomeUser
@@ -815,6 +822,7 @@ type Play struct {
 	PostTasks    []Task                 `yaml:"post_tasks,omitempty"`
 	Handlers     []Task                 `yaml:"handlers,omitempty"`
 	Become       bool                   `yaml:"become,omitempty"`
+	BecomeExpr   string                 `yaml:"-" json:"-"`
 	BecomeUser   string                 `yaml:"become_user,omitempty"`
 	BecomeMethod string                 `yaml:"become_method,omitempty"`
 	Tags         []string               `yaml:"tags,omitempty"`
@@ -1355,8 +1363,28 @@ type RoleReference struct {
 func (p *Play) UnmarshalYAML(value *yaml.Node) error {
 	tagsAsList(value)
 	if value.Kind == yaml.MappingNode {
+		// rewrite a copy: an anchored play is decoded again through its aliases
+		copied := *value
+		copied.Content = append([]*yaml.Node(nil), value.Content...)
+		value = &copied
 		for i := 0; i+1 < len(value.Content); i += 2 {
 			key, val := value.Content[i], value.Content[i+1]
+			if key.Value == "become" {
+				var raw interface{}
+				if err := val.Decode(&raw); err != nil {
+					return err
+				}
+				become, ok := yamlBool(raw)
+				if !ok {
+					if expr, templated := raw.(string); templated && strings.Contains(expr, "{{") {
+						p.BecomeExpr = expr
+					} else {
+						return fmt.Errorf("become: %v is not a boolean", raw)
+					}
+				}
+				value.Content[i+1] = &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!bool", Value: strconv.FormatBool(become)}
+				continue
+			}
 			if key.Value != "hosts" || val.Kind != yaml.SequenceNode {
 				continue
 			}

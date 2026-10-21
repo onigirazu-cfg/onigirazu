@@ -2,6 +2,7 @@ package parser
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -168,4 +169,51 @@ func TestIncludes_VarsAndLoopReachTheIncludedTasks(t *testing.T) {
 	require.NotNil(t, tasks[1].Loop)
 	assert.Equal(t, "x", tasks[1].Loop.Variable)
 	assert.Equal(t, []interface{}{"a", "b"}, tasks[1].Loop.Items)
+}
+
+func TestIncludes_BecomeInheritance(t *testing.T) {
+	for _, keyword := range []string{"include_tasks", "import_tasks"} {
+		for _, tc := range []struct {
+			name     string
+			parent   string
+			included string
+			become   bool
+			expr     string
+			user     string
+			method   string
+		}{
+			{name: "template", parent: `"{{ use_sudo }}"`, included: "- debug: {msg: inherited}\n", expr: "{{ use_sudo }}", user: "admin", method: "su"},
+			{name: "true", parent: "true", included: "- debug: {msg: inherited}\n", become: true, user: "admin", method: "su"},
+			{name: "false", parent: "false", included: "- debug: {msg: inherited}\n", user: "admin", method: "su"},
+			{name: "child_false", parent: `"{{ use_sudo }}"`, included: "- debug: {msg: own}\n  become: false\n"},
+			{name: "nested_template", parent: `"{{ outer }}"`, included: "- include_tasks: nested.yml\n  become: \"{{ inner }}\"\n  become_user: nested\n  become_method: sudo\n", expr: "{{ inner }}", user: "nested", method: "sudo"},
+			{name: "block", parent: `"{{ use_sudo }}"`, included: "- block:\n    - debug: {msg: inherited}\n", expr: "{{ use_sudo }}", user: "admin", method: "su"},
+		} {
+			t.Run(keyword+"/"+tc.name, func(t *testing.T) {
+				dir := t.TempDir()
+				files := map[string]string{
+					"site.yml":   fmt.Sprintf("plays:\n  - hosts: all\n    tasks:\n      - %s: inc.yml\n        become: %s\n        become_user: admin\n        become_method: su\n", keyword, tc.parent),
+					"inc.yml":    tc.included,
+					"nested.yml": "- debug: {msg: nested}\n",
+				}
+				for name, content := range files {
+					require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(content), 0o600))
+				}
+				p := NewEnhancedParser(&mockTemplateEngine{}, &mockLogger{})
+				pb, err := p.ParsePlaybook(context.Background(), filepath.Join(dir, "site.yml"))
+				require.NoError(t, err)
+				require.Len(t, pb.Plays[0].Tasks, 1)
+				task := pb.Plays[0].Tasks[0]
+				assert.True(t, task.BecomeSet)
+				assert.Equal(t, tc.become, task.Become)
+				assert.Equal(t, tc.expr, task.BecomeExpr)
+				assert.Equal(t, tc.user, task.BecomeUser)
+				assert.Equal(t, tc.method, task.BecomeMethod)
+				if tc.name == "block" {
+					require.Len(t, task.Block, 1)
+					assert.False(t, task.Block[0].BecomeSet, "the block applies become to its child at runtime")
+				}
+			})
+		}
+	}
 }

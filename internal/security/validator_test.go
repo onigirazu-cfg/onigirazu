@@ -933,3 +933,22 @@ func TestSecurityAuditor(t *testing.T) {
 		assert.NotEmpty(t, dangerousAudit.Result.Violations)
 	})
 }
+
+func TestSecurityValidator_TemplatedBecome(t *testing.T) {
+	validator := NewSecurityValidator(StrictSecurityConfig())
+	result := validator.ValidatePlaybook(types.Playbook{Plays: []types.Play{{
+		Name: "conditional", Hosts: "all", BecomeExpr: "{{ use_sudo }}",
+	}}})
+	assert.True(t, result.Valid)
+	var warnings []string
+	for _, warning := range result.Warnings {
+		if warning.Rule == "privilege_escalation" || warning.Rule == "playbook_privilege_escalation" {
+			warnings = append(warnings, warning.Message)
+		}
+	}
+	assert.Len(t, warnings, 2)
+	for _, message := range warnings {
+		assert.Contains(t, message, "may use privilege escalation")
+		assert.NotContains(t, message, "become: true")
+	}
+}
