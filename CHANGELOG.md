@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- Go 1.26.10 closes govulncheck GO-2026-6809 (crypto/x509 distrusts compromised intermediate certificates)
+
 ### Changed
 
 - `onigirazu serve`: Runs and Audit filters use local date pickers, quick ranges, suggestions, removable active-filter chips and a per-page selector, with paging cursors hidden
