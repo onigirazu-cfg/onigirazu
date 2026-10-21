@@ -238,7 +238,7 @@ func (e *ExecutionEngine) runIncludedRole(ctx context.Context, task *types.Task,
 	defer func() { e.scope = parent }()
 	role := *task.IncludedRole
 	role.Params = e.mergeVariables(role.Params, task.Vars)
-	return e.executeRoleWithDependencies(ctx, &role, targets, variables, playResult)
+	return e.executeRoleWithDependencies(ctx, &role, targets, variables, playResult, task)
 }
 
 // listensTo tells whether host notified one of the handler's listen topics

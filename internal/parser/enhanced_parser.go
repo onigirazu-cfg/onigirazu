@@ -442,8 +442,8 @@ func (p *EnhancedParser) processPlayIncludes(ctx context.Context, play *types.Pl
 }
 
 // expandIncludes replaces include tasks with the tasks of the included file.
-// Paths are relative to the including file; the include's when and tags apply
-// to every included task, as with Ansible's import_tasks.
+// Paths are relative to the including file; the include's when, tags and become
+// apply to every included task, as with Ansible's import_tasks.
 func (p *EnhancedParser) expandIncludes(ctx context.Context, tasks []types.Task, baseDir string, depth int) ([]types.Task, error) {
 	if depth > 16 {
 		return nil, fmt.Errorf("includes nested more than 16 levels (a loop?)")
@@ -492,6 +492,16 @@ func (p *EnhancedParser) expandIncludes(ctx context.Context, tasks []types.Task,
 			}
 		}
 		for i := range included {
+			// the include's become; the included task's own settings win
+			if (task.BecomeSet || task.Become) && !included[i].BecomeSet {
+				included[i].Become, included[i].BecomeExpr, included[i].BecomeSet = task.Become, task.BecomeExpr, task.BecomeSet
+				if included[i].BecomeUser == "" {
+					included[i].BecomeUser = task.BecomeUser
+				}
+				if included[i].BecomeMethod == "" {
+					included[i].BecomeMethod = task.BecomeMethod
+				}
+			}
 			// vars of the include apply to every included task and win over
 			// the task's own, as Ansible's include params do
 			if len(task.Vars) > 0 {

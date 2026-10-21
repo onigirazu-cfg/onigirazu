@@ -532,6 +532,8 @@ func checkSecurity(playbook *types.Playbook, filename string, result *LintResult
 			// Check for become without become_user
 			if task.Become && task.BecomeUser == "" {
 				result.addInfo("security", "Using 'become' without specifying 'become_user' (defaults to root)", filename, 0, playName, taskName)
+			} else if task.BecomeExpr != "" && task.BecomeUser == "" {
+				result.addInfo("security", "Templated 'become' may use the default 'become_user' (root)", filename, 0, playName, taskName)
 			}
 		}
 	}
