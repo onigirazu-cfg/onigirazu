@@ -157,6 +157,7 @@ func (e *ExecutionEngine) SetRunControl(c *RunControl) {
 
 // becomeSettings is the privilege escalation a task runs with
 type becomeSettings struct {
+	Expr   string
 	Become bool
 	User   string
 	Method string
@@ -165,13 +166,13 @@ type becomeSettings struct {
 // effectiveBecome applies the play's become settings to a task that does not
 // set become itself
 func effectiveBecome(task *types.Task, play becomeSettings) becomeSettings {
-	if task.BecomeSet && !task.Become {
+	if task.BecomeSet && !task.Become && task.BecomeExpr == "" {
 		return becomeSettings{} // become: false wins over the play
 	}
-	if task.Become {
-		return becomeSettings{Become: true, User: task.BecomeUser, Method: task.BecomeMethod}
+	if task.Become || task.BecomeExpr != "" {
+		return becomeSettings{Become: task.Become, Expr: task.BecomeExpr, User: task.BecomeUser, Method: task.BecomeMethod}
 	}
-	if !play.Become {
+	if !play.Become && play.Expr == "" {
 		return becomeSettings{}
 	}
 	user, method := task.BecomeUser, task.BecomeMethod
@@ -181,7 +182,31 @@ func effectiveBecome(task *types.Task, play becomeSettings) becomeSettings {
 	if method == "" {
 		method = play.Method
 	}
-	return becomeSettings{Become: true, User: user, Method: method}
+	return becomeSettings{Become: play.Become, Expr: play.Expr, User: user, Method: method}
+}
+
+// resolveBecome renders escalation with the same variables as the task.
+func (e *ExecutionEngine) resolveBecome(ctx context.Context, task *types.Task, variables map[string]interface{}) (becomeSettings, error) {
+	e.mutex.RLock()
+	become := effectiveBecome(task, e.playBecome)
+	e.mutex.RUnlock()
+	if become.Expr == "" {
+		return become, nil
+	}
+	rendered, err := e.templateEngine.Render(ctx, become.Expr, variables)
+	if err != nil {
+		return becomeSettings{}, fmt.Errorf("become %q: %w", become.Expr, err)
+	}
+	switch strings.ToLower(strings.TrimSpace(rendered)) {
+	case "true", "yes", "on", "y", "1":
+		become.Become = true
+	case "false", "no", "off", "n", "0", "":
+		become.Become = false
+	default:
+		return becomeSettings{}, fmt.Errorf("become %q is not a boolean (rendered %q)", become.Expr, rendered)
+	}
+	become.Expr = ""
+	return become, nil
 }
 
 // ExecutionStats holds execution statistics
@@ -799,7 +824,7 @@ func (e *ExecutionEngine) executePlayOn(ctx context.Context, play *types.Play, h
 			}
 			e.inheritedTags = append(append([]string{}, play.Tags...), roleRef.Tags...)
 			e.scope = playScope
-			err := e.executeRoleWithDependencies(ctx, role, hosts, playVars, result)
+			err := e.executeRoleWithDependencies(ctx, role, hosts, playVars, result, nil)
 			e.inheritedTags = play.Tags
 			if err != nil {
 				e.logger.Error("Role '%s' failed: %v", role.Name, err)
@@ -1156,6 +1181,11 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 		return e.runMeta(task, host, playResult)
 	}
 
+	become, err := e.resolveBecome(ctx, task, taskVars)
+	if err != nil {
+		return failed(err)
+	}
+
 	// Render task arguments with templates
 	renderedArgs, err := e.templateEngine.RenderTaskArgs(ctx, task.Args, taskVars)
 	if err != nil {
@@ -1168,7 +1198,9 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 		return failed(fmt.Errorf("variable %q: %w", name, err))
 	}
 	if task.Module == "setup" || task.Module == "gather_facts" {
-		return e.runSetup(ctx, task, host, renderedArgs, playResult)
+		target := *host
+		target.Become, target.BecomeUser, target.BecomeMethod = become.Become, become.User, become.Method
+		return e.runSetup(ctx, task, &target, renderedArgs, playResult)
 	}
 
 	// Perform security validation
@@ -1251,10 +1283,6 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 	e.metricsManager.IncrementTasksExecuted()
 	e.metricsManager.IncrementModuleUsage(task.Module)
 	taskStartTime := time.Now()
-
-	e.mutex.RLock()
-	become := effectiveBecome(task, e.playBecome)
-	e.mutex.RUnlock()
 
 	// delegate_to: the module runs on another host with this host's variables;
 	// the result stays recorded for this host
@@ -2204,7 +2232,7 @@ func (e *ExecutionEngine) executeRole(ctx context.Context, role *types.Role, hos
 
 // executeRoleWithDependencies executes a role and all its dependencies in correct order
 func (e *ExecutionEngine) executeRoleWithDependencies(ctx context.Context, role *types.Role, hosts []types.Host,
-	variables map[string]interface{}, playResult *types.PlayResult) error {
+	variables map[string]interface{}, playResult *types.PlayResult, becomeParent *types.Task) error {
 	if role == nil {
 		return fmt.Errorf("role is nil")
 	}
@@ -2227,6 +2255,18 @@ func (e *ExecutionEngine) executeRoleWithDependencies(ctx context.Context, role 
 		}
 
 		e.logger.Debug("Executing %s role %d/%d: %s", roleType, i+1, len(roleOrder), depRole.Name)
+
+		if becomeParent != nil {
+			inheritedRole := *depRole
+			for _, list := range []*[]types.Task{&inheritedRole.PreTasks, &inheritedRole.Tasks, &inheritedRole.PostTasks, &inheritedRole.Handlers} {
+				inherited := append([]types.Task(nil), (*list)...)
+				for i := range inherited {
+					inheritBecome(becomeParent, &inherited[i])
+				}
+				*list = inherited
+			}
+			depRole = &inheritedRole
+		}
 
 		// Execute the role
 		if err := e.executeRole(ctx, depRole, hosts, variables, playResult); err != nil {
@@ -2680,6 +2720,21 @@ func (e *ExecutionEngine) executeBlock(ctx context.Context, block *types.Task, h
 	return failed.err()
 }
 
+// inheritBecome gives a task the become of its block, include or role; the
+// task's own become, become_user and become_method win
+func inheritBecome(parent, task *types.Task) {
+	if task.BecomeSet || !(parent.BecomeSet || parent.Become) {
+		return
+	}
+	task.Become, task.BecomeExpr, task.BecomeSet = parent.Become, parent.BecomeExpr, parent.BecomeSet
+	if task.BecomeUser == "" {
+		task.BecomeUser = parent.BecomeUser
+	}
+	if task.BecomeMethod == "" {
+		task.BecomeMethod = parent.BecomeMethod
+	}
+}
+
 // inheritBlock returns copies of a block's tasks carrying the block's when,
 // tags, become and ignore_errors
 func inheritBlock(block *types.Task, tasks []types.Task, rescuable bool) []types.Task {
@@ -2693,11 +2748,7 @@ func inheritBlock(block *types.Task, tasks []types.Task, rescuable bool) []types
 			}
 		}
 		t.Tags = append(append([]string{}, block.Tags...), t.Tags...)
-		if block.BecomeSet && !t.BecomeSet {
-			t.Become, t.BecomeSet, t.BecomeUser, t.BecomeMethod = block.Become, true, block.BecomeUser, block.BecomeMethod
-		} else if block.Become && !t.Become && !t.BecomeSet {
-			t.Become, t.BecomeUser, t.BecomeMethod = true, block.BecomeUser, block.BecomeMethod
-		}
+		inheritBecome(block, &t)
 		// environment and vars of the block, overridden by the task's own
 		t.Environment = mergeMaps(block.Environment, t.Environment)
 		t.Vars = mergeMaps(block.Vars, t.Vars)
@@ -2933,10 +2984,12 @@ func (e *ExecutionEngine) taskTags(task *types.Task) []string {
 // returns the function that clears them
 func (e *ExecutionEngine) enterPlay(play *types.Play) func() {
 	e.mutex.Lock()
-	e.playBecome = becomeSettings{Become: play.Become, User: play.BecomeUser, Method: play.BecomeMethod}
+	e.playBecome = becomeSettings{Become: play.Become, Expr: play.BecomeExpr, User: play.BecomeUser, Method: play.BecomeMethod}
 	e.playEnvironment = play.Environment
 	if e.forceBecome {
-		e.playBecome.Become = true
+		// --become forces the play's become, a templated one too; a task's
+		// own become still wins
+		e.playBecome.Become, e.playBecome.Expr = true, ""
 		if e.forceBecomeUser != "" {
 			e.playBecome.User = e.forceBecomeUser
 		}
@@ -3006,6 +3059,15 @@ func (e *ExecutionEngine) prefetchLoop(ctx context.Context, task *types.Task, ho
 	e.mutex.RLock()
 	become := effectiveBecome(task, e.playBecome)
 	e.mutex.RUnlock()
+	// A become expression can vary by item or use task vars; each item
+	// captures its own paths after resolving it.
+	if become.Expr != "" {
+		return nil
+	}
+	become, err := e.resolveBecome(ctx, task, e.hostVariables(host, variables))
+	if err != nil {
+		return nil
+	}
 	base := e.hostVariables(host, variables)
 	paths := make([]string, 0, len(items))
 	for i, item := range items {

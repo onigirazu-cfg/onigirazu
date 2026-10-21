@@ -61,6 +61,8 @@ Every task accepts these keywords next to its module:
 
 `retries` must be a number and `delay`/`timeout` a number of seconds or a duration such as `10s`. `retries` and `delay` can also be templates (`retries: "{{ n }}"`), rendered per host.
 
+A templated `become` (for example, `become: "{{ use_sudo }}"`) is rendered per host with the task's variables and interpreted as a boolean.
+
 A registered result that has `stdout`/`stderr` also gets `stdout_lines`/`stderr_lines`.
 
 ### Short Forms
