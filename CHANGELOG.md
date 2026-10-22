@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - HTML reports (drift, plan, audit, compliance, health check) carry the onigirazu mark, favicon and header, follow the system light or dark theme, and scroll wide tables on narrow screens
+- `onigirazu serve`: kind icons in the jobs table, a server icon for Hosts (the monitor icon now only marks the system theme), an icon for the more-actions button, slightly heavier icon strokes
 - `onigirazu serve`: new brand in the web UI: a grid mark with one drifted host, indigo accent, "onigirazu / title" in the top bar (the product name hides on narrow screens), and a matching favicon that lightens on dark tab bars; the configured title is HTML-escaped in the page
 - `onigirazu serve`: Runs and Audit filters use local date pickers, quick ranges, suggestions, removable active-filter chips and a per-page selector, with paging cursors hidden
 - `onigirazu serve`: proxy group lists split on `|` and `,` only; a space is part of a group name
