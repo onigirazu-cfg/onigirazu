@@ -848,6 +848,9 @@ func (s *server) loadResults() {
 		}
 	}
 	sort.Slice(requeue, func(i, k int) bool { return requeue[i].Requested.Before(requeue[k].Requested) })
+	if n := len(requeue) + cap(s.queue); len(requeue) > 0 { // a paused backlog can be longer than the queue
+		s.queue = make(chan queued, n)
+	}
 	for _, r := range requeue {
 		j := s.job(r.Job)
 		if j == nil {
@@ -855,13 +858,8 @@ func (s *server) loadResults() {
 			s.saveResult(r)
 			continue
 		}
-		select {
-		case s.queue <- queued{job: j, run: r}:
-			s.running[r.Job] = true
-		default:
-			r.Status, r.Summary = "error", "interrupted: serve restarted ("+errQueueFull.Error()+")"
-			s.saveResult(r)
-		}
+		s.queue <- queued{job: j, run: r}
+		s.running[r.Job] = true
 	}
 }
 

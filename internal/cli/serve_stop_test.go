@@ -273,3 +273,46 @@ func TestServeShutdownTimeoutConfig(t *testing.T) {
 		})
 	}
 }
+
+func TestServeStopKeepsDueScheduleSlot(t *testing.T) {
+	now := scheduleStateTime("2026-10-22T12:17:00Z")
+	s := schedulingServer(t, ServeJob{Every: time.Hour})
+	s.planSchedules(now)
+	slot := s.scheduleState["patch"].Next
+	s.stopping = &serveStop{Since: now, Deadline: now.Add(time.Hour)}
+	s.scheduleTick(slot.Add(time.Second))
+	if rec := s.scheduleState["patch"]; len(s.queue) != 0 || !rec.Next.Equal(slot) || !s.nextRun["patch"].Equal(slot) {
+		t.Fatalf("slot consumed while stopping: queue=%d record=%+v", len(s.queue), rec)
+	}
+	data, err := os.ReadFile(filepath.Join(s.cfg.DataDir, "schedule.json"))
+	if err != nil || !strings.Contains(string(data), slot.Format(time.RFC3339)) {
+		t.Fatalf("saved schedule: %s %v", data, err)
+	}
+}
+
+func TestServeRestartRequeuesBacklogLongerThanQueue(t *testing.T) {
+	cfg := &ServeConfig{DataDir: t.TempDir(), Retain: 5}
+	s, err := newServer(cfg, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := cap(s.queue) + 1 // a paused worker holds one run outside the queue
+	base := time.Now().UTC()
+	for i := 0; i < n; i++ {
+		name := "job" + strconv.Itoa(i)
+		cfg.Jobs = append(cfg.Jobs, ServeJob{Name: name, Kind: "drift"})
+		s.saveResult(&JobResult{ID: name + "-1", Job: name, Kind: "drift", Status: "queued", Requested: base.Add(time.Duration(i) * time.Second)})
+	}
+	restored, err := newServer(cfg, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(restored.queue) != n {
+		t.Fatalf("requeued %d of %d", len(restored.queue), n)
+	}
+	for i := 0; i < n; i++ {
+		if q := <-restored.queue; q.run.Job != "job"+strconv.Itoa(i) || q.run.Status != "queued" {
+			t.Fatalf("position %d: %+v", i, q.run)
+		}
+	}
+}
