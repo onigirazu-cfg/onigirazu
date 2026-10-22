@@ -320,8 +320,11 @@ const $=s=>document.querySelector(s), main=$('#main');
 const request=async(p,o={})=>{const headers=new Headers(o.headers), token=readToken();
   if(token)headers.set('Authorization','Bearer '+token);
   return fetch(p,{...o,headers})};
+// a proxy's own error page (HTML) is replaced by a short message
+const errorText=async r=>{const text=await r.text();
+  return r.status+' '+(/html/i.test(r.headers.get('Content-Type')||'')||/^\s*</.test(text)?(r.status>=502&&r.status<=504?'onigirazu serve is not reachable (restarting or stopped); try again in a moment':r.statusText||'request failed'):text)};
 const apiPage=async(p,o)=>{const r=await request(p,o);
-  if(!r.ok)throw new Error(r.status+' '+(await r.text()));
+  if(!r.ok)throw new Error(await errorText(r));
   return {data:await r.json(),headers:r.headers}};
 const api=async(p,o)=>(await apiPage(p,o)).data;
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -738,7 +741,7 @@ async function streamProgress(id){
       const response=await request('/api/results/'+encodeURIComponent(id)+'/events?after='+after,{signal});
       if(!response.ok){
         if(response.status===404){await run(id);return}
-        throw new Error(response.status+' '+await response.text());
+        throw new Error(await errorText(response));
       }
       const reader=response.body.getReader(), decoder=new TextDecoder();
   let pending='';
