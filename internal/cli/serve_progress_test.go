@@ -91,6 +91,48 @@ func TestRunObserverBufferAndMask(t *testing.T) {
 	}
 }
 
+func TestServeProgressPlan(t *testing.T) {
+	p := newRunProgress(strings.NewReplacer("private-value", "***"))
+	p.OnPlayStart("play private-value", 1, 1)
+	_, _, _, live := p.subscribe(0)
+	defer p.unsubscribe(live)
+	hosts := []string{"host private-value", "other"}
+	p.OnPlayPlan("play private-value", hosts, 4)
+	event := <-live
+	if event.Type != "plan" || event.Play != "play ***" || event.Host != "" || event.Planned != 4 || len(event.Hosts) != 2 || event.Hosts[0] != "host ***" {
+		t.Fatalf("plan event: %+v", event)
+	}
+	if hosts[0] != "host private-value" {
+		t.Fatal("plan mutated caller's hosts")
+	}
+	// Later plays and serial batches add to the existing totals.
+	p.OnPlayPlan("next play", []string{"host private-value"}, 3)
+	p.OnPlayPlan("verify", []string{"verify host"}, 0)
+	p.OnTaskEnd(&types.TaskResult{Host: "host private-value"})
+	snapshot, events, _, ch := p.subscribe(0)
+	p.unsubscribe(ch)
+	if snapshot.TasksPlanned != 11 || snapshot.TasksFinished != 1 || snapshot.Hosts["host ***"].Planned != 7 || snapshot.Hosts["other"].Planned != 4 || snapshot.Hosts["verify host"].Planned != 0 {
+		t.Fatalf("planned snapshot: %+v", snapshot)
+	}
+	data, err := json.Marshal(struct {
+		Snapshot progressSnapshot
+		Events   []progressEvent
+	}{snapshot, events})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(data, []byte("private-value")) || !bytes.Contains(data, []byte(`"hosts":["host ***","other"]`)) {
+		t.Fatalf("plan masking: %s", data)
+	}
+	p.finish("ok")
+	p.OnPlayPlan("late", []string{"other"}, 100)
+	snapshot, _, _, ch = p.subscribe(0)
+	p.unsubscribe(ch)
+	if snapshot.TasksPlanned != 11 {
+		t.Fatalf("plan after finish: %+v", snapshot)
+	}
+}
+
 func progressTestServer(t *testing.T) *server {
 	t.Helper()
 	s, err := newServer(&ServeConfig{DataDir: t.TempDir(), Retain: 5, Auth: ServeAuth{UserHeader: "X-User"}}, io.Discard)
@@ -276,7 +318,10 @@ func TestRunObserverLocalhostIsolation(t *testing.T) {
 				t.Errorf("execute %s: %v", name, err)
 				return
 			}
-			_, events, _, ch := p.subscribe(0)
+			snapshot, events, _, ch := p.subscribe(0)
+			if snapshot.TasksPlanned != 1 || snapshot.Hosts["localhost"].Planned != 1 {
+				t.Errorf("missing localhost plan for %s: %+v", name, snapshot)
+			}
 			defer p.unsubscribe(ch)
 			starts, ends := 0, 0
 			for _, e := range events {

@@ -43,6 +43,11 @@ type ExecutionObserverI interface {
 	OnError(taskName string, hostName string, error string)
 }
 
+// PlayPlanObserver optionally receives the estimated task count per host in a batch.
+type PlayPlanObserver interface {
+	OnPlayPlan(play string, hosts []string, tasks int)
+}
+
 // ExecutionEngine is the main engine for executing playbooks
 type ExecutionEngine struct {
 	output io.Writer
@@ -335,6 +340,75 @@ func (e *ExecutionEngine) countPlaybookTasks(playbook *types.Playbook) int {
 func (e *ExecutionEngine) notifyPlayStart(playName string, playIndex int, totalPlays int) {
 	for _, obs := range e.observers {
 		obs.OnPlayStart(playName, playIndex, totalPlays)
+	}
+}
+
+// countPlayTasks estimates task completions per host, excluding handlers and
+// checks; tasks the tag filter drops emit nothing and are not counted
+func (e *ExecutionEngine) countPlayTasks(ctx context.Context, play *types.Play) int {
+	total := e.countPlannedTasks(ctx, play.PreTasks, play.Tags) + e.countPlannedTasks(ctx, play.Tasks, play.Tags) + e.countPlannedTasks(ctx, play.PostTasks, play.Tags)
+	for i, role := range play.RoleObjects {
+		tags := play.Tags
+		if i < len(play.Roles) {
+			tags = append(append([]string{}, play.Tags...), play.Roles[i].Tags...)
+		}
+		total += e.countRoleTasks(ctx, role, tags)
+	}
+	return total
+}
+
+// countRoleTasks counts the role and its meta dependencies, in the order
+// executeRoleWithDependencies runs them
+func (e *ExecutionEngine) countRoleTasks(ctx context.Context, role *types.Role, tags []string) int {
+	if role == nil {
+		return 0
+	}
+	order := []*types.Role{role}
+	if e.roleLoader != nil {
+		if resolved, err := e.roleLoader.ResolveDependencyOrder(ctx, role); err == nil {
+			order = resolved
+		}
+	}
+	total := 0
+	for _, r := range order {
+		total += e.countPlannedTasks(ctx, r.PreTasks, tags) + e.countPlannedTasks(ctx, r.Tasks, tags) + e.countPlannedTasks(ctx, r.PostTasks, tags)
+	}
+	return total
+}
+
+func (e *ExecutionEngine) countPlannedTasks(ctx context.Context, tasks []types.Task, inherited []string) int {
+	total := 0
+	for _, task := range tasks {
+		tags := append(append([]string{}, inherited...), task.Tags...)
+		switch {
+		case len(task.Block) > 0:
+			// Blocks emit no task_end of their own; rescue is conditional.
+			total += e.countPlannedTasks(ctx, task.Block, tags) + e.countPlannedTasks(ctx, task.Always, tags)
+		case e.tagFilter != nil && !e.tagFilter.ShouldRun(tags):
+			// the filter drops an include_role before its role is read
+		case task.IncludedRole != nil:
+			total += e.countRoleTasks(ctx, task.IncludedRole, tags)
+		default:
+			// Loops emit per item, but their item count is resolved at runtime.
+			total++
+		}
+	}
+	return total
+}
+
+func (e *ExecutionEngine) notifyPlayPlan(ctx context.Context, play *types.Play, hosts []types.Host) {
+	names := make([]string, len(hosts))
+	for i, host := range hosts {
+		names[i] = host.Name
+	}
+	tasks := 0
+	if !e.verifyOnly {
+		tasks = e.countPlayTasks(ctx, play)
+	}
+	for _, obs := range e.observers {
+		if planner, ok := obs.(PlayPlanObserver); ok {
+			planner.OnPlayPlan(play.Name, names, tasks)
+		}
 	}
 }
 
@@ -695,6 +769,8 @@ func (e *ExecutionEngine) executePlayOn(ctx context.Context, play *types.Play, h
 		}
 		hosts = e.activeHosts(hosts)
 	}
+
+	e.notifyPlayPlan(ctx, play, hosts)
 
 	// Set play variables - merge with facts if available
 	playVars := e.mergeVariables(e.variables, play.Vars)

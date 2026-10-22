@@ -523,6 +523,8 @@ are masked. Output, error text, diffs and variables are never sent. Progress is
 memory-only: the latest 1000 events and host totals are kept for each active run
 and the last 20 finished runs, and disappear after restart. The page reconnects
 with `after` when a stream drops and opens the report when the run ends.
+Planned task totals are estimates from the playbook; conditions, loops and dynamic
+includes can make the actual number of completed tasks differ.
 
 ## API
 
