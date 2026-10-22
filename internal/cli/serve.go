@@ -50,6 +50,7 @@ type ServeConfig struct {
 	URL             string         `yaml:"url"`      // where the page is reached, for links in notifications
 	DataDir         string         `yaml:"data_dir"` // default ~/.onigirazu/serve
 	Auth            ServeAuth      `yaml:"auth"`
+	UI              ServeUI        `yaml:"ui"`
 	Jobs            []ServeJob     `yaml:"jobs"`
 	Retain          int            `yaml:"retain"` // results kept per job, default 50
 	RetainAge       time.Duration  `yaml:"retain_age"`
@@ -61,6 +62,17 @@ type ServeConfig struct {
 	// default, 0: cancel them at once
 	ShutdownTimeout *time.Duration `yaml:"shutdown_timeout"`
 	warnings        []string
+}
+
+// ServeUI adds operator-provided pages and sidebar links.
+type ServeUI struct {
+	PagesDir string      `yaml:"pages_dir"`
+	Links    []ServeLink `yaml:"links"`
+}
+
+type ServeLink struct {
+	Title string `yaml:"title" json:"title"`
+	Href  string `yaml:"href" json:"href"`
 }
 
 // ServeAuth: a bearer token is an operator (the plain one is the user
@@ -541,6 +553,28 @@ func loadServeConfig(path string) (*ServeConfig, error) {
 		return nil, err
 	}
 	base := filepath.Dir(path)
+	if cfg.UI.PagesDir != "" {
+		dir := cfg.UI.PagesDir
+		if !filepath.IsAbs(dir) {
+			dir = filepath.Join(base, dir)
+		}
+		cfg.UI.PagesDir, err = filepath.Abs(dir)
+		if err != nil {
+			return nil, fmt.Errorf("ui.pages_dir: %w", err)
+		}
+		info, err := os.Stat(cfg.UI.PagesDir)
+		if err != nil {
+			return nil, fmt.Errorf("ui.pages_dir: %w", err)
+		}
+		if !info.IsDir() {
+			return nil, fmt.Errorf("ui.pages_dir must be a directory")
+		}
+	}
+	for i, link := range cfg.UI.Links {
+		if strings.TrimSpace(link.Title) == "" || !validServeLink(link.Href) {
+			return nil, fmt.Errorf("ui.links: entry %d needs a title and an href starting with / (not //), http:// or https://", i+1)
+		}
+	}
 	names := map[string]bool{}
 	for i := range cfg.Jobs {
 		j := &cfg.Jobs[i]
@@ -627,6 +661,7 @@ type server struct {
 	inventorySnapshots map[string]*serveInventorySnapshot
 	// inventoryLoad replaces the loader in tests.
 	inventoryLoad    func([]string) (*types.Inventory, error)
+	pagesRoot        *os.Root
 	cfg              *ServeConfig
 	out              io.Writer
 	auditMu          sync.Mutex
@@ -716,6 +751,12 @@ func newServer(cfg *ServeConfig, out io.Writer) (*server, error) {
 	s.inventory = slices.Clone(inventoryPaths)
 	if err := os.MkdirAll(filepath.Join(cfg.DataDir, "results"), 0o700); err != nil {
 		return nil, err
+	}
+	if cfg.UI.PagesDir != "" {
+		s.pagesRoot, err = os.OpenRoot(cfg.UI.PagesDir)
+		if err != nil {
+			return nil, fmt.Errorf("ui.pages_dir: %w", err)
+		}
 	}
 	s.loadPause()
 	s.loadResults()
@@ -2050,7 +2091,7 @@ func writeJSON(w http.ResponseWriter, code int, v interface{}) {
 //go:embed serve_ui.html
 var serveUI string
 
-func (s *server) mux() *http.ServeMux {
+func (s *server) mux() http.Handler {
 	mux := http.NewServeMux()
 	auth := func(operator bool, h func(http.ResponseWriter, *http.Request, serveIdentity)) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
@@ -2085,6 +2126,9 @@ func (s *server) mux() *http.ServeMux {
 		s.mu.Lock()
 		running, queued := s.activity()
 		status := map[string]interface{}{"user": id.User, "operator": id.Operator, "title": s.cfg.Title, "paused": s.pause.Paused, "running": running, "queued": queued, "scheduled": s.scheduledCount(), "concurrency": s.cfg.Concurrency, "storage_error": s.storeErr, "sign_out_url": s.cfg.Auth.SignOutURL}
+		if len(s.cfg.UI.Links) > 0 {
+			status["links"] = s.cfg.UI.Links
+		}
 		if s.stopping != nil {
 			status["stopping"] = s.stopping
 		}
@@ -2483,6 +2527,17 @@ func (s *server) mux() *http.ServeMux {
 		}
 		writeJSON(w, http.StatusOK, entries)
 	}))
+	if s.pagesRoot != nil {
+		// Check page paths before ServeMux cleans dot segments.
+		pages := s.pagesHandler()
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/pages" || strings.HasPrefix(r.URL.Path, "/pages/") {
+				pages.ServeHTTP(w, r)
+				return
+			}
+			mux.ServeHTTP(w, r)
+		})
+	}
 	return mux
 }
 
@@ -2975,6 +3030,9 @@ func runServe(ctx context.Context, cfg *ServeConfig, out io.Writer) error {
 	s, err := newServer(cfg, out)
 	if err != nil {
 		return err
+	}
+	if s.pagesRoot != nil {
+		defer s.pagesRoot.Close()
 	}
 	sig := make(chan os.Signal, 2)
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
