@@ -33,10 +33,10 @@ func TestReporterFormatHTMLEscapesValues(t *testing.T) {
 	if strings.Contains(out, `class="<`) || strings.Contains(out, `class="&lt;`) {
 		t.Errorf("record value reached a class attribute:\n%s", out)
 	}
-	if want := strings.Count(out, "&lt;script&gt;alert(1)&lt;/script&gt;&#34;"); want != 6 {
-		t.Errorf("escaped payload count = %d, want 6", want)
+	if want := strings.Count(out, "&lt;script&gt;alert(1)&lt;/script&gt;&#34;"); want != 7 {
+		t.Errorf("escaped payload count = %d, want 7", want)
 	}
-	if !strings.Contains(out, `<span class="unknown">`) {
-		t.Errorf("unknown status should map to class unknown")
+	if !strings.Contains(out, `<span class="onz-badge muted">`) {
+		t.Errorf("unknown status should map to class muted")
 	}
 }

@@ -30,8 +30,8 @@ func TestGenerateHTMLReportEscapesValues(t *testing.T) {
 	if got := strings.Count(out, "&lt;script&gt;alert(1)&lt;/script&gt;&#34;"); got != 3 {
 		t.Errorf("escaped payload count = %d, want 3", got)
 	}
-	if !strings.Contains(out, `<span class="status-other">`) {
-		t.Errorf("unknown status should map to class status-other")
+	if !strings.Contains(out, `<span class="onz-badge muted">`) {
+		t.Errorf("unknown status should map to class onz-badge muted")
 	}
 }
 
@@ -40,7 +40,7 @@ func TestGenerateHTMLReportKnownStatusClass(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out, `<span class="status-failure">failure</span>`) {
+	if !strings.Contains(out, `<span class="onz-badge bad">failure</span>`) {
 		t.Errorf("known status lost its class:\n%s", out)
 	}
 }

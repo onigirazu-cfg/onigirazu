@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- HTML reports (drift, plan, audit, compliance, health check) share one layout: summary chips, tables, status badges, diff blocks and footer from one stylesheet, printable
 - `onigirazu serve` stops gracefully: on SIGTERM it takes no new runs, waits up to `shutdown_timeout` (default 10m, 0 = cancel at once) for executing runs, shows a stopping banner, and cancels the rest at the deadline or on a second signal; queued runs survive a restart; `serve install` writes `KillMode=mixed` and `TimeoutStopSec`
 - HTML reports (drift, plan, audit, compliance, health check) carry the onigirazu mark, favicon and header, follow the system light or dark theme, and scroll wide tables on narrow screens
 - `onigirazu serve`: the Jobs table fits without horizontal scrolling: below 1280px Kind and Target move under the job name and Last run joins Schedule, so Result, Run and the more-actions menu stay in view; below 700px each job is a card

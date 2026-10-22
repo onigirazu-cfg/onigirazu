@@ -200,256 +200,40 @@ func (r *Reporter) generateJSONReport(report *DriftReport) (string, error) {
 
 // generateHTMLReport generates an HTML report
 func (r *Reporter) generateHTMLReport(report *DriftReport) (string, error) {
-	tmpl := `<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Drift Detection Report - {{.ID}}</title>
-    ` + brand.Head + `
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            margin: 0;
-            padding: 20px;
-            background-color: #f5f5f5;
-        }
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            background-color: white;
-            padding: 30px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        h1 {
-            color: #333;
-            border-bottom: 3px solid var(--brand-accent);
-            padding-bottom: 10px;
-        }
-        h2 {
-            color: #555;
-            margin-top: 30px;
-        }
-        .summary {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-            margin: 20px 0;
-        }
-        .summary-card {
-            padding: 20px;
-            border-radius: 6px;
-            background-color: #f9f9f9;
-            border-left: 4px solid #4CAF50;
-        }
-        .summary-card h3 {
-            margin: 0 0 10px 0;
-            color: #666;
-            font-size: 14px;
-            text-transform: uppercase;
-        }
-        .summary-card .value {
-            font-size: 32px;
-            font-weight: bold;
-            color: #333;
-        }
-        .severity-critical { border-left-color: #f44336; }
-        .severity-high { border-left-color: #ff9800; }
-        .severity-medium { border-left-color: #ffc107; }
-        .severity-low { border-left-color: #4CAF50; }
-        .drift-item {
-            margin: 15px 0;
-            padding: 15px;
-            border: 1px solid #ddd;
-            border-radius: 6px;
-            background-color: #fafafa;
-        }
-        .drift-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 10px;
-        }
-        .drift-title {
-            font-weight: bold;
-            font-size: 16px;
-        }
-        .severity-badge {
-            padding: 4px 12px;
-            border-radius: 12px;
-            font-size: 12px;
-            font-weight: bold;
-            color: white;
-        }
-        .badge-critical { background-color: #f44336; }
-        .badge-high { background-color: #ff9800; }
-        .badge-medium { background-color: #ffc107; color: #333; }
-        .badge-low { background-color: #4CAF50; }
-        .drift-details {
-            margin-top: 10px;
-            font-size: 14px;
-            color: #666;
-        }
-        .diff {
-            background-color: #f5f5f5;
-            padding: 10px;
-            border-radius: 4px;
-            font-family: 'Courier New', monospace;
-            font-size: 13px;
-            margin-top: 10px;
-            white-space: pre-wrap;
-        }
-        .status-fixed { color: #4CAF50; }
-        .status-detected { color: #ff9800; }
-        .status-failed { color: #f44336; }
-        .can-autofix {
-            display: inline-block;
-            margin-top: 10px;
-            padding: 4px 8px;
-            background-color: #e8f5e9;
-            color: #2e7d32;
-            border-radius: 4px;
-            font-size: 12px;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin: 20px 0;
-        }
-        th, td {
-            padding: 12px;
-            text-align: left;
-            border-bottom: 1px solid #ddd;
-        }
-        th {
-            background-color: #f5f5f5;
-            font-weight: bold;
-            color: #333;
-        }
-        .no-drift {
-            text-align: center;
-            padding: 40px;
-            color: #4CAF50;
-            font-size: 18px;
-        }
-        @media (prefers-color-scheme:dark) {
-            body { background-color: #0d1117; color: #e6edf3; }
-            .container { background-color: #161b22; }
-            h1, h2, .summary-card .value, th { color: #e6edf3; }
-            .summary-card, .drift-item, .diff, th { background-color: #0d1117; }
-            .summary-card h3, .drift-details { color: #8d96a0; }
-            .drift-item, th, td { border-color: #30363d; }
-            .summary-card, .severity-low { border-left-color: #7ee787; }
-            .severity-critical { border-left-color: #ff7b72; }
-            .severity-high { border-left-color: #ffa657; }
-            .severity-medium { border-left-color: #e3b341; }
-            .severity-badge { color: #10182b; }
-            .badge-critical { background-color: #ff7b72; }
-            .badge-high { background-color: #ffa657; }
-            .badge-medium { background-color: #e3b341; }
-            .badge-low { background-color: #7ee787; }
-            .status-fixed, .no-drift { color: #7ee787; }
-            .status-detected { color: #ffa657; }
-            .status-failed { color: #ff7b72; }
-            .can-autofix { background-color: #12361f; color: #7ee787; }
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        ` + brand.Header("Drift report") + `
-        <h1>Drift Detection Report</h1>
+	tmpl := `<!doctype html><html lang="en"><head>` + brand.ReportHead + `
+<title>Drift detection report - {{.ID}}</title></head><body><main class="onz-page">
+` + brand.HeaderOpen + `Drift report` + brand.HeaderClose + `
+<h1 class="onz-title">Drift detection report</h1>
+<p class="onz-sub">{{.ID}} · {{.Timestamp.Format "2006-01-02 15:04:05 MST"}} · {{.Duration}}</p>
+<div class="onz-stats">
+<div class="onz-stat"><b>{{.TotalDrifts}}</b><span>Total drifts</span></div>
+<div class="onz-stat bad"><b>{{.CriticalDrifts}}</b><span>Critical</span></div>
+<div class="onz-stat warn"><b>{{.HighDrifts}}</b><span>High</span></div>
+<div class="onz-stat warn"><b>{{.MediumDrifts}}</b><span>Medium</span></div>
+<div class="onz-stat muted"><b>{{.LowDrifts}}</b><span>Low</span></div>
+<div class="onz-stat ok"><b>{{.FixedDrifts}}</b><span>Fixed</span></div>
+<div class="onz-stat bad"><b>{{.FailedFixes}}</b><span>Failed fixes</span></div>
+</div>
+{{if or .SnapshotID .PlaybookID}}<section class="onz-card"><h2>Report details</h2><div class="onz-body">
+{{if .SnapshotID}}<p>Snapshot ID: {{.SnapshotID}}</p>{{end}}
+{{if .PlaybookID}}<p>Playbook ID: {{.PlaybookID}}</p>{{end}}
+</div></section>{{end}}
+{{if .DriftsByType}}<section class="onz-card"><h2>Drifts by type</h2><div class="onz-scroll"><table class="onz-table"><tr><th>Type</th><th class="num">Count</th></tr>{{range $type, $count := .DriftsByType}}<tr><td>{{$type}}</td><td class="num">{{$count}}</td></tr>{{end}}</table></div></section>{{end}}
+{{if .DriftsByHost}}<section class="onz-card"><h2>Drifts by host</h2><div class="onz-scroll"><table class="onz-table"><tr><th>Host</th><th class="num">Count</th></tr>{{range $host, $count := .DriftsByHost}}<tr><td>{{$host}}</td><td class="num">{{$count}}</td></tr>{{end}}</table></div></section>{{end}}
+{{range .Items}}<section class="onz-card">
+<h2>{{.Type}}: {{.Resource}} on {{.Host}} <span class="onz-badge {{tone (printf "%s" .Severity)}}">{{.Severity}}</span> <span class="onz-badge {{tone (printf "%s" .Status)}}">{{.Status}}</span></h2>
+<div class="onz-body">
+{{if .Message}}<p>{{.Message}}</p>{{end}}
+<p class="muted">Detected: {{.DetectedAt.Format "2006-01-02 15:04:05 MST"}}{{if .FixedAt}} · Fixed: {{.FixedAt.Format "2006-01-02 15:04:05 MST"}}{{end}}</p>
+{{if .CanAutoFix}}<span class="onz-badge ok">auto-fixable</span>{{end}}
+{{if .Diff}}<pre class="onz-diff">{{range diffLines .Diff}}<span class="{{.Class}}">{{.Text}}</span>{{end}}</pre>{{end}}
+</div></section>{{else}}<p class="muted">No drift detected.</p>{{end}}
+<footer class="onz-foot">Generated {{.Timestamp.Format "2006-01-02 15:04:05 MST"}}</footer></main></body></html>`
 
-        <div class="summary">
-            <div class="summary-card">
-                <h3>Report ID</h3>
-                <div class="value" style="font-size: 16px;">{{.ID}}</div>
-            </div>
-            <div class="summary-card">
-                <h3>Total Drifts</h3>
-                <div class="value">{{.TotalDrifts}}</div>
-            </div>
-            <div class="summary-card severity-critical">
-                <h3>Critical</h3>
-                <div class="value">{{.CriticalDrifts}}</div>
-            </div>
-            <div class="summary-card severity-high">
-                <h3>High</h3>
-                <div class="value">{{.HighDrifts}}</div>
-            </div>
-            <div class="summary-card severity-medium">
-                <h3>Medium</h3>
-                <div class="value">{{.MediumDrifts}}</div>
-            </div>
-            <div class="summary-card severity-low">
-                <h3>Low</h3>
-                <div class="value">{{.LowDrifts}}</div>
-            </div>
-        </div>
-
-        <h2>Report Details</h2>
-        <div class="onz-scroll"><table>
-            <tr>
-                <th>Timestamp</th>
-                <td>{{.Timestamp.Format "2006-01-02 15:04:05"}}</td>
-            </tr>
-            {{if .SnapshotID}}
-            <tr>
-                <th>Snapshot ID</th>
-                <td>{{.SnapshotID}}</td>
-            </tr>
-            {{end}}
-            {{if .PlaybookID}}
-            <tr>
-                <th>Playbook ID</th>
-                <td>{{.PlaybookID}}</td>
-            </tr>
-            {{end}}
-            <tr>
-                <th>Duration</th>
-                <td>{{.Duration}}</td>
-            </tr>
-        </table></div>
-
-        {{if .Items}}
-        <h2>Detected Drifts</h2>
-        {{range $index, $item := .Items}}
-        <div class="drift-item">
-            <div class="drift-header">
-                <div class="drift-title">
-                    {{$item.Type}}: {{$item.Resource}} on {{$item.Host}}
-                </div>
-                <span class="severity-badge badge-{{$item.Severity}}">{{$item.Severity}}</span>
-            </div>
-            <div class="drift-details">
-                <strong>Status:</strong> <span class="status-{{$item.Status}}">{{$item.Status}}</span><br>
-                {{if $item.Message}}
-                <strong>Message:</strong> {{$item.Message}}<br>
-                {{end}}
-                <strong>Detected:</strong> {{$item.DetectedAt.Format "2006-01-02 15:04:05"}}<br>
-                {{if $item.FixedAt}}
-                <strong>Fixed:</strong> {{$item.FixedAt.Format "2006-01-02 15:04:05"}}<br>
-                {{end}}
-            </div>
-            {{if $item.Diff}}
-            <div class="diff">{{$item.Diff}}</div>
-            {{end}}
-            {{if $item.CanAutoFix}}
-            <div class="can-autofix">✓ Can be auto-fixed</div>
-            {{end}}
-        </div>
-        {{end}}
-        {{else}}
-        <div class="no-drift">
-            ✓ No drift detected! Your infrastructure is in sync.
-        </div>
-        {{end}}
-    </div>
-</body>
-</html>`
-
-	t, err := template.New("report").Parse(tmpl)
+	t, err := template.New("report").Funcs(template.FuncMap{
+		"tone":      brand.Tone,
+		"diffLines": reportDiffLines,
+	}).Parse(tmpl)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse template: %w", err)
 	}
@@ -460,6 +244,26 @@ func (r *Reporter) generateHTMLReport(report *DriftReport) (string, error) {
 	}
 
 	return sb.String(), nil
+}
+
+// reportDiffLines classifies diff lines without introducing trusted HTML.
+func reportDiffLines(diff string) []struct{ Class, Text string } {
+	var lines []struct{ Class, Text string }
+	for _, text := range strings.Split(strings.TrimSuffix(diff, "\n"), "\n") {
+		class := ""
+		switch {
+		case strings.HasPrefix(text, "---"), strings.HasPrefix(text, "+++"):
+			class = "hdr"
+		case strings.HasPrefix(text, "+"):
+			class = "add"
+		case strings.HasPrefix(text, "-"):
+			class = "del"
+		case strings.HasPrefix(text, "@@"):
+			class = "hunk"
+		}
+		lines = append(lines, struct{ Class, Text string }{class, text})
+	}
+	return lines
 }
 
 // SaveReportToFile saves a report to a file

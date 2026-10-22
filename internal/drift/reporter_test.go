@@ -166,15 +166,15 @@ func TestGenerateReportHTMLFormat(t *testing.T) {
 		t.Fatalf("Expected no error, got %v", err)
 	}
 
-	if !strings.Contains(result, "Drift Detection Report") {
-		t.Error("Expected 'Drift Detection Report' in HTML output")
+	if !strings.Contains(result, "Drift detection report") {
+		t.Error("Expected 'Drift detection report' in HTML output")
 	}
 
 	if !strings.Contains(result, "report-123") {
 		t.Error("Expected report ID in HTML output")
 	}
 
-	if !strings.Contains(result, "<!DOCTYPE html>") {
+	if !strings.Contains(result, "<!doctype html>") {
 		t.Error("Expected HTML doctype")
 	}
 }
