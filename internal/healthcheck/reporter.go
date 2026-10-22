@@ -3,6 +3,7 @@ package healthcheck
 import (
 	"encoding/json"
 	"fmt"
+	"html"
 	"os"
 	"text/tabwriter"
 
@@ -121,7 +122,7 @@ func (r *Reporter) FormatCSV(report *HealthCheckReport) string {
 
 // FormatHTML returns the report as HTML string
 func (r *Reporter) FormatHTML(report *HealthCheckReport) string {
-	html := `<!DOCTYPE html>
+	out := `<!DOCTYPE html>
 <html>
 <head>
 	<title>Health Check Report</title>
@@ -143,7 +144,7 @@ func (r *Reporter) FormatHTML(report *HealthCheckReport) string {
 	<div class="header">
 		<h1>Health Check Report</h1>
 		<p><strong>Generated:</strong> ` + report.Timestamp.Format("2006-01-02 15:04:05") + `</p>
-		<p><strong>Overall Status:</strong> <span class="` + string(report.OverallStatus) + `">` + string(report.OverallStatus) + `</span></p>
+		<p><strong>Overall Status:</strong> <span class="` + htmlStatusClass(report.OverallStatus) + `">` + html.EscapeString(string(report.OverallStatus)) + `</span></p>
 		<p><strong>Total Duration:</strong> ` + report.TotalDuration.String() + `</p>
 	</div>
 
@@ -160,10 +161,10 @@ func (r *Reporter) FormatHTML(report *HealthCheckReport) string {
 
 	// Add host reports
 	for _, hostReport := range report.HostReports {
-		statusClass := string(hostReport.Status)
-		html += `
+		statusClass := htmlStatusClass(hostReport.Status)
+		out += `
 	<div class="host-report">
-		<h3><span class="` + statusClass + `">` + hostReport.Host.Name + `</span> (` + hostReport.Host.Address + `)</h3>
+		<h3><span class="` + statusClass + `">` + html.EscapeString(hostReport.Host.Name) + `</span> (` + html.EscapeString(hostReport.Host.Address) + `)</h3>
 		<p>Duration: ` + hostReport.Duration.String() + `</p>
 		<table>
 			<tr>
@@ -174,28 +175,39 @@ func (r *Reporter) FormatHTML(report *HealthCheckReport) string {
 `
 
 		for _, check := range hostReport.Checks {
-			checkStatusClass := string(check.Status)
-			html += `
+			checkStatusClass := htmlStatusClass(check.Status)
+			out += `
 			<tr>
-				<td>` + string(check.CheckType) + `</td>
-				<td><span class="` + checkStatusClass + `">` + string(check.Status) + `</span></td>
-				<td>` + check.Message + `</td>
+				<td>` + html.EscapeString(string(check.CheckType)) + `</td>
+				<td><span class="` + checkStatusClass + `">` + html.EscapeString(string(check.Status)) + `</span></td>
+				<td>` + html.EscapeString(check.Message) + `</td>
 			</tr>
 `
 		}
 
-		html += `
+		out += `
 		</table>
 	</div>
 `
 	}
 
-	html += `
+	out += `
 </body>
 </html>
 `
 
-	return html
+	return out
+}
+
+// htmlStatusClass maps a status to one of the fixed CSS classes so that
+// report values never reach the class attribute.
+func htmlStatusClass(status HealthStatus) string {
+	switch status {
+	case StatusHealthy, StatusWarning, StatusCritical:
+		return string(status)
+	default:
+		return string(StatusUnknown)
+	}
 }
 
 // FormatMarkdown returns the report as Markdown string
