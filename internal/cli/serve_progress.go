@@ -25,6 +25,8 @@ type progressEvent struct {
 	Seq        uint64    `json:"seq"`
 	At         time.Time `json:"at"`
 	Type       string    `json:"type"`
+	Planned    int       `json:"planned,omitempty"`
+	Hosts      []string  `json:"hosts,omitempty"`
 	Play       string    `json:"play,omitempty"`
 	Task       string    `json:"task,omitempty"`
 	Host       string    `json:"host,omitempty"`
@@ -33,6 +35,7 @@ type progressEvent struct {
 }
 
 type hostProgress struct {
+	Planned       int    `json:"planned"`
 	Task          string `json:"task"`
 	Done          bool   `json:"done"`
 	OK            int    `json:"ok"`
@@ -47,6 +50,7 @@ type progressSnapshot struct {
 	Seq           uint64                  `json:"seq"`
 	Hosts         map[string]hostProgress `json:"hosts"`
 	TasksFinished int                     `json:"tasks_finished"`
+	TasksPlanned  int                     `json:"tasks_planned"`
 	Status        string                  `json:"status,omitempty"`
 }
 
@@ -58,6 +62,7 @@ type runProgress struct {
 	events      [progressLimit]progressEvent
 	size        uint64
 	hosts       map[string]hostProgress
+	planned     int
 	finished    int
 	status      string
 	subscribers map[chan progressEvent]struct{}
@@ -80,7 +85,20 @@ func (p *runProgress) emit(e progressEvent) {
 	if e.Type == "play_start" {
 		p.play = p.mask.Replace(e.Play)
 	}
-	e.Play = p.play
+	if e.Type == "plan" {
+		e.Play = p.mask.Replace(e.Play)
+		hosts := make([]string, len(e.Hosts))
+		for i, host := range e.Hosts {
+			hosts[i] = p.mask.Replace(host)
+			h := p.hosts[hosts[i]]
+			h.Planned += e.Planned
+			p.hosts[hosts[i]] = h
+			p.planned += e.Planned
+		}
+		e.Hosts = hosts
+	} else {
+		e.Play = p.play
+	}
 	e.Task, e.Host = p.mask.Replace(e.Task), p.mask.Replace(e.Host)
 	p.seq++
 	e.Seq, e.At = p.seq, time.Now().UTC()
@@ -135,6 +153,9 @@ func (p *runProgress) OnExecutionStart(string, int, int) {}
 func (p *runProgress) OnPlayStart(name string, _, _ int) {
 	p.emit(progressEvent{Type: "play_start", Play: name})
 }
+func (p *runProgress) OnPlayPlan(play string, hosts []string, tasks int) {
+	p.emit(progressEvent{Type: "plan", Play: play, Hosts: hosts, Planned: tasks})
+}
 func (p *runProgress) OnPlayEnd(_ string, _ int, _ bool, duration time.Duration) {
 	p.emit(progressEvent{Type: "play_end", DurationMS: duration.Milliseconds()})
 }
@@ -163,7 +184,7 @@ func (p *runProgress) finish(status string)                                { p.e
 func (p *runProgress) subscribe(after uint64) (progressSnapshot, []progressEvent, bool, chan progressEvent) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	snapshot := progressSnapshot{Type: "snapshot", Seq: p.seq, Hosts: make(map[string]hostProgress, len(p.hosts)), TasksFinished: p.finished, Status: p.status}
+	snapshot := progressSnapshot{Type: "snapshot", Seq: p.seq, Hosts: make(map[string]hostProgress, len(p.hosts)), TasksFinished: p.finished, TasksPlanned: p.planned, Status: p.status}
 	for host, h := range p.hosts {
 		snapshot.Hosts[host] = h
 	}

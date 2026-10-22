@@ -77,6 +77,12 @@ th{background:var(--card);color:var(--muted);font-size:12px;font-weight:550;whit
 tr:last-child td{border-bottom:0}
 tbody tr:hover{background:var(--hover)}
 .jobs-table td:first-child a{font-weight:600;color:var(--fg)}
+.run-detail .table-scroll .progress-table{table-layout:fixed;min-width:800px}
+.progress-table .progress-host{width:22%}
+.progress-table .progress-count{width:100px}
+.progress-table .progress-number{width:84px}
+.progress-table th:nth-child(n+3),.progress-table td:nth-child(n+3){text-align:right;font-variant-numeric:tabular-nums}
+.progress-table td:nth-child(1),.progress-table td:nth-child(2){overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .jobs-table{table-layout:fixed;min-width:1000px}
 .jobs-table th:nth-child(1){width:140px}
 .jobs-table th:nth-child(2){width:80px}
@@ -695,14 +701,14 @@ async function run(id){
 async function streamProgress(id){
   const controller=new AbortController();progressController=controller;
   const {signal}=controller;
-  let after=0, snapshotSeq=0, backoff=1000, hosts={}, finished=0;
+  let after=0, snapshotSeq=0, backoff=1000, hosts={}, finished=0, planned=0;
   const draw=()=>{
-    $('#progress-hosts').innerHTML=table(['Host','Current task','OK','Changed','Failed','Skipped'],Object.entries(hosts).map(([host,h])=>`<tr><td>${esc(host)}</td><td class="text">${esc(h.done?'done':h.task)}</td><td>${esc(h.ok)}</td><td>${esc(h.changed)}</td><td>${esc(h.failed)}</td><td>${esc(h.skipped)}</td></tr>`));
-    $('#progress-state').textContent=`${finished} tasks finished`;
+    $('#progress-hosts').innerHTML=`<div class="table-scroll"><table class="progress-table"><colgroup><col class="progress-host"><col><col class="progress-count"><col class="progress-number" span="4"></colgroup><thead><tr>${['Host','Current task','Progress','OK','Changed','Failed','Skipped'].map(h=>`<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${Object.entries(hosts).map(([host,h])=>`<tr><td title="${esc(host)}">${esc(host)}</td><td title="${esc(h.done?'done':h.task)}">${esc(h.done?'done':h.task)}</td><td>${esc(h.tasks_finished)}${h.planned?' / '+esc(h.planned):''}</td><td>${esc(h.ok)}</td><td>${esc(h.changed)}</td><td>${esc(h.failed)}</td><td>${esc(h.skipped)}</td></tr>`).join('')}</tbody></table></div>`;
+    $('#progress-state').textContent=planned>0&&finished<=planned?`${finished} of ~${planned} tasks finished`:`${finished} tasks finished`;
   };
   const receive=e=>{
     if(e.type==='ping')return false;
-    if(e.type==='snapshot'){hosts=Object.assign(Object.create(null),e.hosts);finished=e.tasks_finished;snapshotSeq=e.seq;draw();
+    if(e.type==='snapshot'){hosts=Object.assign(Object.create(null),e.hosts);finished=e.tasks_finished;planned=e.tasks_planned||0;snapshotSeq=e.seq;draw();
   if(e.status){run(id).catch(showError);
   return true}return false}
     if(e.type==='gap'){$('#progress-state').textContent='Earlier events are no longer available; host totals are current.';
@@ -710,14 +716,18 @@ async function streamProgress(id){
     if(e.seq<=after)return false;
     after=e.seq;
     if(e.seq>snapshotSeq)backoff=1000;
+    if(e.seq>snapshotSeq&&e.type==='plan'){
+      for(const host of e.hosts||[]){const h=hosts[host]??={task:'',done:false,ok:0,changed:0,failed:0,skipped:0,tasks_finished:0,planned:0};h.planned=(h.planned||0)+(e.planned||0);planned+=e.planned||0}
+      draw();
+    }
     if(e.seq>snapshotSeq&&e.host){
-      const h=hosts[e.host]??={task:'',done:false,ok:0,changed:0,failed:0,skipped:0,tasks_finished:0};
+      const h=hosts[e.host]??={task:'',done:false,ok:0,changed:0,failed:0,skipped:0,tasks_finished:0,planned:0};
       if(e.type==='task_start'){h.task=e.task;h.done=false}
       if(e.type==='task_end'){h.task='';h.done=true;h.tasks_finished++;finished++;h[e.status==='ignored'?'ok':e.status]++}
       draw();
     }
     const row=document.createElement('div');row.className='item text';
-    row.textContent=[new Date(e.at).toLocaleTimeString(),e.type,e.play,e.host,e.task,e.status,e.duration_ms?e.duration_ms+'ms':''].filter(Boolean).join(' · ');
+    row.textContent=[new Date(e.at).toLocaleTimeString(),e.type,e.play,e.type==='plan'?(e.hosts||[]).length+' hosts':'',e.host,e.task,e.status,e.duration_ms?e.duration_ms+'ms':''].filter(Boolean).join(' · ');
     const log=$('#progress-log');log.prepend(row);while(log.children.length>300)log.lastElementChild.remove();
     if(e.type==='end'){run(id).catch(showError);
   return true}
