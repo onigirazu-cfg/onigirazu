@@ -5,6 +5,7 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"html"
 	"io"
 	"strings"
 	"time"
@@ -328,10 +329,7 @@ func (r *Reporter) generateHTMLReport() (string, error) {
 
 	// Write records
 	for _, record := range r.records {
-		statusClass := "status-" + string(record.Status)
-		if record.Status == "running" {
-			statusClass = "status-running"
-		}
+		statusClass := htmlStatusClass(record.Status)
 
 		buf.WriteString(fmt.Sprintf(`                <tr>
                     <td>%s</td>
@@ -343,7 +341,8 @@ func (r *Reporter) generateHTMLReport() (string, error) {
                     <td>%d</td>
                 </tr>
 `,
-			record.PlaybookPath, record.User, statusClass, record.Status,
+			html.EscapeString(record.PlaybookPath), html.EscapeString(record.User),
+			statusClass, html.EscapeString(string(record.Status)),
 			record.StartTime.Format("2006-01-02 15:04:05"),
 			record.Duration, record.TotalTasks, record.SuccessfulTasks,
 			record.FailedTasks, record.SkippedTasks, record.ExitCode))
@@ -360,6 +359,17 @@ func (r *Reporter) generateHTMLReport() (string, error) {
 `)
 
 	return buf.String(), nil
+}
+
+// htmlStatusClass maps a status to a fixed CSS class so that record values
+// never reach the class attribute.
+func htmlStatusClass(status ExecutionStatus) string {
+	switch status {
+	case StatusSuccess, StatusFailure, StatusRunning, StatusSkipped:
+		return "status-" + string(status)
+	default:
+		return "status-other"
+	}
 }
 
 // generateMarkdownReport generates a Markdown format report
