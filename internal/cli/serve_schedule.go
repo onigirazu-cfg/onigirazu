@@ -123,6 +123,9 @@ func (s *server) schedule(r *JobResult, at time.Time) {
 func (s *server) releaseScheduled(now time.Time) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.stopping != nil { // they stay scheduled for the next start
+		return
+	}
 	for i := range s.cfg.Jobs {
 		j := &s.cfg.Jobs[i]
 		list := s.results[j.Name]

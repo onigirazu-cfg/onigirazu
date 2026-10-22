@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `onigirazu serve` stops gracefully: on SIGTERM it takes no new runs, waits up to `shutdown_timeout` (default 10m, 0 = cancel at once) for executing runs, shows a stopping banner, and cancels the rest at the deadline or on a second signal; queued runs survive a restart; `serve install` writes `KillMode=mixed` and `TimeoutStopSec`
 - HTML reports (drift, plan, audit, compliance, health check) carry the onigirazu mark, favicon and header, follow the system light or dark theme, and scroll wide tables on narrow screens
 - `onigirazu serve`: new brand in the web UI: a grid mark with one drifted host, indigo accent, "onigirazu / title" in the top bar (the product name hides on narrow screens), and a matching favicon that lightens on dark tab bars; the configured title is HTML-escaped in the page
 - `onigirazu serve`: Runs and Audit filters use local date pickers, quick ranges, suggestions, removable active-filter chips and a per-page selector, with paging cursors hidden

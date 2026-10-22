@@ -272,6 +272,7 @@ func advanceSchedule(j *ServeJob, rec scheduleRecord, now time.Time, tick time.D
 func (s *server) scheduleTick(now time.Time) {
 	s.mu.Lock()
 	var due []*ServeJob
+	before := map[string]scheduleRecord{} // a slot a stop refuses goes back
 	changed := false
 	for i := range s.cfg.Jobs {
 		j := &s.cfg.Jobs[i]
@@ -283,12 +284,13 @@ func (s *server) scheduleTick(now time.Time) {
 		if !change {
 			continue
 		}
+		if fire {
+			due = append(due, j)
+			before[j.Name] = *rec
+		}
 		*rec = updated
 		s.nextRun[j.Name] = rec.Next
 		changed = true
-		if fire {
-			due = append(due, j)
-		}
 	}
 	if changed {
 		s.saveSchedule()
@@ -299,6 +301,9 @@ func (s *server) scheduleTick(now time.Time) {
 		s.mu.Lock()
 		rec := s.scheduleState[j.Name]
 		switch {
+		case errors.Is(err, errServeStopping): // the next start handles it as a missed slot
+			*rec = before[j.Name]
+			s.nextRun[j.Name] = rec.Next
 		case result == nil && err != nil:
 			rec.Outcome = "skipped: " + err.Error()
 		case result != nil:

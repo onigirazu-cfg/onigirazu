@@ -396,7 +396,7 @@ func TestServeApprovalQueueFull(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if restored := s2.results["patch"][0]; restored.Status != "error" || restored.Approval.Decision != "approved" {
+	if restored := s2.results["patch"][0]; restored.Status != "queued" || restored.Approval.Decision != "approved" || !s2.running["patch"] || len(s2.queue) != 1 {
 		t.Fatalf("queued restart: %+v", restored)
 	}
 	// Expired pending runs are persisted during restart.

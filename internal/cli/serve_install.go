@@ -10,13 +10,18 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 )
+
+// serveStopMargin is what TimeoutStopSec adds to shutdown_timeout
+const serveStopMargin = time.Minute
 
 type serveUnitOptions struct {
 	Exec, GlobalConfig, ServeConfig, Addr          string
 	User, Group, WorkingDirectory, EnvironmentFile string
 	Env, ReadWritePaths                            []string
+	ShutdownTimeout                                time.Duration // serve.yml's, with its default
 }
 
 func unitQuote(s string, dollars bool) string {
@@ -70,6 +75,10 @@ func renderServeUnit(o serveUnitOptions) (string, error) {
 		args[i] = unitQuote(args[i], true)
 	}
 	fmt.Fprintf(&b, "ExecStart=%s\nRestart=on-failure\nRestartSec=5s\nNoNewPrivileges=yes\nProtectSystem=strict\n", strings.Join(args, " "))
+	// A stop lets running runs finish for shutdown_timeout: SIGTERM goes to
+	// serve alone (its children keep working), and systemd waits past the
+	// timeout for the cancel and the last results before it kills.
+	fmt.Fprintf(&b, "KillMode=mixed\nTimeoutStopSec=%d\n", int((o.ShutdownTimeout + serveStopMargin).Seconds()))
 	paths := make([]string, 0, len(o.ReadWritePaths))
 	seen := map[string]bool{}
 	for _, path := range o.ReadWritePaths {
@@ -294,6 +303,7 @@ func installServeService(o *serveOptions, out, errOut io.Writer) error {
 		Exec: self, GlobalConfig: global, ServeConfig: config, Addr: o.addr,
 		User: o.user, Group: groupName, WorkingDirectory: working,
 		EnvironmentFile: envFile, Env: o.env, ReadWritePaths: paths,
+		ShutdownTimeout: cfg.shutdownTimeout(),
 	})
 	if err != nil {
 		return err
