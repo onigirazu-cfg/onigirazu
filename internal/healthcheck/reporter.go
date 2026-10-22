@@ -6,6 +6,7 @@ import (
 	"os"
 	"text/tabwriter"
 
+	"github.com/onigirazu-cfg/onigirazu/internal/brand"
 	"github.com/onigirazu-cfg/onigirazu/pkg/utils"
 )
 
@@ -124,8 +125,12 @@ func (r *Reporter) FormatHTML(report *HealthCheckReport) string {
 	html := `<!DOCTYPE html>
 <html>
 <head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<title>Health Check Report</title>
+	` + brand.Head + `
 	<style>
+		:root { color-scheme: light dark; }
 		body { font-family: Arial, sans-serif; margin: 20px; }
 		.header { background-color: #f0f0f0; padding: 20px; border-radius: 5px; }
 		.summary { margin: 20px 0; }
@@ -137,9 +142,19 @@ func (r *Reporter) FormatHTML(report *HealthCheckReport) string {
 		table { width: 100%; border-collapse: collapse; }
 		th, td { padding: 10px; text-align: left; border-bottom: 1px solid #ddd; }
 		th { background-color: #f0f0f0; }
+        @media (prefers-color-scheme:dark) {
+            body { background-color: #0d1117; color: #e6edf3; }
+            .header, th { background-color: #161b22; }
+            .host-report, th, td { border-color: #30363d; }
+            .healthy { color: #7ee787; }
+            .warning { color: #ffa657; }
+            .critical { color: #ff7b72; }
+            .unknown { color: #8d96a0; }
+        }
 	</style>
 </head>
 <body>
+	` + brand.Header("Health check report") + `
 	<div class="header">
 		<h1>Health Check Report</h1>
 		<p><strong>Generated:</strong> ` + report.Timestamp.Format("2006-01-02 15:04:05") + `</p>
@@ -165,7 +180,7 @@ func (r *Reporter) FormatHTML(report *HealthCheckReport) string {
 	<div class="host-report">
 		<h3><span class="` + statusClass + `">` + hostReport.Host.Name + `</span> (` + hostReport.Host.Address + `)</h3>
 		<p>Duration: ` + hostReport.Duration.String() + `</p>
-		<table>
+		<div class="onz-scroll"><table>
 			<tr>
 				<th>Check Type</th>
 				<th>Status</th>
@@ -185,7 +200,7 @@ func (r *Reporter) FormatHTML(report *HealthCheckReport) string {
 		}
 
 		html += `
-		</table>
+		</table></div>
 	</div>
 `
 	}

@@ -8,6 +8,8 @@ import (
 	"io"
 	"strings"
 	"time"
+
+	"github.com/onigirazu-cfg/onigirazu/internal/brand"
 )
 
 // Reporter generates audit reports in various formats
@@ -171,7 +173,9 @@ func (r *Reporter) generateHTMLReport() (string, error) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Onigirazu Audit Report</title>
+    ` + brand.Head + `
     <style>
+        :root { color-scheme: light dark; }
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             margin: 20px;
@@ -187,7 +191,7 @@ func (r *Reporter) generateHTMLReport() (string, error) {
         }
         h1 {
             color: #333;
-            border-bottom: 3px solid #007bff;
+            border-bottom: 3px solid var(--brand-accent);
             padding-bottom: 10px;
         }
         h2 {
@@ -200,7 +204,7 @@ func (r *Reporter) generateHTMLReport() (string, error) {
             margin-top: 10px;
         }
         th {
-            background-color: #007bff;
+            background-color: var(--brand-accent);
             color: white;
             padding: 12px;
             text-align: left;
@@ -242,7 +246,7 @@ func (r *Reporter) generateHTMLReport() (string, error) {
         .metric-value {
             font-size: 24px;
             font-weight: bold;
-            color: #007bff;
+            color: var(--brand-accent);
         }
         .metric-label {
             color: #666;
@@ -252,11 +256,29 @@ func (r *Reporter) generateHTMLReport() (string, error) {
             color: #999;
             font-size: 12px;
         }
+        .metric-success { color: #28a745; }
+        .metric-failure { color: #dc3545; }
+        @media (prefers-color-scheme:dark) {
+            body { background-color: #0d1117; color: #e6edf3; }
+            .container { background-color: #161b22; }
+            h1, h2 { color: #e6edf3; }
+            th { color: #10182b; }
+            td { border-color: #30363d; }
+            tr:nth-child(even) { background-color: #0d1117; }
+            tr:hover { background-color: #21262d; }
+            .metric-label, .timestamp { color: #8d96a0; }
+            .status-success { background-color: #12361f; color: #7ee787; }
+            .status-failure { background-color: #4c1a1d; color: #ff7b72; }
+            .status-running { background-color: #0c2d6b; color: #a5d6ff; }
+            .metric-success { color: #7ee787; }
+            .metric-failure { color: #ff7b72; }
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🍙 Onigirazu Audit Report</h1>
+        ` + brand.Header("Audit report") + `
+        <h1>Audit Report</h1>
 `)
 
 	// Write summary metrics
@@ -278,18 +300,18 @@ func (r *Reporter) generateHTMLReport() (string, error) {
         </div>
 `, len(r.records)))
 	buf.WriteString(fmt.Sprintf(`        <div class="metric">
-            <div class="metric-value" style="color: #28a745;">%d</div>
+            <div class="metric-value metric-success">%d</div>
             <div class="metric-label">Successful</div>
         </div>
 `, successCount))
 	buf.WriteString(fmt.Sprintf(`        <div class="metric">
-            <div class="metric-value" style="color: #dc3545;">%d</div>
+            <div class="metric-value metric-failure">%d</div>
             <div class="metric-label">Failed</div>
         </div>
 `, failureCount))
 
 	buf.WriteString(`        <h2>Execution Records</h2>
-        <table>
+        <div class="onz-scroll"><table>
             <thead>
                 <tr>
                     <th>Playbook</th>
@@ -328,7 +350,7 @@ func (r *Reporter) generateHTMLReport() (string, error) {
 	}
 
 	buf.WriteString(`            </tbody>
-        </table>
+        </table></div>
         <p class="timestamp">Generated: `)
 	buf.WriteString(time.Now().Format("2006-01-02 15:04:05 MST"))
 	buf.WriteString(`</p>

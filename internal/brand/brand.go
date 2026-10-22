@@ -4,7 +4,10 @@
 // checks they match these values.
 package brand
 
-import "html"
+import (
+	"html"
+	"html/template"
+)
 
 // Logo colors: five indigo cells in the grid and one salmon cell that drifted.
 const (
@@ -23,22 +26,41 @@ const FaviconLink = `<link rel="icon" type="image/svg+xml" href="data:image/svg+
 const Mark = `<svg viewBox="0 0 32 32" aria-hidden="true"><g fill="var(--logo)"><rect x="3" y="7" width="7" height="7" rx="1.5"/><rect x="12.5" y="7" width="7" height="7" rx="1.5"/><rect x="3" y="16.5" width="7" height="7" rx="1.5"/><rect x="12.5" y="16.5" width="7" height="7" rx="1.5"/><rect x="22" y="16.5" width="7" height="7" rx="1.5"/></g><rect x="23.5" y="3" width="7" height="7" rx="1.5" fill="var(--logo-drift)"/></svg>`
 
 // CSS defines the brand tokens (light by default, dark under
-// prefers-color-scheme) and the report header built by Header.
+// prefers-color-scheme), the report header built by Header and .onz-scroll,
+// a wrapper that lets wide report tables scroll on narrow screens.
 const CSS = `:root{--logo:` + LogoLight + `;--logo-drift:` + LogoDrift + `;--brand-accent:` + AccentLight + `}
 @media (prefers-color-scheme:dark){:root{--logo:` + LogoDark + `;--brand-accent:` + AccentDark + `}}
 .onz-head{display:flex;gap:8px;align-items:center;margin:0 0 12px;font-size:15px;line-height:1.3;color:inherit;min-width:0}
 .onz-head svg{width:24px;height:24px;flex-shrink:0}
 .onz-head b{font-weight:650;flex-shrink:0}
 .onz-head i{font-style:normal;opacity:.55;flex-shrink:0}
-.onz-head span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}`
+.onz-head span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.onz-scroll{overflow-x:auto;max-width:100%}`
 
-// Head returns the favicon link plus a <style> block with CSS, to put inside
-// a report's <head>.
-func Head() string {
-	return FaviconLink + "\n<style>" + CSS + "</style>"
+// Head is the favicon link plus a <style> block with CSS, to put inside a
+// report's <head>.
+const Head = FaviconLink + "\n<style>" + CSS + "</style>"
+
+// HeaderOpen and HeaderClose wrap the escaped report name in the
+// "mark onigirazu / report" line; templates put the name between them.
+const (
+	HeaderOpen  = `<div class="onz-head">` + Mark + `<b>onigirazu</b><i>/</i><span>`
+	HeaderClose = `</span></div>`
+)
+
+// Header returns the header line for the top of a report, escaping the name.
+func Header(report string) string {
+	return HeaderOpen + html.EscapeString(report) + HeaderClose
 }
 
-// Header returns the "mark onigirazu / report" line for the top of a report.
-func Header(report string) string {
-	return `<div class="onz-head">` + Mark + `<b>onigirazu</b><i>/</i><span>` + html.EscapeString(report) + `</span></div>`
+// TemplateFuncs gives html/template reports brandHead, brandHeaderOpen and
+// brandHeaderClose; the report name between the last two stays escaped by
+// the template itself.
+func TemplateFuncs() template.FuncMap {
+	// Constant markup only, no user input reaches template.HTML here.
+	return template.FuncMap{
+		"brandHead":        func() template.HTML { return template.HTML(Head) },        //nolint:gosec // constant
+		"brandHeaderOpen":  func() template.HTML { return template.HTML(HeaderOpen) },  //nolint:gosec // constant
+		"brandHeaderClose": func() template.HTML { return template.HTML(HeaderClose) }, //nolint:gosec // constant
+	}
 }

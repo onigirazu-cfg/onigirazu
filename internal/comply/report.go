@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/onigirazu-cfg/onigirazu/internal/brand"
 )
 
 // Report is the outcome of a profile on a set of hosts
@@ -210,20 +212,24 @@ func mdEscape(s string) string {
 
 // WriteHTML prints a self-contained HTML page
 func (r *Report) WriteHTML(w io.Writer) {
-	fmt.Fprintf(w, `<!doctype html><html><head><meta charset="utf-8"><title>Compliance: %s</title>
-<style>body{font-family:system-ui,sans-serif;margin:2em;color:#222}table{border-collapse:collapse;margin:1em 0}td,th{border:1px solid #ccc;padding:.3em .6em;text-align:left;vertical-align:top}
-.ok{color:#2a7}.bad{color:#c33}.critical,.high{font-weight:bold}.score{font-size:1.4em}</style></head><body>
+	fmt.Fprintf(w, `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Compliance: %s</title>
+%s
+<style>:root{color-scheme:light dark}body{font-family:system-ui,sans-serif;margin:2em;color:#222}table{border-collapse:collapse;margin:1em 0}td,th{border:1px solid #ccc;padding:.3em .6em;text-align:left;vertical-align:top}
+.ok{color:#2a7}.bad{color:#c33}.critical,.high{font-weight:bold}.score{font-size:1.4em}
+@media (prefers-color-scheme:dark){body{background:#0d1117;color:#e6edf3}td,th{border-color:#30363d}th{background:#161b22}.ok{color:#7ee787}.bad{color:#ff7b72}}
+</style></head><body>
+%s
 <h1>Compliance: %s</h1><p>%s</p><p class="score">%d host(s), %d/%d controls pass (%.0f%%) — %s</p>
-`, html.EscapeString(r.Profile), html.EscapeString(r.Profile), html.EscapeString(r.Title), len(r.Hosts), r.Passed, r.Passed+r.Failed, r.Score, r.Time.Format(time.RFC3339))
-	fmt.Fprintln(w, "<table><tr><th>Host</th><th>Pass</th><th>Fail</th><th>Score</th></tr>")
+`, html.EscapeString(r.Profile), brand.Head, brand.Header("Compliance: "+r.Profile), html.EscapeString(r.Profile), html.EscapeString(r.Title), len(r.Hosts), r.Passed, r.Passed+r.Failed, r.Score, r.Time.Format(time.RFC3339))
+	fmt.Fprintln(w, "<div class=\"onz-scroll\"><table><tr><th>Host</th><th>Pass</th><th>Fail</th><th>Score</th></tr>")
 	for _, name := range r.hostNames() {
 		h := r.Hosts[name]
 		fmt.Fprintf(w, "<tr><td>%s</td><td class=\"ok\">%d</td><td class=\"bad\">%d</td><td>%.0f%%</td></tr>\n", html.EscapeString(name), h.Passed, h.Failed, h.Score)
 	}
-	fmt.Fprintln(w, "</table>")
+	fmt.Fprintln(w, "</table></div>")
 	for _, name := range r.hostNames() {
 		h := r.Hosts[name]
-		fmt.Fprintf(w, "<h2>%s</h2><table><tr><th>Control</th><th>Severity</th><th>Result</th><th>Detail</th><th>Fix</th></tr>\n", html.EscapeString(name))
+		fmt.Fprintf(w, "<h2>%s</h2><div class=\"onz-scroll\"><table><tr><th>Control</th><th>Severity</th><th>Result</th><th>Detail</th><th>Fix</th></tr>\n", html.EscapeString(name))
 		for _, c := range h.Controls {
 			state, cls := "pass", "ok"
 			if !c.OK {
@@ -233,7 +239,7 @@ func (r *Report) WriteHTML(w io.Writer) {
 				html.EscapeString(c.ID), html.EscapeString(c.Title), html.EscapeString(c.Severity), html.EscapeString(c.Severity), cls, state,
 				html.EscapeString(strings.Join(c.Details, "; ")), html.EscapeString(c.Remediation))
 		}
-		fmt.Fprintln(w, "</table>")
+		fmt.Fprintln(w, "</table></div>")
 	}
 	for _, name := range r.errorHosts() {
 		fmt.Fprintf(w, "<p class=\"bad\">%s: could not check: %s</p>\n", html.EscapeString(name), html.EscapeString(r.Errors[name]))

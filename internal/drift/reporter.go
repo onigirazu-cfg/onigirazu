@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/fatih/color"
+	"github.com/onigirazu-cfg/onigirazu/internal/brand"
 )
 
 // Reporter generates drift reports in various formats
@@ -203,8 +204,11 @@ func (r *Reporter) generateHTMLReport(report *DriftReport) (string, error) {
 <html>
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Drift Detection Report - {{.ID}}</title>
+    {{brandHead}}
     <style>
+        :root { color-scheme: light dark; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
             margin: 0;
@@ -221,7 +225,7 @@ func (r *Reporter) generateHTMLReport(report *DriftReport) (string, error) {
         }
         h1 {
             color: #333;
-            border-bottom: 3px solid #4CAF50;
+            border-bottom: 3px solid var(--brand-accent);
             padding-bottom: 10px;
         }
         h2 {
@@ -330,11 +334,33 @@ func (r *Reporter) generateHTMLReport(report *DriftReport) (string, error) {
             color: #4CAF50;
             font-size: 18px;
         }
+        @media (prefers-color-scheme:dark) {
+            body { background-color: #0d1117; color: #e6edf3; }
+            .container { background-color: #161b22; }
+            h1, h2, .summary-card .value, th { color: #e6edf3; }
+            .summary-card, .drift-item, .diff, th { background-color: #0d1117; }
+            .summary-card h3, .drift-details { color: #8d96a0; }
+            .drift-item, th, td { border-color: #30363d; }
+            .summary-card, .severity-low { border-left-color: #7ee787; }
+            .severity-critical { border-left-color: #ff7b72; }
+            .severity-high { border-left-color: #ffa657; }
+            .severity-medium { border-left-color: #e3b341; }
+            .severity-badge { color: #10182b; }
+            .badge-critical { background-color: #ff7b72; }
+            .badge-high { background-color: #ffa657; }
+            .badge-medium { background-color: #e3b341; }
+            .badge-low { background-color: #7ee787; }
+            .status-fixed, .no-drift { color: #7ee787; }
+            .status-detected { color: #ffa657; }
+            .status-failed { color: #ff7b72; }
+            .can-autofix { background-color: #12361f; color: #7ee787; }
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🔍 Drift Detection Report</h1>
+        {{brandHeaderOpen}}Drift report{{brandHeaderClose}}
+        <h1>Drift Detection Report</h1>
 
         <div class="summary">
             <div class="summary-card">
@@ -364,7 +390,7 @@ func (r *Reporter) generateHTMLReport(report *DriftReport) (string, error) {
         </div>
 
         <h2>Report Details</h2>
-        <table>
+        <div class="onz-scroll"><table>
             <tr>
                 <th>Timestamp</th>
                 <td>{{.Timestamp.Format "2006-01-02 15:04:05"}}</td>
@@ -385,7 +411,7 @@ func (r *Reporter) generateHTMLReport(report *DriftReport) (string, error) {
                 <th>Duration</th>
                 <td>{{.Duration}}</td>
             </tr>
-        </table>
+        </table></div>
 
         {{if .Items}}
         <h2>Detected Drifts</h2>
@@ -424,7 +450,7 @@ func (r *Reporter) generateHTMLReport(report *DriftReport) (string, error) {
 </body>
 </html>`
 
-	t, err := template.New("report").Parse(tmpl)
+	t, err := template.New("report").Funcs(brand.TemplateFuncs()).Parse(tmpl)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse template: %w", err)
 	}

@@ -16,7 +16,7 @@ func TestHeaderEscapesAndCarriesMark(t *testing.T) {
 }
 
 func TestHeadIsOffline(t *testing.T) {
-	head := Head()
+	head := Head
 	if !strings.HasPrefix(head, FaviconLink) || !strings.Contains(head, "prefers-color-scheme:dark") {
 		t.Fatalf("head misses the favicon or the dark tokens: %s", head)
 	}
