@@ -206,7 +206,7 @@ func (r *Reporter) generateHTMLReport(report *DriftReport) (string, error) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Drift Detection Report - {{.ID}}</title>
-    {{brandHead}}
+    ` + brand.Head + `
     <style>
         :root { color-scheme: light dark; }
         body {
@@ -359,7 +359,7 @@ func (r *Reporter) generateHTMLReport(report *DriftReport) (string, error) {
 </head>
 <body>
     <div class="container">
-        {{brandHeaderOpen}}Drift report{{brandHeaderClose}}
+        ` + brand.Header("Drift report") + `
         <h1>Drift Detection Report</h1>
 
         <div class="summary">
@@ -450,7 +450,7 @@ func (r *Reporter) generateHTMLReport(report *DriftReport) (string, error) {
 </body>
 </html>`
 
-	t, err := template.New("report").Funcs(brand.TemplateFuncs()).Parse(tmpl)
+	t, err := template.New("report").Parse(tmpl)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse template: %w", err)
 	}

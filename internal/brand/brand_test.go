@@ -26,3 +26,13 @@ func TestHeadIsOffline(t *testing.T) {
 		}
 	}
 }
+
+// Reports splice Head and HeaderOpen into html/template text, where "{{"
+// would start an action.
+func TestMarkupHasNoTemplateActions(t *testing.T) {
+	for name, s := range map[string]string{"Head": Head, "HeaderOpen": HeaderOpen, "HeaderClose": HeaderClose} {
+		if strings.Contains(s, "{{") {
+			t.Errorf("%s contains a template action delimiter", name)
+		}
+	}
+}

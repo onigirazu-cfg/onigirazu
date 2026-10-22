@@ -4,10 +4,7 @@
 // checks they match these values.
 package brand
 
-import (
-	"html"
-	"html/template"
-)
+import "html"
 
 // Logo colors: five indigo cells in the grid and one salmon cell that drifted.
 const (
@@ -42,7 +39,8 @@ const CSS = `:root{--logo:` + LogoLight + `;--logo-drift:` + LogoDrift + `;--bra
 const Head = FaviconLink + "\n<style>" + CSS + "</style>"
 
 // HeaderOpen and HeaderClose wrap the escaped report name in the
-// "mark onigirazu / report" line; templates put the name between them.
+// "mark onigirazu / report" line; html/template reports put them in the
+// template text with the name action between them, so the template escapes it.
 const (
 	HeaderOpen  = `<div class="onz-head">` + Mark + `<b>onigirazu</b><i>/</i><span>`
 	HeaderClose = `</span></div>`
@@ -51,16 +49,4 @@ const (
 // Header returns the header line for the top of a report, escaping the name.
 func Header(report string) string {
 	return HeaderOpen + html.EscapeString(report) + HeaderClose
-}
-
-// TemplateFuncs gives html/template reports brandHead, brandHeaderOpen and
-// brandHeaderClose; the report name between the last two stays escaped by
-// the template itself.
-func TemplateFuncs() template.FuncMap {
-	// Constant markup only, no user input reaches template.HTML here.
-	return template.FuncMap{
-		"brandHead":        func() template.HTML { return template.HTML(Head) },        //nolint:gosec // constant
-		"brandHeaderOpen":  func() template.HTML { return template.HTML(HeaderOpen) },  //nolint:gosec // constant
-		"brandHeaderClose": func() template.HTML { return template.HTML(HeaderClose) }, //nolint:gosec // constant
-	}
 }
