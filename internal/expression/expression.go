@@ -470,6 +470,10 @@ func items2dict(value interface{}, keyName, valueName string) (map[string]interf
 	return out, nil
 }
 
+// InlineIf splits Jinja's "a if cond else b" at the top level; without else,
+// b is ""
+func InlineIf(code string) (string, string, string, bool) { return inlineIf(code) }
+
 // inlineIf splits Jinja's "a if cond else b"; without else, b is ""
 func inlineIf(code string) (string, string, string, bool) {
 	parts := splitTop(code, " if ")

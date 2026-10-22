@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Templates: an inline if whose chosen branch is `none`/`None` or a variable holding None (`{{ x | default({}) if c else none }}`) renders as None instead of failing with "function x not defined"; an undefined chosen branch is still an error
 - `onigirazu serve`: a restart no longer requests every scheduled job at once; the next run is kept in `data_dir/schedule.json`, interval slots retain their phase, and missed slots follow the configured policy
 - Connection variables (`ansible_host`, `ansible_user`, `ansible_port`, keys, passwords, `ansible_ssh_common_args`/`ansible_ssh_extra_args`) are rendered per host before connecting with the precedence tasks use, so `-e` wins inside a template: `{{ '' if on_lan else '-o ProxyJump=bastion' }}` with `-e on_lan=true` no longer jumps; a template that fails to render fails that host instead of being used as raw text; pooled SSH connections are no longer shared between hosts with the same address but different arguments or keys
 - `onigirazu serve`: notify URLs that expand to empty disable the target with a startup warning naming the job and unset or empty variables, so webhook configuration can stay in `serve.yml` before the webhook exists
