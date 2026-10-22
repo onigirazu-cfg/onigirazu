@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `onigirazu serve`: new brand in the web UI: a grid mark with one drifted host, indigo accent, "onigirazu / title" in the top bar (the product name hides on narrow screens), and a matching favicon that lightens on dark tab bars; the configured title is HTML-escaped in the page
 - `onigirazu serve`: Runs and Audit filters use local date pickers, quick ranges, suggestions, removable active-filter chips and a per-page selector, with paging cursors hidden
 - `onigirazu serve`: proxy group lists split on `|` and `,` only; a space is part of a group name
 - In-process playbook runs can overlap with their own output, secrets, role paths, bridge configuration and facts cache; cancellation follows the caller's context, and SSH pool settings are retained from the first initialization

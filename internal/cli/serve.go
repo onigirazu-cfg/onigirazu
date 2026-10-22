@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"maps"
 	"net/http"
@@ -2020,7 +2021,7 @@ func (s *server) mux() *http.ServeMux {
 			return
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		_, _ = io.WriteString(w, strings.ReplaceAll(serveUI, "{{title}}", s.cfg.Title))
+		_, _ = io.WriteString(w, strings.ReplaceAll(serveUI, "{{title}}", html.EscapeString(s.cfg.Title)))
 	})
 	mux.HandleFunc("/api/me", auth(false, func(w http.ResponseWriter, _ *http.Request, id serveIdentity) {
 		s.mu.Lock()

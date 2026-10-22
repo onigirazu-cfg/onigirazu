@@ -137,6 +137,19 @@ func TestServeConfigAndAPI(t *testing.T) {
 	}
 }
 
+func TestServeUITitleEscaped(t *testing.T) {
+	cfg := &ServeConfig{Listen: ":0", Title: `a</span><script>x()</script>`, DataDir: t.TempDir(), Retain: 5}
+	s, err := newServer(cfg, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := httptest.NewRecorder()
+	s.mux().ServeHTTP(w, httptest.NewRequest("GET", "/", nil))
+	if body := w.Body.String(); strings.Contains(body, "<script>x()") || !strings.Contains(body, "a&lt;/span&gt;&lt;script&gt;") {
+		t.Errorf("title not escaped in the page")
+	}
+}
+
 func TestServeOpenWithoutAuth(t *testing.T) {
 	cfg := &ServeConfig{Listen: ":0", Title: "x", DataDir: t.TempDir(), Retain: 5}
 	s, err := newServer(cfg, io.Discard)
