@@ -124,7 +124,7 @@ func TestServeConfigAndAPI(t *testing.T) {
 	if code, body := do("GET", "/metrics", nil); code != 200 || !strings.Contains(string(body), `onigirazu_serve_host_status{host="web1",job="drift-site"} 1`) || strings.Contains(string(body), `onigirazu_serve_job_pending{job="drift-site"}`) {
 		t.Errorf("metrics: %d %s", code, body)
 	}
-	if code, body := do("GET", "/", nil); code != 200 || !strings.Contains(string(body), "<title>test fleet") {
+	if code, body := do("GET", "/", nil); code != 200 || !strings.Contains(string(body), "<title>test fleet") || !strings.Contains(string(body), `<link rel="icon"`) {
 		t.Errorf("ui: %d", code)
 	}
 	// results survive a restart
