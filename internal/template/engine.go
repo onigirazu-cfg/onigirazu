@@ -389,11 +389,17 @@ func evalBlocks(text string, variables map[string]interface{}) (string, []string
 		if inner == "" || strings.HasPrefix(inner, ".") {
 			return block
 		}
-		value, err := expression.Eval(inner, variables)
+		// A top-level inline if is decided here, once, so a None branch can
+		// be told from an undefined one without evaluating the condition again.
+		chosen, err := chooseBranch(inner, variables)
+		var value interface{}
+		if err == nil {
+			value, err = expression.Eval(chosen, variables)
+		}
 		if err != nil && firstErr == nil {
 			firstErr = fmt.Errorf("%s: %w", inner, err)
 		}
-		if err == nil && value == nil && definedNone(inner, variables) {
+		if err == nil && value == nil && definedNone(chosen, variables) {
 			// Ansible prints a defined None as nothing
 			values = append(values, "")
 			return fmt.Sprintf("\x00%d\x00", len(values)-1)
@@ -407,14 +413,74 @@ func evalBlocks(text string, variables map[string]interface{}) (string, []string
 	return out, values, firstErr
 }
 
+// chooseBranch returns the branch a top-level "a if cond else b" selects,
+// evaluating cond exactly once; any other expression is returned unchanged.
+// Outer parentheses around the whole expression are dropped first.
+func chooseBranch(expr string, variables map[string]interface{}) (string, error) {
+	stripped := strings.TrimSpace(expr)
+	for {
+		inner, ok := wrappedInParens(stripped)
+		if !ok {
+			break
+		}
+		stripped = strings.TrimSpace(inner)
+	}
+	then, cond, otherwise, ok := expression.InlineIf(stripped)
+	if !ok {
+		return expr, nil
+	}
+	holds, err := expression.Condition(cond, variables)
+	if err != nil {
+		return "", err
+	}
+	if holds {
+		return strings.TrimSpace(then), nil
+	}
+	return strings.TrimSpace(otherwise), nil
+}
+
 // definedNone reports whether expr is None itself or a variable that exists
 // and holds None, as opposed to an undefined name, which stays an error
 func definedNone(expr string, variables map[string]interface{}) bool {
+	expr = strings.TrimSpace(expr)
+	if inner, ok := wrappedInParens(expr); ok {
+		return definedNone(inner, variables)
+	}
 	if expr == "None" || expr == "none" || expr == "null" {
 		return true
 	}
 	v, found, _ := expression.LookupPath(expr, variables)
 	return found && v == nil
+}
+
+// wrappedInParens returns the inside of "( ... )" when the outer pair
+// encloses the whole expression, not "(a) if (b)"
+func wrappedInParens(expr string) (string, bool) {
+	if len(expr) < 2 || expr[0] != '(' || expr[len(expr)-1] != ')' {
+		return "", false
+	}
+	depth, quote := 0, byte(0)
+	for i := 0; i < len(expr); i++ {
+		c := expr[i]
+		switch {
+		case quote != 0:
+			if c == '\\' {
+				i++
+			} else if c == quote {
+				quote = 0
+			}
+		case c == '\'' || c == '"':
+			quote = c
+		case c == '(':
+			depth++
+		case c == ')':
+			depth--
+			if depth == 0 && i != len(expr)-1 {
+				return "", false
+			}
+		}
+	}
+	return expr[1 : len(expr)-1], depth == 0
 }
 
 func restoreBlocks(text string, values []string) string {
