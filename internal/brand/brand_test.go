@@ -36,3 +36,11 @@ func TestMarkupHasNoTemplateActions(t *testing.T) {
 		}
 	}
 }
+
+// Without color-scheme the browser keeps light scrollbars and form controls
+// on dark report pages.
+func TestCSSDeclaresColorScheme(t *testing.T) {
+	if !strings.Contains(CSS, "color-scheme:light dark") {
+		t.Fatal("brand CSS must declare color-scheme: light dark")
+	}
+}

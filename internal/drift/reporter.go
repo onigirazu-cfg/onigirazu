@@ -208,7 +208,6 @@ func (r *Reporter) generateHTMLReport(report *DriftReport) (string, error) {
     <title>Drift Detection Report - {{.ID}}</title>
     ` + brand.Head + `
     <style>
-        :root { color-scheme: light dark; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
             margin: 0;

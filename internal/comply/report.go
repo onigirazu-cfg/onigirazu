@@ -214,7 +214,7 @@ func mdEscape(s string) string {
 func (r *Report) WriteHTML(w io.Writer) {
 	fmt.Fprintf(w, `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Compliance: %s</title>
 %s
-<style>:root{color-scheme:light dark}body{font-family:system-ui,sans-serif;margin:2em;color:#222}table{border-collapse:collapse;margin:1em 0}td,th{border:1px solid #ccc;padding:.3em .6em;text-align:left;vertical-align:top}
+<style>body{font-family:system-ui,sans-serif;margin:2em;color:#222}table{border-collapse:collapse;margin:1em 0}td,th{border:1px solid #ccc;padding:.3em .6em;text-align:left;vertical-align:top}
 .ok{color:#2a7}.bad{color:#c33}.critical,.high{font-weight:bold}.score{font-size:1.4em}
 @media (prefers-color-scheme:dark){body{background:#0d1117;color:#e6edf3}td,th{border-color:#30363d}th{background:#161b22}.ok{color:#7ee787}.bad{color:#ff7b72}}
 </style></head><body>

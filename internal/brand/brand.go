@@ -25,7 +25,7 @@ const Mark = `<svg viewBox="0 0 32 32" aria-hidden="true"><g fill="var(--logo)">
 // CSS defines the brand tokens (light by default, dark under
 // prefers-color-scheme), the report header built by Header and .onz-scroll,
 // a wrapper that lets wide report tables scroll on narrow screens.
-const CSS = `:root{--logo:` + LogoLight + `;--logo-drift:` + LogoDrift + `;--brand-accent:` + AccentLight + `}
+const CSS = `:root{color-scheme:light dark;--logo:` + LogoLight + `;--logo-drift:` + LogoDrift + `;--brand-accent:` + AccentLight + `}
 @media (prefers-color-scheme:dark){:root{--logo:` + LogoDark + `;--brand-accent:` + AccentDark + `}}
 .onz-head{display:flex;gap:8px;align-items:center;margin:0 0 12px;font-size:15px;line-height:1.3;color:inherit;min-width:0}
 .onz-head svg{width:24px;height:24px;flex-shrink:0}

@@ -176,7 +176,6 @@ func (r *Reporter) generateHTMLReport() (string, error) {
     <title>Onigirazu Audit Report</title>
     ` + brand.Head + `
     <style>
-        :root { color-scheme: light dark; }
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             margin: 20px;
