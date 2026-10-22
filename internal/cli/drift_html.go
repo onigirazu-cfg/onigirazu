@@ -5,6 +5,8 @@ import (
 	"io"
 	"sort"
 	"strings"
+
+	"github.com/onigirazu-cfg/onigirazu/internal/brand"
 )
 
 // writeDriftHTML writes the report as one self-contained HTML page (a CI
@@ -77,6 +79,7 @@ func writeDriftHTML(w io.Writer, r *DriftReport) error {
 var driftHTML = template.Must(template.New("drift").Parse(`<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{.Title}}: {{.R.Playbook}}</title>
+` + brand.Head + `
 <style>
 :root{--bg:#fff;--fg:#1f2328;--muted:#656d76;--line:#d0d7de;--add:#dafbe1;--del:#ffebe9;--hunk:#ddf4ff;--ok:#1a7f37;--warn:#9a6700;--bad:#cf222e}
 @media (prefers-color-scheme:dark){:root{--bg:#0d1117;--fg:#e6edf3;--muted:#8d96a0;--line:#30363d;--add:#12361f;--del:#4c1a1d;--hunk:#0c2d6b;--ok:#3fb950;--warn:#d29922;--bad:#f85149}}
@@ -90,6 +93,7 @@ section h2{font-size:15px;margin:0;padding:8px 12px;border-bottom:1px solid var(
 pre{margin:6px 0 0;overflow-x:auto;font:12px/1.45 ui-monospace,monospace}
 pre span{display:block;padding:0 6px}.add{background:var(--add)}.del{background:var(--del)}.hunk{background:var(--hunk)}.hdr{color:var(--muted)}
 </style></head><body>
+` + brand.HeaderOpen + `{{.Title}}: {{.R.Playbook}}` + brand.HeaderClose + `
 <h1>{{.Title}}: {{.R.Playbook}}</h1>
 <div class="muted">checked {{.R.CheckedAt.Format "2006-01-02 15:04:05 MST"}}</div>
 <div class="summary">
