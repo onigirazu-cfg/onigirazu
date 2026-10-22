@@ -20,14 +20,6 @@ func parseServeWindows(specs []string, zone string) ([]serveWindow, *time.Locati
 		return nil, nil, fmt.Errorf("windows_tz: %w", err)
 	}
 	var windows []serveWindow
-	days := map[string]int{"sun": 0, "mon": 1, "tue": 2, "wed": 3, "thu": 4, "fri": 5, "sat": 6}
-	clock := func(s string) (int, error) {
-		t, err := time.Parse("15:04", s)
-		if err != nil || len(s) != 5 {
-			return 0, fmt.Errorf("invalid time %q (expected HH:MM)", s)
-		}
-		return t.Hour()*60 + t.Minute(), nil
-	}
 	for _, spec := range specs {
 		fields := strings.Fields(spec)
 		if len(fields) != 2 {
@@ -38,42 +30,20 @@ func parseServeWindows(specs []string, zone string) ([]serveWindow, *time.Locati
 			return nil, nil, fmt.Errorf("windows: invalid time range %q", spec)
 		}
 		var w serveWindow
-		w.start, err = clock(times[0])
+		w.start, err = parseServeClock(times[0])
 		if err != nil {
 			return nil, nil, fmt.Errorf("windows: %w", err)
 		}
-		w.end, err = clock(times[1])
+		w.end, err = parseServeClock(times[1])
 		if err != nil {
 			return nil, nil, fmt.Errorf("windows: %w", err)
 		}
 		if w.start == w.end {
 			return nil, nil, fmt.Errorf("windows: start and end must differ in %q", spec)
 		}
-		for _, part := range strings.Split(fields[0], ",") {
-			if part == "*" {
-				for i := range w.days {
-					w.days[i] = true
-				}
-				continue
-			}
-			bounds := strings.Split(part, "-")
-			first, ok := days[bounds[0]]
-			if !ok || len(bounds) > 2 {
-				return nil, nil, fmt.Errorf("windows: invalid days %q", fields[0])
-			}
-			last := first
-			if len(bounds) == 2 {
-				last, ok = days[bounds[1]]
-				if !ok {
-					return nil, nil, fmt.Errorf("windows: invalid days %q", fields[0])
-				}
-			}
-			for d := first; ; d = (d + 1) % 7 {
-				w.days[d] = true
-				if d == last {
-					break
-				}
-			}
+		w.days, err = parseServeDays(fields[0])
+		if err != nil {
+			return nil, nil, fmt.Errorf("windows: %w", err)
 		}
 		windows = append(windows, w)
 	}

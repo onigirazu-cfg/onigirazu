@@ -20,6 +20,7 @@ data_dir: /var/lib/onigirazu/serve     # results and job state; default ~/.onigi
 approval_timeout: 1h                   # default wait for approval
 run_timeout: 0s                        # default run limit; 0: no limit, negative: invalid
 concurrency: 2                         # max jobs executing at once; default 1
+# missed: skip                        # optional default for all jobs; job setting wins
 retain: 50                             # results kept per job
 retain_age: 168h                        # optional maximum result age (Go duration)
 auth:
@@ -41,7 +42,10 @@ jobs:
     kind: drift                        # drift (default), apply, verify, comply
     playbook: site.yml
     inventory: hosts.yml
-    every: 30m                         # 0 / absent: on demand only
+    every: 30m                         # absent with no at: on demand only
+    # at: ["mon,thu 03:30", "sat 12:00"] # use instead of every
+    # at_tz: Europe/Madrid              # default UTC; only with at
+    # missed: run_once                  # run_once or skip; overrides server default
     timeout: 10m                       # run limit; 0 / absent: server run_timeout; negative: invalid
     notify:
       - url: https://mattermost.example.com/hooks/${DRIFT_HOOK}
@@ -171,6 +175,58 @@ and facts cache). Add repeatable
 `data_dir`, its default is the service user's `~/.onigirazu/serve`; installation
 creates the data directory and assigns it to the selected user and group.
 
+## Scheduling
+
+`every: 30m` requests a job at a fixed interval. `at` anchors requests to local days
+and times instead: `at: "tue 18:00"`, `at: ["mon,thu 03:30", "sat 12:00"]` or
+`at: "* 04:00"`. Each entry is `"<days> HH:MM"`; days are `mon` through `sun`,
+comma-separated lists, inclusive ranges (including wrapping ranges such as `fri-mon`),
+or `*` for every day. `every` and `at` are exclusive. `at_tz` is an IANA time zone,
+defaulting to `UTC`; it requires `at`, and unknown zones reject the configuration.
+For daylight-saving transitions, candidates use Go's `time.Date`: nonexistent local
+times are normalized (for example, 02:30 becomes 03:30 at the spring transition in
+Europe/Madrid), and repeated local times use the first occurrence.
+
+The server keeps each job's schedule signature, last planned slot, next slot, planning
+reason, missed slot (when known) and last request outcome in `data_dir/schedule.json`.
+Writes use a temporary file and atomic rename with mode `0600`. A restart restores the
+next run from this record instead of requesting every scheduled job at once. Interval
+schedules retain their phase rather than moving with each scheduler tick. Changing a
+schedule recomputes its next slot, using the last planned slot when available.
+
+`missed: skip` skips slots that passed while the server was down or the clock jumped
+forward. `missed: run_once` requests one catch-up run, however many slots were missed,
+then resumes the normal schedule. A job's setting overrides top-level `missed:`. With
+neither set, `apply` defaults to `skip` to avoid unexpected changes after an upgrade or
+restart; read-only `drift`, `verify` and `comply` jobs default to `run_once`. Other
+values reject the configuration. A policy on an on-demand job has no effect.
+
+On first start, a new `run_once` job requests its first run after a short stagger
+(10 seconds plus 5 seconds per job); a new `skip` job waits for its first future slot.
+When upgrading from a version without `schedule.json`, the most recent scheduled
+request in retained results supplies the last slot. A weekly apply last requested two
+days ago therefore waits for the remaining five days. If neither state nor scheduled
+history exists, the job follows the first-start rule.
+
+A forward clock jump never causes a burst of requests: missed slots follow the policy
+above, with at most one request per job per tick. A backward jump caps the wait at one
+interval, or the next anchored occurrence. An unreadable `schedule.json` is logged and
+renamed to `schedule.json.corrupt-<UTC timestamp>` for inspection. The server writes a
+fresh plan and waits for future slots; nothing runs immediately in this case. Schedule
+write failures appear through the existing storage-error reporting.
+
+Catch-up requests still follow approval and maintenance-window rules. A slot is consumed
+even when its request is refused (for example, the job already has a pending or queued run);
+`last_outcome` then says why. Pausing execution keeps
+scheduled requests working as before; workers wait until execution resumes.
+
+`GET /api/jobs` exposes `every`, `at`, `at_tz` and the effective `missed` policy, plus
+`next`, `next_reason`, `missed_at`, `last_scheduled` and `last_outcome`. Reasons are
+`scheduled`, `missed_skipped`, `missed_run_once`, `state_unreadable` and `new`.
+`last_scheduled` is the planned slot rather than the tick's wall time; `last_outcome`
+records `requested <run id>` (with pending or scheduled status when applicable) or
+`skipped: <error>`. The page shows the next slot and explains skipped or caught-up slots.
+
 ## Run later and maintenance windows
 
 Operators can schedule any job kind with `POST /api/jobs/{name}/run` and a body such as
@@ -181,16 +237,16 @@ status `scheduled`. A guarded run waits as `pending` first; approval schedules i
 its time is still ahead, otherwise it can queue immediately.
 
 Only one future request per job is accepted. A second request with `not_before` returns
-`409 {"error":"a run is already scheduled for this job"}`; the `every` schedule likewise keeps
+`409 {"error":"a run is already scheduled for this job"}`; the periodic scheduler likewise keeps
 a single deferral outside a window instead of adding one per tick. Scheduled runs do not hold
-the job slot: manual runs and `every` schedules continue. Every five seconds, due runs
+the job slot: manual runs and periodic schedules continue. Every five seconds, due runs
 queue when the job is free; busy jobs leave them scheduled with summary
 `waiting for the job to be free` until a later tick. Cancel works on scheduled runs.
 If an immediate run misses its window while another run is already scheduled, both
 are preserved as scheduled runs. The same applies to a run approved after its window
 closes. In this collision case, `/api/jobs` also returns `scheduled_runs` with all
 deferred records; the page shows each one with its own Cancel button.
-A restart re-arms scheduled runs; scheduled runs with secret parameters instead become
+A restart re-arms deferred runs at their recorded times; deferred runs with secret parameters instead become
 `error`, because the secret values were kept only in memory.
 
 Apply jobs can set `windows` to a list of `"<days> HH:MM-HH:MM"` specifications.
@@ -477,7 +533,7 @@ with `after` when a stream drops and opens the report when the run ends.
 | `GET /api/pause` | pause state: `paused`, optional `reason`, `by`, `at` (viewers too) |
 | `POST /api/pause` | pauses execution (operators); optional JSON `{reason: "..."}`; `200` with the state; pausing again updates reason and identity; `500` with the state and `error` when `pause.json` could not be written (the pause still holds in this process) |
 | `POST /api/resume` | resumes execution (operators); `200` with the state; already resumed is a no-op; `500` as for pause |
-| `GET /api/jobs` | the jobs with schedule, next run, optional job `timeout` (duration string), `running` flag (queued, running or cancelling), optional `active` record (without report; `active.requested` and `active.started` give queue and execution timing), `queued` flag (waiting for the worker), last executed result, `recent: [{status, mode, started}]` (up to 20 executed runs, newest first, including checks), optional `pending` and `scheduled` records (without reports), `scheduled_runs` when automatic deferrals collide, optional `windows`, `windows_tz` and `next_window` for gated jobs, and `approval: "required"` for guarded jobs; optional `operators` list and caller-specific `allowed` bool; `adhoc: {limit, extra_vars, secret_vars, vars}` (`extra_vars` remains a list of names; `vars` contains declarations with `name`, `type`, `choices`, `default`, `pattern`, `min`, `max`, `description`, `required`, `secret`; secret defaults are omitted) when enabled |
+| `GET /api/jobs` | the jobs with schedule (`every` or `at` and `at_tz`), effective `missed` policy, `next`, `next_reason`, optional `missed_at`, `last_scheduled` and `last_outcome`, optional job `timeout` (duration string), `running` flag (queued, running or cancelling), optional `active` record (without report; `active.requested` and `active.started` give queue and execution timing), `queued` flag (waiting for the worker), last executed result, `recent: [{status, mode, started}]` (up to 20 executed runs, newest first, including checks), optional `pending` and `scheduled` records (without reports), `scheduled_runs` when automatic deferrals collide, optional `windows`, `windows_tz` and `next_window` for gated jobs, and `approval: "required"` for guarded jobs; optional `operators` list and caller-specific `allowed` bool; `adhoc: {limit, extra_vars, secret_vars, vars}` (`extra_vars` remains a list of names; `vars` contains declarations with `name`, `type`, `choices`, `default`, `pattern`, `min`, `max`, `description`, `required`, `secret`; secret defaults are omitted) when enabled |
 | `GET /api/jobs/{name}/inventory` | operators of jobs with `adhoc.limit: true` only; sorted reachable host names and nonempty groups that lie entirely within the job's limit (recursive, excluding `all`); `?limit=pattern` previews resolved host names; `400` for invalid limits or jobs without ad-hoc limits; `403` for callers not allowed to operate the job; `500` for inventory load errors |
 | `POST /api/jobs/{name}/run` | requests the job (operators); optional JSON `{mode: "check", limit: "host pattern", extra_vars: {k: "v"}, not_before: "RFC 3339 time"}` with limit/variables as allowed by `adhoc`; mode is `check` (apply jobs only), `apply` or empty; `400` for invalid parameters or a limit with no hosts or hosts outside the job's limit; `202` with `{queued: name, run: id}` or `{pending: id, run: id}` or `{scheduled: id, run: id}`; `409` when running, queued or pending for an immediate request, or when another run is already scheduled for a request with `not_before`; `503` when the queue is full; `500` with the record and `error` when storage fails (the run remains in memory); `403` with `{"error":"not an operator of this job"}` when the job disallows the operator |
 | `GET /api/jobs/{name}/history?limit=N` | light retained history, newest first (viewers allowed); default 50, maximum 500: `[{id, status, mode, trigger, requested, started, duration_seconds, summary, hosts_count, failed_hosts, params, approval}]`; `params` as stored (secret values masked) and `approval` appear when set; reports and host lists are never included |
@@ -548,7 +604,7 @@ comply has a control-by-host Matrix with unreachable hosts and scores, plus Reme
 grouped by control. Apply runs include the diff of what they changed. Every kind retains a full JSON tab. Audit records open as JSON.
 Host names open `#host/<name>` with retained serve results across jobs and a separate
 “runs in the audit store” link. Jobs show a muted “never” badge before the first executed
-run and “stale” when a scheduled job’s last execution is older than twice its interval;
+run and “stale” when an interval job’s last execution is older than twice its interval (anchored `at` jobs have no stale badge);
 queued and running jobs show wait and elapsed time. Tables scroll horizontally on narrow
 screens; at 700px and below the Jobs Target column is hidden and dates are shortened.
 

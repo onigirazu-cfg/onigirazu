@@ -42,6 +42,7 @@ import (
 
 // ServeConfig is the serve.yml file
 type ServeConfig struct {
+	Missed          string         `yaml:"missed"`
 	Concurrency     int            `yaml:"concurrency"` // default 1
 	Listen          string         `yaml:"listen"`      // default :8086
 	Title           string         `yaml:"title"`
@@ -298,6 +299,12 @@ func (p *RunParams) values() []string {
 
 // ServeJob is a scheduled run
 type ServeJob struct {
+	At              ServeAt `yaml:"at"`
+	AtTZ            string  `yaml:"at_tz"`
+	Missed          string  `yaml:"missed"`
+	at              []serveAt
+	atLoc           *time.Location
+	missed          string
 	Windows         []string `yaml:"windows"`
 	WindowsTZ       string   `yaml:"windows_tz"`
 	windows         []serveWindow
@@ -523,10 +530,16 @@ func loadServeConfig(path string) (*ServeConfig, error) {
 		return nil, fmt.Errorf("notify: %w", err)
 	}
 	cfg.warnings = append(cfg.warnings, warnings...)
+	if err := validateServeMissed(cfg.Missed); err != nil {
+		return nil, err
+	}
 	base := filepath.Dir(path)
 	names := map[string]bool{}
 	for i := range cfg.Jobs {
 		j := &cfg.Jobs[i]
+		if err := j.prepareSchedule(cfg.Missed); err != nil {
+			return nil, err
+		}
 		for n := range j.Adhoc.Vars {
 			if err := j.Adhoc.Vars[n].validateDeclaration(); err != nil {
 				return nil, fmt.Errorf("job %s: %w", j.Name, err)
@@ -611,6 +624,8 @@ type server struct {
 	pending          map[string]*JobResult
 	lastID           map[string]string // job -> the base of the last id given (ids stay unique when records are pruned)
 	lastSeq          map[string]int
+	now              func() time.Time
+	scheduleState    map[string]*scheduleRecord
 	schedulerTick    time.Duration
 	nextRun          map[string]time.Time
 	pause            servePause
@@ -638,6 +653,9 @@ type queued struct {
 }
 
 func newServer(cfg *ServeConfig, out io.Writer) (*server, error) {
+	if err := validateServeMissed(cfg.Missed); err != nil {
+		return nil, err
+	}
 	trusted, err := parseTrustedProxies(cfg.Auth.TrustedProxies)
 	if err != nil {
 		return nil, err
@@ -651,6 +669,9 @@ func newServer(cfg *ServeConfig, out io.Writer) (*server, error) {
 	}
 	for i := range cfg.Jobs {
 		j := &cfg.Jobs[i]
+		if err := j.prepareSchedule(cfg.Missed); err != nil {
+			return nil, err
+		}
 		if j.WindowsTZ == "" {
 			j.WindowsTZ = "UTC"
 		}
@@ -661,6 +682,8 @@ func newServer(cfg *ServeConfig, out io.Writer) (*server, error) {
 		}
 	}
 	s := &server{cancels: map[string]context.CancelFunc{}, cfg: cfg, out: out, results: map[string][]*JobResult{}, running: map[string]bool{}, pending: map[string]*JobResult{}, lastID: map[string]string{}, lastSeq: map[string]int{}, nextRun: map[string]time.Time{}, queue: make(chan queued, 64), resumed: make(chan struct{})}
+	s.now = time.Now
+	s.scheduleState = make(map[string]*scheduleRecord)
 	s.secrets = map[string]map[string]string{}
 	s.progress = make(map[string]*runProgress)
 	s.runJob = s.execute
@@ -947,6 +970,9 @@ func (s *server) requestParent(j *ServeJob, trigger string, params *RunParams, p
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	now := time.Now().UTC()
+	if trigger == "schedule" && s.now != nil {
+		now = s.now().UTC()
+	}
 	var notBefore *time.Time
 	mode := ""
 	if params != nil {
@@ -1356,44 +1382,21 @@ func maskRunValue(value interface{}, mask *strings.Replacer) interface{} {
 	return value
 }
 
-// scheduler queues the jobs with a period when it is due
+// scheduler uses the ticker only to wake up; the clock drives slot decisions.
 func (s *server) scheduler(ctx context.Context) {
-	s.mu.Lock()
-	now := time.Now()
-	for i := range s.cfg.Jobs {
-		j := &s.cfg.Jobs[i]
-		if j.Every > 0 {
-			// the first run soon after start, staggered a little
-			s.nextRun[j.Name] = now.Add(time.Duration(10+i*5) * time.Second)
-		}
-	}
-	s.mu.Unlock()
-	tick := s.schedulerTick
-	if tick <= 0 {
-		tick = 5 * time.Second
-	}
-	t := time.NewTicker(tick)
+	// wall clock only: a monotonic reading would hide clock jumps from the slot checks
+	s.planSchedules(s.now().Round(0))
+	t := time.NewTicker(s.scheduleTickDuration())
 	defer t.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case now := <-t.C:
+		case <-t.C:
+			now := s.now().Round(0)
 			s.expirePending(now)
 			s.releaseScheduled(now)
-			s.mu.Lock()
-			var due []*ServeJob
-			for i := range s.cfg.Jobs {
-				j := &s.cfg.Jobs[i]
-				if next, ok := s.nextRun[j.Name]; ok && !now.Before(next) {
-					due = append(due, j)
-					s.nextRun[j.Name] = now.Add(j.Every)
-				}
-			}
-			s.mu.Unlock()
-			for _, j := range due {
-				_, _ = s.request(j, "schedule", nil)
-			}
+			s.scheduleTick(now)
 		}
 	}
 }
@@ -2616,6 +2619,13 @@ func driftDifference(from, other *DriftReport) []compareItem {
 }
 
 type jobView struct {
+	At            []string     `json:"at,omitempty"`
+	AtTZ          string       `json:"at_tz,omitempty"`
+	Missed        string       `json:"missed,omitempty"`
+	NextReason    string       `json:"next_reason,omitempty"`
+	MissedAt      *time.Time   `json:"missed_at,omitempty"`
+	LastScheduled *time.Time   `json:"last_scheduled,omitempty"`
+	LastOutcome   string       `json:"last_outcome,omitempty"`
 	Windows       []string     `json:"windows,omitempty"`
 	WindowsTZ     string       `json:"windows_tz,omitempty"`
 	NextWindow    *time.Time   `json:"next_window,omitempty"`
@@ -2683,9 +2693,18 @@ func (s *server) jobsView(id serveIdentity) []jobView {
 		}
 		if j.Every > 0 {
 			v.Every = j.Every.String()
-			if n, ok := s.nextRun[j.Name]; ok {
-				next := n
-				v.Next = &next
+		}
+		v.At, v.AtTZ, v.Missed = []string(j.At), j.AtTZ, j.missed
+		if n, ok := s.nextRun[j.Name]; ok {
+			next := n
+			v.Next = &next
+		}
+		if rec := s.scheduleState[j.Name]; rec != nil {
+			v.NextReason, v.LastOutcome = rec.Reason, rec.Outcome
+			v.MissedAt = copyScheduleTime(rec.MissedAt)
+			if !rec.Last.IsZero() {
+				last := rec.Last
+				v.LastScheduled = &last
 			}
 		}
 		if pending := s.pending[j.Name]; pending != nil {
