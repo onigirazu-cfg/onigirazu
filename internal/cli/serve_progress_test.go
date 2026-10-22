@@ -417,3 +417,44 @@ func TestServeProgressPendingRejected(t *testing.T) {
 		t.Fatal("rejected stream did not end")
 	}
 }
+
+func TestServeProgressLoopIsOneTask(t *testing.T) {
+	p := newRunProgress(strings.NewReplacer("private-value", "***"))
+	p.OnPlayPlan("play", []string{"host"}, 3)
+	p.OnLoopStart("rows private-value", "host", 3)
+	for i, status := range []types.TaskResult{{Host: "host"}, {Host: "host", Changed: true}, {Host: "host", Skipped: true}} {
+		p.OnTaskStart(fmt.Sprintf("rows (item %d)", i+1), "host")
+		if i == 1 {
+			snapshot, _, _, ch := p.subscribe(0)
+			p.unsubscribe(ch)
+			if h := snapshot.Hosts["host"]; !h.Loop || h.Items != 3 || h.Item != 2 || h.Task != "rows ***" || h.TasksFinished != 0 {
+				t.Fatalf("inside the loop: %+v", h)
+			}
+		}
+		p.OnTaskEnd(&status)
+	}
+	p.OnLoopEnd("rows private-value", "host")
+	p.OnLoopStart("empty", "host", 0)
+	p.OnLoopEnd("empty", "host")
+	p.OnPlanAdjust("handler", "host", 1)
+	p.OnTaskStart("handler", "host")
+	p.OnTaskEnd(&types.TaskResult{Host: "host", Failed: true})
+	snapshot, events, _, ch := p.subscribe(0)
+	p.unsubscribe(ch)
+	h := snapshot.Hosts["host"]
+	if snapshot.TasksFinished != 3 || snapshot.TasksPlanned != 4 || h.TasksFinished != 3 || h.Changed != 1 || h.Skipped != 1 || h.Failed != 1 || h.OK != 0 || h.Loop || h.Items != 0 {
+		t.Fatalf("after loops: %+v %+v", snapshot, h)
+	}
+	ends := 0
+	for _, e := range events {
+		if e.Type == "loop_end" {
+			ends++
+			if (e.Task == "rows ***" && e.Status != "changed") || (e.Task == "empty" && e.Status != "skipped") {
+				t.Fatalf("loop result: %+v", e)
+			}
+		}
+	}
+	if ends != 2 {
+		t.Fatalf("loop_end events: %d", ends)
+	}
+}
