@@ -41,6 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `onigirazu serve`: `ui.pages_dir` serves authenticated static pages under `/pages/`; `ui.links` adds sidebar links for custom dashboards and maps.
 - `onigirazu serve`: anchored `at` schedules with `at_tz` and job or server `missed` policies (`run_once` or `skip`); apply jobs skip missed slots by default
 - `onigirazu serve install`: user/group, working directory, environment file, repeatable environment and writable-path flags, and `--print`; generated units retain global config and apply systemd hardening
 - `onigirazu serve`: `auth.trusted_proxies` limits proxy identity headers to the proxy's addresses, `auth.sign_out_url` adds Sign out to the user menu

@@ -35,6 +35,10 @@ auth:
   operators: [admins, tier0-admins]
   trusted_proxies: [10.0.0.5, 172.18.0.0/16]   # proxy headers only from these (address or network)
   sign_out_url: /outpost.goauthentik.io/sign_out   # optional "Sign out" in the page's user menu
+ui:
+  pages_dir: pages                     # optional static pages; relative to serve.yml
+  links:
+    - {title: Map, href: /pages/map.html} # extra sidebar entry
 metrics:
   push: http://victoria:8428/api/v1/import/prometheus   # every job's metrics, optional
   labels: {env: prod}
@@ -526,6 +530,54 @@ Every run, approve, reject, cancel, pause and resume action and refused attempt 
 and client address. Scheduling details include `not_before=<time>`. Unauthenticated probes are omitted. Viewers can read the entries,
 newest first, through `GET /api/audit` or the Audit tab. The file is append-only and
 reopened for every entry, so logrotate can move it aside (no `copytruncate` needed).
+
+## Extra pages
+
+`ui.pages_dir` serves your own static pages under `/pages/`, on the same origin as
+the UI and REST API. Relative paths resolve against the directory containing
+`serve.yml`; the directory must exist at startup. `ui.links` adds sidebar entries:
+each needs a nonempty `title` and an `href` beginning with `/` (not `//`), `http://`
+or `https://`. External links open in a new tab. Links can also be configured without
+`pages_dir`.
+
+```yaml
+ui:
+  pages_dir: /srv/app/serve/pages
+  links:
+    - {title: Map, href: /pages/map.html}
+```
+
+Pages require the same identity as the API: use proxy authentication (the browser's
+proxy cookies work on the same origin), or leave authentication unconfigured.
+With only bearer-token authentication, browser navigation cannot load these pages:
+it does not send an Authorization header, even if the main UI has saved a token.
+An unauthenticated HTML request gets a sign-in link to `/`.
+
+Create `map.html` inside the pages directory, for example:
+
+```html
+<!doctype html>
+<title>Fleet map</title>
+<pre id="jobs"></pre>
+<script>
+const token = sessionStorage.serveToken;
+fetch('/api/jobs', {
+  headers: token ? {Authorization: 'Bearer ' + token} : {}
+}).then(r => {
+  if (!r.ok) throw new Error('API request failed: ' + r.status);
+  return r.json();
+}).then(jobs => {
+  document.getElementById('jobs').textContent = JSON.stringify(jobs, null, 2);
+}).catch(error => {
+  document.getElementById('jobs').textContent = error.message;
+});
+</script>
+```
+
+Only GET and HEAD are supported. Directories serve `index.html` when present;
+there are no directory listings. Hidden path segments and symlinks escaping the
+pages directory are not served. Responses use `Cache-Control: no-cache`,
+`X-Content-Type-Options: nosniff`, and `Referrer-Policy: same-origin`.
 
 ## Live progress
 
