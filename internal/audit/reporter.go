@@ -182,25 +182,25 @@ func (r *Reporter) generateHTMLReport() (string, error) {
 	}
 
 	buf.WriteString(fmt.Sprintf(`<div class="onz-stats"><div class="onz-stat"><b>%d</b><span>Total executions</span></div><div class="onz-stat ok"><b>%d</b><span>Successful</span></div><div class="onz-stat bad"><b>%d</b><span>Failed</span></div></div>`, len(r.records), successCount, failureCount))
-	buf.WriteString(`<section class="onz-card"><h2>Execution records</h2><div class="onz-scroll"><table class="onz-table"><thead><tr><th>Playbook</th><th>User</th><th>Status</th><th>Start time</th><th class="num">Duration (s)</th><th class="num">Tasks (successful / failed / skipped)</th><th class="num">Exit code</th></tr></thead><tbody>`)
+	buf.WriteString(`<section class="onz-card"><h2>Execution records</h2><div class="onz-scroll"><table class="onz-table"><thead><tr><th>Playbook</th><th>User</th><th>Status</th><th>Start time</th><th class="num">Duration</th><th class="num" title="total (successful ✓ / failed ✗ / skipped ⊘)">Tasks</th><th class="num">Exit</th></tr></thead><tbody>`)
 
 	// Write records
 	for _, record := range r.records {
 		statusClass := brand.Tone(string(record.Status))
 
 		buf.WriteString(fmt.Sprintf(`                <tr>
-                    <td>%s</td>
+                    <td class="path">%s</td>
                     <td>%s</td>
                     <td><span class="onz-badge %s">%s</span></td>
-                    <td>%s</td>
-                    <td class="num">%.2f</td>
-                    <td class="num">%d (%d/%d/%d)</td>
+                    <td class="time">%s</td>
+                    <td class="num">%.2fs</td>
+                    <td class="num">%d (✓%d ✗%d ⊘%d)</td>
                     <td class="num">%d</td>
                 </tr>
 `,
 			html.EscapeString(record.PlaybookPath), html.EscapeString(record.User),
 			statusClass, html.EscapeString(string(record.Status)),
-			record.StartTime.Format("2006-01-02 15:04:05"),
+			record.StartTime.Format("2006-01-02 15:04"),
 			record.Duration, record.TotalTasks, record.SuccessfulTasks,
 			record.FailedTasks, record.SkippedTasks, record.ExitCode))
 	}

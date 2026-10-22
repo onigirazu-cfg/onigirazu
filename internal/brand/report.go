@@ -13,6 +13,8 @@ import "strings"
 //	                              with ok, warn, bad or changed on the chip
 //	section.onz-card > h2         a titled block (a host, a group of results)
 //	div.onz-scroll > table.onz-table   tables; td.num for numbers
+//	                              td.time keeps a timestamp on one line,
+//	                              td.path lets a long path break
 //	span.onz-badge                status badge with ok, warn, bad, changed or muted
 //	pre.onz-diff > span.add|del|hunk|hdr   diff lines
 //	footer.onz-foot               "Generated ..." line
@@ -53,6 +55,8 @@ h3{margin:12px 0 6px;font-size:14px;font-weight:600}
 .onz-table th{color:var(--muted);font-size:12px;font-weight:550;white-space:nowrap;background:var(--card)}
 .onz-table tr:last-child td{border-bottom:0}
 .onz-table td.num,.onz-table th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.onz-table td.time{white-space:nowrap;font-variant-numeric:tabular-nums}
+.onz-table td.path{overflow-wrap:anywhere;min-width:10ch}
 .onz-card>.onz-table,.onz-card>.onz-scroll>.onz-table{margin:0}
 main>.onz-scroll{border:1px solid var(--line);border-radius:8px;background:var(--card);margin:0 0 16px}
 .onz-badge{display:inline-block;padding:1px 7px;border-radius:6px;font-size:11px;font-weight:550;line-height:1.6;white-space:nowrap;background:var(--hover);color:var(--muted)}
