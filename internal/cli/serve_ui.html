@@ -4,12 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{title}} — onigirazu</title>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M13 5c1.3-2 4.7-2 6 0l10 18c1.5 2.8-.5 6-3.5 6h-19C3.5 29 1.5 25.8 3 23Z' fill='%23fff' stroke='%2318181b' stroke-width='2.2'/%3E%3Crect x='11' y='18' width='10' height='11' rx='1.5' fill='%2318181b'/%3E%3C/svg%3E">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cstyle%3Erect{fill:%232b4c8c}rect.d{fill:%23ef6a4c}@media (prefers-color-scheme:dark){rect{fill:%237f9fe0}}%3C/style%3E%3Crect x='2' y='7' width='11.5' height='11.5' rx='2.5'/%3E%3Crect x='2' y='19.5' width='11.5' height='11.5' rx='2.5'/%3E%3Crect x='15' y='19.5' width='11.5' height='11.5' rx='2.5'/%3E%3Crect class='d' x='18.5' y='1' width='11.5' height='11.5' rx='2.5'/%3E%3C/svg%3E">
 <style>
 /* Tokens: zinc surfaces and semantic status colours. */
-:root{color-scheme:light;--bg:#fff;--content:oklch(97% .003 285.8);--card:#fff;--fg:oklch(14.5% .017 285.8);--muted:oklch(44% .015 285.8);--line:oklch(92.2% .007 285.8);--hover:oklch(96% .003 285.8);--primary:#18181b;--primary-fg:#fff;--accent:#245dbe;--selection:#e7efff;--ok:#187446;--ok-bg:#e5f5ec;--warn:#936013;--warn-bg:#fff2d5;--bad:oklch(50% .20 27.3);--bad-bg:#fee9e8;--blue:#245dbe;--blue-bg:#e9f0ff;--violet:#7445ad;--violet-bg:#f1eaff;--grey:#60606b;--grey-bg:#efeff2;--add-bg:#e0f4e8;--remove-bg:#fbe5e5;--add-fg:#17623d;--remove-fg:#942b2b;--destructive:oklch(57.7% .245 27.3);--shadow:0 1px 3px rgb(0 0 0/.1)}
+:root{color-scheme:light;--bg:#fff;--content:oklch(97% .003 285.8);--card:#fff;--fg:oklch(14.5% .017 285.8);--muted:oklch(44% .015 285.8);--line:oklch(92.2% .007 285.8);--hover:oklch(96% .003 285.8);--primary:#2b4c8c;--primary-fg:#fff;--accent:#2b4c8c;--selection:#e6ecf8;--logo:#2b4c8c;--logo-drift:#ef6a4c;--ok:#187446;--ok-bg:#e5f5ec;--warn:#936013;--warn-bg:#fff2d5;--bad:oklch(50% .20 27.3);--bad-bg:#fee9e8;--blue:#245dbe;--blue-bg:#e9f0ff;--violet:#7445ad;--violet-bg:#f1eaff;--grey:#60606b;--grey-bg:#efeff2;--add-bg:#e0f4e8;--remove-bg:#fbe5e5;--add-fg:#17623d;--remove-fg:#942b2b;--destructive:oklch(57.7% .245 27.3);--shadow:0 1px 3px rgb(0 0 0/.1)}
 
-:root[data-theme=dark]{color-scheme:dark;--bg:oklch(14.1% .005 285.8);--content:oklch(11.5% .005 285.8);--card:oklch(20.5% .007 285.8);--fg:oklch(98.5% .002 285.8);--muted:oklch(70.8% .015 285.8);--line:oklch(27.4% .009 285.8);--hover:oklch(24% .007 285.8);--primary:#fafafa;--primary-fg:#18181b;--accent:#9dbbff;--selection:#203773;--ok:#78d4a0;--ok-bg:#16382a;--warn:#f4c277;--warn-bg:#3a2b17;--bad:oklch(70% .19 27.3);--bad-bg:#422324;--blue:#9dbbff;--blue-bg:#1c2b4a;--violet:#c6a7f0;--violet-bg:#322441;--grey:#b8b8c2;--grey-bg:#303036;--add-bg:#163629;--remove-bg:#421f25;--add-fg:#9ce1b4;--remove-fg:#ffb1b1}
+:root[data-theme=dark]{color-scheme:dark;--bg:oklch(14.1% .005 285.8);--content:oklch(11.5% .005 285.8);--card:oklch(20.5% .007 285.8);--fg:oklch(98.5% .002 285.8);--muted:oklch(70.8% .015 285.8);--line:oklch(27.4% .009 285.8);--hover:oklch(24% .007 285.8);--primary:#9db8f0;--primary-fg:#10182b;--accent:#9db8f0;--selection:#22335a;--logo:#7f9fe0;--logo-drift:#ef6a4c;--ok:#78d4a0;--ok-bg:#16382a;--warn:#f4c277;--warn-bg:#3a2b17;--bad:oklch(70% .19 27.3);--bad-bg:#422324;--blue:#9dbbff;--blue-bg:#1c2b4a;--violet:#c6a7f0;--violet-bg:#322441;--grey:#b8b8c2;--grey-bg:#303036;--add-bg:#163629;--remove-bg:#421f25;--add-fg:#9ce1b4;--remove-fg:#ffb1b1}
 
 *{box-sizing:border-box}
 body{margin:0;font:14px/1.5 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--fg);background:var(--content)}
@@ -27,7 +27,9 @@ svg.icon{width:16px;height:16px;flex-shrink:0;fill:none;stroke:currentColor;stro
 .topbar{height:56px;display:flex;align-items:center;gap:14px;padding:0 20px;background:var(--bg);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20}
 .brand{display:flex;gap:10px;align-items:center;min-width:200px;color:var(--fg);font-size:17px;font-weight:650;white-space:nowrap;overflow:hidden}
 .brand svg{width:28px;height:28px;flex-shrink:0}
-.brand span{overflow:hidden;text-overflow:ellipsis}
+.brand span{overflow:hidden;text-overflow:ellipsis;font-weight:500}
+.brand-name{font-weight:650;flex-shrink:0}
+.brand-sep{font-style:normal;font-weight:400;color:var(--muted);flex-shrink:0}
 .search{margin:auto;position:relative;width:min(440px,32vw)}
 .search .icon{position:absolute;left:11px;top:10px;color:var(--muted)}
 .search input{width:100%;height:36px;padding:7px 35px;border:1px solid var(--line);background:var(--content);border-radius:6px;color:var(--fg)}
@@ -219,6 +221,7 @@ main{padding:24px}
 .sidebar nav button span,.sidebar-foot{display:none}
 main,.banner{margin-left:64px}
 .brand{min-width:0;max-width:190px}
+.brand-name,.brand-sep{display:none}
 .job-split{grid-template-columns:minmax(220px,280px) minmax(0,1fr)}
 .search{width:auto;flex:1}
 .search input{min-width:100px}
@@ -297,7 +300,7 @@ main{margin-left:0;padding:20px 12px}
 <body>
 <header class="topbar">
 <button class="icon-button menu-button" id="menu" aria-controls="main-navigation" aria-label="Open navigation" aria-expanded="false"></button>
-<a class="brand" href="#" aria-label="onigirazu home"><svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M13 5c1.3-2 4.7-2 6 0l10 18c1.5 2.8-.5 6-3.5 6h-19C3.5 29 1.5 25.8 3 23Z" stroke="currentColor" stroke-width="1.7"/><rect x="12" y="19" width="8" height="10" rx="1.5" fill="currentColor"/></svg><span>{{title}}</span></a>
+<a class="brand" href="#" aria-label="onigirazu home"><svg viewBox="0 0 32 32" aria-hidden="true"><g fill="var(--logo)"><rect x="3" y="7" width="7" height="7" rx="1.5"/><rect x="12.5" y="7" width="7" height="7" rx="1.5"/><rect x="3" y="16.5" width="7" height="7" rx="1.5"/><rect x="12.5" y="16.5" width="7" height="7" rx="1.5"/><rect x="22" y="16.5" width="7" height="7" rx="1.5"/></g><rect x="23.5" y="3" width="7" height="7" rx="1.5" fill="var(--logo-drift)"/></svg><b class="brand-name">onigirazu</b><i class="brand-sep">/</i><span>{{title}}</span></a>
 <label class="search"><span id="search-icon"></span><input id="search" type="search" aria-label="Search current list" placeholder="Search…"><kbd>/</kbd></label>
 <div class="top-actions"><span class="activity" id="activity" role="status" aria-live="polite" hidden></span><button class="run" id="pause" hidden>Pause</button><button class="icon-button" id="theme" aria-label="Theme: system" title="Theme: system"></button><details class="user-menu" id="user-menu"><summary class="icon-button" aria-label="User menu" id="user-icon"></summary><div class="user-popover"><p id="who"></p><button class="run" id="set-token">Set token</button><a class="run" id="sign-out" hidden>Sign out</a></div></details></div>
 </header>
