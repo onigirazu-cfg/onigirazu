@@ -168,118 +168,7 @@ func (r *Reporter) generateHTMLReport() (string, error) {
 	var buf bytes.Buffer
 
 	// Write HTML header
-	buf.WriteString(`<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Onigirazu Audit Report</title>
-    ` + brand.Head + `
-    <style>
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            margin: 20px;
-            background-color: #f5f5f5;
-        }
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            background-color: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        h1 {
-            color: #333;
-            border-bottom: 3px solid var(--brand-accent);
-            padding-bottom: 10px;
-        }
-        h2 {
-            color: #555;
-            margin-top: 20px;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 10px;
-        }
-        th {
-            background-color: var(--brand-accent);
-            color: white;
-            padding: 12px;
-            text-align: left;
-            font-weight: bold;
-        }
-        tr:nth-child(even) {
-            background-color: #f9f9f9;
-        }
-        tr:hover {
-            background-color: #f0f0f0;
-        }
-        td {
-            border-bottom: 1px solid #ddd;
-            padding: 12px;
-        }
-        .status-success {
-            background-color: #d4edda;
-            color: #155724;
-            padding: 4px 8px;
-            border-radius: 4px;
-        }
-        .status-failure {
-            background-color: #f8d7da;
-            color: #721c24;
-            padding: 4px 8px;
-            border-radius: 4px;
-        }
-        .status-running {
-            background-color: #d1ecf1;
-            color: #0c5460;
-            padding: 4px 8px;
-            border-radius: 4px;
-        }
-        .metric {
-            display: inline-block;
-            margin-right: 30px;
-            margin-bottom: 15px;
-        }
-        .metric-value {
-            font-size: 24px;
-            font-weight: bold;
-            color: var(--brand-accent);
-        }
-        .metric-label {
-            color: #666;
-            font-size: 14px;
-        }
-        .timestamp {
-            color: #999;
-            font-size: 12px;
-        }
-        .metric-success { color: #28a745; }
-        .metric-failure { color: #dc3545; }
-        @media (prefers-color-scheme:dark) {
-            body { background-color: #0d1117; color: #e6edf3; }
-            .container { background-color: #161b22; }
-            h1, h2 { color: #e6edf3; }
-            th { color: #10182b; }
-            td { border-color: #30363d; }
-            tr:nth-child(even) { background-color: #0d1117; }
-            tr:hover { background-color: #21262d; }
-            .metric-label, .timestamp { color: #8d96a0; }
-            .status-success { background-color: #12361f; color: #7ee787; }
-            .status-failure { background-color: #4c1a1d; color: #ff7b72; }
-            .status-running { background-color: #0c2d6b; color: #a5d6ff; }
-            .metric-success { color: #7ee787; }
-            .metric-failure { color: #ff7b72; }
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        ` + brand.Header("Audit report") + `
-        <h1>Audit Report</h1>
-`)
+	buf.WriteString(`<!doctype html><html lang="en"><head>` + brand.ReportHead + `<title>Audit report</title></head><body><main class="onz-page">` + brand.Header("Audit report") + `<h1 class="onz-title">Audit report</h1><p class="onz-sub">Execution history</p>`)
 
 	// Write summary metrics
 	successCount := 0
@@ -292,52 +181,21 @@ func (r *Reporter) generateHTMLReport() (string, error) {
 		}
 	}
 
-	buf.WriteString(`        <h2>Summary</h2>
-`)
-	buf.WriteString(fmt.Sprintf(`        <div class="metric">
-            <div class="metric-value">%d</div>
-            <div class="metric-label">Total Executions</div>
-        </div>
-`, len(r.records)))
-	buf.WriteString(fmt.Sprintf(`        <div class="metric">
-            <div class="metric-value metric-success">%d</div>
-            <div class="metric-label">Successful</div>
-        </div>
-`, successCount))
-	buf.WriteString(fmt.Sprintf(`        <div class="metric">
-            <div class="metric-value metric-failure">%d</div>
-            <div class="metric-label">Failed</div>
-        </div>
-`, failureCount))
-
-	buf.WriteString(`        <h2>Execution Records</h2>
-        <div class="onz-scroll"><table>
-            <thead>
-                <tr>
-                    <th>Playbook</th>
-                    <th>User</th>
-                    <th>Status</th>
-                    <th>Start Time</th>
-                    <th>Duration (s)</th>
-                    <th>Tasks</th>
-                    <th>Exit Code</th>
-                </tr>
-            </thead>
-            <tbody>
-`)
+	buf.WriteString(fmt.Sprintf(`<div class="onz-stats"><div class="onz-stat"><b>%d</b><span>Total executions</span></div><div class="onz-stat ok"><b>%d</b><span>Successful</span></div><div class="onz-stat bad"><b>%d</b><span>Failed</span></div></div>`, len(r.records), successCount, failureCount))
+	buf.WriteString(`<section class="onz-card"><h2>Execution records</h2><div class="onz-scroll"><table class="onz-table"><thead><tr><th>Playbook</th><th>User</th><th>Status</th><th>Start time</th><th class="num">Duration (s)</th><th class="num">Tasks (successful / failed / skipped)</th><th class="num">Exit code</th></tr></thead><tbody>`)
 
 	// Write records
 	for _, record := range r.records {
-		statusClass := htmlStatusClass(record.Status)
+		statusClass := brand.Tone(string(record.Status))
 
 		buf.WriteString(fmt.Sprintf(`                <tr>
                     <td>%s</td>
                     <td>%s</td>
-                    <td><span class="%s">%s</span></td>
+                    <td><span class="onz-badge %s">%s</span></td>
                     <td>%s</td>
-                    <td>%.2f</td>
-                    <td>%d (✓%d/✗%d/⊘%d)</td>
-                    <td>%d</td>
+                    <td class="num">%.2f</td>
+                    <td class="num">%d (%d/%d/%d)</td>
+                    <td class="num">%d</td>
                 </tr>
 `,
 			html.EscapeString(record.PlaybookPath), html.EscapeString(record.User),
@@ -347,28 +205,10 @@ func (r *Reporter) generateHTMLReport() (string, error) {
 			record.FailedTasks, record.SkippedTasks, record.ExitCode))
 	}
 
-	buf.WriteString(`            </tbody>
-        </table></div>
-        <p class="timestamp">Generated: `)
-	buf.WriteString(time.Now().Format("2006-01-02 15:04:05 MST"))
-	buf.WriteString(`</p>
-    </div>
-</body>
-</html>
-`)
-
+	buf.WriteString(`</tbody></table></div></section><footer class="onz-foot">Generated `)
+	buf.WriteString(html.EscapeString(time.Now().Format("2006-01-02 15:04:05 MST")))
+	buf.WriteString(`</footer></main></body></html>`)
 	return buf.String(), nil
-}
-
-// htmlStatusClass maps a status to a fixed CSS class so that record values
-// never reach the class attribute.
-func htmlStatusClass(status ExecutionStatus) string {
-	switch status {
-	case StatusSuccess, StatusFailure, StatusRunning, StatusSkipped:
-		return "status-" + string(status)
-	default:
-		return "status-other"
-	}
 }
 
 // generateMarkdownReport generates a Markdown format report

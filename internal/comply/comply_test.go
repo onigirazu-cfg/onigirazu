@@ -99,7 +99,7 @@ controls:
 	if !strings.Contains(text.String(), "✗ [medium] b — two checks") || !strings.Contains(text.String(), "db1: could not check: unreachable") {
 		t.Errorf("text:\n%s", text.String())
 	}
-	if !strings.Contains(md.String(), "| web1 | 2 | 1 | 67% |") || !strings.Contains(h.String(), "<td class=\"bad\">fail</td>") {
+	if !strings.Contains(md.String(), "| web1 | 2 | 1 | 67% |") || !strings.Contains(h.String(), `<span class="onz-badge bad">fail</span>`) {
 		t.Errorf("markdown/html:\n%s\n%s", md.String(), h.String())
 	}
 	m := r.Metrics(map[string]string{"env": "prod"})

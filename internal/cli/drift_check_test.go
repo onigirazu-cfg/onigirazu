@@ -237,7 +237,7 @@ func TestWriteDriftHTML(t *testing.T) {
 	out.Reset()
 	assert.NoError(t, writeDriftHTML(&out, r))
 	html = out.String()
-	assert.Contains(t, html, "2 resource(s) left the playbook")
+	assert.Contains(t, html, `<b>2</b><span>left the playbook</span>`)
 	assert.Contains(t, html, `<span class="del">- file /etc/x: remove (onigirazu created it) (was: x)</span>`)
 	assert.Contains(t, html, `<span class="hunk">&lt; file /etc/y: put back as it was</span>`)
 }

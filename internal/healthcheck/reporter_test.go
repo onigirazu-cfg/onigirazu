@@ -302,7 +302,7 @@ func TestReporterFormatHTML(t *testing.T) {
 
 	result := reporter.FormatHTML(report)
 
-	if !strings.Contains(result, "<!DOCTYPE html>") {
+	if !strings.Contains(result, "<!doctype html>") {
 		t.Error("Expected HTML doctype")
 	}
 
@@ -581,7 +581,7 @@ func TestReporterFormatHTMLWithMultipleStatus(t *testing.T) {
 	if !strings.Contains(result, "critical-host") {
 		t.Error("Expected 'critical-host' in HTML")
 	}
-	if !strings.Contains(result, "<table>") || !strings.Contains(result, "</table>") {
+	if !strings.Contains(result, `<table class="onz-table">`) || !strings.Contains(result, "</table>") {
 		t.Error("Expected HTML table structure")
 	}
 }

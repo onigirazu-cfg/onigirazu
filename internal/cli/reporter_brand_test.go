@@ -19,15 +19,15 @@ func renderBrandedReport(t *testing.T, name string) string {
 
 func TestHTMLReportBrand(t *testing.T) {
 	out := renderBrandedReport(t, "example")
-	for _, want := range []string{brand.FaviconLink, brand.Mark, `class="onz-head"`, "prefers-color-scheme:dark", `<meta charset=`, `<meta name="viewport"`} {
+	for _, want := range []string{brand.FaviconLink, brand.Mark, `class="onz-head"`, `class="onz-page"`, `class="onz-stats"`, `class="onz-foot"`, brand.ReportHead, "prefers-color-scheme:dark", `<meta charset=`, `<meta name="viewport"`} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %q", want)
 		}
 	}
-	if strings.Index(out, brand.FaviconLink) > strings.Index(out, "<style>") {
-		t.Error("brand head must precede report styles")
+	if got := strings.Count(out, "<style>"); got != 1 {
+		t.Errorf("style block count = %d, want 1", got)
 	}
-	if strings.Index(out, `class="onz-head"`) > strings.Index(out, "<h1>") {
+	if strings.Index(out, `class="onz-head"`) > strings.Index(out, `<h1 class="onz-title">`) {
 		t.Error("brand header must precede heading")
 	}
 }
@@ -35,6 +35,9 @@ func TestHTMLReportBrand(t *testing.T) {
 func TestHTMLReportHeaderEscaping(t *testing.T) {
 	name := `<script>alert("x")</script> & example`
 	out := renderBrandedReport(t, name)
+	if strings.Contains(out, "<script>") {
+		t.Fatal("raw script in report")
+	}
 	want := brand.Header("Drift: " + name)
 	if !strings.Contains(out, want) {
 		t.Fatalf("missing header %q", want)
@@ -58,5 +61,30 @@ func TestPlanHTMLReportHeaderEscaping(t *testing.T) {
 	}
 	if strings.Contains(out.String(), "<script>") {
 		t.Fatal("unescaped playbook")
+	}
+}
+
+func TestHTMLReportContentEscaping(t *testing.T) {
+	const payload = `<script>alert("x")</script>`
+	for _, plan := range []bool{false, true} {
+		var out bytes.Buffer
+		if err := writeDriftHTML(&out, &DriftReport{
+			Plan: plan, Playbook: payload, InSync: []string{payload},
+			Drift:  map[string][]DriftItem{payload: {{Task: payload, Module: payload, Diff: "+" + payload}, {Task: payload, Detail: payload}}},
+			Errors: map[string][]DriftItem{payload: {{Task: payload, Detail: payload}}},
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(out.String(), "<script>") || !strings.Contains(out.String(), "&lt;script&gt;") {
+			t.Fatalf("report content not escaped (plan=%t)", plan)
+		}
+		for _, want := range []string{brand.ReportHead, `class="onz-card"`, `class="onz-body"`, `class="onz-diff"`, `class="onz-foot"`} {
+			if !strings.Contains(out.String(), want) {
+				t.Errorf("missing %q (plan=%t)", want, plan)
+			}
+		}
+		if got := strings.Count(out.String(), "<style>"); got != 1 {
+			t.Errorf("style block count = %d, want 1 (plan=%t)", got, plan)
+		}
 	}
 }

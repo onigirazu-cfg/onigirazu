@@ -123,106 +123,24 @@ func (r *Reporter) FormatCSV(report *HealthCheckReport) string {
 
 // FormatHTML returns the report as HTML string
 func (r *Reporter) FormatHTML(report *HealthCheckReport) string {
-	out := `<!DOCTYPE html>
-<html>
-<head>
-	<meta charset="utf-8">
-	<meta name="viewport" content="width=device-width, initial-scale=1">
-	<title>Health Check Report</title>
-	` + brand.Head + `
-	<style>
-		:root { color-scheme: light dark; }
-		body { font-family: Arial, sans-serif; margin: 20px; }
-		.header { background-color: #f0f0f0; padding: 20px; border-radius: 5px; }
-		.summary { margin: 20px 0; }
-		.host-report { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
-		.healthy { color: green; }
-		.warning { color: orange; }
-		.critical { color: red; }
-		.unknown { color: gray; }
-		table { width: 100%; border-collapse: collapse; }
-		th, td { padding: 10px; text-align: left; border-bottom: 1px solid #ddd; }
-		th { background-color: #f0f0f0; }
-        @media (prefers-color-scheme:dark) {
-            body { background-color: #0d1117; color: #e6edf3; }
-            .header, th { background-color: #161b22; }
-            .host-report, th, td { border-color: #30363d; }
-            .healthy { color: #7ee787; }
-            .warning { color: #ffa657; }
-            .critical { color: #ff7b72; }
-            .unknown { color: #8d96a0; }
-        }
-	</style>
-</head>
-<body>
-	` + brand.Header("Health check report") + `
-	<div class="header">
-		<h1>Health Check Report</h1>
-		<p><strong>Generated:</strong> ` + report.Timestamp.Format("2006-01-02 15:04:05") + `</p>
-		<p><strong>Overall Status:</strong> <span class="` + htmlStatusClass(report.OverallStatus) + `">` + html.EscapeString(string(report.OverallStatus)) + `</span></p>
-		<p><strong>Total Duration:</strong> ` + report.TotalDuration.String() + `</p>
-	</div>
-
-	<div class="summary">
-		<h2>Summary</h2>
-		<ul>
-			<li>Total Hosts: ` + fmt.Sprintf("%d", report.Statistics.TotalHosts) + `</li>
-			<li><span class="healthy">✓ Healthy:</span> ` + fmt.Sprintf("%d", report.Statistics.HealthyHosts) + `</li>
-			<li><span class="warning">⚠ Warning:</span> ` + fmt.Sprintf("%d", report.Statistics.WarningHosts) + `</li>
-			<li><span class="critical">✗ Critical:</span> ` + fmt.Sprintf("%d", report.Statistics.CriticalHosts) + `</li>
-		</ul>
-	</div>
-`
-
-	// Add host reports
+	out := `<!doctype html><html lang="en"><head>` + brand.ReportHead + `<title>Health check report</title></head><body><main class="onz-page">` + brand.Header("Health check report") + `
+<h1 class="onz-title">Health check</h1><p class="onz-sub">Total duration ` + html.EscapeString(report.TotalDuration.String()) + `</p>
+<div class="onz-stats"><div class="onz-stat ` + brand.Tone(string(report.OverallStatus)) + `"><b>` + html.EscapeString(string(report.OverallStatus)) + `</b><span>Overall</span></div>
+<div class="onz-stat"><b>` + html.EscapeString(fmt.Sprint(report.Statistics.TotalHosts)) + `</b><span>Hosts</span></div>
+<div class="onz-stat ok"><b>` + html.EscapeString(fmt.Sprint(report.Statistics.HealthyHosts)) + `</b><span>Healthy</span></div>
+<div class="onz-stat warn"><b>` + html.EscapeString(fmt.Sprint(report.Statistics.WarningHosts)) + `</b><span>Warning</span></div>
+<div class="onz-stat bad"><b>` + html.EscapeString(fmt.Sprint(report.Statistics.CriticalHosts)) + `</b><span>Critical</span></div></div>`
 	for _, hostReport := range report.HostReports {
-		statusClass := htmlStatusClass(hostReport.Status)
-		out += `
-	<div class="host-report">
-		<h3><span class="` + statusClass + `">` + html.EscapeString(hostReport.Host.Name) + `</span> (` + html.EscapeString(hostReport.Host.Address) + `)</h3>
-		<p>Duration: ` + hostReport.Duration.String() + `</p>
-		<div class="onz-scroll"><table>
-			<tr>
-				<th>Check Type</th>
-				<th>Status</th>
-				<th>Message</th>
-			</tr>
-`
-
+		out += `<section class="onz-card"><h2>` + html.EscapeString(hostReport.Host.Name) + ` (` + html.EscapeString(hostReport.Host.Address) + `) <span class="onz-badge ` + brand.Tone(string(hostReport.Status)) + `">` + html.EscapeString(string(hostReport.Status)) + `</span></h2>
+<div class="onz-body">Duration: ` + html.EscapeString(hostReport.Duration.String()) + `</div>
+<div class="onz-scroll"><table class="onz-table"><tr><th>Check type</th><th>Status</th><th>Message</th><th class="num">Duration</th></tr>`
 		for _, check := range hostReport.Checks {
-			checkStatusClass := htmlStatusClass(check.Status)
-			out += `
-			<tr>
-				<td>` + html.EscapeString(string(check.CheckType)) + `</td>
-				<td><span class="` + checkStatusClass + `">` + html.EscapeString(string(check.Status)) + `</span></td>
-				<td>` + html.EscapeString(check.Message) + `</td>
-			</tr>
-`
+			out += `<tr><td>` + html.EscapeString(string(check.CheckType)) + `</td><td><span class="onz-badge ` + brand.Tone(string(check.Status)) + `">` + html.EscapeString(string(check.Status)) + `</span></td><td>` + html.EscapeString(check.Message) + `</td><td class="num">` + html.EscapeString(check.Duration.String()) + `</td></tr>`
 		}
-
-		out += `
-		</table></div>
-	</div>
-`
+		out += `</table></div></section>`
 	}
-
-	out += `
-</body>
-</html>
-`
-
+	out += `<footer class="onz-foot">Generated ` + html.EscapeString(report.Timestamp.Format("2006-01-02 15:04:05 MST")) + `</footer></main></body></html>`
 	return out
-}
-
-// htmlStatusClass maps a status to one of the fixed CSS classes so that
-// report values never reach the class attribute.
-func htmlStatusClass(status HealthStatus) string {
-	switch status {
-	case StatusHealthy, StatusWarning, StatusCritical:
-		return string(status)
-	default:
-		return string(StatusUnknown)
-	}
 }
 
 // FormatMarkdown returns the report as Markdown string

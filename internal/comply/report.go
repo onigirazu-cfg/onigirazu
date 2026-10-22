@@ -212,39 +212,38 @@ func mdEscape(s string) string {
 
 // WriteHTML prints a self-contained HTML page
 func (r *Report) WriteHTML(w io.Writer) {
-	fmt.Fprintf(w, `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Compliance: %s</title>
-%s
-<style>body{font-family:system-ui,sans-serif;margin:2em;color:#222}table{border-collapse:collapse;margin:1em 0}td,th{border:1px solid #ccc;padding:.3em .6em;text-align:left;vertical-align:top}
-.ok{color:#2a7}.bad{color:#c33}.critical,.high{font-weight:bold}.score{font-size:1.4em}
-@media (prefers-color-scheme:dark){body{background:#0d1117;color:#e6edf3}td,th{border-color:#30363d}th{background:#161b22}.ok{color:#7ee787}.bad{color:#ff7b72}}
-</style></head><body>
-%s
-<h1>Compliance: %s</h1><p>%s</p><p class="score">%d host(s), %d/%d controls pass (%.0f%%) — %s</p>
-`, html.EscapeString(r.Profile), brand.Head, brand.Header("Compliance: "+r.Profile), html.EscapeString(r.Profile), html.EscapeString(r.Title), len(r.Hosts), r.Passed, r.Passed+r.Failed, r.Score, r.Time.Format(time.RFC3339))
-	fmt.Fprintln(w, "<div class=\"onz-scroll\"><table><tr><th>Host</th><th>Pass</th><th>Fail</th><th>Score</th></tr>")
+	scoreTone := brand.Tone("pass")
+	if r.Failed > 0 {
+		scoreTone = brand.Tone("fail")
+	}
+	fmt.Fprintf(w, `<!doctype html><html lang="en"><head>%s<title>Compliance: %s</title></head><body><main class="onz-page">
+%s<h1 class="onz-title">Compliance: %s</h1><p class="onz-sub">%s</p>
+<div class="onz-stats"><div class="onz-stat"><b>%d</b><span>Hosts</span></div><div class="onz-stat ok"><b>%d</b><span>Controls passed</span></div><div class="onz-stat bad"><b>%d</b><span>Controls failed</span></div><div class="onz-stat %s"><b>%.0f%%</b><span>Score</span></div></div>
+`, brand.ReportHead, html.EscapeString(r.Profile), brand.Header("Compliance: "+r.Profile), html.EscapeString(r.Profile), html.EscapeString(r.Title), len(r.Hosts), r.Passed, r.Failed, scoreTone, r.Score)
+	fmt.Fprintln(w, `<div class="onz-scroll"><table class="onz-table"><tr><th>Host</th><th class="num">Pass</th><th class="num">Fail</th><th class="num">Score</th></tr>`)
 	for _, name := range r.hostNames() {
 		h := r.Hosts[name]
-		fmt.Fprintf(w, "<tr><td>%s</td><td class=\"ok\">%d</td><td class=\"bad\">%d</td><td>%.0f%%</td></tr>\n", html.EscapeString(name), h.Passed, h.Failed, h.Score)
+		fmt.Fprintf(w, `<tr><td>%s</td><td class="num">%d</td><td class="num">%d</td><td class="num">%.0f%%</td></tr>`, html.EscapeString(name), h.Passed, h.Failed, h.Score)
 	}
 	fmt.Fprintln(w, "</table></div>")
 	for _, name := range r.hostNames() {
 		h := r.Hosts[name]
-		fmt.Fprintf(w, "<h2>%s</h2><div class=\"onz-scroll\"><table><tr><th>Control</th><th>Severity</th><th>Result</th><th>Detail</th><th>Fix</th></tr>\n", html.EscapeString(name))
+		fmt.Fprintf(w, `<section class="onz-card"><h2>%s</h2><div class="onz-scroll"><table class="onz-table"><tr><th>Control</th><th>Severity</th><th>Result</th><th>Details</th><th>Remediation</th></tr>`, html.EscapeString(name))
 		for _, c := range h.Controls {
-			state, cls := "pass", "ok"
+			state := "pass"
 			if !c.OK {
-				state, cls = "fail", "bad"
+				state = "fail"
 			}
-			fmt.Fprintf(w, "<tr><td>%s %s</td><td class=\"%s\">%s</td><td class=\"%s\">%s</td><td>%s</td><td>%s</td></tr>\n",
-				html.EscapeString(c.ID), html.EscapeString(c.Title), html.EscapeString(c.Severity), html.EscapeString(c.Severity), cls, state,
+			fmt.Fprintf(w, `<tr><td>%s %s</td><td><span class="onz-badge %s">%s</span></td><td><span class="onz-badge %s">%s</span></td><td>%s</td><td>%s</td></tr>`,
+				html.EscapeString(c.ID), html.EscapeString(c.Title), brand.Tone(c.Severity), html.EscapeString(c.Severity), brand.Tone(state), state,
 				html.EscapeString(strings.Join(c.Details, "; ")), html.EscapeString(c.Remediation))
 		}
-		fmt.Fprintln(w, "</table></div>")
+		fmt.Fprintln(w, "</table></div></section>")
 	}
 	for _, name := range r.errorHosts() {
-		fmt.Fprintf(w, "<p class=\"bad\">%s: could not check: %s</p>\n", html.EscapeString(name), html.EscapeString(r.Errors[name]))
+		fmt.Fprintf(w, `<section class="onz-card"><h2>%s <span class="onz-badge bad">could not be checked</span></h2><div class="onz-body">%s</div></section>`, html.EscapeString(name), html.EscapeString(r.Errors[name]))
 	}
-	fmt.Fprintln(w, "</body></html>")
+	fmt.Fprintf(w, `<footer class="onz-foot">Generated %s</footer></main></body></html>`, html.EscapeString(r.Time.Format("2006-01-02 15:04:05 MST")))
 }
 
 // Metrics is the report as Prometheus text: controls per host and result,
