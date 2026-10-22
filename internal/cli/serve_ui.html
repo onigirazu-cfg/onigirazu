@@ -312,7 +312,7 @@ main{margin-left:0;padding:20px 12px}
 </header>
 <button class="drawer-scrim" id="drawer-scrim" aria-label="Close navigation"></button>
 <aside class="sidebar"><nav id="main-navigation" aria-label="Main navigation"><button data-v="jobs" class="on"><span>Jobs</span></button><button data-v="runs"><span>Runs</span></button><button data-v="hosts"><span>Hosts</span></button><button data-v="inventory"><span>Inventory</span></button><button data-v="audit"><span>Audit</span></button></nav><div class="sidebar-foot">onigirazu<br><span>Fleet automation</span></div></aside>
-<div class="banner error-banner" id="storage-error" role="alert" hidden></div><div class="banner" id="pause-banner" role="status" hidden></div>
+<div class="banner error-banner" id="storage-error" role="alert" hidden></div><div class="banner" id="pause-banner" role="status" hidden></div><div class="banner" id="stop-banner" role="status" hidden></div>
 <main id="main" aria-label="Fleet workspace"></main>
 <dialog class="sheet" id="run-sheet" aria-labelledby="sheet-title"><div class="sheet-header"><div><h2 id="sheet-title">Run job</h2><span class="muted" id="sheet-subtitle"></span></div><button class="icon-button" id="close-sheet" aria-label="Close run form"></button></div><div class="sheet-body" id="sheet-content"></div></dialog>
 <script>
@@ -337,6 +337,8 @@ window.addEventListener('pagehide',stopProgress);
 function activityView(m){
   $('#storage-error').hidden=!m.storage_error;
   $('#storage-error').textContent=m.storage_error?'Results not saved: '+m.storage_error:'';
+  $('#stop-banner').hidden=!m.stopping;
+  $('#stop-banner').textContent=m.stopping?`Serve is stopping: waiting for ${m.running||0} running run(s) to finish, cancelled ${ago(m.stopping.deadline)} if still going. New runs start after the restart.`:'';
   $('#activity').hidden=!(m.running+m.queued+(m.scheduled||0));
   $('#activity').textContent=`${m.running||0} running · ${m.queued||0} queued · ${m.scheduled||0} scheduled`;
 }

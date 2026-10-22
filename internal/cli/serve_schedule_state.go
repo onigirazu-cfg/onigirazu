@@ -271,6 +271,10 @@ func advanceSchedule(j *ServeJob, rec scheduleRecord, now time.Time, tick time.D
 
 func (s *server) scheduleTick(now time.Time) {
 	s.mu.Lock()
+	if s.stopping != nil { // the slots stay planned for the next start
+		s.mu.Unlock()
+		return
+	}
 	var due []*ServeJob
 	changed := false
 	for i := range s.cfg.Jobs {

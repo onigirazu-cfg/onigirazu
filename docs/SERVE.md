@@ -19,6 +19,7 @@ notify:
 data_dir: /var/lib/onigirazu/serve     # results and job state; default ~/.onigirazu/serve
 approval_timeout: 1h                   # default wait for approval
 run_timeout: 0s                        # default run limit; 0: no limit, negative: invalid
+shutdown_timeout: 10m                  # how long a stop waits for executing runs; 0: cancel at once
 concurrency: 2                         # max jobs executing at once; default 1
 # missed: skip                        # optional default for all jobs; job setting wins
 retain: 50                             # results kept per job
@@ -110,8 +111,15 @@ onigirazu serve --config-file serve.yml
 Up to `concurrency` jobs run at a time (default 1), picked up in FIFO order as they
 are due or requested. A job that is pending, queued or running is not requested again,
 so a job never overlaps itself. Pause stops new runs from starting while executing runs
-finish; resume drains the queue. Server shutdown cancels executing runs and records them
-as `error` with summary `interrupted: serve stopping`.
+finish; resume drains the queue.
+
+On SIGTERM or SIGINT serve stops gracefully. It refuses new runs and approvals with `503`,
+starts nothing from the queue or the schedule, and waits up to `shutdown_timeout`
+(default 10m) for executing runs to finish. The page and API keep answering meanwhile, and
+`/api/me` carries `stopping: {since, deadline}`, which the page shows as a banner. Runs still
+going at the deadline, or when a second signal arrives, are cancelled and recorded as `error`
+with summary `interrupted: serve stopping`. `shutdown_timeout: 0` cancels them at once.
+Queued, scheduled and pending runs stay on disk and continue after the next start.
 
 Run time limits start when execution starts, excluding time scheduled, queued or pending approval.
 An unfinished run that reaches its limit becomes `timed_out` with summary
@@ -168,6 +176,11 @@ The working directory and environment file must already exist.
 
 The unit waits for the network and restarts on failure. It sets
 `NoNewPrivileges=yes`, `ProtectSystem=strict` and `PrivateTmp=yes`.
+For the graceful stop it sets `KillMode=mixed` (SIGTERM reaches serve only, so commands a run
+started keep working) and `TimeoutStopSec` to `shutdown_timeout` plus one minute; re-run
+install after changing `shutdown_timeout`. A hand-written unit needs the same two lines.
+`systemctl stop` or `restart` therefore waits until the running runs finish. To cancel them
+now, send the second signal with `systemctl kill --kill-whom=main -s SIGTERM onigirazu-serve`.
 `ReadWritePaths` allows writes to `data_dir`, the working directory and the service
 user's home when it exists or install creates it for `data_dir` (for the audit store
 and facts cache). Add repeatable
@@ -281,8 +294,8 @@ The flow is requested → pending → approved/rejected/expired; approved or ung
 through optional scheduled → queued → running → result, with cancellation possible while
 scheduled, queued or running.
 Each job has at most one pending run; the schedule skips it while one waits. The record keeps `approval.by`, `approval.at`
-and `approval.comment`. A restart keeps pending and scheduled runs and marks queued or executing runs as
-`error` with `interrupted: serve restarted`; `cancelling` runs become `cancelled` with the same summary.
+and `approval.comment`. A restart keeps pending, scheduled and queued runs (queued ones queue again in request
+order) and marks runs that were executing as `error` with `interrupted: serve restarted`; `cancelling` runs become `cancelled` with the same summary.
 
 Apply jobs accept `{"mode":"check"}` at `POST /api/jobs/{name}/run` to preview changes
 without applying them. A check run skips the plays' `verify:` checks, which would test the

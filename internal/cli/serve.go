@@ -57,6 +57,9 @@ type ServeConfig struct {
 	Notify          []NotifyTarget `yaml:"notify"`           // targets for every job
 	ApprovalTimeout time.Duration  `yaml:"approval_timeout"` // how long a pending run waits, default 1h
 	RunTimeout      time.Duration  `yaml:"run_timeout"`      // 0: no run limit
+	// ShutdownTimeout is how long a stop waits for executing runs; nil: the
+	// default, 0: cancel them at once
+	ShutdownTimeout *time.Duration `yaml:"shutdown_timeout"`
 	warnings        []string
 }
 
@@ -495,6 +498,9 @@ func loadServeConfig(path string) (*ServeConfig, error) {
 	if cfg.RunTimeout < 0 {
 		return nil, fmt.Errorf("run_timeout must be >= 0")
 	}
+	if cfg.ShutdownTimeout != nil && *cfg.ShutdownTimeout < 0 {
+		return nil, fmt.Errorf("shutdown_timeout must be >= 0")
+	}
 	if cfg.RetainAge < 0 {
 		return nil, fmt.Errorf("retain_age must be >= 0")
 	}
@@ -604,6 +610,17 @@ func loadServeConfig(path string) (*ServeConfig, error) {
 	return cfg, nil
 }
 
+// defaultShutdownTimeout: a stop waits this long for executing runs
+const defaultShutdownTimeout = 10 * time.Minute
+
+// shutdownTimeout is shutdown_timeout with its default
+func (cfg *ServeConfig) shutdownTimeout() time.Duration {
+	if cfg.ShutdownTimeout == nil {
+		return defaultShutdownTimeout
+	}
+	return *cfg.ShutdownTimeout
+}
+
 // server holds the jobs, their results and the audit store
 type server struct {
 	inventoryMu        sync.Mutex
@@ -632,6 +649,8 @@ type server struct {
 	pause            servePause
 	resumed          chan struct{}
 	queue            chan queued
+	stopping         *serveStop    // set once a stop began
+	drain            chan struct{} // closed when a stop begins: nothing new starts
 	// runJob runs a job; tests replace it
 	runJob func(ctx context.Context, j *ServeJob, mode string) (*JobResult, error)
 	audit  *audit.Storage
@@ -646,6 +665,12 @@ type servePause struct {
 	Reason string    `json:"reason,omitempty"`
 	By     string    `json:"by,omitempty"`
 	At     time.Time `json:"at,omitempty"`
+}
+
+// serveStop is a stop in progress: running runs finish until Deadline
+type serveStop struct {
+	Since    time.Time `json:"since"`
+	Deadline time.Time `json:"deadline"`
 }
 
 type queued struct {
@@ -682,7 +707,7 @@ func newServer(cfg *ServeConfig, out io.Writer) (*server, error) {
 			return nil, fmt.Errorf("job %s: %w", j.Name, err)
 		}
 	}
-	s := &server{cancels: map[string]context.CancelFunc{}, cfg: cfg, out: out, results: map[string][]*JobResult{}, running: map[string]bool{}, pending: map[string]*JobResult{}, lastID: map[string]string{}, lastSeq: map[string]int{}, nextRun: map[string]time.Time{}, queue: make(chan queued, 64), resumed: make(chan struct{})}
+	s := &server{cancels: map[string]context.CancelFunc{}, cfg: cfg, out: out, results: map[string][]*JobResult{}, running: map[string]bool{}, pending: map[string]*JobResult{}, lastID: map[string]string{}, lastSeq: map[string]int{}, nextRun: map[string]time.Time{}, queue: make(chan queued, 64), resumed: make(chan struct{}), drain: make(chan struct{})}
 	s.now = time.Now
 	s.scheduleState = make(map[string]*scheduleRecord)
 	s.secrets = map[string]map[string]string{}
@@ -787,6 +812,7 @@ func (s *server) loadResults() {
 			s.storeErr = err.Error()
 		}
 	}
+	var requeue []*JobResult
 	for _, list := range s.results {
 		for _, r := range append([]*JobResult(nil), list...) {
 			if (r.Status == "pending" || r.Status == "scheduled" || r.Status == "queued") && s.hasSecretParams(r) {
@@ -812,11 +838,29 @@ func (s *server) loadResults() {
 			case statusCancelling:
 				r.Status, r.Summary = statusCancelled, "interrupted: serve restarted"
 				s.saveResult(r)
-			case "queued", "running":
+			case "queued": // never started: it queues again
+				requeue = append(requeue, r)
+			case "running":
 				r.Status = "error"
 				r.Summary = "interrupted: serve restarted"
 				s.saveResult(r)
 			}
+		}
+	}
+	sort.Slice(requeue, func(i, k int) bool { return requeue[i].Requested.Before(requeue[k].Requested) })
+	for _, r := range requeue {
+		j := s.job(r.Job)
+		if j == nil {
+			r.Status, r.Summary = "error", "interrupted: job removed from serve.yml"
+			s.saveResult(r)
+			continue
+		}
+		select {
+		case s.queue <- queued{job: j, run: r}:
+			s.running[r.Job] = true
+		default:
+			r.Status, r.Summary = "error", "interrupted: serve restarted ("+errQueueFull.Error()+")"
+			s.saveResult(r)
 		}
 	}
 }
@@ -929,6 +973,7 @@ var (
 	errNoPendingRun      = errors.New("no such pending run")
 	errRunExpired        = errors.New("the run expired before the decision")
 	errQueueFull         = errors.New("queue full")
+	errServeStopping     = errors.New("serve is stopping: no new runs until it is back")
 )
 
 // resultByID finds a record of a job; the caller holds mu
@@ -970,6 +1015,9 @@ func (s *server) request(j *ServeJob, trigger string, params *RunParams) (*JobRe
 func (s *server) requestParent(j *ServeJob, trigger string, params *RunParams, parent string) (*JobResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.stopping != nil {
+		return nil, errServeStopping
+	}
 	now := time.Now().UTC()
 	if trigger == "schedule" && s.now != nil {
 		now = s.now().UTC()
@@ -1108,6 +1156,9 @@ func (s *server) decide(id, by, comment, decision string) (*JobResult, error) {
 			return nil, errRunExpired
 		}
 		if decision == "approved" {
+			if s.stopping != nil { // it stays pending through the restart
+				return nil, errServeStopping
+			}
 			if at := s.job(job).deferUntil(r, now); at != nil {
 				s.schedule(r, *at)
 				s.running[job] = false
@@ -1168,7 +1219,8 @@ func (s *server) expirePending(now time.Time) []*JobResult {
 }
 
 // worker runs queued jobs; there are cfg.Concurrency of them, picking up
-// in FIFO order
+// in FIFO order. ctx cancels a run; a stop (drain) only ends the pickup, so
+// a run in progress finishes and queued runs stay queued on disk.
 func (s *server) worker(ctx context.Context) {
 	defer func() {
 		s.mu.Lock()
@@ -1188,6 +1240,9 @@ next:
 		case <-ctx.Done():
 			s.pickupMu.Unlock()
 			return
+		case <-s.drain:
+			s.pickupMu.Unlock()
+			return
 		case q := <-s.queue:
 			waiting := false
 			for {
@@ -1201,7 +1256,7 @@ next:
 				p, ch := s.paused()
 				if !p.Paused {
 					s.mu.Lock()
-					if ctx.Err() != nil {
+					if ctx.Err() != nil || s.stopping != nil {
 						s.mu.Unlock()
 						s.pickupMu.Unlock()
 						return
@@ -1221,6 +1276,9 @@ next:
 				}
 				select {
 				case <-ctx.Done():
+					s.pickupMu.Unlock()
+					return
+				case <-s.drain:
 					s.pickupMu.Unlock()
 					return
 				case <-ch:
@@ -1392,6 +1450,8 @@ func (s *server) scheduler(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
+			return
+		case <-s.drain: // scheduled runs and slots wait for the next start
 			return
 		case <-t.C:
 			now := s.now().Round(0)
@@ -2027,6 +2087,9 @@ func (s *server) mux() *http.ServeMux {
 		s.mu.Lock()
 		running, queued := s.activity()
 		status := map[string]interface{}{"user": id.User, "operator": id.Operator, "title": s.cfg.Title, "paused": s.pause.Paused, "running": running, "queued": queued, "scheduled": s.scheduledCount(), "concurrency": s.cfg.Concurrency, "storage_error": s.storeErr, "sign_out_url": s.cfg.Auth.SignOutURL}
+		if s.stopping != nil {
+			status["stopping"] = s.stopping
+		}
 		s.mu.Unlock()
 		writeJSON(w, http.StatusOK, status)
 	}))
@@ -2915,15 +2978,19 @@ func runServe(ctx context.Context, cfg *ServeConfig, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+	sig := make(chan os.Signal, 2)
+	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(sig)
+	// runCtx cancels executing runs; a stop cancels it only after the drain
+	runCtx, kill := context.WithCancel(context.Background())
 	var workers sync.WaitGroup
 	defer workers.Wait()
-	defer stop()
+	defer kill()
 	for i := 0; i < cfg.Concurrency; i++ {
 		workers.Add(1)
-		go func() { defer workers.Done(); s.worker(ctx) }()
+		go func() { defer workers.Done(); s.worker(runCtx) }()
 	}
-	go s.scheduler(ctx)
+	go s.scheduler(runCtx)
 	srv := &http.Server{Addr: cfg.Listen, Handler: s.mux(), ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second}
 	errc := make(chan error, 1)
 	go func() { errc <- srv.ListenAndServe() }()
@@ -2942,11 +3009,59 @@ func runServe(ctx context.Context, cfg *ServeConfig, out io.Writer) error {
 	case err := <-errc:
 		return err
 	case <-ctx.Done():
-		shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		return srv.Shutdown(shutdown)
+	case <-sig:
 	}
+	done := make(chan struct{})
+	go func() { workers.Wait(); close(done) }()
+	// the page keeps answering while the runs finish
+	s.drainStop(cfg.shutdownTimeout(), sig, kill, done)
+	shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	err = srv.Shutdown(shutdown)
+	notified := make(chan struct{}) // the last runs' messages go out too
+	go func() { s.notifyWait.Wait(); close(notified) }()
+	select {
+	case <-notified:
+	case <-shutdown.Done():
+	}
+	return err
 }
+
+// drainStop stops new runs from starting and waits for the executing ones;
+// at the timeout or on another signal (again) it cancels them (kill), and it
+// returns when the workers are done. Queued, scheduled and pending runs stay
+// on disk for the next start.
+func (s *server) drainStop(timeout time.Duration, again <-chan os.Signal, kill context.CancelFunc, done <-chan struct{}) {
+	s.mu.Lock()
+	now := time.Now().UTC()
+	s.stopping = &serveStop{Since: now, Deadline: now.Add(timeout)}
+	close(s.drain)
+	running, queued := s.activity()
+	s.mu.Unlock()
+	if running == 0 || timeout == 0 {
+		if running > 0 {
+			fmt.Fprintf(s.out, "serve: stopping: canceling %d running run(s) (shutdown_timeout 0)\n", running)
+		}
+		kill()
+		<-done
+		return
+	}
+	fmt.Fprintf(s.out, "serve: stopping: waiting up to %s for %d running run(s), %d queued kept for the next start; signal again to cancel them now\n", timeout, running, queued)
+	t := time.NewTimer(timeout)
+	defer t.Stop()
+	select {
+	case <-done:
+		fmt.Fprintln(s.out, "serve: stopping: running runs finished")
+		return
+	case <-again:
+		fmt.Fprintln(s.out, "serve: stopping: second signal, canceling running runs")
+	case <-t.C:
+		fmt.Fprintf(s.out, "serve: stopping: shutdown_timeout %s reached, canceling running runs\n", timeout)
+	}
+	kill()
+	<-done
+}
+
 func (cfg *ServeConfig) printWarnings(out io.Writer) {
 	for _, warning := range cfg.warnings {
 		fmt.Fprintln(out, warning)
