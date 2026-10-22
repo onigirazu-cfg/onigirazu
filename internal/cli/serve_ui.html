@@ -83,21 +83,25 @@ tbody tr:hover{background:var(--hover)}
 .progress-table .progress-number{width:84px}
 .progress-table th:nth-child(n+3),.progress-table td:nth-child(n+3){text-align:right;font-variant-numeric:tabular-nums}
 .progress-table td:nth-child(1),.progress-table td:nth-child(2){overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.jobs-table{table-layout:fixed;min-width:1000px}
-.jobs-table th:nth-child(1){width:140px}
-.jobs-table th:nth-child(2){width:80px}
-.jobs-table th:nth-child(4){width:120px}
-.jobs-table th:nth-child(5){width:160px}
-.jobs-table th:nth-child(6){width:180px}
-.jobs-table th:nth-child(7){width:150px}
-.jobs-table td:nth-child(1),.jobs-table td:nth-child(2){white-space:nowrap}
+.jobs-table{table-layout:fixed;min-width:0}
+.jobs-table .col-job{width:150px}
+.jobs-table .col-kind{width:96px}
+.jobs-table .col-schedule{width:120px}
+.jobs-table .col-last{width:150px}
+.jobs-table .col-result{width:180px}
+.jobs-table .col-actions{width:152px}
+.jobs-table .job-name,.jobs-table td.col-kind{white-space:nowrap}
+.jobs-table .job-name a{display:block;overflow:hidden;text-overflow:ellipsis}
 .jobs-table td.target{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Below 1280px the Kind and Target columns fold into the Job cell and Last run into Schedule, so Result and Actions stay in view. */
+.jobs-table .job-meta,.jobs-table .job-last-inline,.jobs-table .th-last{display:none}
+.job-meta{align-items:center;gap:6px;min-width:0;margin-top:4px;font-size:12px;color:var(--muted);font-weight:400}
+.job-meta .job-target{min-width:0;overflow:hidden;text-overflow:ellipsis}
 .jobs-table .job-result .muted{overflow-wrap:anywhere}
 .job-actions{display:inline-flex;gap:6px;align-items:center;white-space:nowrap}
 .action-popover{position:fixed;inset:auto;margin:0;padding:6px;min-width:150px;max-width:calc(100vw - 24px);border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--fg);box-shadow:var(--shadow)}
 .action-popover:popover-open{display:grid;gap:4px}
 .action-popover button{justify-content:flex-start}
-.jobs-table .job-kind{display:none}
 .kind{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}.kind svg.icon,.job-kind svg.icon{color:var(--muted)}.job-kind svg.icon{width:13px;height:13px}
 .table-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;color:var(--muted);font-size:12px;margin:14px 0}
 .pagination{display:flex;gap:8px}
@@ -215,6 +219,16 @@ summary{cursor:pointer}
 .limit-chips [aria-pressed=true]{border-color:var(--accent);background:var(--selection);color:var(--accent)}
 .sheet-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:20px}
 
+@media(max-width:1280px){.jobs-table .col-kind,.jobs-table .target,.jobs-table .job-last{display:none}
+.jobs-table .col-job{width:28%}
+.jobs-table .col-schedule{width:24%}
+.jobs-table .col-result{width:auto}
+.jobs-table th,.jobs-table td{padding-left:12px;padding-right:12px}
+.jobs-table .job-meta{display:flex}
+.jobs-table .th-last{display:inline}
+.jobs-table .job-last-inline{display:block;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
+}
+
 @media(max-width:1100px){.activity{max-width:140px;white-space:normal;line-height:1.3}
 .brand{min-width:160px}
 .topbar{gap:10px;padding:0 16px}
@@ -248,6 +262,19 @@ main,.banner{margin-left:64px}
 .inventory-hosts-table td{display:block;min-width:0;border:0;padding:8px}
 .inventory-hosts-table td::before{content:attr(data-label);display:block;color:var(--muted);font-size:12px}
 .inventory-hosts-table .inventory-host-vars{grid-column:1/-1}
+.jobs-scroll{overflow:visible;border:0;background:none;box-shadow:none}
+.jobs-table,.jobs-table tbody{display:block;min-width:0;width:100%}
+.jobs-table thead{display:none}
+.jobs-table tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px 12px;padding:16px;margin-bottom:12px;background:var(--bg);border:1px solid var(--line);border-radius:10px}
+.jobs-table td{display:block;min-width:0;padding:0;border:0}
+.jobs-table .job-name{grid-row:1;grid-column:1/-1}
+.jobs-table .job-last-inline{display:none}
+.jobs-table .job-result{grid-row:2;grid-column:1/-1}
+.jobs-table .job-schedule{grid-row:3;grid-column:2;color:var(--muted)}
+.jobs-table .job-last{display:contents}
+.jobs-table .last-run-meta{grid-row:3;grid-column:1;color:var(--muted)}
+.jobs-table .recent{grid-row:4;grid-column:1/-1;max-width:100%;margin-top:0}
+.jobs-table .job-actions-cell{grid-row:5;grid-column:1/-1}
 }
 
 @media(max-width:600px){.topbar{padding:0 10px;gap:6px}
@@ -281,22 +308,6 @@ main{margin-left:0;padding:20px 12px}
 .table-footer{flex-wrap:wrap}
 .sheet-body{padding:0 12px 20px}
 .nowrap-table td{white-space:nowrap}.nowrap-table td.wrap{white-space:normal;min-width:16rem}
-.jobs-scroll{overflow:visible;border:0;background:none;box-shadow:none}
-.jobs-table,.jobs-table tbody{display:block;min-width:0;width:100%}
-.jobs-table thead{display:none}
-.jobs-table tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px 12px;padding:16px;margin-bottom:12px;background:var(--bg);border:1px solid var(--line);border-radius:10px}
-.jobs-table td{display:block;min-width:0;padding:0;border:0}
-.jobs-table td:nth-child(1){display:flex;align-items:center;grid-row:1;grid-column:1/-1;white-space:nowrap}
-.jobs-table td:nth-child(1) a{display:inline-block;min-width:0;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;vertical-align:middle}
-.jobs-table .job-kind{display:inline-flex;flex-shrink:0;margin-left:8px}
-.jobs-table td:nth-child(2),.jobs-table td.target{display:none}
-.jobs-table .job-result{grid-row:2;grid-column:1/-1}
-.jobs-table .job-schedule{grid-row:3;grid-column:2;color:var(--muted)}
-.jobs-table .job-last{display:contents}
-.jobs-table .last-run-meta{grid-row:3;grid-column:1;color:var(--muted)}
-.jobs-table .recent{grid-row:4;grid-column:1/-1;max-width:100%;margin-top:0}
-.jobs-table .job-actions-cell{grid-row:5;grid-column:1/-1}
-
 }
 
 @media(prefers-reduced-motion:reduce){*{transition:none!important}
@@ -492,7 +503,7 @@ async function jobs(){
   pauseView(p);
   activityView(m);
   const pending=list.filter(j=>j.pending);
-  main.innerHTML=pageHeader('Jobs','Scheduled and on-demand fleet automation')+(pending.length?`<h2>Pending approval <span class="b pending">${pending.length}</span></h2>${pending.map(j=>`<section class="approval-card"><b>${esc(j.name)}</b> · ${esc(j.kind)} · ${esc(j.target)}<br><span class="muted">Requested by ${esc(j.pending.trigger)} ${esc(ago(j.pending.requested))} · expires in ${span(Math.max(0,(new Date(j.pending.approval.expires)-Date.now())/1000))}</span>${j.pending.not_before?`<div class="muted">${esc(scheduledTime(j.pending.not_before))}</div>`:''}${paramsView(j.pending)}<p>${decisionButtons({...j.pending,status:'pending'},j)}</p></section>`).join('')}`:'')+(list.length?`<div class="table-scroll jobs-scroll"><table class="jobs-table"><thead><tr><th>Job</th><th>Kind</th><th class="target">Target</th><th>Schedule</th><th>Last run</th><th>Result</th><th>Actions</th></tr></thead><tbody>${list.map(j=>`<tr data-search="${esc([j.name,j.kind,j.target].join(' '))}"><td><a title="${esc(j.name)}" href="#job/${encodeURIComponent(j.name)}">${esc(j.name)}</a><span class="b job-kind">${kindIcon(j.kind)}${esc(j.kind)}</span></td><td><span class="kind">${kindIcon(j.kind)}${esc(j.kind)}</span></td><td class="muted target" title="${esc(j.target)}">${esc(j.target)}</td><td class="job-schedule">${scheduleView(j)}${j.windows?.length?`<div class="muted">${j.windows.map(esc).join('<br>')} (${esc(j.windows_tz||'UTC')})${j.next_window?'<br>next window '+date(j.next_window):''}</div>`:''}</td><td class="job-last"><div class="last-run-meta">${lastRun(j)}</div>${recentStrip(j.recent)}</td><td class="job-result">${j.pending?badge('pending')+checkBadge(j.pending):j.running?badge(j.active?.status||(j.queued?'queued':'running'))+checkBadge(j.active)+activeTime(j):j.last?badge(j.last.status)+checkBadge(j.last)+'<div class="muted">'+esc(j.last.summary)+'</div>':''}${(j.scheduled_runs||(j.scheduled?[j.scheduled]:[])).map(r=>`<div>${badge('scheduled')}${checkBadge(r)} <a href="#run/${encodeURIComponent(r.id)}">${esc(scheduledTime(r.not_before))}</a>${r.summary?'<br><span class="muted">'+esc(r.summary)+'</span>':''}</div>`).join('')}</td><td class="job-actions-cell">${jobActions(j)}</td></tr>`).join('')}</tbody></table></div>`:empty('No jobs in serve.yml'));
+  main.innerHTML=pageHeader('Jobs','Scheduled and on-demand fleet automation')+(pending.length?`<h2>Pending approval <span class="b pending">${pending.length}</span></h2>${pending.map(j=>`<section class="approval-card"><b>${esc(j.name)}</b> · ${esc(j.kind)} · ${esc(j.target)}<br><span class="muted">Requested by ${esc(j.pending.trigger)} ${esc(ago(j.pending.requested))} · expires in ${span(Math.max(0,(new Date(j.pending.approval.expires)-Date.now())/1000))}</span>${j.pending.not_before?`<div class="muted">${esc(scheduledTime(j.pending.not_before))}</div>`:''}${paramsView(j.pending)}<p>${decisionButtons({...j.pending,status:'pending'},j)}</p></section>`).join('')}`:'')+(list.length?`<div class="table-scroll jobs-scroll"><table class="jobs-table"><thead><tr><th class="col-job">Job</th><th class="col-kind">Kind</th><th class="target">Target</th><th class="col-schedule">Schedule<span class="th-last"> · Last run</span></th><th class="col-last job-last">Last run</th><th class="col-result">Result</th><th class="col-actions">Actions</th></tr></thead><tbody>${list.map(j=>`<tr data-search="${esc([j.name,j.kind,j.target].join(' '))}"><td class="job-name"><a title="${esc(j.name)}" href="#job/${encodeURIComponent(j.name)}">${esc(j.name)}</a><div class="job-meta"><span class="kind job-kind">${kindIcon(j.kind)}${esc(j.kind)}</span><span class="job-target" title="${esc(j.target)}">· ${esc(j.target)}</span></div></td><td class="col-kind"><span class="kind">${kindIcon(j.kind)}${esc(j.kind)}</span></td><td class="muted target" title="${esc(j.target)}">${esc(j.target)}</td><td class="job-schedule">${scheduleView(j)}${j.windows?.length?`<div class="muted">${j.windows.map(esc).join('<br>')} (${esc(j.windows_tz||'UTC')})${j.next_window?'<br>next window '+date(j.next_window):''}</div>`:''}<div class="job-last-inline">${lastRun(j)}${recentStrip(j.recent)}</div></td><td class="job-last"><div class="last-run-meta">${lastRun(j)}</div>${recentStrip(j.recent)}</td><td class="job-result">${j.pending?badge('pending')+checkBadge(j.pending):j.running?badge(j.active?.status||(j.queued?'queued':'running'))+checkBadge(j.active)+activeTime(j):j.last?badge(j.last.status)+checkBadge(j.last)+'<div class="muted">'+esc(j.last.summary)+'</div>':''}${(j.scheduled_runs||(j.scheduled?[j.scheduled]:[])).map(r=>`<div>${badge('scheduled')}${checkBadge(r)} <a href="#run/${encodeURIComponent(r.id)}">${esc(scheduledTime(r.not_before))}</a>${r.summary?'<br><span class="muted">'+esc(r.summary)+'</span>':''}</div>`).join('')}</td><td class="job-actions-cell">${jobActions(j)}</td></tr>`).join('')}</tbody></table></div>`:empty('No jobs in serve.yml'));
   bindJobActions();
   listFooter(list.length);
   applySearch();
