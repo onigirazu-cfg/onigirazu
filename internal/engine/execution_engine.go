@@ -48,6 +48,19 @@ type PlayPlanObserver interface {
 	OnPlayPlan(play string, hosts []string, tasks int)
 }
 
+// PlanAdjustObserver optionally receives additions to a host's estimate:
+// handlers and health checks are not in it until they run
+type PlanAdjustObserver interface {
+	OnPlanAdjust(task, host string, delta int)
+}
+
+// LoopObserver optionally learns where a loop starts and ends on a host: the
+// estimate counts a loop as one task, its items report task ends of their own
+type LoopObserver interface {
+	OnLoopStart(task, host string, items int)
+	OnLoopEnd(task, host string)
+}
+
 // ExecutionEngine is the main engine for executing playbooks
 type ExecutionEngine struct {
 	output io.Writer
@@ -394,6 +407,40 @@ func (e *ExecutionEngine) countPlannedTasks(ctx context.Context, tasks []types.T
 		}
 	}
 	return total
+}
+
+func (e *ExecutionEngine) notifyPlanAdjust(task, host string, delta int) {
+	if delta == 0 {
+		return
+	}
+	for _, obs := range e.observers {
+		if planner, ok := obs.(PlanAdjustObserver); ok {
+			planner.OnPlanAdjust(task, host, delta)
+		}
+	}
+}
+
+func (e *ExecutionEngine) notifyLoop(task, host string, items int, end bool) {
+	for _, obs := range e.observers {
+		if loops, ok := obs.(LoopObserver); ok {
+			if end {
+				loops.OnLoopEnd(task, host)
+			} else {
+				loops.OnLoopStart(task, host, items)
+			}
+		}
+	}
+}
+
+// notifyUnplannedTask adds a task the play estimate leaves out (a handler, a
+// health check) to the plan of the hosts it runs on; these run whatever the
+// tag filter says
+func (e *ExecutionEngine) notifyUnplannedTask(ctx context.Context, task *types.Task, hosts []types.Host) {
+	unfiltered := &ExecutionEngine{roleLoader: e.roleLoader}
+	n := unfiltered.countPlannedTasks(ctx, []types.Task{*task}, nil)
+	for _, host := range hosts {
+		e.notifyPlanAdjust(task.Name, host.Name, n)
+	}
 }
 
 func (e *ExecutionEngine) notifyPlayPlan(ctx context.Context, play *types.Play, hosts []types.Host) {
@@ -1725,6 +1772,13 @@ func (e *ExecutionEngine) runLoopOnHost(ctx context.Context, task *types.Task, h
 		}, playResult)
 	}
 	e.logger.Debug("Executing task '%s' on %s with loop (%d items)", task.Name, host.Name, len(items))
+	// an unnamed task's items are "debug (item 1)", as in Ansible
+	base := task.Name
+	if base == "" || task.NameGenerated {
+		base = task.Module
+	}
+	e.notifyLoop(base, host.Name, len(items), false)
+	defer e.notifyLoop(base, host.Name, 0, true)
 
 	itemVar, indexVar := task.Loop.Variable, task.Loop.Index
 	if itemVar == "" {
@@ -1755,11 +1809,6 @@ func (e *ExecutionEngine) runLoopOnHost(ctx context.Context, task *types.Task, h
 		}
 
 		taskCopy := *task
-		// an unnamed task's items are "debug (item 1)", as in Ansible
-		base := task.Name
-		if base == "" || task.NameGenerated {
-			base = task.Module
-		}
 		taskCopy.Name = fmt.Sprintf("%s (item %d)", base, i+1)
 		taskCopy.NameGenerated = false
 		taskCopy.Loop = nil

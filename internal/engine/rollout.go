@@ -117,6 +117,7 @@ func (e *ExecutionEngine) runHealthChecks(ctx context.Context, checks []types.Ta
 		if len(active) == 0 {
 			break
 		}
+		e.notifyUnplannedTask(ctx, &check, active)
 		if err := e.executeTask(ctx, &check, active, vars, result); err != nil {
 			var hf *hostsFailedError
 			if !errors.As(err, &hf) {

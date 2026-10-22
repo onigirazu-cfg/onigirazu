@@ -153,6 +153,7 @@ func (e *ExecutionEngine) flushHandlers(ctx context.Context, hosts []types.Host,
 			ran = true
 			entry := h.entries[i]
 			e.logger.Debug("Running handler %s on %d host(s)", entry.task.Name, len(targets))
+			e.notifyUnplannedTask(ctx, &entry.task, targets)
 			if err := e.executeTask(ctx, &entry.task, targets, entry.vars, playResult); err != nil && !entry.task.IgnoreErrors {
 				return fmt.Errorf("handler '%s' failed: %w", entry.task.Name, err)
 			}

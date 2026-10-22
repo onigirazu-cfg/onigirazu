@@ -26,6 +26,7 @@ type progressEvent struct {
 	At         time.Time `json:"at"`
 	Type       string    `json:"type"`
 	Planned    int       `json:"planned,omitempty"`
+	Items      int       `json:"items,omitempty"`
 	Hosts      []string  `json:"hosts,omitempty"`
 	Play       string    `json:"play,omitempty"`
 	Task       string    `json:"task,omitempty"`
@@ -43,6 +44,29 @@ type hostProgress struct {
 	Failed        int    `json:"failed"`
 	Skipped       int    `json:"skipped"`
 	TasksFinished int    `json:"tasks_finished"`
+	// a running loop: its size and the items started; the loop is one task
+	// with one result, the worst of its items
+	Items      int  `json:"items,omitempty"`
+	Item       int  `json:"item,omitempty"`
+	Loop       bool `json:"loop,omitempty"`
+	loopStatus string
+}
+
+// loopRank orders item results: a loop reports its worst one
+var loopRank = map[string]int{"": 0, "skipped": 1, "ok": 2, "ignored": 2, "changed": 3, "failed": 4}
+
+func (h *hostProgress) count(status string) {
+	h.TasksFinished++
+	switch status {
+	case "ok", "ignored":
+		h.OK++
+	case "changed":
+		h.Changed++
+	case "failed":
+		h.Failed++
+	case "skipped":
+		h.Skipped++
+	}
 }
 
 type progressSnapshot struct {
@@ -105,29 +129,39 @@ func (p *runProgress) emit(e progressEvent) {
 	if e.Host != "" {
 		h := p.hosts[e.Host]
 		switch e.Type {
-		case "task_start":
-			h.Task, h.Done = e.Task, false
-		case "task_end":
-			h.Task, h.Done = "", true
-			h.TasksFinished++
-			p.finished++
-			switch e.Status {
-			case "ok", "ignored":
-				h.OK++
-			case "changed":
-				h.Changed++
-			case "failed":
-				h.Failed++
-			case "skipped":
-				h.Skipped++
+		case "loop_start":
+			h.Task, h.Done, h.Loop, h.loopStatus, h.Items, h.Item = e.Task, false, true, "", e.Items, 0
+		case "loop_end":
+			if h.loopStatus == "" {
+				h.loopStatus = "skipped" // no items ran
 			}
+			e.Status = h.loopStatus
+			h.count(e.Status)
+			p.finished++
+			h.Task, h.Done, h.Loop, h.loopStatus, h.Items, h.Item = "", true, false, "", 0, 0
+		case "task_start":
+			if h.Loop {
+				h.Item++
+			} else {
+				h.Task, h.Done = e.Task, false
+			}
+		case "task_end":
+			if h.Loop {
+				if loopRank[e.Status] > loopRank[h.loopStatus] {
+					h.loopStatus = e.Status
+				}
+				break
+			}
+			h.Task, h.Done = "", true
+			h.count(e.Status)
+			p.finished++
 		}
 		p.hosts[e.Host] = h
 	}
 	if e.Type == "end" {
 		p.status = e.Status
 		for host, h := range p.hosts {
-			h.Task, h.Done = "", true
+			h.Task, h.Done, h.Loop, h.Items, h.Item = "", true, false, 0, 0
 			p.hosts[host] = h
 		}
 	}
@@ -155,6 +189,15 @@ func (p *runProgress) OnPlayStart(name string, _, _ int) {
 }
 func (p *runProgress) OnPlayPlan(play string, hosts []string, tasks int) {
 	p.emit(progressEvent{Type: "plan", Play: play, Hosts: hosts, Planned: tasks})
+}
+func (p *runProgress) OnPlanAdjust(task, host string, delta int) {
+	p.emit(progressEvent{Type: "plan", Task: task, Hosts: []string{host}, Planned: delta})
+}
+func (p *runProgress) OnLoopStart(task, host string, items int) {
+	p.emit(progressEvent{Type: "loop_start", Task: task, Host: host, Items: items})
+}
+func (p *runProgress) OnLoopEnd(task, host string) {
+	p.emit(progressEvent{Type: "loop_end", Task: task, Host: host})
 }
 func (p *runProgress) OnPlayEnd(_ string, _ int, _ bool, duration time.Duration) {
 	p.emit(progressEvent{Type: "play_end", DurationMS: duration.Milliseconds()})

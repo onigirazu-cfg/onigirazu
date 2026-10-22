@@ -702,8 +702,9 @@ async function streamProgress(id){
   const controller=new AbortController();progressController=controller;
   const {signal}=controller;
   let after=0, snapshotSeq=0, backoff=1000, hosts={}, finished=0, planned=0;
+  const current=h=>h.done?'done':h.loop?`${h.task} · item ${h.item||0} / ${h.items||0}`:h.task;
   const draw=()=>{
-    $('#progress-hosts').innerHTML=`<div class="table-scroll"><table class="progress-table"><colgroup><col class="progress-host"><col><col class="progress-count"><col class="progress-number" span="4"></colgroup><thead><tr>${['Host','Current task','Progress','OK','Changed','Failed','Skipped'].map(h=>`<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${Object.entries(hosts).map(([host,h])=>`<tr><td title="${esc(host)}">${esc(host)}</td><td title="${esc(h.done?'done':h.task)}">${esc(h.done?'done':h.task)}</td><td>${esc(h.tasks_finished)}${h.planned?' / '+esc(h.planned):''}</td><td>${esc(h.ok)}</td><td>${esc(h.changed)}</td><td>${esc(h.failed)}</td><td>${esc(h.skipped)}</td></tr>`).join('')}</tbody></table></div>`;
+    $('#progress-hosts').innerHTML=`<div class="table-scroll"><table class="progress-table"><colgroup><col class="progress-host"><col><col class="progress-count"><col class="progress-number" span="4"></colgroup><thead><tr>${['Host','Current task','Progress','OK','Changed','Failed','Skipped'].map(h=>`<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${Object.entries(hosts).map(([host,h])=>`<tr><td title="${esc(host)}">${esc(host)}</td><td title="${esc(current(h))}">${esc(current(h))}</td><td>${esc(h.tasks_finished)}${h.planned?' / '+esc(h.planned):''}</td><td>${esc(h.ok)}</td><td>${esc(h.changed)}</td><td>${esc(h.failed)}</td><td>${esc(h.skipped)}</td></tr>`).join('')}</tbody></table></div>`;
     $('#progress-state').textContent=planned>0&&finished<=planned?`${finished} of ~${planned} tasks finished`:`${finished} tasks finished`;
   };
   const receive=e=>{
@@ -722,10 +723,14 @@ async function streamProgress(id){
     }
     if(e.seq>snapshotSeq&&e.host){
       const h=hosts[e.host]??={task:'',done:false,ok:0,changed:0,failed:0,skipped:0,tasks_finished:0,planned:0};
-      if(e.type==='task_start'){h.task=e.task;h.done=false}
-      if(e.type==='task_end'){h.task='';h.done=true;h.tasks_finished++;finished++;h[e.status==='ignored'?'ok':e.status]++}
+      // a loop is one task with the result of its worst item (loop_end)
+      if(e.type==='loop_start'){Object.assign(h,{task:e.task,done:false,loop:true,items:e.items||0,item:0})}
+      else if(e.type==='loop_end'){Object.assign(h,{task:'',done:true,loop:false,items:0,item:0});h.tasks_finished++;finished++;h[e.status==='ignored'?'ok':e.status]++}
+      else if(e.type==='task_start'){if(h.loop)h.item=(h.item||0)+1;else{h.task=e.task;h.done=false}}
+      else if(e.type==='task_end'&&!h.loop){h.task='';h.done=true;h.tasks_finished++;finished++;h[e.status==='ignored'?'ok':e.status]++}
       draw();
     }
+    if(e.type==='plan'&&e.task)return false;
     const row=document.createElement('div');row.className='item text';
     row.textContent=[new Date(e.at).toLocaleTimeString(),e.type,e.play,e.type==='plan'?(e.hosts||[]).length+' hosts':'',e.host,e.task,e.status,e.duration_ms?e.duration_ms+'ms':''].filter(Boolean).join(' · ');
     const log=$('#progress-log');log.prepend(row);while(log.children.length>300)log.lastElementChild.remove();
