@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestServeUnitReference(t *testing.T) {
@@ -18,6 +19,7 @@ func TestServeUnitReference(t *testing.T) {
 		EnvironmentFile: "/etc/onigirazu/serve.env",
 		Env:             []string{"PATH=/srv/patchctl/red-patching/.venv/bin:/usr/local/bin:/usr/bin:/bin"},
 		ReadWritePaths:  []string{"/var/lib/onigirazu", "/srv/patchctl", "/var/lib/onigirazu"},
+		ShutdownTimeout: 10 * time.Minute,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -38,6 +40,8 @@ Restart=on-failure
 RestartSec=5s
 NoNewPrivileges=yes
 ProtectSystem=strict
+KillMode=mixed
+TimeoutStopSec=660
 ReadWritePaths=/var/lib/onigirazu /srv/patchctl
 PrivateTmp=yes
 
