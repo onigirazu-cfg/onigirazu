@@ -581,8 +581,10 @@ A scoped caller must supply a nonempty subset of its own jobs. Jobs must exist.
 Every job must be one the caller can run (its operators list admits the caller); without
 `jobs` the token covers every job the caller can run. The token then passes the operators
 list of those jobs: it gets its creator's access to exactly them, recorded as `delegated`
-in the store and in `GET /api/tokens`. The access is fixed when the token is made: a
+in the store and in `GET /api/tokens`. The pass is fixed when the token is made: a
 creator who later leaves the group keeps the token working until it expires or is revoked.
+Only jobs that already had an operators list are recorded; an operators list added to a job
+later applies to existing tokens too, so tightening a job never leaves old tokens past it.
 The Access form lists only the jobs the caller can run.
 A new token never expires later than the caller's own token; a later expiry is cut to it.
 Groups cannot be set through the API. Names are unique across config and store.

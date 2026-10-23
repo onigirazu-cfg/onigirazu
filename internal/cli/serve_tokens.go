@@ -199,6 +199,7 @@ func (id serveIdentity) creator() string {
 // delegatedJobs: a new token gets its creator's access to the jobs it is
 // for (all jobs when jobs is empty) and to nothing the creator cannot run;
 // the jobs with an operators list are recorded, the others need no pass
+// (an operators list added later then binds old tokens too)
 func (s *server) delegatedJobs(id serveIdentity, jobs []string) ([]string, error) {
 	var out []string
 	for i := range s.cfg.Jobs {
