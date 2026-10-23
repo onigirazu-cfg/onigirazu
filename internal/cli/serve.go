@@ -75,11 +75,10 @@ type ServeLink struct {
 	Href  string `yaml:"href" json:"href"`
 }
 
-// ServeAuth: a bearer token is an operator (the plain one is the user
-// "token", named ones carry a name and groups a job's operators list can
-// match); a reverse proxy's user header is a viewer, an operator when one of
-// its groups is in operators. Without any of them everything is open — put a
-// proxy in front.
+// ServeAuth: bearer tokens (auth.token is read as the token named "token")
+// are operators or viewers, optionally scoped to jobs; a reverse proxy's user
+// header is a viewer, an operator when one of its groups is in operators.
+// Without any of them everything is open — put a proxy in front.
 type ServeAuth struct {
 	Token        string       `yaml:"token"` // ${VAR} expanded
 	Tokens       []ServeToken `yaml:"tokens"`
@@ -143,9 +142,15 @@ func splitGroups(v string) []string {
 
 // ServeToken is a named bearer identity
 type ServeToken struct {
-	Name   string   `yaml:"name"`
-	Token  string   `yaml:"token"`
-	Groups []string `yaml:"groups"`
+	Name     string   `yaml:"name"`
+	Token    string   `yaml:"token"`
+	Role     string   `yaml:"role"`
+	Jobs     []string `yaml:"jobs,omitempty,flow"`
+	Groups   []string `yaml:"groups,omitempty,flow"`
+	Expires  string   `yaml:"expires,omitempty"`
+	expires  time.Time
+	digest   [sha256.Size]byte
+	prepared bool
 }
 
 // ServeMetric is an optional push of every job's metrics
@@ -442,7 +447,7 @@ func newServeCmd() *cobra.Command {
 		Long: `Serve a web page and a REST API over the fleet: jobs from serve.yml run on
 their schedule or on demand (drift checks, applies, verify, compliance
 profiles), their results are kept, the audit store's run history is shown per
-run and per host. Access: a bearer token (operator) or the identity headers of
+run and per host. Access: a bearer token (operator or viewer) or the identity headers of
 a reverse proxy such as Authentik's outpost (viewer; operator by group).`,
 		Example: `  onigirazu serve --config-file serve.yml
   curl -H 'Authorization: Bearer ...' localhost:8086/api/jobs
@@ -479,7 +484,7 @@ a reverse proxy such as Authentik's outpost (viewer; operator by group).`,
 	install.Flags().StringArrayVar(&o.env, "env", nil, "Service environment KEY=VALUE (repeatable)")
 	install.Flags().StringArrayVar(&o.readWritePaths, "read-write-path", nil, "Extra writable directory (repeatable)")
 	install.Flags().BoolVar(&o.print, "print", false, "Print the validated unit without installing it")
-	cmd.AddCommand(install)
+	cmd.AddCommand(install, newServeTokenCmd())
 	return cmd
 }
 
@@ -527,13 +532,23 @@ func loadServeConfig(path string) (*ServeConfig, error) {
 		cfg.DataDir = filepath.Join(home, ".onigirazu", "serve")
 	}
 	cfg.Auth.Token = os.ExpandEnv(cfg.Auth.Token)
+	for i := range cfg.Auth.Tokens {
+		cfg.Auth.Tokens[i].Token = os.ExpandEnv(cfg.Auth.Tokens[i].Token)
+	}
+	if cfg.Auth.Token != "" {
+		for _, t := range cfg.Auth.Tokens {
+			if strings.EqualFold(t.Name, "token") {
+				return nil, errors.New(`auth.token and auth.tokens both define the name "token"`)
+			}
+		}
+		cfg.Auth.Tokens = cfg.Auth.allTokens()
+	}
 	if _, err := parseTrustedProxies(cfg.Auth.TrustedProxies); err != nil {
 		return nil, err
 	}
 	tokenNames := map[string]bool{}
 	for i := range cfg.Auth.Tokens {
 		t := &cfg.Auth.Tokens[i]
-		t.Token = os.ExpandEnv(t.Token)
 		if strings.TrimSpace(t.Name) == "" || t.Token == "" {
 			return nil, fmt.Errorf("auth.tokens: entry %d needs a name and a value", i+1)
 		}
@@ -542,6 +557,14 @@ func loadServeConfig(path string) (*ServeConfig, error) {
 			return nil, fmt.Errorf("auth.tokens: duplicate name %q", t.Name)
 		}
 		tokenNames[name] = true
+		if err := t.prepare(); err != nil {
+			return nil, err
+		}
+		for _, name := range t.Jobs {
+			if !slices.ContainsFunc(cfg.Jobs, func(j ServeJob) bool { return j.Name == name }) {
+				return nil, fmt.Errorf("auth.tokens: %q: unknown job %q", t.Name, name)
+			}
+		}
 	}
 	var warnings []string
 	cfg.Notify, warnings, err = validateNotifyTargets(cfg.Notify, "(server-wide)")
@@ -2002,32 +2025,46 @@ type serveIdentity struct {
 	User     string
 	Groups   []string
 	Operator bool
+	Kind     string
+	Role     string
+	Jobs     []string
+	Expires  *time.Time
 }
 
 var errServeAuth = errors.New("unauthorized")
 
-// identify resolves who is calling: the bearer token (operator), the
-// proxy's headers (viewer, operator by group), or nobody when no auth is
-// configured (everything allowed)
+// identify resolves who is calling: a bearer token that has not expired
+// (its role and jobs scope), the proxy's headers (viewer, operator by group),
+// or nobody when no auth is configured (everything allowed)
 func (s *server) identify(r *http.Request) (serveIdentity, error) {
 	a := s.cfg.Auth
-	if a.Token == "" && len(a.Tokens) == 0 && a.UserHeader == "" {
-		return serveIdentity{User: "anonymous", Operator: true}, nil
+	tokens := a.allTokens()
+	if len(tokens) == 0 && a.UserHeader == "" {
+		return serveIdentity{User: "anonymous", Operator: true, Kind: "none", Role: "operator"}, nil
 	}
-	if a.Token != "" || len(a.Tokens) > 0 {
-		got := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-		if got != "" && subtle.ConstantTimeCompare([]byte(got), []byte(a.Token)) == 1 {
-			return serveIdentity{User: "token", Operator: true}, nil
-		}
-		for _, t := range a.Tokens {
-			if got != "" && subtle.ConstantTimeCompare([]byte(got), []byte(t.Token)) == 1 {
-				return serveIdentity{User: t.Name, Groups: t.Groups, Operator: true}, nil
+	got := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+	digest := sha256.Sum256([]byte(got))
+	for _, t := range tokens {
+		// Directly constructed configs have not been prepared by the loader.
+		if !t.prepared {
+			if err := t.prepare(); err != nil {
+				continue
 			}
+		}
+		if !t.expires.IsZero() && !s.now().Before(t.expires) {
+			continue
+		}
+		if got != "" && subtle.ConstantTimeCompare(digest[:], t.digest[:]) == 1 {
+			id := serveIdentity{User: t.Name, Groups: t.Groups, Operator: t.Role == "operator", Kind: "token", Role: t.Role, Jobs: t.Jobs}
+			if !t.expires.IsZero() {
+				id.Expires = &t.expires
+			}
+			return id, nil
 		}
 	}
 	if a.UserHeader != "" && a.fromTrustedProxy(r) {
 		if user := r.Header.Get(a.UserHeader); user != "" {
-			id := serveIdentity{User: user}
+			id := serveIdentity{User: user, Kind: "proxy", Role: "viewer"}
 			if a.GroupsHeader != "" {
 				// oauth2-proxy sends one header line per group: read them all
 				id.Groups = splitGroups(strings.Join(r.Header.Values(a.GroupsHeader), ","))
@@ -2035,6 +2072,7 @@ func (s *server) identify(r *http.Request) (serveIdentity, error) {
 					for _, op := range a.Operators {
 						if strings.EqualFold(g, op) {
 							id.Operator = true
+							id.Role = "operator"
 						}
 					}
 				}
@@ -2048,6 +2086,12 @@ func (s *server) identify(r *http.Request) (serveIdentity, error) {
 // matches: the user name or one of the groups is in names
 func (id serveIdentity) matches(names []string) bool {
 	for _, name := range names {
+		if strings.HasPrefix(strings.ToLower(name), "token:") {
+			if id.Kind == "token" && strings.EqualFold("token:"+id.User, name) {
+				return true
+			}
+			continue
+		}
 		if strings.EqualFold(id.User, name) {
 			return true
 		}
@@ -2062,7 +2106,7 @@ func (id serveIdentity) matches(names []string) bool {
 
 // allowed: an operator, and one the job's operators list admits
 func (s *server) allowed(id serveIdentity, j *ServeJob) bool {
-	return id.Operator && (len(j.Operators) == 0 || id.matches(j.Operators))
+	return id.Operator && (len(id.Jobs) == 0 || slices.Contains(id.Jobs, j.Name)) && (len(j.Operators) == 0 || id.matches(j.Operators))
 }
 
 // writePause answers a pause/resume: the state, with 500 and the error
@@ -2112,6 +2156,20 @@ func (s *server) mux() http.Handler {
 			h(w, r, id)
 		}
 	}
+	// serverWide: pause, resume, inventory refresh; a token scoped to jobs is
+	// not an operator of the whole server
+	serverWide := func(h func(http.ResponseWriter, *http.Request, serveIdentity)) http.HandlerFunc {
+		return auth(true, func(w http.ResponseWriter, r *http.Request, id serveIdentity) {
+			if len(id.Jobs) > 0 {
+				a := s.requestAction(r, id)
+				a.Reason = "operators only"
+				s.logAction(a)
+				writeJSON(w, http.StatusForbidden, map[string]string{"error": "operators only"})
+				return
+			}
+			h(w, r, id)
+		})
+	}
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) { _, _ = io.WriteString(w, "ok\n") })
 	mux.HandleFunc("/metrics", s.metricsHandler)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -2126,6 +2184,13 @@ func (s *server) mux() http.Handler {
 		s.mu.Lock()
 		running, queued := s.activity()
 		status := map[string]interface{}{"user": id.User, "operator": id.Operator, "title": s.cfg.Title, "paused": s.pause.Paused, "running": running, "queued": queued, "scheduled": s.scheduledCount(), "concurrency": s.cfg.Concurrency, "storage_error": s.storeErr, "sign_out_url": s.cfg.Auth.SignOutURL}
+		status["auth"], status["role"] = id.Kind, id.Role
+		if len(id.Jobs) > 0 {
+			status["jobs"] = id.Jobs
+		}
+		if id.Expires != nil {
+			status["expires"] = id.Expires
+		}
 		if len(s.cfg.UI.Links) > 0 {
 			status["links"] = s.cfg.UI.Links
 		}
@@ -2141,7 +2206,7 @@ func (s *server) mux() http.Handler {
 			p, _ := s.paused()
 			writeJSON(w, http.StatusOK, p)
 		case http.MethodPost:
-			auth(true, func(w http.ResponseWriter, r *http.Request, _ serveIdentity) {
+			serverWide(func(w http.ResponseWriter, r *http.Request, _ serveIdentity) {
 				var body struct {
 					Reason string `json:"reason"`
 				}
@@ -2165,7 +2230,7 @@ func (s *server) mux() http.Handler {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 		}
 	}))
-	mux.HandleFunc("/api/resume", auth(true, func(w http.ResponseWriter, r *http.Request, id serveIdentity) {
+	mux.HandleFunc("/api/resume", serverWide(func(w http.ResponseWriter, r *http.Request, id serveIdentity) {
 		if r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
@@ -2318,7 +2383,7 @@ func (s *server) mux() http.Handler {
 	mux.HandleFunc("GET /api/inventory", auth(false, func(w http.ResponseWriter, _ *http.Request, id serveIdentity) {
 		writeJSON(w, http.StatusOK, s.inventoryView(id.Operator))
 	}))
-	mux.HandleFunc("POST /api/inventory/refresh", auth(true, func(w http.ResponseWriter, r *http.Request, id serveIdentity) {
+	mux.HandleFunc("POST /api/inventory/refresh", serverWide(func(w http.ResponseWriter, r *http.Request, id serveIdentity) {
 		s.inventoryMu.Lock()
 		s.inventorySnapshots = nil
 		s.inventoryMu.Unlock()
@@ -2963,6 +3028,17 @@ func (s *server) metricsHandler(w http.ResponseWriter, _ *http.Request) {
 	defer s.mu.Unlock()
 	w.Header().Set("Content-Type", "text/plain; version=0.0.4")
 	var b strings.Builder
+	b.WriteString("# HELP onigirazu_serve_token_expiry_timestamp_seconds Token expiry as a Unix timestamp.\n# TYPE onigirazu_serve_token_expiry_timestamp_seconds gauge\n")
+	for _, t := range s.cfg.Auth.allTokens() {
+		if !t.prepared {
+			if err := t.prepare(); err != nil {
+				continue
+			}
+		}
+		if !t.expires.IsZero() {
+			promLine(&b, "onigirazu_serve_token_expiry_timestamp_seconds", withLabels(map[string]string{"name": t.Name}, s.cfg.Metrics.Labels), float64(t.expires.Unix()))
+		}
+	}
 	b.WriteString("# TYPE onigirazu_serve_job_last_status gauge\n# TYPE onigirazu_serve_job_last_run_timestamp_seconds gauge\n# TYPE onigirazu_serve_host_status gauge\n")
 	b.WriteString("# TYPE onigirazu_serve_job_pending gauge\n# TYPE onigirazu_serve_paused gauge\n")
 	paused := float64(0)
@@ -3051,7 +3127,7 @@ func runServe(ctx context.Context, cfg *ServeConfig, out io.Writer) error {
 	errc := make(chan error, 1)
 	go func() { errc <- srv.ListenAndServe() }()
 	open := ""
-	if cfg.Auth.Token == "" && len(cfg.Auth.Tokens) == 0 && cfg.Auth.UserHeader == "" {
+	if len(cfg.Auth.allTokens()) == 0 && cfg.Auth.UserHeader == "" {
 		open = " — no auth configured, everyone is an operator"
 	} else if cfg.Auth.UserHeader != "" && len(cfg.Auth.TrustedProxies) == 0 {
 		open = " — proxy headers are trusted from any address: set auth.trusted_proxies"
