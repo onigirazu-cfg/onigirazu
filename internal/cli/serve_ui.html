@@ -51,13 +51,14 @@ svg.icon{width:16px;height:16px;flex-shrink:0;fill:none;stroke:currentColor;stro
 .sidebar-foot{margin-top:auto;padding:16px;color:var(--muted);font-size:12px}
 .banner{margin-left:240px;padding:8px 28px;border-bottom:1px solid var(--line);background:var(--warn-bg);color:var(--warn);font-size:13px}
 .banner.error-banner{background:var(--bad-bg);color:var(--bad)}
-main{margin-left:240px;min-width:0;padding:28px}
+main{margin-left:240px;min-width:0;padding:28px} main.page-host{padding:0} .page-frame{display:block;width:100%;height:calc(100vh - 56px);border:0}
 .page-header{display:flex;gap:16px;align-items:center;justify-content:space-between;margin-bottom:26px}
 .page-header h1{font-size:26px;line-height:1.2;letter-spacing:-.7px;margin:0 0 6px;font-weight:650}
 .page-header p{margin:0;color:var(--muted)}
 .page-actions,.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-.menu-button{display:none}
+.menu-button{display:inline-flex;flex-shrink:0}
 .drawer-scrim{display:none}
+@media(min-width:601px){.nav-collapsed .sidebar{display:none} .nav-collapsed main,.nav-collapsed .banner{margin-left:0}}
 .muted{color:var(--muted)}
 small{font-size:12px}
 h2{font-size:18px;letter-spacing:-.3px}
@@ -1001,18 +1002,28 @@ function syncSidebar(){
   const sidebar=$('.sidebar');
   sidebar.inert=mobileNavigation.matches&&!document.body.classList.contains('drawer-open');
 }
+// The menu button opens the drawer on phones and hides or shows the sidebar on wider screens (remembered).
+let navCollapsed=false;try{navCollapsed=localStorage.getItem('serveNav')==='collapsed'}catch{}
+function syncMenuButton(){
+  const shown=mobileNavigation.matches?document.body.classList.contains('drawer-open'):!navCollapsed;
+  const label=mobileNavigation.matches?(shown?'Close navigation':'Open navigation'):(shown?'Hide navigation':'Show navigation');
+  $('#menu').setAttribute('aria-expanded',String(shown));$('#menu').setAttribute('aria-label',label);$('#menu').title=label;
+}
+function collapseNav(collapsed){navCollapsed=collapsed;document.body.classList.toggle('nav-collapsed',collapsed);
+  try{localStorage.setItem('serveNav',collapsed?'collapsed':'open')}catch{}syncMenuButton()}
 function drawer(open){
   const wasOpen=document.body.classList.contains('drawer-open');
   document.body.classList.toggle('drawer-open',open);
-  $('#menu').setAttribute('aria-expanded',String(open));
-  $('#menu').setAttribute('aria-label',open?'Close navigation':'Open navigation');
+  syncMenuButton();
   syncSidebar();
   if(open&&mobileNavigation.matches)$('.sidebar nav button')?.focus();
   if(wasOpen&&!open&&mobileNavigation.matches)$('#menu').focus();
 }
 mobileNavigation.addEventListener?.('change',()=>{drawer(false);syncSidebar()});
+document.body.classList.toggle('nav-collapsed',navCollapsed);
 syncSidebar();
-$('#menu').onclick=()=>drawer(!document.body.classList.contains('drawer-open')) ;
+syncMenuButton();
+$('#menu').onclick=()=>mobileNavigation.matches?drawer(!document.body.classList.contains('drawer-open')):collapseNav(!navCollapsed) ;
   $('#drawer-scrim').onclick=()=>drawer(false);
 $('#close-sheet').onclick=closeSheet ;
   $('#run-sheet').addEventListener('click',e=>{if(e.target===$('#run-sheet')){const r=e.target.getBoundingClientRect();
@@ -1022,8 +1033,12 @@ $('#close-sheet').onclick=closeSheet ;
 $('#set-token').onclick=()=>{const token=prompt('Bearer token (empty to clear)',readToken());
   if(token===null)return;
   try{if(token)sessionStorage.setItem('serveToken',token);else sessionStorage.removeItem('serveToken')}catch{alert('This browser cannot save the token in session storage.');return}location.reload()};
-function setNav(v){document.querySelectorAll('nav [data-v]').forEach(b=>{const active=b.dataset.v===v;b.classList.toggle('on',active);
+// Pages under /pages/ (ui.pages_dir) open inside the UI so the sidebar stays; anything else is a plain link.
+function pagePath(href){return /^\/pages\/([\w.-]+\/)*([\w.-]+)?(\?[^#]*)?(#.*)?$/.test(href)&&!href.split(/[?#]/)[0].split('/').includes('..')}
+function embedSrc(path){const u=new URL(path,location.origin);u.searchParams.set('embed','1');return u.pathname+u.search+u.hash}
+function setNav(v){document.querySelectorAll('nav [data-v],nav a[data-page]').forEach(b=>{const active=(b.dataset.v||'page:'+b.dataset.page)===v;b.classList.toggle('on',active);
   if(active)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')});
+  main.classList.toggle('page-host',v.startsWith('page:'));
   drawer(false)}
 let listPage=0;
 function applySearch(reset=false){
@@ -1079,6 +1094,9 @@ function route(){
   try{const parts=location.hash.slice(1).split('/');type=parts.shift();id=decodeURIComponent(parts.join('/'))}
   catch(e){showError(e);return}
   const kind=type.split('?')[0];
+  if(type==='page'&&pagePath(id)){view='page';setNav('page:'+id);
+    const link=[...document.querySelectorAll('nav a[data-page]')].find(a=>a.dataset.page===id);
+    main.innerHTML=`<iframe class="page-frame" title="${esc(link?.title||id)}" src="${esc(embedSrc(id))}"></iframe>`;return}
   if(['runs','audit','inventory','hosts'].includes(kind)){view=kind;
   setNav(kind);views[kind]().catch(showError);return}
   if(type==='job'&&id)results(id).catch(showError);else if(type==='run'&&id)run(id).catch(showError);else if(type==='host'&&id)host(id).catch(showError);else if(type==='host-audit'&&id)runs(id).catch(showError);else show('jobs');
@@ -1090,6 +1108,7 @@ api('/api/me').then(m=>{me=m;
     const a=document.createElement('a'),label=document.createElement('span');
     a.href=href;a.title=label.textContent=link.title;a.insertAdjacentHTML('afterbegin',icon('page'));a.append(label);
     if(/^https?:\/\//i.test(href)){a.target='_blank';a.rel='noopener'}
+    else if(pagePath(href)){a.href='#page/'+encodeURIComponent(href);a.dataset.page=href}
     $('#main-navigation').append(a);
   }
   activityView(m);

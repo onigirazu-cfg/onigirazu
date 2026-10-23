@@ -26,6 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `onigirazu serve`: the menu button also works on wide screens and hides or shows the sidebar; the choice is remembered in the browser
+- `onigirazu serve`: sidebar links to pages under `/pages/` open inside the UI with the sidebar kept, loaded with `?embed=1`, instead of leaving the UI
 - Audit and health-check HTML reports escape record values (playbook path, user, status, host name and address, check type and message), so a value with HTML in it can no longer inject script into the report; statuses outside the known set get a fixed CSS class
 - Templates: an inline if whose chosen branch is `none`/`None` or a variable holding None (`{{ x | default({}) if c else none }}`) renders as None instead of failing with "function x not defined"; an undefined chosen branch is still an error
 - `onigirazu serve`: a restart no longer requests every scheduled job at once; the next run is kept in `data_dir/schedule.json`, interval slots retain their phase, and missed slots follow the configured policy
