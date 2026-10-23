@@ -519,6 +519,44 @@ auth:
   sign_out_url: https://auth.example.com/logout
 ```
 
+### Tokens
+
+Generate and save a token with `onigirazu serve token new -f serve.yml --name ci`.
+The value is printed once. Keep it in your secret manager. Without `--name` the name is
+made from the role, the job when there is one, and four random hex digits
+(`viewer-drift-site-3f2a`); the same applies to an empty name in the API and the Access tab.
+`serve token list -f serve.yml` lists tokens. `serve token revoke ci -f serve.yml`
+revokes a generated token. Config tokens must be removed from `serve.yml`.
+Use `--print` to print a value and hashed YAML entry without reading or writing files.
+
+Generated tokens live in `data_dir/tokens.json`, mode 0600. The file holds hashes,
+never values. Writers use `tokens.lock` and replace the file atomically. A running
+server picks up changes within seconds. Last use is kept in `token-usage.json`.
+The server writes usage at most once a minute and when it stops.
+Once `tokens.json` exists, authentication stays on, even after every token in it expired
+or was revoked: sign in again with a token from `serve token new` on the server, or delete
+the file to open the server. A `tokens.json` that cannot be read stops `serve` from starting.
+
+The Access tab lists config and generated tokens. Operators can create and revoke
+tokens there. The value appears once with a Copy button. Creating the first
+token enables authentication. The tab asks for confirmation because callers without
+a token lose access.
+
+`GET /api/tokens` lists metadata for authenticated callers, without values or hashes.
+`POST /api/tokens` accepts `name`, `role`, `jobs` and `expires` and returns the value once.
+Only operators can create tokens. A token cannot grant a higher role than its caller.
+A scoped caller must supply a nonempty subset of its own jobs. Jobs must exist.
+A new token never expires later than the caller's own token; a later expiry is cut to it.
+Groups cannot be set through the API. Names are unique across config and store.
+When authentication is off, creation requires `enable_auth: true`.
+`DELETE /api/tokens/{name}` revokes a generated token immediately. An operator may
+revoke any generated token when unscoped, or a token they created when scoped.
+Creation, revocation and refused attempts are audited.
+
+Generated tokens match a job's operators list by name only as `token:<name>`; groups given with `serve token new --groups` match as usual.
+A bare name still matches config tokens for compatibility. CLI generation accepts
+`--groups`; the API and Access form do not accept groups.
+
 Named bearer tokens in `auth.tokens` have a `name`, a `token` value (expands `${VAR}`),
 and optional `groups`, `role`, `jobs` and `expires`. Names must be unique and values
 must be nonempty. `role` is `operator` (default) or `viewer`. `jobs: [drift-site]` limits
@@ -531,7 +569,7 @@ forms use a constant-time digest comparison. Tokens are checked before proxy hea
 Generate a value and a YAML entry with its hash:
 
 ```sh
-onigirazu serve token new --name ci --jobs drift-site --groups tier2 --expires 90d
+onigirazu serve token new --print --name ci --jobs drift-site --groups tier2 --expires 90d
 ```
 
 The command does not read `serve.yml`. Store the printed value in your secret manager

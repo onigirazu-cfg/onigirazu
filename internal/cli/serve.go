@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	_ "embed"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -680,6 +681,7 @@ func (cfg *ServeConfig) shutdownTimeout() time.Duration {
 
 // server holds the jobs, their results and the audit store
 type server struct {
+	tokens             serveTokenState
 	inventoryMu        sync.Mutex
 	inventorySnapshots map[string]*serveInventorySnapshot
 	// inventoryLoad replaces the loader in tests.
@@ -781,6 +783,22 @@ func newServer(cfg *ServeConfig, out io.Writer) (*server, error) {
 			return nil, fmt.Errorf("ui.pages_dir: %w", err)
 		}
 	}
+	s.tokens.usage = map[string]time.Time{}
+	s.tokens.Lock()
+	// a tokens.json that cannot be read must not start the server open
+	if err := s.reloadServeTokens(true); err != nil {
+		s.tokens.Unlock()
+		return nil, fmt.Errorf("%s: %w", filepath.Join(cfg.DataDir, "tokens.json"), err)
+	}
+	if data, err := os.ReadFile(filepath.Join(cfg.DataDir, "token-usage.json")); err == nil {
+		if err := json.Unmarshal(data, &s.tokens.usage); err != nil {
+			fmt.Fprintf(s.out, "serve: token usage: %v\n", err)
+		}
+	}
+	if s.tokens.usage == nil {
+		s.tokens.usage = map[string]time.Time{}
+	}
+	s.tokens.Unlock()
 	s.loadPause()
 	s.loadResults()
 	s.expirePending(time.Now())
@@ -2022,6 +2040,7 @@ func (s *server) pushMetrics(text string) {
 // ---- HTTP
 
 type serveIdentity struct {
+	Source   string
 	User     string
 	Groups   []string
 	Operator bool
@@ -2037,9 +2056,13 @@ var errServeAuth = errors.New("unauthorized")
 // (its role and jobs scope), the proxy's headers (viewer, operator by group),
 // or nobody when no auth is configured (everything allowed)
 func (s *server) identify(r *http.Request) (serveIdentity, error) {
+	var usage map[string]time.Time
+	s.tokens.Lock()
+	defer func() { s.tokens.Unlock(); s.saveTokenUsage(usage) }()
+	_ = s.reloadServeTokens(false)
 	a := s.cfg.Auth
 	tokens := a.allTokens()
-	if len(tokens) == 0 && a.UserHeader == "" {
+	if !s.authEnabledLocked() {
 		return serveIdentity{User: "anonymous", Operator: true, Kind: "none", Role: "operator"}, nil
 	}
 	got := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
@@ -2055,11 +2078,22 @@ func (s *server) identify(r *http.Request) (serveIdentity, error) {
 			continue
 		}
 		if got != "" && subtle.ConstantTimeCompare(digest[:], t.digest[:]) == 1 {
-			id := serveIdentity{User: t.Name, Groups: t.Groups, Operator: t.Role == "operator", Kind: "token", Role: t.Role, Jobs: t.Jobs}
+			id := serveIdentity{User: t.Name, Groups: t.Groups, Operator: t.Role == "operator", Kind: "token", Source: "config", Role: t.Role, Jobs: t.Jobs}
 			if !t.expires.IsZero() {
 				id.Expires = &t.expires
 			}
+			usage = s.useToken(t.Name)
 			return id, nil
+		}
+	}
+	for _, t := range s.tokens.tokens {
+		if t.ExpiresAt != nil && !s.now().Before(*t.ExpiresAt) {
+			continue
+		}
+		want, err := hex.DecodeString(t.SHA256)
+		if err == nil && got != "" && subtle.ConstantTimeCompare(digest[:], want) == 1 {
+			usage = s.useToken(t.Name)
+			return serveIdentity{User: t.Name, Groups: t.Groups, Operator: t.Role == "operator", Kind: "token", Source: "store", Role: t.Role, Jobs: t.Jobs, Expires: t.ExpiresAt}, nil
 		}
 	}
 	if a.UserHeader != "" && a.fromTrustedProxy(r) {
@@ -2092,7 +2126,7 @@ func (id serveIdentity) matches(names []string) bool {
 			}
 			continue
 		}
-		if strings.EqualFold(id.User, name) {
+		if !(id.Kind == "token" && id.Source == "store") && strings.EqualFold(id.User, name) {
 			return true
 		}
 		for _, group := range id.Groups {
@@ -2141,6 +2175,15 @@ func (s *server) mux() http.Handler {
 		return func(w http.ResponseWriter, r *http.Request) {
 			id, err := s.identify(r)
 			if err != nil {
+				if (r.URL.Path == "/api/tokens" && r.Method == http.MethodPost) || (strings.HasPrefix(r.URL.Path, "/api/tokens/") && r.Method == http.MethodDelete) {
+					a := s.requestAction(r, id)
+					a.Action = "token_create"
+					if r.Method == http.MethodDelete {
+						a.Action = "token_revoke"
+					}
+					a.Reason = "unauthorized"
+					s.logAction(a)
+				}
 				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 				return
 			}
@@ -2170,6 +2213,8 @@ func (s *server) mux() http.Handler {
 			h(w, r, id)
 		})
 	}
+	mux.HandleFunc("/api/tokens", auth(false, s.tokensHandler))
+	mux.HandleFunc("/api/tokens/", auth(false, s.tokensHandler))
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) { _, _ = io.WriteString(w, "ok\n") })
 	mux.HandleFunc("/metrics", s.metricsHandler)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -3127,7 +3172,7 @@ func runServe(ctx context.Context, cfg *ServeConfig, out io.Writer) error {
 	errc := make(chan error, 1)
 	go func() { errc <- srv.ListenAndServe() }()
 	open := ""
-	if len(cfg.Auth.allTokens()) == 0 && cfg.Auth.UserHeader == "" {
+	if !s.authEnabled() {
 		open = " — no auth configured, everyone is an operator"
 	} else if cfg.Auth.UserHeader != "" && len(cfg.Auth.TrustedProxies) == 0 {
 		open = " — proxy headers are trusted from any address: set auth.trusted_proxies"
@@ -3150,6 +3195,10 @@ func runServe(ctx context.Context, cfg *ServeConfig, out io.Writer) error {
 	shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	err = srv.Shutdown(shutdown)
+	s.tokens.Lock()
+	usage := s.tokenUsageLocked()
+	s.tokens.Unlock()
+	s.saveTokenUsage(usage)
 	notified := make(chan struct{}) // the last runs' messages go out too
 	go func() { s.notifyWait.Wait(); close(notified) }()
 	select {

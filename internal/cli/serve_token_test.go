@@ -219,7 +219,7 @@ func TestServeTokenGenerator(t *testing.T) {
 	cmd := newServeCmd()
 	var out bytes.Buffer
 	cmd.SetOut(&out)
-	cmd.SetArgs([]string{"token", "new", "--name", "ci", "--expires", "never"})
+	cmd.SetArgs([]string{"token", "new", "--print", "--name", "ci", "--expires", "never"})
 	if err := cmd.Execute(); err != nil {
 		t.Fatal(err)
 	}
@@ -303,5 +303,22 @@ func TestServeTokenMetricEscaping(t *testing.T) {
 	w := tokenHTTP(s, "GET", "/metrics", "")
 	if !strings.Contains(w.Body.String(), `onigirazu_serve_token_expiry_timestamp_seconds{name="a\"b\\c\nd"}`) {
 		t.Fatal(w.Body.String())
+	}
+}
+
+func TestServeTokenAutoName(t *testing.T) {
+	now := func() time.Time { return time.Date(2026, 10, 23, 0, 0, 0, 0, time.UTC) }
+	for _, tt := range []struct {
+		o    serveTokenOptions
+		want string
+	}{
+		{serveTokenOptions{}, "operator-0000"},
+		{serveTokenOptions{role: "viewer", jobs: []string{"Drift Site"}}, "viewer-drift-site-0000"},
+		{serveTokenOptions{jobs: []string{"a", "b"}}, "operator-0000"},
+	} {
+		_, tok, err := generateServeTokenValue(tt.o, bytes.NewReader(make([]byte, 34)), now)
+		if err != nil || tok.Name != tt.want {
+			t.Fatalf("%+v: %q %v", tt.o, tok.Name, err)
+		}
 	}
 }
