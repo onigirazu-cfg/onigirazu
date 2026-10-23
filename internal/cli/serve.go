@@ -681,6 +681,7 @@ func (cfg *ServeConfig) shutdownTimeout() time.Duration {
 
 // server holds the jobs, their results and the audit store
 type server struct {
+	sessions           serveSessionState
 	tokens             serveTokenState
 	inventoryMu        sync.Mutex
 	inventorySnapshots map[string]*serveInventorySnapshot
@@ -2040,6 +2041,7 @@ func (s *server) pushMetrics(text string) {
 // ---- HTTP
 
 type serveIdentity struct {
+	Via      string
 	Source   string
 	User     string
 	Groups   []string
@@ -2061,39 +2063,17 @@ func (s *server) identify(r *http.Request) (serveIdentity, error) {
 	defer func() { s.tokens.Unlock(); s.saveTokenUsage(usage) }()
 	_ = s.reloadServeTokens(false)
 	a := s.cfg.Auth
-	tokens := a.allTokens()
 	if !s.authEnabledLocked() {
 		return serveIdentity{User: "anonymous", Operator: true, Kind: "none", Role: "operator"}, nil
 	}
-	got := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-	digest := sha256.Sum256([]byte(got))
-	for _, t := range tokens {
-		// Directly constructed configs have not been prepared by the loader.
-		if !t.prepared {
-			if err := t.prepare(); err != nil {
-				continue
-			}
-		}
-		if !t.expires.IsZero() && !s.now().Before(t.expires) {
-			continue
-		}
-		if got != "" && subtle.ConstantTimeCompare(digest[:], t.digest[:]) == 1 {
-			id := serveIdentity{User: t.Name, Groups: t.Groups, Operator: t.Role == "operator", Kind: "token", Source: "config", Role: t.Role, Jobs: t.Jobs}
-			if !t.expires.IsZero() {
-				id.Expires = &t.expires
-			}
-			usage = s.useToken(t.Name)
-			return id, nil
-		}
+	if id, used := s.tokenIdentityLocked(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "), "header"); id.Kind != "" {
+		usage = used
+		return id, nil
 	}
-	for _, t := range s.tokens.tokens {
-		if t.ExpiresAt != nil && !s.now().Before(*t.ExpiresAt) {
-			continue
-		}
-		want, err := hex.DecodeString(t.SHA256)
-		if err == nil && got != "" && subtle.ConstantTimeCompare(digest[:], want) == 1 {
-			usage = s.useToken(t.Name)
-			return serveIdentity{User: t.Name, Groups: t.Groups, Operator: t.Role == "operator", Kind: "token", Source: "store", Role: t.Role, Jobs: t.Jobs, Expires: t.ExpiresAt}, nil
+	if cookie, err := r.Cookie(serveSessionCookie); err == nil {
+		if id, used := s.tokenIdentityLocked(cookie.Value, "cookie"); id.Kind != "" {
+			usage = used
+			return id, nil
 		}
 	}
 	if a.UserHeader != "" && a.fromTrustedProxy(r) {
@@ -2115,6 +2095,40 @@ func (s *server) identify(r *http.Request) (serveIdentity, error) {
 		}
 	}
 	return serveIdentity{}, errServeAuth
+}
+
+// tokenIdentityLocked checks config and generated tokens with the same expiry rules.
+func (s *server) tokenIdentityLocked(got, via string) (serveIdentity, map[string]time.Time) {
+	digest := sha256.Sum256([]byte(got))
+	for _, t := range s.cfg.Auth.allTokens() {
+		// Directly constructed configs have not been prepared by the loader.
+		if !t.prepared {
+			if err := t.prepare(); err != nil {
+				continue
+			}
+		}
+		if !t.expires.IsZero() && !s.now().Before(t.expires) {
+			continue
+		}
+		if got != "" && subtle.ConstantTimeCompare(digest[:], t.digest[:]) == 1 {
+			id := serveIdentity{User: t.Name, Groups: t.Groups, Operator: t.Role == "operator", Kind: "token", Source: "config", Role: t.Role, Jobs: t.Jobs}
+			if !t.expires.IsZero() {
+				id.Expires = &t.expires
+			}
+			id.Via = via
+			return id, s.useToken(t.Name)
+		}
+	}
+	for _, t := range s.tokens.tokens {
+		if t.ExpiresAt != nil && !s.now().Before(*t.ExpiresAt) {
+			continue
+		}
+		want, err := hex.DecodeString(t.SHA256)
+		if err == nil && got != "" && subtle.ConstantTimeCompare(digest[:], want) == 1 {
+			return serveIdentity{Via: via, User: t.Name, Groups: t.Groups, Operator: t.Role == "operator", Kind: "token", Source: "store", Role: t.Role, Jobs: t.Jobs, Expires: t.ExpiresAt}, s.useToken(t.Name)
+		}
+	}
+	return serveIdentity{}, nil
 }
 
 // matches: the user name or one of the groups is in names
@@ -2169,6 +2183,27 @@ func writeJSON(w http.ResponseWriter, code int, v interface{}) {
 //go:embed serve_ui.html
 var serveUI string
 
+func (s *server) meHandler(w http.ResponseWriter, _ *http.Request, id serveIdentity) {
+	s.mu.Lock()
+	running, queued := s.activity()
+	status := map[string]interface{}{"user": id.User, "operator": id.Operator, "title": s.cfg.Title, "paused": s.pause.Paused, "running": running, "queued": queued, "scheduled": s.scheduledCount(), "concurrency": s.cfg.Concurrency, "storage_error": s.storeErr, "sign_out_url": s.cfg.Auth.SignOutURL}
+	status["auth"], status["role"], status["via"] = id.Kind, id.Role, id.Via
+	if len(id.Jobs) > 0 {
+		status["jobs"] = id.Jobs
+	}
+	if id.Expires != nil {
+		status["expires"] = id.Expires
+	}
+	if len(s.cfg.UI.Links) > 0 {
+		status["links"] = s.cfg.UI.Links
+	}
+	if s.stopping != nil {
+		status["stopping"] = s.stopping
+	}
+	s.mu.Unlock()
+	writeJSON(w, http.StatusOK, status)
+}
+
 func (s *server) mux() http.Handler {
 	mux := http.NewServeMux()
 	auth := func(operator bool, h func(http.ResponseWriter, *http.Request, serveIdentity)) http.HandlerFunc {
@@ -2185,6 +2220,9 @@ func (s *server) mux() http.Handler {
 					s.logAction(a)
 				}
 				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+				return
+			}
+			if !serveCookieRequest(w, r, id) {
 				return
 			}
 			if operator && !id.Operator {
@@ -2213,6 +2251,7 @@ func (s *server) mux() http.Handler {
 			h(w, r, id)
 		})
 	}
+	mux.HandleFunc("/api/session", s.sessionHandler)
 	mux.HandleFunc("/api/tokens", auth(false, s.tokensHandler))
 	mux.HandleFunc("/api/tokens/", auth(false, s.tokensHandler))
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) { _, _ = io.WriteString(w, "ok\n") })
@@ -2225,26 +2264,7 @@ func (s *server) mux() http.Handler {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_, _ = io.WriteString(w, strings.ReplaceAll(serveUI, "{{title}}", html.EscapeString(s.cfg.Title)))
 	})
-	mux.HandleFunc("/api/me", auth(false, func(w http.ResponseWriter, _ *http.Request, id serveIdentity) {
-		s.mu.Lock()
-		running, queued := s.activity()
-		status := map[string]interface{}{"user": id.User, "operator": id.Operator, "title": s.cfg.Title, "paused": s.pause.Paused, "running": running, "queued": queued, "scheduled": s.scheduledCount(), "concurrency": s.cfg.Concurrency, "storage_error": s.storeErr, "sign_out_url": s.cfg.Auth.SignOutURL}
-		status["auth"], status["role"] = id.Kind, id.Role
-		if len(id.Jobs) > 0 {
-			status["jobs"] = id.Jobs
-		}
-		if id.Expires != nil {
-			status["expires"] = id.Expires
-		}
-		if len(s.cfg.UI.Links) > 0 {
-			status["links"] = s.cfg.UI.Links
-		}
-		if s.stopping != nil {
-			status["stopping"] = s.stopping
-		}
-		s.mu.Unlock()
-		writeJSON(w, http.StatusOK, status)
-	}))
+	mux.HandleFunc("/api/me", auth(false, s.meHandler))
 	mux.HandleFunc("/api/pause", auth(false, func(w http.ResponseWriter, r *http.Request, id serveIdentity) {
 		switch r.Method {
 		case http.MethodGet:
