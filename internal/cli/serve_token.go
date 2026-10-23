@@ -93,6 +93,12 @@ func newServeTokenCmd() *cobra.Command {
 				if err != nil {
 					return err
 				}
+				// the host's admin names the jobs: they pass their operators lists
+				for _, j := range cfg.Jobs {
+					if len(j.Operators) > 0 && slices.Contains(o.jobs, j.Name) {
+						record.Delegated = append(record.Delegated, j.Name)
+					}
+				}
 				if _, err = addServeToken(cfg, record); err != nil {
 					return err
 				}

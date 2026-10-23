@@ -2049,7 +2049,9 @@ type serveIdentity struct {
 	Kind     string
 	Role     string
 	Jobs     []string
-	Expires  *time.Time
+	// Delegated: jobs a generated token may operate despite their operators list
+	Delegated []string
+	Expires   *time.Time
 }
 
 var errServeAuth = errors.New("unauthorized")
@@ -2125,7 +2127,7 @@ func (s *server) tokenIdentityLocked(got, via string) (serveIdentity, map[string
 		}
 		want, err := hex.DecodeString(t.SHA256)
 		if err == nil && got != "" && subtle.ConstantTimeCompare(digest[:], want) == 1 {
-			return serveIdentity{Via: via, User: t.Name, Groups: t.Groups, Operator: t.Role == "operator", Kind: "token", Source: "store", Role: t.Role, Jobs: t.Jobs, Expires: t.ExpiresAt}, s.useToken(t.Name)
+			return serveIdentity{Via: via, User: t.Name, Groups: t.Groups, Operator: t.Role == "operator", Kind: "token", Source: "store", Role: t.Role, Jobs: t.Jobs, Delegated: t.Delegated, Expires: t.ExpiresAt}, s.useToken(t.Name)
 		}
 	}
 	return serveIdentity{}, nil
@@ -2154,7 +2156,8 @@ func (id serveIdentity) matches(names []string) bool {
 
 // allowed: an operator, and one the job's operators list admits
 func (s *server) allowed(id serveIdentity, j *ServeJob) bool {
-	return id.Operator && (len(id.Jobs) == 0 || slices.Contains(id.Jobs, j.Name)) && (len(j.Operators) == 0 || id.matches(j.Operators))
+	return id.Operator && (len(id.Jobs) == 0 || slices.Contains(id.Jobs, j.Name)) &&
+		(len(j.Operators) == 0 || id.matches(j.Operators) || slices.Contains(id.Delegated, j.Name))
 }
 
 // writePause answers a pause/resume: the state, with 500 and the error
