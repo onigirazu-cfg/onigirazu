@@ -540,6 +540,8 @@ each needs a nonempty `title` and an `href` beginning with `/` (not `//`), `http
 or `https://`. External links open in a new tab. A link to a page under `/pages/`
 opens inside the UI (in the main area, with the sidebar kept) and is loaded with
 `?embed=1`, so the page can hide its own header; other `/` links navigate normally.
+On wide screens the menu button in the top bar hides or shows the sidebar; the choice is
+remembered in the browser. On phones it opens the navigation drawer.
 Links can also be configured without `pages_dir`.
 
 ```yaml
