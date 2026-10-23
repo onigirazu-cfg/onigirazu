@@ -423,9 +423,41 @@ the Authentik groups that may run jobs, `trusted_proxies` = the outpost's addres
 `sign_out_url: /outpost.goauthentik.io/sign_out` for a Sign out entry in the user menu
 (`/api/me` returns it as `sign_out_url`; only `/…` or `http(s)://` links are shown). Viewers read everything; operators also start jobs, approve or reject pending runs and cancel scheduled, queued or running ones.
 
+### Browser sign-in
+
+When `/api/me` returns 401, the main page shows a sign-in screen with a Token password
+field and “Remember on this device”. Config and generated tokens both work. The user
+menu shows the name, role, authentication kind and token expiry, when set. Token users
+sign out there; proxy users keep the configured `sign_out_url` link. Open servers show
+neither sign-out action. Old sessionStorage tokens are migrated once and removed.
+
+`POST /api/session` accepts `{"token":"…","remember":false}` and returns the same
+identity and state as `GET /api/me`. Unknown or expired tokens return 401. Successful
+sign-in sets `onigirazu_session` to the token value with `Path=/`, `HttpOnly` and
+`SameSite=Strict`. It adds `Secure` on TLS or when a trusted proxy sends
+`X-Forwarded-Proto: https` (the same `auth.trusted_proxies` rules apply as for proxy
+identity headers). By default the cookie has no Max-Age or Expires. Remember sets
+Max-Age to 30 days, capped at the token's expiry. Revoking or expiring the token ends
+access immediately; restarting the server preserves sessions.
+
+`DELETE /api/session` clears the cookie and returns 204. Sign-in successes and failures
+are audited as `sign_in`, with the client address and no token value. Resolved sign-outs
+are audited as `sign_out`. After 10 failed sign-ins in a minute per audit client address,
+further attempts from that client return 429 without checking the token, until failures
+age out. The limit is held in memory per client: the peer address, or, when the peer is
+listed in `auth.trusted_proxies`, the last `X-Forwarded-For` entry it added.
+
+Authentication checks the Authorization header, then the session cookie, then proxy
+headers. Cookie-authenticated requests other than GET, HEAD and OPTIONS must show they
+come from the page itself: they return 403 `{"error":"cross-site request"}` when they
+carry neither `Origin` nor `Sec-Fetch-Site`, when `Sec-Fetch-Site` is not `same-origin`,
+or when `Origin` has a different host from the request. Sign-in and sign-out refuse only
+the cross-site cases. Bearer-header requests are exempt from this check.
+
 ### Behind Authentik
 
-`serve` has no login of its own: Authentik signs people in and passes who they are in headers.
+Authentik signs people in and passes who they are in headers. The token sign-in screen
+also works when proxy authentication is configured.
 
 ```yaml
 listen: "192.0.2.20:8086"           # an internal address only the proxy reaches
@@ -580,7 +612,8 @@ days, a date, RFC3339, or `never` to omit expiry. Day counts use the UTC date no
 that many days. Values start with `ozs_` followed by 43 base64url characters.
 
 `GET /api/me` includes `auth` (`token`, `proxy`, `none`) and `role` (`operator`, `viewer`).
-It includes `jobs` for scoped tokens and `expires` for tokens with an expiry.
+It includes `via` (`header` or `cookie` for tokens, empty otherwise), `jobs` for scoped
+tokens and `expires` for tokens with an expiry.
 `GET /metrics` exposes `onigirazu_serve_token_expiry_timestamp_seconds{name}` for each
 token with an expiry, including expired tokens.
 
@@ -593,7 +626,7 @@ or `token` in a job's list to admit it. Pause, resume and inventory refresh requ
 
 Every run, approve, reject, cancel, pause and resume action and refused attempt is recorded in
 `data_dir/audit.log` as JSON lines, with identity, job, run ID, result, comment or reason,
-and client address. Scheduling details include `not_before=<time>`. Unauthenticated probes are omitted. Viewers can read the entries,
+and client address. Scheduling details include `not_before=<time>`. Unauthenticated probes other than sign-in attempts are omitted. Viewers can read the entries,
 newest first, through `GET /api/audit` or the Audit tab. The file is append-only and
 reopened for every entry, so logrotate can move it aside (no `copytruncate` needed).
 
@@ -617,10 +650,9 @@ ui:
     - {title: Map, href: /pages/map.html}
 ```
 
-Pages require the same identity as the API: use proxy authentication (the browser's
-proxy cookies work on the same origin), or leave authentication unconfigured.
-With only bearer-token authentication, browser navigation cannot load these pages:
-it does not send an Authorization header, even if the main UI has saved a token.
+Pages require the same identity as the API. With tokens, signing in on the main page
+is enough: pages and their fetch calls then work without Authorization headers. Proxy
+cookies work on the same origin too; pages also work when authentication is unconfigured.
 An unauthenticated HTML request gets a sign-in link to `/`.
 
 Create `map.html` inside the pages directory, for example:
@@ -630,10 +662,7 @@ Create `map.html` inside the pages directory, for example:
 <title>Fleet map</title>
 <pre id="jobs"></pre>
 <script>
-const token = sessionStorage.serveToken;
-fetch('/api/jobs', {
-  headers: token ? {Authorization: 'Bearer ' + token} : {}
-}).then(r => {
+fetch('/api/jobs').then(r => {
   if (!r.ok) throw new Error('API request failed: ' + r.status);
   return r.json();
 }).then(jobs => {
@@ -668,7 +697,9 @@ counts once, with its worst item result (failed, changed, ok, skipped).
 | Method and path | Returns |
 |---|---|
 | `GET /api/audit` | action log array, newest first (viewers too); filters `user`, `action`, `job`, `run`, `ok=true/false`, `from`, `to` (RFC 3339); `limit` defaults to 100, max 1000; pass `X-Next-Cursor` as `before` for older entries; `400` for invalid cursor, `ok` or dates |
-| `GET /api/me` | the caller: `user`, `operator`, `auth`, `role`, optional `jobs` and `expires`, `title`, `paused` (bool), `running`, `queued` and `scheduled` counts, `concurrency`, `storage_error` (last result storage error, empty when fine) |
+| `POST /api/session` | sign in with `{token, remember}`; returns `/api/me` state and sets the session cookie; `401` for unknown/expired tokens, `429` after 10 failures per minute per client address |
+| `DELETE /api/session` | clears the session cookie; `204`; cookie CSRF rule applies; audits `sign_out` when the identity resolves |
+| `GET /api/me` | the caller: `user`, `operator`, `auth`, `role`, `via`, optional `jobs` and `expires`, `title`, `paused` (bool), `running`, `queued` and `scheduled` counts, `concurrency`, `storage_error` (last result storage error, empty when fine) |
 | `GET /api/pause` | pause state: `paused`, optional `reason`, `by`, `at` (viewers too) |
 | `POST /api/pause` | pauses execution (operators); optional JSON `{reason: "..."}`; `200` with the state; pausing again updates reason and identity; `500` with the state and `error` when `pause.json` could not be written (the pause still holds in this process) |
 | `POST /api/resume` | resumes execution (operators); `200` with the state; already resumed is a no-op; `500` as for pause |
