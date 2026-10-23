@@ -444,3 +444,51 @@ func TestServeTokensAnonymousRaceAndExpiryClamp(t *testing.T) {
 		t.Fatal(w.Body.String())
 	}
 }
+
+func TestServeTokensDelegation(t *testing.T) {
+	cfg := loadTokenConfig(t, "  tokens: [{name: root, token: root}]\n  user_header: X-User\n  groups_header: X-Groups\n  operators: [admin, tier0]")
+	cfg.Jobs[0].Operators = []string{"tier0"}
+	cfg.Jobs[1].Operators = []string{"admin"}
+	cfg.Jobs = append(cfg.Jobs, ServeJob{Name: "c", Playbook: "c.yml"})
+	s, err := newServer(cfg, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	admin := serveIdentity{User: "alice", Groups: []string{"admin"}, Operator: true, Kind: "proxy", Role: "operator"}
+	create := func(body string) *httptest.ResponseRecorder {
+		w := httptest.NewRecorder()
+		s.tokensHandler(w, httptest.NewRequest("POST", "/api/tokens", strings.NewReader(body)), admin)
+		return w
+	}
+	// a job the creator cannot run is refused
+	if w := create(`{"name":"bad","jobs":["a"]}`); w.Code != 403 || !strings.Contains(w.Body.String(), `job \"a\"`) {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	// no jobs: everything the creator can run, the restricted ones recorded
+	w := create(`{"name":"ci"}`)
+	if w.Code != 201 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	var got struct {
+		Token     string
+		Delegated []string
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil || len(got.Delegated) != 1 || got.Delegated[0] != "b" {
+		t.Fatal(w.Body.String())
+	}
+	for _, tt := range []struct {
+		job  string
+		code int
+	}{{"b", 202}, {"c", 202}, {"a", 403}} {
+		if rw := tokenHTTP(s, "POST", "/api/jobs/"+tt.job+"/run", got.Token); rw.Code != tt.code {
+			t.Fatalf("%s: %d %s", tt.job, rw.Code, rw.Body.String())
+		}
+	}
+	// a token made by that token cannot pick up more than it has
+	tok := serveIdentity{User: "ci", Operator: true, Kind: "token", Source: "store", Role: "operator", Delegated: []string{"b"}}
+	w = httptest.NewRecorder()
+	s.tokensHandler(w, httptest.NewRequest("POST", "/api/tokens", strings.NewReader(`{"name":"child","jobs":["a"]}`)), tok)
+	if w.Code != 403 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+}

@@ -578,6 +578,12 @@ a token lose access.
 `POST /api/tokens` accepts `name`, `role`, `jobs` and `expires` and returns the value once.
 Only operators can create tokens. A token cannot grant a higher role than its caller.
 A scoped caller must supply a nonempty subset of its own jobs. Jobs must exist.
+Every job must be one the caller can run (its operators list admits the caller); without
+`jobs` the token covers every job the caller can run. The token then passes the operators
+list of those jobs: it gets its creator's access to exactly them, recorded as `delegated`
+in the store and in `GET /api/tokens`. The access is fixed when the token is made: a
+creator who later leaves the group keeps the token working until it expires or is revoked.
+The Access form lists only the jobs the caller can run.
 A new token never expires later than the caller's own token; a later expiry is cut to it.
 Groups cannot be set through the API. Names are unique across config and store.
 When authentication is off, creation requires `enable_auth: true`.
@@ -585,7 +591,8 @@ When authentication is off, creation requires `enable_auth: true`.
 revoke any generated token when unscoped, or a token they created when scoped.
 Creation, revocation and refused attempts are audited.
 
-Generated tokens match a job's operators list by name only as `token:<name>`; groups given with `serve token new --groups` match as usual.
+Generated tokens match a job's operators list by name only as `token:<name>`, by their delegated jobs,
+or by groups given with `serve token new --groups`. `serve token new --jobs` delegates the listed jobs.
 A bare name still matches config tokens for compatibility. CLI generation accepts
 `--groups`; the API and Access form do not accept groups.
 

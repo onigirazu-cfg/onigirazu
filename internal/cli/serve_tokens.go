@@ -26,6 +26,9 @@ type storedServeToken struct {
 	CreatedAt time.Time  `json:"created_at"`
 	CreatedBy string     `json:"created_by"`
 	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+	// Delegated: jobs whose operators list this token passes, because its
+	// creator could run them when it was made
+	Delegated []string `json:"delegated,omitempty"`
 }
 
 type serveTokenStore struct {
@@ -193,6 +196,30 @@ func (id serveIdentity) creator() string {
 	return id.User
 }
 
+// delegatedJobs: a new token gets its creator's access to the jobs it is
+// for (all jobs when jobs is empty) and to nothing the creator cannot run;
+// the jobs with an operators list are recorded, the others need no pass
+func (s *server) delegatedJobs(id serveIdentity, jobs []string) ([]string, error) {
+	var out []string
+	for i := range s.cfg.Jobs {
+		j := &s.cfg.Jobs[i]
+		wanted := len(jobs) == 0 || slices.Contains(jobs, j.Name)
+		if !wanted {
+			continue
+		}
+		if !s.allowed(id, j) {
+			if len(jobs) == 0 {
+				continue
+			}
+			return nil, fmt.Errorf("you are not an operator of job %q", j.Name)
+		}
+		if len(j.Operators) > 0 {
+			out = append(out, j.Name)
+		}
+	}
+	return out, nil
+}
+
 func validateServeTokenJobs(cfg *ServeConfig, jobs []string) error {
 	for _, name := range jobs {
 		if !slices.ContainsFunc(cfg.Jobs, func(j ServeJob) bool { return j.Name == name }) {
@@ -312,6 +339,7 @@ type serveTokenView struct {
 	ExpiresAt  *time.Time `json:"expires_at"`
 	LastUsedAt *time.Time `json:"last_used_at"`
 	Expired    bool       `json:"expired"`
+	Delegated  []string   `json:"delegated,omitempty"`
 }
 
 func (s *server) tokenViewsLocked() []serveTokenView {
@@ -330,7 +358,7 @@ func (s *server) tokenViewsLocked() []serveTokenView {
 	}
 	for _, t := range s.tokens.tokens {
 		created := t.CreatedAt
-		views = append(views, serveTokenView{Name: t.Name, Source: "store", Role: t.Role, Jobs: t.Jobs, Groups: t.Groups, Prefix: t.Prefix, CreatedAt: &created, CreatedBy: t.CreatedBy, ExpiresAt: t.ExpiresAt})
+		views = append(views, serveTokenView{Name: t.Name, Source: "store", Role: t.Role, Jobs: t.Jobs, Groups: t.Groups, Prefix: t.Prefix, CreatedAt: &created, CreatedBy: t.CreatedBy, ExpiresAt: t.ExpiresAt, Delegated: t.Delegated})
 	}
 	for i := range views {
 		v := &views[i]
@@ -348,7 +376,7 @@ func tokenAuditReason(t storedServeToken) string {
 	if t.ExpiresAt != nil {
 		expires = t.ExpiresAt.Format(time.RFC3339)
 	}
-	return fmt.Sprintf("name=%s role=%s jobs=%s expires=%s", t.Name, t.Role, strings.Join(t.Jobs, ","), expires)
+	return fmt.Sprintf("name=%s role=%s jobs=%s delegated=%s expires=%s", t.Name, t.Role, strings.Join(t.Jobs, ","), strings.Join(t.Delegated, ","), expires)
 }
 
 func (s *server) tokensHandler(w http.ResponseWriter, r *http.Request, id serveIdentity) {
@@ -420,11 +448,17 @@ func (s *server) tokensHandler(w http.ResponseWriter, r *http.Request, id serveI
 			fail(400, err)
 			return
 		}
+		delegated, err := s.delegatedJobs(id, body.Jobs)
+		if err != nil {
+			fail(403, err)
+			return
+		}
 		value, record, err := makeStoredServeToken(serveTokenOptions{name: body.Name, role: body.Role, jobs: body.Jobs, expires: body.Expires}, id.creator(), s.now)
 		if err != nil {
 			fail(400, err)
 			return
 		}
+		record.Delegated = delegated
 		// a token does not outlive the one that made it
 		if id.Expires != nil && (record.ExpiresAt == nil || record.ExpiresAt.After(*id.Expires)) {
 			expires := *id.Expires
