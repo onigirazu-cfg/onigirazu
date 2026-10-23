@@ -25,22 +25,24 @@ concurrency: 2                         # max jobs executing at once; default 1
 retain: 50                             # results kept per job
 retain_age: 168h                        # optional maximum result age (Go duration)
 auth:
-  token: ${SERVE_TOKEN}                # API bearer token: an operator
   tokens:
     - name: ci
-      token: ${CI_TOKEN}
+      token: sha256:3f96ac8166d16e1cc7f6cbe569d04a399edbbf39ea622448c685d633733a4cba
+      role: operator
+      jobs: [drift-site]
       groups: [tier2]
+      expires: 2027-01-21              # generated with serve token new
   user_header: X-Authentik-Username    # a reverse proxy's identity: a viewer ...
   groups_header: X-Authentik-Groups    # ... an operator when one of the groups is listed
   operators: [admins, tier0-admins]
-  trusted_proxies: [10.0.0.5, 172.18.0.0/16]   # proxy headers only from these (address or network)
+  trusted_proxies: [192.0.2.5, 192.0.2.0/24]   # proxy headers only from these (address or network)
   sign_out_url: /outpost.goauthentik.io/sign_out   # optional "Sign out" in the page's user menu
 ui:
   pages_dir: pages                     # optional static pages; relative to serve.yml
   links:
     - {title: Map, href: /pages/map.html} # extra sidebar entry
 metrics:
-  push: http://victoria:8428/api/v1/import/prometheus   # every job's metrics, optional
+  push: https://metrics.example.com/api/v1/import/prometheus   # every job's metrics, optional
   labels: {env: prod}
 jobs:
   - name: drift-site
@@ -405,7 +407,9 @@ request the job again. Pending runs must be rejected instead.
 ## Access
 
 Without `auth` everyone is an operator — put the server behind a reverse proxy or a firewall.
-With `token`, `Authorization: Bearer <token>` is an operator (automation, curl). With
+Bearer tokens in `auth.tokens` accept `Authorization: Bearer <token>` (automation, curl).
+Their `role` is `operator` by default, or `viewer` for read access. The legacy `auth.token`
+is loaded as a token named `token`; that name cannot also appear in `auth.tokens`. With
 `user_header`, the user the proxy sets (Authentik's outpost, oauth2-proxy, nginx auth_request) is
 a viewer; when one of the groups in `groups_header` (separated by `|` as Authentik sends them, or by
 commas; a space belongs to the name, "Fleet Operators") is in `operators`, an operator.
@@ -516,14 +520,38 @@ auth:
 ```
 
 Named bearer tokens in `auth.tokens` have a `name`, a `token` value (expands `${VAR}`),
-and optional `groups`. Each is a server-level operator. Names must be unique and values
-must be nonempty. Tokens are checked before proxy headers.
+and optional `groups`, `role`, `jobs` and `expires`. Names must be unique and values
+must be nonempty. `role` is `operator` (default) or `viewer`. `jobs: [drift-site]` limits
+run, approve, reject and cancel actions to existing jobs in that list. Reading stays open.
+A jobs-scoped token cannot pause or resume the server or refresh the inventory. `expires` accepts a date (start
+of that day in UTC) or RFC3339. Expired tokens return `401`.
+
+`token` accepts a plain value or `sha256:<64 hex digits>` for its SHA-256 hash. Both
+forms use a constant-time digest comparison. Tokens are checked before proxy headers.
+Generate a value and a YAML entry with its hash:
+
+```sh
+onigirazu serve token new --name ci --jobs drift-site --groups tier2 --expires 90d
+```
+
+The command does not read `serve.yml`. Store the printed value in your secret manager
+and add the entry to `auth.tokens`. Names must match `[a-z0-9][a-z0-9._-]{0,63}`.
+`--role` defaults to `operator`; use `viewer` for read access. `--jobs` and `--groups`
+accept comma-separated lists. `--expires` defaults to `90d` and accepts a number of
+days, a date, RFC3339, or `never` to omit expiry. Day counts use the UTC date now plus
+that many days. Values start with `ozs_` followed by 43 base64url characters.
+
+`GET /api/me` includes `auth` (`token`, `proxy`, `none`) and `role` (`operator`, `viewer`).
+It includes `jobs` for scoped tokens and `expires` for tokens with an expiry.
+`GET /metrics` exposes `onigirazu_serve_token_expiry_timestamp_seconds{name}` for each
+token with an expiry, including expired tokens.
 
 A job's optional `operators` list narrows run, approve, reject and cancel access: the caller must
-be a server-level operator and match a listed user name or group, case-insensitively.
-Without the list, every server-level operator is allowed. The legacy `auth.token` has the
-user name `token`; include `token` in a job's list to admit it. Pause and resume require
-only a server-level operator.
+be a server-level operator and match a listed user name, group or `token:<name>`,
+case-insensitively. `token:ci` admits only the token named `ci`. Bare token names still
+match for compatibility. A token's `jobs` scope also applies when the job has no
+`operators` list. The legacy `auth.token` has the user name `token`; include `token:token`
+or `token` in a job's list to admit it. Pause, resume and inventory refresh require an unscoped operator.
 
 Every run, approve, reject, cancel, pause and resume action and refused attempt is recorded in
 `data_dir/audit.log` as JSON lines, with identity, job, run ID, result, comment or reason,
@@ -602,7 +630,7 @@ counts once, with its worst item result (failed, changed, ok, skipped).
 | Method and path | Returns |
 |---|---|
 | `GET /api/audit` | action log array, newest first (viewers too); filters `user`, `action`, `job`, `run`, `ok=true/false`, `from`, `to` (RFC 3339); `limit` defaults to 100, max 1000; pass `X-Next-Cursor` as `before` for older entries; `400` for invalid cursor, `ok` or dates |
-| `GET /api/me` | the caller: `user`, `operator`, `title`, `paused` (bool), `running`, `queued` and `scheduled` counts, `concurrency`, `storage_error` (last result storage error, empty when fine) |
+| `GET /api/me` | the caller: `user`, `operator`, `auth`, `role`, optional `jobs` and `expires`, `title`, `paused` (bool), `running`, `queued` and `scheduled` counts, `concurrency`, `storage_error` (last result storage error, empty when fine) |
 | `GET /api/pause` | pause state: `paused`, optional `reason`, `by`, `at` (viewers too) |
 | `POST /api/pause` | pauses execution (operators); optional JSON `{reason: "..."}`; `200` with the state; pausing again updates reason and identity; `500` with the state and `error` when `pause.json` could not be written (the pause still holds in this process) |
 | `POST /api/resume` | resumes execution (operators); `200` with the state; already resumed is a no-op; `500` as for pause |
@@ -625,7 +653,7 @@ counts once, with its worst item result (failed, changed, ok, skipped).
 | `GET /api/hosts` | every host seen by a job's last executed result (cancelled and check runs are skipped), with its worst status (`ok`, `changed`, `drift`, `failed`, `unreachable`) and the status per job |
 | `GET /api/runs` | audit store run array, newest first (viewers too); filters `host`, `playbook` (path substring), `status`, `job` (linked serve runs), `from`, `to` (RFC 3339); `limit` defaults to 100, max 1000, `offset` defaults to 0; `X-Next-Offset` gives the next offset when more exist; `400` for invalid dates or a non-numeric, negative or overflowing offset; optional `serve_run` links to the retained serve result |
 | `GET /api/runs/{id}` | one audit record, with optional `serve_run` |
-| `GET /metrics` | `onigirazu_serve_job_last_status{job,kind}` (0 ok, 1 drift/changed, 2 failed, 3 error, 4 cancelled, 5 timed_out), `onigirazu_serve_job_last_run_timestamp_seconds{job}`, `onigirazu_serve_host_status{job,host}`, `onigirazu_serve_job_pending{job}` (guarded jobs only: 1 pending, 0 otherwise); `onigirazu_serve_paused` (1 paused, 0 otherwise); `onigirazu_serve_running` (executing or cancelling runs), `onigirazu_serve_concurrency` (configured limit), `onigirazu_serve_scheduled` (scheduled run count); `onigirazu_serve_storage_error` (1 while the last result storage operation failed, 0 otherwise); all include configured metric labels |
+| `GET /metrics` | `onigirazu_serve_job_last_status{job,kind}` (0 ok, 1 drift/changed, 2 failed, 3 error, 4 cancelled, 5 timed_out), `onigirazu_serve_job_last_run_timestamp_seconds{job}`, `onigirazu_serve_host_status{job,host}`, `onigirazu_serve_job_pending{job}` (guarded jobs only: 1 pending, 0 otherwise); `onigirazu_serve_paused` (1 paused, 0 otherwise); `onigirazu_serve_running` (executing or cancelling runs), `onigirazu_serve_concurrency` (configured limit), `onigirazu_serve_scheduled` (scheduled run count); `onigirazu_serve_storage_error` (1 while the last result storage operation failed, 0 otherwise); `onigirazu_serve_token_expiry_timestamp_seconds{name}` (expiry as Unix seconds); all include configured metric labels |
 | `GET /healthz` | `ok` |
 
 Run, approve, reject and cancel return `403` with `{"error":"not an operator of this job"}` when
