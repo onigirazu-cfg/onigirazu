@@ -791,6 +791,9 @@ A job result: `{id, job, kind, mode, requested, started, duration_seconds, statu
 hosts, report, approval, cancel, params, audit_execution_id, playbook_hash}`. `requested` is the request time; `started` becomes the execution
 start time when the worker begins. `trigger` is `schedule` or `api:<user>`. Status is `pending`, `scheduled`,
 `queued`, `running`, `cancelling`, `cancelled`, `timed_out`, `rejected`, `expired`, `ok`, `drift`, `changed`, `failed` or `error`.
+An executed run's `summary` counts hosts (`2 in sync, 1 changed, 1 failed`); when a task failed it
+ends with ` — <host>: <first line of the first failure>` (hosts sorted), so a playbook that puts a
+one-line reason first in its failure message is self-explaining in lists and notifications.
 The optional approval object has `required`, `expires`, and, after a decision, `decision`
 (`approved`, `rejected`, `expired`), `by` (operator identity; absent for expiry), `at` and an
 optional `comment`. Job results open at `#job/<name>` and individual runs at `#run/<id>`.
