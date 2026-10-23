@@ -1420,6 +1420,10 @@ next:
 			case err == nil:
 				r.Started, r.Duration, r.Status, r.Summary, r.Hosts, r.Report = result.Started, result.Duration, result.Status, result.Summary, result.Hosts, result.Report
 				r.AuditExecutionID = result.AuditExecutionID
+				// s.mu is held and r.ID is this run's: mask its secrets before the line is cut.
+				if reason := reportFailure(r.Report, s.runSecretMask(r.ID)); reason != "" {
+					r.Summary += " — " + reason
+				}
 			case ctx.Err() != nil, runCtx.Err() != nil:
 				// stopped: what the partial result knows about the hosts stays
 				r.Status = statusCancelled
@@ -3270,4 +3274,44 @@ func (cfg *ServeConfig) printWarnings(out io.Writer) {
 	for _, warning := range cfg.warnings {
 		fmt.Fprintln(out, warning)
 	}
+}
+
+// reportFailure is firstFailure of a drift/apply report; other report kinds give "".
+func reportFailure(report json.RawMessage, mask *strings.Replacer) string {
+	var parsed struct {
+		Errors map[string][]DriftItem `json:"errors"`
+	}
+	if len(report) == 0 || json.Unmarshal(report, &parsed) != nil {
+		return ""
+	}
+	return firstFailure(parsed.Errors, mask)
+}
+
+// firstFailure is the first line of the first failed task, in host order, so a run summary
+// (jobs table, history, notifications) says why a run failed without opening its report.
+// mask (may be nil) hides secret parameters before the line is cut.
+func firstFailure(errs map[string][]DriftItem, mask *strings.Replacer) string {
+	hosts := make([]string, 0, len(errs))
+	for h, items := range errs {
+		if len(items) > 0 {
+			hosts = append(hosts, h)
+		}
+	}
+	if len(hosts) == 0 {
+		return ""
+	}
+	sort.Strings(hosts)
+	item := errs[hosts[0]][0]
+	detail := item.Detail
+	if mask != nil {
+		detail = mask.Replace(detail) // before any trimming or cutting changes a secret's exact text
+	}
+	line := strings.TrimSpace(strings.SplitN(strings.TrimSpace(detail), "\n", 2)[0])
+	if line == "" {
+		line = item.Task + " failed"
+	}
+	if r := []rune(line); len(r) > 200 {
+		line = string(r[:199]) + "…"
+	}
+	return hosts[0] + ": " + line
 }
