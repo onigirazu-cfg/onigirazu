@@ -162,3 +162,31 @@ func TestServePagesUnsetAndStartup(t *testing.T) {
 		t.Fatal("expected startup error for missing pages root")
 	}
 }
+
+func TestServePageRevalidated(t *testing.T) {
+	s, err := newServer(&ServeConfig{DataDir: t.TempDir(), Title: "fleet"}, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := s.mux()
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest("GET", "/", nil))
+	etag := w.Header().Get("ETag")
+	if w.Code != 200 || w.Header().Get("Cache-Control") != "no-cache" || etag == "" || !strings.Contains(w.Body.String(), "fleet") {
+		t.Fatal(w.Code, w.Header())
+	}
+	r := httptest.NewRequest("GET", "/", nil)
+	r.Header.Set("If-None-Match", etag)
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	if w.Code != 304 || w.Body.Len() != 0 {
+		t.Fatal(w.Code, w.Body.Len())
+	}
+	r = httptest.NewRequest("GET", "/", nil)
+	r.Header.Set("If-None-Match", `"old"`)
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	if w.Code != 200 || w.Body.Len() == 0 {
+		t.Fatal(w.Code)
+	}
+}

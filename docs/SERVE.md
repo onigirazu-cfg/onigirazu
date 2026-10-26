@@ -746,10 +746,12 @@ newest executed result in `last`, including checks.
 The Runs and Audit tabs have compact filters with shareable hash links and an Older button that appends earlier entries.
 On Runs and Audit, From and To use the browser's date and time picker (local time, sent as RFC 3339) with quick ranges (last hour, 24 h, 7 days, 30 days); Job is a list of the jobs, Host suggests the hosts seen in results and in the inventory, Playbook suggests file names (the filter matches part of the path), User suggests the users already listed. Active filters show as removable chips; on phones the filters fold under a Filters button. Apply, Reset and the per-page selector control the loaded history; paging cursors stay out of the form.
 
-Page: the page at `/` uses the same API. A top bar holds the fleet name, a search box (`/`
+Page: the page at `/` uses the same API. It is sent with `Cache-Control: no-cache` and an
+`ETag`, so a browser checks it on every load and shows the new page right after an upgrade
+(an unchanged page costs a `304`). A top bar holds the fleet name, a search box (`/`
 focuses it; it filters the current list), the activity counts, Pause/Resume for operators, the
-theme switch (system, light, dark; kept in the browser) and the user menu with the bearer token.
-A sidebar leads to Jobs, Runs, Hosts, Inventory and Audit; it shrinks to icons below 900 px and
+theme switch (system, light, dark; kept in the browser) and the user menu (who you are, Sign out).
+A sidebar leads to Jobs, Runs, Hosts, Inventory, Audit and Access; it shrinks to icons below 900 px and
 becomes a drawer below 600 px. Jobs is a table (cards on phones) with Run and a menu for Run…,
 Run at…, Check and Cancel when `allowed`; pending approvals are cards above it. Run… and Run at…
 open a side sheet with the limit picker, variables and the start time. A job page lists its runs on
