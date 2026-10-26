@@ -2263,13 +2263,20 @@ func (s *server) mux() http.Handler {
 	mux.HandleFunc("/api/tokens/", auth(false, s.tokensHandler))
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) { _, _ = io.WriteString(w, "ok\n") })
 	mux.HandleFunc("/metrics", s.metricsHandler)
+	// the page is revalidated on every load, so a browser never keeps the
+	// previous version's page after an upgrade; an unchanged one is a 304
+	page := strings.ReplaceAll(serveUI, "{{title}}", html.EscapeString(s.cfg.Title))
+	pageSum := sha256.Sum256([]byte(page))
+	pageETag := `"` + hex.EncodeToString(pageSum[:16]) + `"`
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
 			http.NotFound(w, r)
 			return
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		_, _ = io.WriteString(w, strings.ReplaceAll(serveUI, "{{title}}", html.EscapeString(s.cfg.Title)))
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("ETag", pageETag)
+		http.ServeContent(w, r, "", time.Time{}, strings.NewReader(page))
 	})
 	mux.HandleFunc("/api/me", auth(false, s.meHandler))
 	mux.HandleFunc("/api/pause", auth(false, func(w http.ResponseWriter, r *http.Request, id serveIdentity) {
