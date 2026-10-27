@@ -36,6 +36,11 @@ tasks:
 - If the task has `register`, the other hosts get the same registered value.
 - Loops, `when` and `delegate_to` apply as usual on that one host.
 - Inside a `block`, the task still runs once for all hosts of the play: the first host to reach it runs it, the others wait and take its registered result (and its failure, if it failed).
+- With `serial`, "the play" is the current batch: the task runs once per batch, on its first host.
+- On `include_tasks` and `include_role`, as in Ansible, the whole include runs on that one host: its `when` is that host's, and its tasks are not `run_once` themselves, so what they register stays on that host.
+- On `import_tasks`, `import_role` and a `block`, `run_once` passes on to each of their tasks, so each one registers for all hosts. A block with `run_once` runs on the first host, and the other hosts get what it registered.
+- An include with `run_once` inside a block runs on the first host to reach it, as `run_once` tasks do there.
+- Unlike Ansible, `run_once: false` on a task does not undo a `run_once` of its block or imported role, and an imported role's dependencies do not get it.
 
 ### Example: Database Migration
 
