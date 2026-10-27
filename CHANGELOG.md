@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `run_once` on `include_tasks` and `include_role` runs the include on the first host of each `serial` batch only, as in Ansible (it ran on every host); `run_once` on `import_tasks`, `import_role` and a `block` passes on to each of their tasks (it was ignored)
 - `onigirazu serve`: the menu button also works on wide screens and hides or shows the sidebar; the choice is remembered in the browser
 - `onigirazu serve`: sidebar links to pages under `/pages/` open inside the UI with the sidebar kept, loaded with `?embed=1`, instead of leaving the UI
 - Audit and health-check HTML reports escape record values (playbook path, user, status, host name and address, check type and message), so a value with HTML in it can no longer inject script into the report; statuses outside the known set get a fixed CSS class
