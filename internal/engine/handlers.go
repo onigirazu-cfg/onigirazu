@@ -152,6 +152,12 @@ func (e *ExecutionEngine) flushHandlers(ctx context.Context, hosts []types.Host,
 			}
 			ran = true
 			entry := h.entries[i]
+			// a handler of an include with run_once: on the include's host only
+			if entry.task.OnceGroup != "" {
+				if targets = e.onceHost(entry.task.OnceGroup, targets); len(targets) == 0 {
+					continue
+				}
+			}
 			e.logger.Debug("Running handler %s on %d host(s)", entry.task.Name, len(targets))
 			e.notifyUnplannedTask(ctx, &entry.task, targets)
 			if err := e.executeTask(ctx, &entry.task, targets, entry.vars, playResult); err != nil && !entry.task.IgnoreErrors {

@@ -96,6 +96,8 @@ type ExecutionEngine struct {
 	// mutex); the magic variables built from them are cached by it
 	hostsVersion uint64
 	magic        magicLists
+	// once: the host of each include with run_once in the current batch
+	once onceHosts
 	// inventoryView: the inventory's hosts and groups for hostvars and
 	// groups, read once per playbook run (nothing changes them during it)
 	inventoryView     inventorySnapshot
@@ -768,6 +770,7 @@ func (e *ExecutionEngine) executePlayOn(ctx context.Context, play *types.Play, h
 	}
 	e.hostsVersion++
 	e.mutex.Unlock()
+	e.once.reset()
 
 	if len(hosts) == 0 {
 		e.logger.Warn("No hosts found for play '%s'", play.Name)
@@ -1069,11 +1072,19 @@ func (e *ExecutionEngine) executeTaskList(ctx context.Context, tasks []types.Tas
 		if len(active) == 0 {
 			return nil
 		}
+		// a task of an include with run_once: on the include's host only;
+		// a failure there is weighed against the whole batch
+		batch := active
+		if task.OnceGroup != "" {
+			if active = e.onceHost(task.OnceGroup, active); len(active) == 0 {
+				continue
+			}
+		}
 
 		// a block filters its own tasks by tag, so it is not filtered here
 		if len(task.Block) > 0 {
 			if err := e.executeBlock(ctx, &task, active, variables, playResult); err != nil {
-				if err = e.continueAfter(ctx, err, active, playResult); err != nil {
+				if err = e.continueAfter(ctx, err, batch, playResult); err != nil {
 					return fmt.Errorf("block '%s' failed: %w", task.Name, err)
 				}
 			}
@@ -1091,7 +1102,7 @@ func (e *ExecutionEngine) executeTaskList(ctx context.Context, tasks []types.Tas
 
 		// Execute task on all hosts
 		if err := e.executeTask(ctx, &task, active, variables, playResult); err != nil {
-			if err = e.continueAfter(ctx, err, active, playResult); err != nil {
+			if err = e.continueAfter(ctx, err, batch, playResult); err != nil {
 				return fmt.Errorf("task '%s' failed: %w", task.Name, err)
 			}
 		}
@@ -1106,8 +1117,18 @@ func (e *ExecutionEngine) executeTask(ctx context.Context, task *types.Task, hos
 	if task.Module == "meta" && metaAction(task) == "flush_handlers" {
 		return e.flushHandlers(ctx, hosts, playResult)
 	}
-	if task.IncludedRole != nil {
-		return e.runIncludedRole(ctx, task, hosts, variables, playResult)
+	// import_role passes run_once on to each task of the role, like any
+	// keyword of a static import; include_role runs on one host below
+	if task.IncludedRole != nil && task.RunOnce && types.ShortModuleName(task.Module) == "import_role" {
+		role := *task.IncludedRole
+		role.Tasks = make([]types.Task, len(role.Tasks))
+		for i, t := range task.IncludedRole.Tasks {
+			t.RunOnce = true
+			role.Tasks[i] = t
+		}
+		imported := runOnceTask(task)
+		imported.IncludedRole = &role
+		return e.runIncludedRole(ctx, imported, hosts, variables, playResult)
 	}
 	// run_once inside a block: blocks run per host, so the hosts share a
 	// registry; the first runs the task, the others wait and take its result
@@ -1146,6 +1167,10 @@ func (e *ExecutionEngine) executeTask(ctx context.Context, task *types.Task, hos
 			}
 		}
 		return nil
+	}
+	// include_role: with run_once it got here on one host
+	if task.IncludedRole != nil {
+		return e.runIncludedRole(ctx, task, hosts, variables, playResult)
 	}
 
 	variables = e.withMagicVariables(variables)
@@ -2545,11 +2570,19 @@ func (e *ExecutionEngine) executeTaskListWithRetry(ctx context.Context, tasks []
 		if len(active) == 0 {
 			return nil
 		}
+		// a task of an include with run_once: on the include's host only;
+		// a failure there is weighed against the whole batch
+		batch := active
+		if task.OnceGroup != "" {
+			if active = e.onceHost(task.OnceGroup, active); len(active) == 0 {
+				continue
+			}
+		}
 
 		// a block filters its own tasks by tag, so it is not filtered here
 		if len(task.Block) > 0 {
 			if err := e.executeBlock(ctx, &task, active, variables, playResult); err != nil {
-				if err = e.continueAfter(ctx, err, active, playResult); err != nil {
+				if err = e.continueAfter(ctx, err, batch, playResult); err != nil {
 					return fmt.Errorf("block '%s' failed: %w", task.Name, err)
 				}
 			}
@@ -2568,7 +2601,7 @@ func (e *ExecutionEngine) executeTaskListWithRetry(ctx context.Context, tasks []
 		// Execute task with retry logic
 		if err := e.executeTaskWithRetryLogic(ctx, &task, active, variables, playResult); err != nil {
 			if !task.IgnoreErrors {
-				if err = e.continueAfter(ctx, err, active, playResult); err != nil {
+				if err = e.continueAfter(ctx, err, batch, playResult); err != nil {
 					return fmt.Errorf("task '%s' failed: %w", task.Name, err)
 				}
 			} else {
@@ -2761,6 +2794,61 @@ func splitLines(text string) []interface{} {
 	return items
 }
 
+// onceHosts are the hosts the includes with run_once picked in this batch
+type onceHosts struct {
+	mu    sync.Mutex
+	hosts map[string]string
+}
+
+func (o *onceHosts) reset() {
+	o.mu.Lock()
+	o.hosts = nil
+	o.mu.Unlock()
+}
+
+// onceHost narrows hosts to the one the include of group runs on in this
+// batch: the first host its first task reached (inside a block, where hosts
+// run in parallel, the first to get there, as with run_once). Once that host
+// left the run, the include's other tasks run nowhere.
+func (e *ExecutionEngine) onceHost(group string, hosts []types.Host) []types.Host {
+	o := &e.once
+	o.mu.Lock()
+	name, ok := o.hosts[group]
+	if !ok {
+		name = hosts[0].Name
+		if o.hosts == nil {
+			o.hosts = map[string]string{}
+		}
+		o.hosts[group] = name
+	}
+	o.mu.Unlock()
+	for i := range hosts {
+		if hosts[i].Name == name {
+			return hosts[i : i+1]
+		}
+	}
+	return nil
+}
+
+// registers are the register names of a block's tasks, nested blocks and
+// imported roles too
+func registers(block *types.Task) []string {
+	var names []string
+	lists := [][]types.Task{block.Block, block.Rescue, block.Always}
+	if block.IncludedRole != nil {
+		lists = append(lists, block.IncludedRole.Tasks)
+	}
+	for _, list := range lists {
+		for i := range list {
+			if list[i].Register != "" {
+				names = append(names, list[i].Register)
+			}
+			names = append(names, registers(&list[i])...)
+		}
+	}
+	return names
+}
+
 // runOnceTask is a copy of task without run_once, to run on one host
 func runOnceTask(task *types.Task) *types.Task {
 	t := *task
@@ -2792,6 +2880,26 @@ func (e *ExecutionEngine) delegateHost(ctx context.Context, name string, variabl
 // ignore_errors apply to all its tasks.
 func (e *ExecutionEngine) executeBlock(ctx context.Context, block *types.Task, hosts []types.Host,
 	variables map[string]interface{}, playResult *types.PlayResult) error {
+	// run_once on the block: each of its tasks runs once, so the block runs
+	// on the first host and the others get what it registered there
+	if block.RunOnce && len(hosts) > 1 {
+		names := registers(block)
+		before := make([]interface{}, len(names))
+		for i, name := range names {
+			before[i] = e.getHostVar(hosts[0].Name, name)
+		}
+		err := e.executeBlock(ctx, runOnceTask(block), hosts[:1], variables, playResult)
+		for i, name := range names {
+			value := e.getHostVar(hosts[0].Name, name)
+			if value == nil || reflect.DeepEqual(value, before[i]) {
+				continue // not registered by this block (a rescue that did not run)
+			}
+			for _, h := range hosts[1:] {
+				e.setHostVar(h.Name, name, value)
+			}
+		}
+		return err
+	}
 	// run_once inside the block: once for all hosts, not once per host
 	if ctx.Value(runOnceKey{}) == nil {
 		ctx = context.WithValue(ctx, runOnceKey{}, &sync.Map{})
@@ -2879,6 +2987,9 @@ func inheritBlock(block *types.Task, tasks []types.Task, rescuable bool) []types
 		t.Vars = mergeMaps(block.Vars, t.Vars)
 		if block.IgnoreErrors {
 			t.IgnoreErrors = true
+		}
+		if block.RunOnce {
+			t.RunOnce = true
 		}
 		if rescuable || block.Rescuable { // nested blocks inherit the outer rescue
 			t.Rescuable = true
