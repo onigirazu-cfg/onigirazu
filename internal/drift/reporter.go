@@ -204,15 +204,16 @@ func (r *Reporter) generateHTMLReport(report *DriftReport) (string, error) {
 <title>Drift detection report - {{.ID}}</title></head><body><main class="onz-page">
 ` + brand.HeaderOpen + `Drift report` + brand.HeaderClose + `
 <h1 class="onz-title">Drift detection report</h1>
-<p class="onz-sub">{{.ID}} · {{.Timestamp.Format "2006-01-02 15:04:05 MST"}} · {{.Duration}}</p>
+<p class="onz-sub">{{.ID}} · Checked {{.Timestamp.Format "2 Jan 2006 15:04 MST"}} · <span class="onz-duration">{{duration .Duration}}</span></p>
 <div class="onz-stats">
+<div class="onz-stat"><b>{{len .DriftsByHost}}</b><span>Hosts with drift</span></div>
 <div class="onz-stat"><b>{{.TotalDrifts}}</b><span>Total drifts</span></div>
-<div class="onz-stat bad"><b>{{.CriticalDrifts}}</b><span>Critical</span></div>
-<div class="onz-stat warn"><b>{{.HighDrifts}}</b><span>High</span></div>
-<div class="onz-stat warn"><b>{{.MediumDrifts}}</b><span>Medium</span></div>
-<div class="onz-stat muted"><b>{{.LowDrifts}}</b><span>Low</span></div>
-<div class="onz-stat ok"><b>{{.FixedDrifts}}</b><span>Fixed</span></div>
-<div class="onz-stat bad"><b>{{.FailedFixes}}</b><span>Failed fixes</span></div>
+<div class="onz-stat {{statTone .CriticalDrifts "bad"}}"><b>{{.CriticalDrifts}}</b><span>Critical</span></div>
+<div class="onz-stat"><b>{{.HighDrifts}}</b><span>High</span></div>
+<div class="onz-stat"><b>{{.MediumDrifts}}</b><span>Medium</span></div>
+<div class="onz-stat"><b>{{.LowDrifts}}</b><span>Low</span></div>
+<div class="onz-stat {{statTone .FixedDrifts "ok"}}"><b>{{.FixedDrifts}}</b><span>Fixed</span></div>
+<div class="onz-stat {{statTone .FailedFixes "bad"}}"><b>{{.FailedFixes}}</b><span>Failed fixes</span></div>
 </div>
 {{if or .SnapshotID .PlaybookID}}<section class="onz-card"><h2>Report details</h2><div class="onz-body">
 {{if .SnapshotID}}<p>Snapshot ID: {{.SnapshotID}}</p>{{end}}
@@ -221,18 +222,22 @@ func (r *Reporter) generateHTMLReport(report *DriftReport) (string, error) {
 {{if .DriftsByType}}<section class="onz-card"><h2>Drifts by type</h2><div class="onz-scroll"><table class="onz-table"><tr><th>Type</th><th class="num">Count</th></tr>{{range $type, $count := .DriftsByType}}<tr><td>{{$type}}</td><td class="num">{{$count}}</td></tr>{{end}}</table></div></section>{{end}}
 {{if .DriftsByHost}}<section class="onz-card"><h2>Drifts by host</h2><div class="onz-scroll"><table class="onz-table"><tr><th>Host</th><th class="num">Count</th></tr>{{range $host, $count := .DriftsByHost}}<tr><td>{{$host}}</td><td class="num">{{$count}}</td></tr>{{end}}</table></div></section>{{end}}
 {{range .Items}}<section class="onz-card">
-<h2>{{.Type}}: {{.Resource}} on {{.Host}} <span class="onz-badge {{tone (printf "%s" .Severity)}}">{{.Severity}}</span> <span class="onz-badge {{tone (printf "%s" .Status)}}">{{.Status}}</span></h2>
+<h2>{{.Type}}: {{.Resource}} on {{.Host}} <span class="onz-badge {{severityTone (printf "%s" .Severity)}}">{{.Severity}}</span> <span class="onz-badge {{tone (printf "%s" .Status)}}">{{.Status}}</span></h2>
 <div class="onz-body">
 {{if .Message}}<p>{{.Message}}</p>{{end}}
-<p class="muted">Detected: {{.DetectedAt.Format "2006-01-02 15:04:05 MST"}}{{if .FixedAt}} · Fixed: {{.FixedAt.Format "2006-01-02 15:04:05 MST"}}{{end}}</p>
+<p class="muted">Detected: {{.DetectedAt.Format "2 Jan 2006 15:04 MST"}}{{if .FixedAt}} · Fixed: {{.FixedAt.Format "2 Jan 2006 15:04 MST"}}{{end}}</p>
 {{if .CanAutoFix}}<span class="onz-badge ok">auto-fixable</span>{{end}}
 {{if .Diff}}<pre class="onz-diff">{{range diffLines .Diff}}<span class="{{.Class}}">{{.Text}}</span>{{end}}</pre>{{end}}
-</div></section>{{else}}<p class="muted">No drift detected.</p>{{end}}
-<footer class="onz-foot">Generated {{.Timestamp.Format "2006-01-02 15:04:05 MST"}}</footer></main></body></html>`
+</div></section>{{else}}<p class="muted">No drift detected</p>{{end}}
+<footer class="onz-foot">{{footer}}</footer></main></body></html>`
 
 	t, err := template.New("report").Funcs(template.FuncMap{
-		"tone":      brand.Tone,
-		"diffLines": reportDiffLines,
+		"tone":         brand.StatusClass,
+		"severityTone": brand.SeverityTone,
+		"statTone":     brand.StatTone,
+		"duration":     brand.ReportDuration,
+		"footer":       brand.ReportFooter,
+		"diffLines":    reportDiffLines,
 	}).Parse(tmpl)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse template: %w", err)

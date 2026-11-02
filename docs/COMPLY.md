@@ -23,7 +23,7 @@ web1: 21/23 controls pass (91%)
       file /var/log/journal: missing
       fix: mkdir /var/log/journal; systemctl restart systemd-journald
 
-2 host(s), 44/46 controls pass (96%)
+2 hosts, 44/46 controls pass (96%)
 ```
 
 ## Bundled profiles
@@ -76,3 +76,10 @@ fix itself is an ordinary playbook.
 Exit codes: 0 all controls pass (or none at the `--fail-on` severity failed), 1 a control failed
 or a host could not be checked. The JSON report has every control per host (`ok`, `details`,
 `remediation`), the host scores and the total.
+
+The standalone HTML report uses the same restrained fleet layout as the other reports,
+follows the system light or dark theme, and prints without external resources. Its control ×
+host matrix uses outlined squares for passes, red squares for failures, and dashed squares
+for missing results or unreachable hosts. The matrix scrolls horizontally on narrow screens;
+per-host details and remediation remain below it. Controls absent from every host result
+cannot appear in the matrix because the report has no metadata for them.

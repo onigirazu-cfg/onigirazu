@@ -62,11 +62,11 @@ func TestHTMLReportContentEscapingAndBadges(t *testing.T) {
 	}
 	for _, want := range []string{
 		`<span class="onz-badge bad">critical</span>`,
-		`<span class="onz-badge warn">high</span>`,
-		`<span class="onz-badge warn">medium</span>`,
+		`<span class="onz-badge muted">high</span>`,
+		`<span class="onz-badge muted">medium</span>`,
 		`<span class="onz-badge muted">&lt;script&gt;`,
 		`<span class="onz-badge bad">fail</span>`,
-		`<span class="onz-badge ok">pass</span>`,
+		`<span class="muted">pass</span>`,
 		`<span class="onz-badge bad">could not be checked</span>`,
 		`<table class="onz-table">`, `<td class="num">`,
 	} {
