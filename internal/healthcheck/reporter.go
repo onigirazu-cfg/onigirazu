@@ -123,23 +123,27 @@ func (r *Reporter) FormatCSV(report *HealthCheckReport) string {
 
 // FormatHTML returns the report as HTML string
 func (r *Reporter) FormatHTML(report *HealthCheckReport) string {
-	out := `<!doctype html><html lang="en"><head>` + brand.ReportHead + `<title>Health check report</title></head><body><main class="onz-page">` + brand.Header("Health check report") + `
-<h1 class="onz-title">Health check</h1><p class="onz-sub">Total duration ` + html.EscapeString(report.TotalDuration.String()) + `</p>
-<div class="onz-stats"><div class="onz-stat ` + brand.Tone(string(report.OverallStatus)) + `"><b>` + html.EscapeString(string(report.OverallStatus)) + `</b><span>Overall</span></div>
-<div class="onz-stat"><b>` + html.EscapeString(fmt.Sprint(report.Statistics.TotalHosts)) + `</b><span>Hosts</span></div>
-<div class="onz-stat ok"><b>` + html.EscapeString(fmt.Sprint(report.Statistics.HealthyHosts)) + `</b><span>Healthy</span></div>
-<div class="onz-stat warn"><b>` + html.EscapeString(fmt.Sprint(report.Statistics.WarningHosts)) + `</b><span>Warning</span></div>
-<div class="onz-stat bad"><b>` + html.EscapeString(fmt.Sprint(report.Statistics.CriticalHosts)) + `</b><span>Critical</span></div></div>`
+	out := `<!doctype html><html lang="en"><head>` + brand.ReportHead + `<title>Health check</title></head><body><main class="onz-page">` + brand.Header("Health check") + `
+<h1 class="onz-title">Health check</h1><p class="onz-sub">Checked ` + html.EscapeString(report.Timestamp.Format(brand.ReportTime)) + ` · Total duration <span class="onz-duration">` + html.EscapeString(brand.ReportDuration(report.TotalDuration)) + `</span></p>
+<div class="onz-stats"><div class="onz-stat"><b>` + html.EscapeString(fmt.Sprint(report.Statistics.TotalHosts)) + `</b><span>Hosts</span></div>
+<div class="onz-stat ` + brand.Tone(string(report.OverallStatus)) + `"><b>` + html.EscapeString(string(report.OverallStatus)) + `</b><span>Overall</span></div>
+<div class="onz-stat ` + brand.StatTone(report.Statistics.HealthyHosts, "ok") + `"><b>` + html.EscapeString(fmt.Sprint(report.Statistics.HealthyHosts)) + `</b><span>Healthy</span></div>
+<div class="onz-stat ` + brand.StatTone(report.Statistics.WarningHosts, "warn") + `"><b>` + html.EscapeString(fmt.Sprint(report.Statistics.WarningHosts)) + `</b><span>Warning</span></div>
+<div class="onz-stat ` + brand.StatTone(report.Statistics.CriticalHosts, "bad") + `"><b>` + html.EscapeString(fmt.Sprint(report.Statistics.CriticalHosts)) + `</b><span>Critical</span></div></div>`
 	for _, hostReport := range report.HostReports {
-		out += `<section class="onz-card"><h2>` + html.EscapeString(hostReport.Host.Name) + ` (` + html.EscapeString(hostReport.Host.Address) + `) <span class="onz-badge ` + brand.Tone(string(hostReport.Status)) + `">` + html.EscapeString(string(hostReport.Status)) + `</span></h2>
-<div class="onz-body">Duration: ` + html.EscapeString(hostReport.Duration.String()) + `</div>
+		heading := html.EscapeString(hostReport.Host.Name)
+		if hostReport.Host.Address != "" && hostReport.Host.Address != hostReport.Host.Name {
+			heading += " (" + html.EscapeString(hostReport.Host.Address) + ")"
+		}
+		out += `<section class="onz-card"><h2>` + heading + ` <span class="onz-badge ` + brand.Tone(string(hostReport.Status)) + `">` + html.EscapeString(string(hostReport.Status)) + `</span></h2>
+<div class="onz-body">Duration: <span class="onz-duration">` + html.EscapeString(brand.ReportDuration(hostReport.Duration)) + `</span></div>
 <div class="onz-scroll"><table class="onz-table"><tr><th>Check type</th><th>Status</th><th>Message</th><th class="num">Duration</th></tr>`
 		for _, check := range hostReport.Checks {
-			out += `<tr><td>` + html.EscapeString(string(check.CheckType)) + `</td><td><span class="onz-badge ` + brand.Tone(string(check.Status)) + `">` + html.EscapeString(string(check.Status)) + `</span></td><td>` + html.EscapeString(check.Message) + `</td><td class="num">` + html.EscapeString(check.Duration.String()) + `</td></tr>`
+			out += `<tr><td>` + html.EscapeString(string(check.CheckType)) + `</td><td><span class="onz-badge ` + brand.Tone(string(check.Status)) + `">` + html.EscapeString(string(check.Status)) + `</span></td><td>` + html.EscapeString(check.Message) + `</td><td class="num">` + html.EscapeString(brand.ReportDuration(check.Duration)) + `</td></tr>`
 		}
 		out += `</table></div></section>`
 	}
-	out += `<footer class="onz-foot">Generated ` + html.EscapeString(report.Timestamp.Format("2006-01-02 15:04:05 MST")) + `</footer></main></body></html>`
+	out += `<footer class="onz-foot">` + html.EscapeString(brand.ReportFooter()) + `</footer></main></body></html>`
 	return out
 }
 

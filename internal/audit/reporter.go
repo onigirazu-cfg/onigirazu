@@ -168,7 +168,7 @@ func (r *Reporter) generateHTMLReport() (string, error) {
 	var buf bytes.Buffer
 
 	// Write HTML header
-	buf.WriteString(`<!doctype html><html lang="en"><head>` + brand.ReportHead + `<title>Audit report</title></head><body><main class="onz-page">` + brand.Header("Audit report") + `<h1 class="onz-title">Audit report</h1><p class="onz-sub">Execution history</p>`)
+	buf.WriteString(`<!doctype html><html lang="en"><head>` + brand.ReportHead + `<title>Audit report</title></head><body><main class="onz-page">` + brand.Header("Audit report") + `<h1 class="onz-title">Audit report</h1><p class="onz-sub">Execution history · Checked ` + html.EscapeString(time.Now().Format(brand.ReportTime)) + `</p>`)
 
 	// Write summary metrics
 	successCount := 0
@@ -181,8 +181,8 @@ func (r *Reporter) generateHTMLReport() (string, error) {
 		}
 	}
 
-	buf.WriteString(fmt.Sprintf(`<div class="onz-stats"><div class="onz-stat"><b>%d</b><span>Total executions</span></div><div class="onz-stat ok"><b>%d</b><span>Successful</span></div><div class="onz-stat bad"><b>%d</b><span>Failed</span></div></div>`, len(r.records), successCount, failureCount))
-	buf.WriteString(`<section class="onz-card"><h2>Execution records</h2><div class="onz-scroll"><table class="onz-table"><thead><tr><th>Playbook</th><th>User</th><th>Status</th><th>Start time</th><th class="num">Duration</th><th class="num" title="total (successful ✓ / failed ✗ / skipped ⊘)">Tasks</th><th class="num">Exit</th></tr></thead><tbody>`)
+	buf.WriteString(fmt.Sprintf(`<div class="onz-stats"><div class="onz-stat"><b>%d</b><span>Total executions</span></div><div class="onz-stat %s"><b>%d</b><span>Successful</span></div><div class="onz-stat %s"><b>%d</b><span>Failed</span></div></div>`, len(r.records), brand.StatTone(successCount, "ok"), successCount, brand.StatTone(failureCount, "bad"), failureCount))
+	buf.WriteString(`<section class="onz-card"><h2>Execution records</h2><div class="onz-scroll"><table class="onz-table"><thead><tr><th>Playbook</th><th>User</th><th>Status</th><th>Start time</th><th class="num">Duration</th><th class="num" title="Total (successful / failed / skipped)">Tasks</th><th class="num">Exit</th></tr></thead><tbody>`)
 
 	// Write records
 	for _, record := range r.records {
@@ -193,20 +193,20 @@ func (r *Reporter) generateHTMLReport() (string, error) {
                     <td>%s</td>
                     <td><span class="onz-badge %s">%s</span></td>
                     <td class="time">%s</td>
-                    <td class="num">%.2fs</td>
-                    <td class="num">%d (✓%d ✗%d ⊘%d)</td>
+                    <td class="num">%s</td>
+                    <td class="num">%d (%d passed / %d failed / %d skipped)</td>
                     <td class="num">%d</td>
                 </tr>
 `,
 			html.EscapeString(record.PlaybookPath), html.EscapeString(record.User),
 			statusClass, html.EscapeString(string(record.Status)),
-			record.StartTime.Format("2006-01-02 15:04"),
-			record.Duration, record.TotalTasks, record.SuccessfulTasks,
+			html.EscapeString(record.StartTime.Format(brand.ReportTime)),
+			html.EscapeString(brand.ReportDuration(time.Duration(record.Duration*float64(time.Second)))), record.TotalTasks, record.SuccessfulTasks,
 			record.FailedTasks, record.SkippedTasks, record.ExitCode))
 	}
 
-	buf.WriteString(`</tbody></table></div></section><footer class="onz-foot">Generated `)
-	buf.WriteString(html.EscapeString(time.Now().Format("2006-01-02 15:04:05 MST")))
+	buf.WriteString(`</tbody></table></div></section><footer class="onz-foot">`)
+	buf.WriteString(html.EscapeString(brand.ReportFooter()))
 	buf.WriteString(`</footer></main></body></html>`)
 	return buf.String(), nil
 }

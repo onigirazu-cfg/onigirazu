@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- serve page: quieter chrome, one time format, compact Result column, comply matrix as a host grid
+- Polish standalone HTML reports with restrained status colors, consistent spacing and time formats, and a printable compliance host × control matrix
+
 - `onigirazu serve`: a failed run's summary ends with the first line of its first failed task, in host order (`… 1 failed — web1: <message>`), so the jobs table, history and notifications show why it failed
 - HTML reports (drift, plan, audit, compliance, health check) share one layout: summary chips, tables, status badges, diff blocks and footer from one stylesheet, printable
 - `onigirazu serve` stops gracefully: on SIGTERM it takes no new runs, waits up to `shutdown_timeout` (default 10m, 0 = cancel at once) for executing runs, shows a stopping banner, and cancels the rest at the deadline or on a second signal; queued runs survive a restart; `serve install` writes `KillMode=mixed` and `TimeoutStopSec`
@@ -28,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - `run_once` on `include_tasks` and `include_role` runs the include on the first host of each `serial` batch only, as in Ansible (it ran on every host); `run_once` on `import_tasks`, `import_role` and a `block` passes on to each of their tasks (it was ignored)
+- `onigirazu serve`: drift cells in the recent-runs strip stay in line with the others instead of shifting into their neighbours
 - `onigirazu serve`: the menu button also works on wide screens and hides or shows the sidebar; the choice is remembered in the browser
 - `onigirazu serve`: sidebar links to pages under `/pages/` open inside the UI with the sidebar kept, loaded with `?embed=1`, instead of leaving the UI
 - Audit and health-check HTML reports escape record values (playbook path, user, status, host name and address, check type and message), so a value with HTML in it can no longer inject script into the report; statuses outside the known set get a fixed CSS class

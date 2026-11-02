@@ -76,26 +76,26 @@ func writeDriftHTML(w io.Writer, r *DriftReport) error {
 	return driftHTML.Execute(w, map[string]interface{}{"R": r, "Hosts": hosts, "Title": title})
 }
 
-var driftHTML = template.Must(template.New("drift").Funcs(template.FuncMap{"tone": brand.Tone}).Parse(`<!doctype html>
+var driftHTML = template.Must(template.New("drift").Funcs(template.FuncMap{"tone": brand.StatusClass, "footer": brand.ReportFooter}).Parse(`<!doctype html>
 <html lang="en"><head>` + brand.ReportHead + `<title>{{.Title}}: {{.R.Playbook}}</title></head><body><main class="onz-page">
 ` + brand.HeaderOpen + `{{.Title}}: {{.R.Playbook}}` + brand.HeaderClose + `
 <h1 class="onz-title">{{.Title}}: {{.R.Playbook}}</h1>
-<p class="onz-sub">checked {{.R.CheckedAt.Format "2006-01-02 15:04:05 MST"}}</p>
+<p class="onz-sub">Checked {{.R.CheckedAt.Format "2 Jan 2006 15:04 MST"}}</p>
 <div class="onz-stats">
-<div class="onz-stat"><b>{{.R.Hosts}}</b><span>hosts</span></div>
-<div class="onz-stat {{if .R.Drift}}warn{{else}}ok{{end}}"><b>{{len .R.Drift}}</b><span>with changes</span></div>
-<div class="onz-stat"><b>{{.R.DriftTasks}}</b><span>tasks</span></div>
-<div class="onz-stat ok"><b>{{len .R.InSync}}</b><span>in sync</span></div>
-{{if .R.Orphans}}<div class="onz-stat warn"><b>{{len .R.Orphans}}</b><span>left the playbook</span></div>{{end}}
-{{if .R.Errors}}<div class="onz-stat bad"><b>{{len .R.Errors}}</b><span>could not be checked</span></div>{{end}}
+<div class="onz-stat"><b>{{.R.Hosts}}</b><span>Hosts</span></div>
+<div class="onz-stat {{if .R.Drift}}warn{{end}}"><b>{{len .R.Drift}}</b><span>With changes</span></div>
+<div class="onz-stat"><b>{{.R.DriftTasks}}</b><span>Tasks</span></div>
+<div class="onz-stat{{if .R.InSync}} ok{{end}}"><b>{{len .R.InSync}}</b><span>In sync</span></div>
+{{if .R.Orphans}}<div class="onz-stat warn"><b>{{len .R.Orphans}}</b><span>Left the playbook</span></div>{{end}}
+{{if .R.Errors}}<div class="onz-stat bad"><b>{{len .R.Errors}}</b><span>Could not be checked</span></div>{{end}}
 </div>
 {{if .R.Fixed}}<p><span class="onz-badge {{tone "fixed"}}">fixed</span>: the playbook was applied</p>{{end}}
 {{range .Hosts}}<section class="onz-card"><h2>{{.Name}}</h2>
-{{range .Items}}<div class="onz-body"><strong>{{.Task}}</strong>{{if .Module}} <span class="muted">({{.Module}})</span>{{end}}{{if .Since}} <span class="muted">· since {{.Since.Local.Format "2006-01-02 15:04"}}</span>{{end}}{{if and .Detail (not .Lines)}} — {{.Detail}}{{end}}
+{{range .Items}}<div class="onz-body"><strong>{{.Task}}</strong>{{if .Module}} <span class="muted">({{.Module}})</span>{{end}}{{if .Since}} <span class="muted">· since {{.Since.Local.Format "2 Jan 2006 15:04 MST"}}</span>{{end}}{{if and .Detail (not .Lines)}} — {{.Detail}}{{end}}
 {{if .Lines}}<pre class="onz-diff">{{range .Lines}}<span class="{{.Class}}">{{.Text}}</span>{{end}}</pre>{{end}}</div>{{end}}
 {{if .Orphans}}<div class="onz-body"><strong>No longer in the playbook</strong><pre class="onz-diff">{{range .Orphans}}<span class="{{.Class}}">{{.Mark}} {{.Text}}</span>{{end}}</pre></div>{{end}}
 {{range .Errors}}<div class="onz-body"><span class="onz-badge {{tone "error"}}">error</span> <strong>{{.Task}}</strong>: {{.Detail}}</div>{{end}}
 </section>{{end}}
 {{if .R.InSync}}<p class="muted">In sync: {{range $i, $h := .R.InSync}}{{if $i}}, {{end}}{{$h}}{{end}}</p>{{end}}
-<footer class="onz-foot">Generated {{.R.CheckedAt.Format "2006-01-02 15:04:05 MST"}}</footer></main></body></html>
+<footer class="onz-foot">{{footer}}</footer></main></body></html>
 `))
