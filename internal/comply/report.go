@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html"
 	"io"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -169,7 +170,7 @@ func (r *Report) WriteText(w io.Writer) {
 	for _, name := range r.errorHosts() {
 		fmt.Fprintf(w, "\n%s: could not check: %s\n", name, r.Errors[name])
 	}
-	fmt.Fprintf(w, "\n%d host(s), %d/%d controls pass (%.0f%%)\n", len(r.Hosts), r.Passed, r.Passed+r.Failed, r.Score)
+	fmt.Fprintf(w, "\n%d %s, %d/%d controls pass (%.0f%%)\n", len(r.Hosts), brand.Plural(len(r.Hosts), "host", "hosts"), r.Passed, r.Passed+r.Failed, r.Score)
 }
 
 // WriteJSON prints the report as JSON
@@ -182,7 +183,7 @@ func (r *Report) WriteJSON(w io.Writer) error {
 // WriteMarkdown prints the report as Markdown (a pull request comment, a
 // wiki page)
 func (r *Report) WriteMarkdown(w io.Writer) {
-	fmt.Fprintf(w, "## Compliance: %s\n\n%s — %d host(s), **%d/%d controls pass (%.0f%%)**\n\n", r.Profile, r.Title, len(r.Hosts), r.Passed, r.Passed+r.Failed, r.Score)
+	fmt.Fprintf(w, "## Compliance: %s\n\n%s — %d %s, **%d/%d controls pass (%.0f%%)**\n\n", r.Profile, r.Title, len(r.Hosts), brand.Plural(len(r.Hosts), "host", "hosts"), r.Passed, r.Passed+r.Failed, r.Score)
 	fmt.Fprintln(w, "| Host | Pass | Fail | Score |\n|---|---|---|---|")
 	for _, name := range r.hostNames() {
 		h := r.Hosts[name]
@@ -217,10 +218,11 @@ func (r *Report) WriteHTML(w io.Writer) {
 		scoreTone = brand.Tone("fail")
 	}
 	fmt.Fprintf(w, `<!doctype html><html lang="en"><head>%s<title>Compliance: %s</title></head><body><main class="onz-page">
-%s<h1 class="onz-title">Compliance: %s</h1><p class="onz-sub">%s</p>
-<div class="onz-stats"><div class="onz-stat"><b>%d</b><span>Hosts</span></div><div class="onz-stat ok"><b>%d</b><span>Controls passed</span></div><div class="onz-stat bad"><b>%d</b><span>Controls failed</span></div><div class="onz-stat %s"><b>%.0f%%</b><span>Score</span></div></div>
-`, brand.ReportHead, html.EscapeString(r.Profile), brand.Header("Compliance: "+r.Profile), html.EscapeString(r.Profile), html.EscapeString(r.Title), len(r.Hosts), r.Passed, r.Failed, scoreTone, r.Score)
-	fmt.Fprintln(w, `<div class="onz-scroll"><table class="onz-table"><tr><th>Host</th><th class="num">Pass</th><th class="num">Fail</th><th class="num">Score</th></tr>`)
+%s<h1 class="onz-title">Compliance: %s</h1><p class="onz-sub">%s · Checked %s</p>
+<div class="onz-stats"><div class="onz-stat %s"><b>%.0f%%</b><span>Score</span></div><div class="onz-stat"><b>%d</b><span>Hosts</span></div><div class="onz-stat %s"><b>%d</b><span>Controls passed</span></div><div class="onz-stat %s"><b>%d</b><span>Controls failed</span></div></div>
+`, brand.ReportHead, html.EscapeString(r.Profile), brand.Header("Compliance: "+r.Profile), html.EscapeString(r.Profile), html.EscapeString(r.Title), html.EscapeString(r.Time.Local().Format(brand.ReportTime)), scoreTone, r.Score, len(r.Hosts), brand.StatTone(r.Passed, "ok"), r.Passed, brand.StatTone(r.Failed, "bad"), r.Failed)
+	r.writeControlMatrix(w)
+	fmt.Fprintln(w, `<div class="onz-scroll onz-summary"><table class="onz-table"><tr><th>Host</th><th class="num">Pass</th><th class="num">Fail</th><th class="num">Score</th></tr>`)
 	for _, name := range r.hostNames() {
 		h := r.Hosts[name]
 		fmt.Fprintf(w, `<tr><td>%s</td><td class="num">%d</td><td class="num">%d</td><td class="num">%.0f%%</td></tr>`, html.EscapeString(name), h.Passed, h.Failed, h.Score)
@@ -230,12 +232,12 @@ func (r *Report) WriteHTML(w io.Writer) {
 		h := r.Hosts[name]
 		fmt.Fprintf(w, `<section class="onz-card"><h2>%s</h2><div class="onz-scroll"><table class="onz-table"><tr><th>Control</th><th>Severity</th><th>Result</th><th>Details</th><th>Remediation</th></tr>`, html.EscapeString(name))
 		for _, c := range h.Controls {
-			state := "pass"
+			result := `<span class="muted">pass</span>`
 			if !c.OK {
-				state = "fail"
+				result = `<span class="onz-badge bad">fail</span>`
 			}
-			fmt.Fprintf(w, `<tr><td>%s %s</td><td><span class="onz-badge %s">%s</span></td><td><span class="onz-badge %s">%s</span></td><td>%s</td><td>%s</td></tr>`,
-				html.EscapeString(c.ID), html.EscapeString(c.Title), brand.Tone(c.Severity), html.EscapeString(c.Severity), brand.Tone(state), state,
+			fmt.Fprintf(w, `<tr><td>%s %s</td><td><span class="onz-badge %s">%s</span></td><td>%s</td><td>%s</td><td>%s</td></tr>`,
+				html.EscapeString(c.ID), html.EscapeString(c.Title), brand.SeverityTone(c.Severity), html.EscapeString(c.Severity), result,
 				html.EscapeString(strings.Join(c.Details, "; ")), html.EscapeString(c.Remediation))
 		}
 		fmt.Fprintln(w, "</table></div></section>")
@@ -243,7 +245,84 @@ func (r *Report) WriteHTML(w io.Writer) {
 	for _, name := range r.errorHosts() {
 		fmt.Fprintf(w, `<section class="onz-card"><h2>%s <span class="onz-badge bad">could not be checked</span></h2><div class="onz-body">%s</div></section>`, html.EscapeString(name), html.EscapeString(r.Errors[name]))
 	}
-	fmt.Fprintf(w, `<footer class="onz-foot">Generated %s</footer></main></body></html>`, html.EscapeString(r.Time.Format("2006-01-02 15:04:05 MST")))
+	fmt.Fprintf(w, `<footer class="onz-foot">%s</footer></main></body></html>`, html.EscapeString(brand.ReportFooter()))
+}
+
+// writeControlMatrix uses the union of observed controls, so partial reports
+// distinguish missing results from passes. Error hosts always remain unchecked.
+func (r *Report) writeControlMatrix(w io.Writer) {
+	controls := map[string]string{}
+	names := map[string]bool{}
+	results := map[string]map[string]bool{}
+	for name, host := range r.Hosts {
+		names[name] = true
+		results[name] = map[string]bool{}
+		if host == nil {
+			continue
+		}
+		for _, c := range host.Controls {
+			// Choose deterministically even if host metadata differs.
+			if title, ok := controls[c.ID]; !ok || c.Title < title {
+				controls[c.ID] = c.Title
+			}
+			results[name][c.ID] = c.OK
+		}
+	}
+	for name := range r.Errors {
+		names[name] = true
+	}
+	hosts := make([]string, 0, len(names))
+	for name := range names {
+		hosts = append(hosts, name)
+	}
+	sort.Strings(hosts)
+	// Rows follow the profile. Every host lists its controls in profile order,
+	// but a partial host may skip some, so merge: a control missing so far goes
+	// right after the control that precedes it on that host.
+	ids := make([]string, 0, len(controls))
+	for _, name := range hosts {
+		host := r.Hosts[name]
+		if host == nil {
+			continue
+		}
+		at := 0
+		for _, c := range host.Controls {
+			if i := slices.Index(ids, c.ID); i >= 0 {
+				at = i + 1
+				continue
+			}
+			ids = slices.Insert(ids, at, c.ID)
+			at++
+		}
+	}
+	if len(hosts) == 0 || len(ids) == 0 {
+		return
+	}
+	fmt.Fprint(w, `<section class="onz-card"><h2>Controls across hosts</h2><div class="onz-body onz-legend"><span><span class="onz-square"></span>Passed</span><span><span class="onz-square fail"></span>Failed</span><span><span class="onz-square unchecked"></span>Not checked or unreachable</span></div><div class="onz-scroll"><table class="onz-table onz-matrix"><thead><tr><th scope="col">Control</th>`)
+	for _, name := range hosts {
+		fmt.Fprintf(w, `<th scope="col">%s</th>`, html.EscapeString(name))
+	}
+	fmt.Fprint(w, `</tr></thead><tbody>`)
+	for _, id := range ids {
+		label := id + " " + controls[id]
+		fmt.Fprintf(w, `<tr><th scope="row">%s</th>`, html.EscapeString(label))
+		for _, name := range hosts {
+			class, result := "unchecked", "not checked"
+			if _, unreachable := r.Errors[name]; unreachable {
+				result = "unreachable"
+			} else if ok, checked := results[name][id]; checked {
+				if ok {
+					class, result = "", "pass"
+				} else {
+					class, result = "fail", "fail"
+				}
+			}
+			title := html.EscapeString(label + ": " + result)
+			fmt.Fprintf(w, `<td><span class="onz-square %s" role="img" title="%s" aria-label="%s"></span></td>`, class, title, html.EscapeString(name+": "+label+": "+result))
+		}
+		fmt.Fprint(w, `</tr>`)
+	}
+	fmt.Fprint(w, `</tbody></table></div></section>`)
 }
 
 // Metrics is the report as Prometheus text: controls per host and result,

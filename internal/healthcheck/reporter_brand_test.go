@@ -34,7 +34,7 @@ func TestHTMLReportHeaderEscaping(t *testing.T) {
 	if strings.Contains(out, "<script>") {
 		t.Fatal("raw script in report")
 	}
-	want := brand.Header("Health check report")
+	want := brand.Header("Health check")
 	if !strings.Contains(out, want) {
 		t.Fatalf("missing header %q", want)
 	}

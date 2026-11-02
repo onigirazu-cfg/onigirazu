@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - serve page: quieter chrome, one time format, compact Result column, comply matrix as a host grid
+- Polish standalone HTML reports with restrained status colors, consistent spacing and time formats, and a printable compliance host × control matrix
 
 - `onigirazu serve`: a failed run's summary ends with the first line of its first failed task, in host order (`… 1 failed — web1: <message>`), so the jobs table, history and notifications show why it failed
 - HTML reports (drift, plan, audit, compliance, health check) share one layout: summary chips, tables, status badges, diff blocks and footer from one stylesheet, printable
