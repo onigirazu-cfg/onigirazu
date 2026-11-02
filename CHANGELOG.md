@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- serve page: quieter chrome, one time format, compact Result column, comply matrix as a host grid
+
 - `onigirazu serve`: a failed run's summary ends with the first line of its first failed task, in host order (`… 1 failed — web1: <message>`), so the jobs table, history and notifications show why it failed
 - HTML reports (drift, plan, audit, compliance, health check) share one layout: summary chips, tables, status badges, diff blocks and footer from one stylesheet, printable
 - `onigirazu serve` stops gracefully: on SIGTERM it takes no new runs, waits up to `shutdown_timeout` (default 10m, 0 = cancel at once) for executing runs, shows a stopping banner, and cancels the rest at the deadline or on a second signal; queued runs survive a restart; `serve install` writes `KillMode=mixed` and `TimeoutStopSec`

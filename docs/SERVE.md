@@ -771,8 +771,10 @@ to clear snapshots for the next request. Conflicting native host definitions rep
 provenance error when their effective sources depend on the selected group; the engine's
 resolution behavior is unchanged.
 
-Jobs show up to 20 status squares, newest on the right, with hollow squares for check
-runs and status/date tooltips. The job page uses light history with a duration sparkline
+Jobs show up to 20 status cells in a history ribbon, newest on the right, with hollow cells for check
+runs and status/date tooltips. Status colours use green for ok, amber for drift/changed/pending/cancelling,
+red for failures and grey otherwise. Result summaries stay on one line with full-text tooltips; absolute
+Targets longer than two segments show the last two with the full path in a tooltip. The job page uses light history with a duration sparkline
 for up to 50 runs. Select two executed drift/apply runs and choose Compare to see host
 verdict changes and appeared/resolved drift tasks; a warning appears when playbook hashes
 differ or are unavailable. Individual run pages still load full reports.
@@ -781,13 +783,13 @@ Run pages show metadata and tabs by kind: drift/apply
 have expandable Hosts, Changes grouped by task, coloured Diff (limited to the first
 200 KB), Tasks with collapsible per-host status and duration lists, host duration totals
 and the slowest 10 retained tasks, and Orphans when present; verify has expandable Hosts and Checks across hosts;
-comply has a control-by-host Matrix with unreachable hosts and scores, plus Remediation
+comply has a control-by-host Matrix of squares (outlined passed, filled red failed, dashed not checked or unreachable), with expandable failure details and scores, plus Remediation
 grouped by control. Apply runs include the diff of what they changed. Every kind retains a full JSON tab. Audit records open as JSON.
 Host names open `#host/<name>` with retained serve results across jobs and a separate
 “runs in the audit store” link. Jobs show a muted “never” badge before the first executed
 run and “stale” when an interval job’s last execution is older than twice its interval (anchored `at` jobs have no stale badge);
 queued and running jobs show wait and elapsed time. Tables scroll horizontally on narrow
-screens; at 700px and below the Jobs Target column is hidden and dates are shortened.
+screens; below 1280px Kind and Target fold into Job and Last run into Schedule; at 700px and below jobs become cards. Dates use a consistent 24-hour format.
 
 A job result: `{id, job, kind, mode, requested, started, duration_seconds, status, summary, trigger,
 hosts, report, approval, cancel, params, audit_execution_id, playbook_hash}`. `requested` is the request time; `started` becomes the execution
