@@ -344,6 +344,73 @@ func TestRunObserverLocalhostIsolation(t *testing.T) {
 	wg.Wait()
 }
 
+func TestRunObserverDelegatedInventoryHosts(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		loop  string
+		items int
+	}{
+		{name: "task", items: 1},
+		{name: "loop", loop: "      loop: [first, second]\n", items: 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			inventory := filepath.Join(dir, "hosts.yml")
+			if err := os.WriteFile(inventory, []byte("all:\n  hosts:\n    web1: {}\n    web2: {}\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			playbook := filepath.Join(dir, "delegated.yml")
+			if err := os.WriteFile(playbook, []byte("- name: delegated\n  hosts: all\n  serial: 2\n  gather_facts: false\n  tasks:\n    - name: delegated task\n      command: \"true\"\n      delegate_to: localhost\n      changed_when: false\n"+tc.loop), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			p := newRunProgress(strings.NewReplacer())
+			ctx, cancel := context.WithTimeout(withRunObserver(context.Background(), p), 20*time.Second)
+			defer cancel()
+			result, err := runPlaybookContext(ctx, []string{playbook, "-i", inventory, "--state", filepath.Join(dir, "state.json")})
+			if err != nil || result == nil {
+				t.Fatalf("execute delegated task: %v", err)
+			}
+			if len(result.Plays) != 1 || len(result.Plays[0].Hosts) != 2 {
+				t.Fatalf("expected one two-host batch: %+v", result.Plays)
+			}
+			for _, host := range result.Plays[0].Hosts {
+				if len(host.Tasks) != tc.items {
+					t.Fatalf("%s: got %d recorded tasks, want %d", host.Host, len(host.Tasks), tc.items)
+				}
+				for _, task := range host.Tasks {
+					if task.Host != "localhost" {
+						t.Errorf("recorded delegate host changed: %+v", task)
+					}
+				}
+			}
+			_, events, _, ch := p.subscribe(0)
+			defer p.unsubscribe(ch)
+			starts, ends := map[string]int{}, map[string]int{}
+			for _, e := range events {
+				if e.Type != "task_start" && e.Type != "task_end" {
+					continue
+				}
+				if e.Host != "web1" && e.Host != "web2" {
+					t.Errorf("event attributed to non-inventory host: %+v", e)
+				}
+				if e.Type == "task_start" {
+					starts[e.Host]++
+				} else {
+					ends[e.Host]++
+					if e.Status != "ok" {
+						t.Errorf("delegated task did not succeed: %+v", e)
+					}
+				}
+			}
+			for _, host := range []string{"web1", "web2"} {
+				if starts[host] != tc.items || ends[host] != tc.items {
+					t.Errorf("%s: got %d starts and %d ends, want %d each", host, starts[host], ends[host], tc.items)
+				}
+			}
+		})
+	}
+}
+
 func TestServeProgressWorkerContext(t *testing.T) {
 	cfg := &ServeConfig{DataDir: t.TempDir(), Retain: 5, Jobs: []ServeJob{{Name: "echo", Adhoc: ServeAdhoc{ExtraVars: []string{"token"}, SecretVars: []string{"token"}}}}}
 	s, err := newServer(cfg, io.Discard)
