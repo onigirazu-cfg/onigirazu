@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Delegated task-end events report the inventory host to observers, including loop items, so live progress tracks each host in a batch correctly.
 - serve: a job's `timeout` now limits its run; before, apply's 30m default cut every job at 30 minutes and the cut run could report ok. A play error no host's task carries now makes the run failed.
 - `onigirazu serve`: drift cells in the recent-runs strip stay in line with the others instead of shifting into their neighbours
 - `onigirazu serve`: the menu button also works on wide screens and hides or shows the sidebar; the choice is remembered in the browser
