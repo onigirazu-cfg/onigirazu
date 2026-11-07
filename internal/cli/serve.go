@@ -1937,7 +1937,8 @@ func (s *server) execute(ctx context.Context, j *ServeJob, mode string) (*JobRes
 		}
 	}
 	var runErr error
-	o := driftCheckOptions{limit: j.Limit, become: j.Become}
+	// the job's timeout, on ctx, bounds the run: apply's own default would cut it at 30m
+	o := driftCheckOptions{limit: j.Limit, become: j.Become, noApplyTimeout: true}
 	if j.Inventory != "" {
 		o.inventory = []string{j.Inventory}
 	} else {
@@ -2018,15 +2019,11 @@ func (s *server) execute(ctx context.Context, j *ServeJob, mode string) (*JobRes
 		for h := range report.Errors {
 			r.Hosts[h] = "failed"
 		}
-		switch {
-		case len(report.Errors) > 0:
-			r.Status = "failed"
-		case check && len(report.Drift) > 0:
-			r.Status = "drift"
-		default:
-			r.Status = "ok"
-		}
+		r.Status = applyStatus(report, result, check)
 		r.Summary = fmt.Sprintf("%d in sync, %d %s, %d failed", len(report.InSync), len(report.Drift), map[bool]string{true: "drifting", false: "changed"}[check], len(report.Errors))
+		if len(report.Errors) == 0 && result.Error != "" {
+			r.Summary += " — " + result.Error
+		}
 		r.Report, _ = json.Marshal(report)
 		if j.Kind == "drift" && runErr == nil {
 			s.pushMetrics(driftMetrics(report, s.cfg.Metrics.Labels))
@@ -2034,6 +2031,18 @@ func (s *server) execute(ctx context.Context, j *ServeJob, mode string) (*JobRes
 	}
 	r.Duration = time.Since(started).Seconds()
 	return r, runErr
+}
+
+// applyStatus is a drift or apply run's status. A play can end in an error no
+// host's task carries, so the hosts alone would call a cut run ok.
+func applyStatus(report *DriftReport, result *types.PlaybookResult, check bool) string {
+	switch {
+	case len(report.Errors) > 0, result.Error != "":
+		return "failed"
+	case check && len(report.Drift) > 0:
+		return "drift"
+	}
+	return "ok"
 }
 
 func (s *server) pushMetrics(text string) {
