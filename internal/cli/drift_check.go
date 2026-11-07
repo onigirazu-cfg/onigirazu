@@ -91,6 +91,7 @@ type driftCheckOptions struct {
 	user                     string
 	privateKey               string
 	notify                   []string // webhooks told about drift and errors
+	noApplyTimeout           bool     // the caller's context bounds the run, not apply's --timeout default
 	notifyOK                 bool     // tell them about a clean check too
 	metricsFile, metricsPush string   // Prometheus text: a textfile collector file, a push URL
 	metricsLabels            []string // extra labels, name=value
@@ -120,6 +121,9 @@ func (o driftCheckOptions) applyArgs(playbook string, check bool) []string {
 	}
 	if o.become {
 		args = append(args, "--become")
+	}
+	if o.noApplyTimeout {
+		args = append(args, "--timeout=0")
 	}
 	return args
 }
