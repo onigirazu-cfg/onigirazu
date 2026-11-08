@@ -18,9 +18,10 @@ func (e *ExecutionEngine) conditionHolds(ctx context.Context, condition string, 
 		return true, nil
 	}
 	if _, whole := expression.Unwrap(condition); whole || !strings.Contains(condition, "{{") {
-		return expression.Condition(condition, e.expressionVariables(variables))
+		holds, err := expression.Condition(condition, e.expressionVariables(variables))
+		return holds, enrichExpressionError(ctx, condition, variables, err)
 	}
-	rendered, err := e.templateEngine.Render(ctx, condition, variables)
+	rendered, err := e.renderEvaluation(ctx, condition, variables)
 	if err != nil {
 		return false, fmt.Errorf("condition %q: %w", condition, err)
 	}

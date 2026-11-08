@@ -15,7 +15,7 @@ func TestEvalConcurrent(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for _, e := range []string{`'a' | sha256`, `[1, 2] | product([3]) | list | length`, `'x' | type_debug`, `'a,b' | split(',') | length`} {
+			for _, e := range []string{`{'z': 1, 'a': {'y': 2, 'b': 3}} | combine({'x': 4}, recursive=true) | to_json`, `'a' | sha256`, `[1, 2] | product([3]) | list | length`, `'x' | type_debug`, `'a,b' | split(',') | length`} {
 				_, err := Eval(e, map[string]interface{}{})
 				require.NoError(t, err, e)
 			}

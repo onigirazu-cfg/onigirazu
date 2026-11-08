@@ -32,7 +32,9 @@ func (e *ExecutionEngine) throttleSlots(ctx context.Context, task *types.Task, v
 		return nil, nil
 	}
 	if strings.Contains(value, "{{") {
-		rendered, err := e.templateEngine.Render(ctx, value, variables)
+		variables = e.mergeVariables(variables, nil)
+		ctx = e.lazyEvaluationContext(ctx, "", variables)
+		rendered, err := e.renderEvaluation(ctx, value, variables)
 		if err != nil {
 			return nil, fmt.Errorf("throttle: %w", err)
 		}

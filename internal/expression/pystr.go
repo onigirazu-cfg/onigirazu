@@ -121,16 +121,20 @@ func pyQuote(s string) string {
 
 // pyJSON is Python's json.dumps as Ansible's to_json/to_nice_json call it:
 // ", " and ": " separators, non-ASCII as \uXXXX, no HTML escaping. indent > 0
-// is to_nice_json. Keys are sorted (Go maps keep no order).
+// is to_nice_json. Keys follow evaluation-local literal/combine order, with sorted fallback.
 func pyJSON(v interface{}, indent int) (string, error) {
+	return pyJSONOrdered(v, indent, nil)
+}
+
+func pyJSONOrdered(v interface{}, indent int, order *mapOrder) (string, error) {
 	var b strings.Builder
-	if err := writePyJSON(&b, v, indent, 0); err != nil {
+	if err := writePyJSON(&b, v, indent, 0, order); err != nil {
 		return "", err
 	}
 	return b.String(), nil
 }
 
-func writePyJSON(b *strings.Builder, v interface{}, indent, level int) error {
+func writePyJSON(b *strings.Builder, v interface{}, indent, level int, order *mapOrder) error {
 	newline := func(l int) {
 		if indent > 0 {
 			b.WriteByte('\n')
@@ -175,7 +179,7 @@ func writePyJSON(b *strings.Builder, v interface{}, indent, level int) error {
 				b.WriteString(sep)
 			}
 			newline(level + 1)
-			if err := writePyJSON(b, rv.Index(i).Interface(), indent, level+1); err != nil {
+			if err := writePyJSON(b, rv.Index(i).Interface(), indent, level+1, order); err != nil {
 				return err
 			}
 		}
@@ -187,8 +191,7 @@ func writePyJSON(b *strings.Builder, v interface{}, indent, level int) error {
 			b.WriteString("{}")
 			return nil
 		}
-		keys := rv.MapKeys()
-		sort.Slice(keys, func(i, j int) bool { return fmt.Sprint(keys[i].Interface()) < fmt.Sprint(keys[j].Interface()) })
+		keys := order.mapKeys(rv)
 		b.WriteByte('{')
 		for i, k := range keys {
 			if i > 0 {
@@ -197,7 +200,7 @@ func writePyJSON(b *strings.Builder, v interface{}, indent, level int) error {
 			newline(level + 1)
 			b.WriteString(pyJSONString(fmt.Sprint(k.Interface())))
 			b.WriteString(": ")
-			if err := writePyJSON(b, rv.MapIndex(k).Interface(), indent, level+1); err != nil {
+			if err := writePyJSON(b, rv.MapIndex(k).Interface(), indent, level+1, order); err != nil {
 				return err
 			}
 		}
@@ -214,7 +217,7 @@ func writePyJSON(b *strings.Builder, v interface{}, indent, level int) error {
 	if err := json.Unmarshal(raw, &plain); err != nil {
 		return err
 	}
-	return writePyJSON(b, plain, indent, level)
+	return writePyJSON(b, plain, indent, level, order)
 }
 
 func pyJSONString(s string) string {
