@@ -1735,7 +1735,9 @@ func (e *ExecutionEngine) finishTask(task *types.Task, host *types.Host, result 
 	}
 
 	// Notify observers of task completion
-	e.notifyTaskEnd(&result)
+	observed := result
+	observed.Host = host.Name
+	e.notifyTaskEnd(&observed)
 	e.callbackTaskEnd(context.Background(), task, *host, result)
 
 	if result.Failed && !task.IgnoreErrors {

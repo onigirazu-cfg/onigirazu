@@ -10,7 +10,7 @@ require (
 	github.com/hashicorp/vault/api v1.23.0
 	github.com/mattn/go-sqlite3 v1.14.52
 	github.com/pelletier/go-toml/v2 v2.4.3
-	github.com/pkg/sftp v1.13.11
+	github.com/pkg/sftp v1.13.12
 	github.com/prometheus/client_golang v1.25.0
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/crypto v0.58.0
@@ -36,7 +36,7 @@ require (
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f // indirect
-	github.com/go-jose/go-jose/v4 v4.1.5 // indirect
+	github.com/go-jose/go-jose/v4 v4.1.6 // indirect
 	github.com/go-logr/logr v1.4.1 // indirect
 	github.com/gofrs/uuid v4.4.0+incompatible // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
