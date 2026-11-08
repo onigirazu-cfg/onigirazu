@@ -1,0 +1,21 @@
+# compat-hosts: 4
+# run_once on includes, imports and blocks: once per serial batch, on its first host
+- hosts: all
+  gather_facts: false
+  serial: 2
+  order: inventory
+  tasks:
+    - include_tasks: tasks/once.yml
+      run_once: true
+    - debug: {msg: "registered {{ oncereg is defined }}"}
+    - include_role: {name: once}
+      run_once: true
+    - import_role: {name: once}
+      run_once: true
+    - block:
+        - debug: {msg: "block once on {{ inventory_hostname }}"}
+          register: blockreg
+      run_once: true
+    - debug: {msg: "block registered {{ blockreg is defined }}"}
+# an include whose when is false differs in its report (README: known differences);
+# internal/cli/run_once_include_test.go covers those cases

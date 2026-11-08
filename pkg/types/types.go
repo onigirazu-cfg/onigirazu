@@ -265,6 +265,11 @@ type Task struct {
 	// Key identifies the task across runs (play, role, block path and
 	// name); the engine assigns it
 	Key string `yaml:"-" json:"-"`
+	// IncludeStatic: Include came from import_tasks
+	IncludeStatic bool `yaml:"-" json:"-"`
+	// OnceGroup marks the tasks of an include_tasks with run_once (set by
+	// the parser): as in Ansible they run on one host per batch only
+	OnceGroup string `yaml:"-" json:"-"`
 }
 
 // UnmarshalYAML implements custom YAML unmarshaling for Task
@@ -464,7 +469,7 @@ func (t *Task) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	// include, include_tasks and import_tasks are expanded by the parser
 	for _, key := range []string{"include", "include_tasks", "import_tasks"} {
 		if include, ok := taskMap[key].(string); ok {
-			t.Include = include
+			t.Include, t.IncludeStatic = include, key == "import_tasks"
 		}
 	}
 	if serial, ok := yamlBool(taskMap["serial"]); ok {

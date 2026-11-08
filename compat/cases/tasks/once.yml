@@ -1,0 +1,4 @@
+- debug: {msg: "once on {{ inventory_hostname }}"}
+  register: oncereg
+- block:
+    - debug: {msg: "once block on {{ inventory_hostname }}"}

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 
 	"github.com/onigirazu-cfg/onigirazu/internal/vault"
 
@@ -441,6 +442,9 @@ func (p *EnhancedParser) processPlayIncludes(ctx context.Context, play *types.Pl
 	return nil
 }
 
+// onceGroups numbers the includes with run_once
+var onceGroups atomic.Uint64
+
 // expandIncludes replaces include tasks with the tasks of the included file.
 // Paths are relative to the including file; the include's when, tags and become
 // apply to every included task, as with Ansible's import_tasks.
@@ -483,6 +487,13 @@ func (p *EnhancedParser) expandIncludes(ctx context.Context, tasks []types.Task,
 		included, err = p.expandIncludes(ctx, included, filepath.Dir(path), depth+1)
 		if err != nil {
 			return nil, err
+		}
+		// run_once on include_tasks: its tasks run on one host, not each
+		// of them once (an outer include's group wins over an inner one's);
+		// import_tasks passes run_once on to each task
+		group := ""
+		if task.RunOnce && !task.IncludeStatic {
+			group = fmt.Sprintf("%s#%d", path, onceGroups.Add(1))
 		}
 		if task.Loop != nil {
 			for i := range included {
@@ -527,6 +538,11 @@ func (p *EnhancedParser) expandIncludes(ctx context.Context, tasks []types.Task,
 				}
 			}
 			included[i].Tags = append(append([]string{}, task.Tags...), included[i].Tags...)
+			if group != "" {
+				included[i].OnceGroup = group
+			} else if task.RunOnce {
+				included[i].RunOnce = true
+			}
 		}
 		out = append(out, included...)
 	}
