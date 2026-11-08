@@ -349,7 +349,7 @@ Not available: `hash`, `default(value, true)` (the second argument is ignored; `
 
 ### Tests
 
-Tests work in any expression (`x is test(args)`, `x is not test(args)`) and in `select`, `reject`, `selectattr` and `rejectattr`: `defined`, `undefined`, `none`, `truthy`, `falsy`, `equalto`/`==`/`eq`, `!=`/`ne`, `>`, `<`, `>=`, `<=` (also `gt`, `lt`, `ge`, `le`), `in`, `contains`, `match`/`search`/`regex`, `string`, `number`.
+Tests work in any expression (`x is test(args)`, `x is not test(args)`, or one bare argument such as `x is sameas true` and `x is not equalto 'a'`) and in `select`, `reject`, `selectattr` and `rejectattr`: `defined`, `undefined`, `none`, `truthy`, `falsy`, `equalto`/`==`/`eq`, `!=`/`ne`, `>`, `<`, `>=`, `<=` (also `gt`, `lt`, `ge`, `le`), `in`, `contains`, `match`/`search`/`regex`, `string`, `number`.
 
 Ansible tests: task results `success`/`succeeded`, `failed`/`failure`, `changed`, `skipped`, `unreachable` (`until: r is success`); `version(other, op)` (loose comparison as Ansible's default: `'22.04' is version('20.04', '>=')`); `mapping`, `sequence`/`iterable`, `boolean`, `integer`, `float`, `lower`, `upper`, `even`, `odd`, `divisibleby(n)`, `subset(list)`, `superset(list)`; paths on the control machine `exists`, `file`, `directory`, `link`, `abs`.
 
@@ -429,7 +429,8 @@ loop: "{{ query('fileglob', 'files/conf.d/*.conf') }}"
 - String concatenation: `{{ name ~ '-' ~ version }}`, also inside parentheses and lists, as inline ifs (`('yes' if x else 'no')`) (`when: ('version ' ~ v) not in out.stdout`); `+` adds numbers and concatenates strings and lists (`(a | intersect(b) + ['Other']) | first`)
 - `{% set name = expression %}` in templates, for the rest of the template (inside a for loop, for that iteration)
 - `True`, `False` and `None` as in Jinja; `and`, `or`, `not`, `in`
-- Values inside text print as Ansible prints them (Python's `str`): `enabled={{ flag }}` gives `enabled=True`, lists `['a', 1]`, dicts `{'k': 'v'}`; `{{ flag | lower }}` gives `true`. A value that is the whole argument keeps its type. `to_json` writes `{"k": [1, 2]}` as Ansible does, `to_nice_json` indents by 4 with sorted keys, `from_json` keeps whole numbers whole. Unlike Ansible, dict keys are printed sorted (Ansible keeps the playbook's order)
+- Values inside text print as Ansible prints them (Python's `str`): `enabled={{ flag }}` gives `enabled=True`, lists `['a', 1]`, dicts `{'k': 'v'}`; `{{ flag | lower }}` gives `true`. A value that is the whole argument keeps its type. `to_json` writes `{"k": [1, 2]}` as Ansible does, `to_nice_json` indents by 4 with sorted keys, `from_json` keeps whole numbers whole. As in Ansible, `to_json` keeps the order in which a dict literal was written, and `combine` keeps existing keys in place and appends new ones (also with `recursive`); `dict2items` and `.items()` keep that order too. `to_nice_json`, `to_yaml` and `to_nice_yaml` sort keys, as Ansible does
+- Unlike Ansible, dicts that come from YAML, facts or another variable have no recorded order: `to_json` prints their keys sorted
 - A variable set to `null`/`None` is defined (`x is defined` is true, `x is none` is true) and prints as an empty string, as in Ansible; an undefined name in `{{ }}` fails the task. Unlike Ansible, `default(...)` also replaces `None`
 - Dictionary methods `d.keys()` and `d.values()`
 - Precedence as in Jinja: a filter applies to the operand right before it

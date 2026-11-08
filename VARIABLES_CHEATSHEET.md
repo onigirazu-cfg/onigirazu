@@ -234,6 +234,10 @@ plays:
 
 ---
 
+## Role variable scope
+
+Role defaults and vars from `roles:` and `import_role` are public throughout the play, including earlier tasks. `include_role` keeps its variables private; `public: true` is not supported yet. `import_role` also accepts `public: false`. Role defaults have the lowest precedence, so inventory, play vars and `-e` override them; later roles' defaults win for subsequent play tasks. Role vars override inventory/play vars, while task vars, role/include parameters, `set_fact`/registered values and `-e` take precedence over role vars. A role's own defaults apply inside that role.
+
 ## 🎯 Play Variables with Templates
 
 Play `vars` with templates are rendered per host when a task uses them:
