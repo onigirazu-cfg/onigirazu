@@ -828,6 +828,20 @@ func (e *ExecutionEngine) executePlayOn(ctx context.Context, play *types.Play, h
 	// templated vars are rendered per host when a task runs (as Ansible
 	// does): "/backup/{{ inventory_hostname }}" differs per host
 	playVars = e.mergeVariables(playVars, e.extraVars)
+	for _, role := range play.RoleObjects {
+		if err := e.exposeRole(ctx, role, playVars); err != nil {
+			return result, err
+		}
+		if err := e.exposeImportedRoles(ctx, role.Tasks, playVars); err != nil {
+			return result, err
+		}
+	}
+	for _, tasks := range [][]types.Task{play.PreTasks, play.Tasks, play.PostTasks} {
+		if err := e.exposeImportedRoles(ctx, tasks, playVars); err != nil {
+			return result, err
+		}
+	}
+
 	if opts := types.ArgumentSpecsEntry(play.ArgumentSpecs, "main"); len(opts) > 0 {
 		pv := validator.NewParameterValidator(types.ArgumentSpecOptions(opts))
 		if res := pv.ValidateParameters(playVars); !res.Valid {
@@ -2468,17 +2482,21 @@ func (e *ExecutionEngine) executeRoleWithDependencies(ctx context.Context, role 
 }
 
 // mergeRoleVariables merges role variables with play variables using correct precedence:
-// RoleVars > OverrideVars > PlayVars > Defaults
+// ExtraVars > Params > RoleVars > PlayVars > Defaults
 func (e *ExecutionEngine) mergeRoleVariables(role *types.Role, playVars map[string]interface{}) map[string]interface{} {
 	if role == nil {
 		return playVars
 	}
 
-	// Use the role loader's merge function for proper precedence handling
-	// This ensures: RoleVars > OverrideVars > PlayVars > Defaults
-	// Note: overrideVars are empty here; they should be passed from RoleReference if available
-	merged := e.roleLoader.MergeVariables(role.Defaults, role.Vars, playVars, nil)
-	return e.mergeVariables(merged, role.Params, e.extraVars)
+	// Materialize values for argument validation, retaining their layers for
+	// hostVariables to place inventory above defaults and below role vars.
+	scope, _ := playVars[roleScopeKey].(roleVariableScope)
+	scope.defaults = e.mergeVariables(scope.defaults, role.Defaults)
+	scope.vars = e.mergeVariables(scope.vars, role.Vars)
+	scope.params = e.mergeVariables(scope.params, role.Params)
+	merged := e.mergeVariables(scope.defaults, playVars, scope.vars, role.Params, e.extraVars)
+	merged[roleScopeKey] = scope
+	return merged
 }
 
 // mergeVariables merges multiple variable maps (later maps take precedence)
@@ -2786,7 +2804,8 @@ func (e *ExecutionEngine) layerHostVariables(host *types.Host, variables map[str
 	// one map, filled in order of precedence: it is built for every task
 	// and loop item, and merging step by step copied it four times
 	vars := make(map[string]interface{}, max(len(variables), len(e.variables), len(host.Vars), len(facts)))
-	layers := []map[string]interface{}{variables, e.variables, host.Vars}
+	scope, _ := variables[roleScopeKey].(roleVariableScope)
+	layers := []map[string]interface{}{scope.defaults, variables, e.variables, host.Vars}
 	if !withFacts {
 		// literal passwords are for the connection only: tasks never had them
 		layers = append(layers, host.ConnectionSecrets)
@@ -2811,7 +2830,7 @@ func (e *ExecutionEngine) layerHostVariables(host *types.Host, variables map[str
 			vars[k] = v
 		}
 	}
-	for _, m := range []map[string]interface{}{hostVars, e.extraVars} {
+	for _, m := range []map[string]interface{}{scope.vars, scope.params, hostVars, e.extraVars} {
 		for k, v := range m {
 			vars[k] = v
 		}

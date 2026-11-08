@@ -256,6 +256,12 @@ func (e *ExecutionEngine) runIncludedRole(ctx context.Context, task *types.Task,
 	e.scope = task.Key
 	defer func() { e.scope = parent }()
 	role := *task.IncludedRole
+	if rolePublic(task) {
+		if err := e.exposeRole(ctx, &role, variables); err != nil {
+			return err
+		}
+	}
+
 	role.Params = e.mergeVariables(role.Params, task.Vars)
 	if err := e.executeRoleWithDependencies(ctx, &role, targets, variables, playResult, task); err != nil {
 		return err

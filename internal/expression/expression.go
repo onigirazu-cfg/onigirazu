@@ -81,6 +81,7 @@ func Eval(expression string, variables map[string]interface{}) (interface{}, err
 	}
 	// lookup('template') renders with the task's variables
 	env[lookupVars] = variables
+	env[orderKey] = &mapOrder{keys: make(map[uintptr][]string)}
 	return expr.Run(program, env)
 }
 
@@ -108,6 +109,9 @@ func compileWithFilters(expression string, filters map[string]func(...interface{
 		expr.Patch(truthPatch{}),
 		expr.Patch(methodPatch{}),
 		expr.Patch(indexPatch{}),
+		expr.Patch(orderPatch{}),
+		expr.Function("jinja_dict", orderedDict),
+		expr.Function("jinja_ordered", orderedCall),
 		expr.Function("jinja_method", callMethod),
 		expr.Function("bitwarden", func(params ...interface{}) (interface{}, error) {
 			variables, _ := params[0].(map[string]interface{})

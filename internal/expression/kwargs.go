@@ -115,6 +115,10 @@ func toFloat(v interface{}) (float64, bool) {
 // jinjaCombine is Ansible's combine(*dicts, recursive=false,
 // list_merge='replace')
 func jinjaCombine(p ...interface{}) (interface{}, error) {
+	return combineOrdered(nil, p...)
+}
+
+func combineOrdered(order *mapOrder, p ...interface{}) (interface{}, error) {
 	pos, kw := splitKwargs(p)
 	recursive := Truthy(kw["recursive"])
 	listMerge := "replace"
@@ -138,14 +142,21 @@ func jinjaCombine(p ...interface{}) (interface{}, error) {
 			if !ok {
 				return nil, fmt.Errorf("combine needs dictionaries, got %T", d)
 			}
-			out = mergeDicts(out, m, recursive, listMerge)
+			out = mergeDictsOrdered(order, out, m, recursive, listMerge)
 		}
 	}
 	return out, nil
 }
 
-func mergeDicts(dst, src map[string]interface{}, recursive bool, listMerge string) map[string]interface{} {
+func mergeDictsOrdered(order *mapOrder, dst, src map[string]interface{}, recursive bool, listMerge string) map[string]interface{} {
 	out := make(map[string]interface{}, len(dst)+len(src))
+	keys := append([]string(nil), order.names(dst)...)
+	for _, k := range order.names(src) {
+		if _, exists := dst[k]; !exists {
+			keys = append(keys, k)
+		}
+	}
+	order.remember(out, keys)
 	for k, v := range dst {
 		out[k] = v
 	}
@@ -158,7 +169,7 @@ func mergeDicts(dst, src map[string]interface{}, recursive bool, listMerge strin
 		om, oldIsMap := old.(map[string]interface{})
 		nm, newIsMap := v.(map[string]interface{})
 		if recursive && oldIsMap && newIsMap {
-			out[k] = mergeDicts(om, nm, recursive, listMerge)
+			out[k] = mergeDictsOrdered(order, om, nm, recursive, listMerge)
 			continue
 		}
 		ol, oldIsList := old.([]interface{})

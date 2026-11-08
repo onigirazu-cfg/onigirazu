@@ -89,7 +89,12 @@ func matchEndfor(text string, from int) (int, int, error) {
 func (e *Engine) renderLoop(ctx context.Context, name, valueName, source, body string, variables map[string]interface{}) (string, error) {
 	pairs := false
 	if m := itemsCall.FindStringSubmatch(strings.TrimSpace(source)); m != nil && valueName != "" {
-		source, pairs = m[1], true
+		pairs = true
+		// Evaluate items() inside Eval, where literal/combine order is known.
+		// dictsort deliberately keeps the sorted-map path below.
+		if !strings.HasSuffix(strings.TrimSpace(source), ".items()") {
+			source = m[1]
+		}
 	}
 	value, err := expression.Eval(source, variables)
 	if err != nil {
@@ -113,7 +118,11 @@ func (e *Engine) renderLoop(ctx context.Context, name, valueName, source, body s
 			return "", fmt.Errorf("for loop over %q: %w", source, err)
 		}
 		for _, item := range items {
-			entries = append(entries, entry{nil, item})
+			if pair, ok := item.(map[string]interface{}); pairs && ok {
+				entries = append(entries, entry{pair["key"], pair["value"]})
+			} else {
+				entries = append(entries, entry{nil, item})
+			}
 		}
 	}
 
