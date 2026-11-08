@@ -141,8 +141,12 @@ func bareTestArgument(s string, pos int) (string, int) {
 	if pos >= len(s) {
 		return "", start
 	}
+	// a signed number: `x is equalto -1`
+	if (s[pos] == '-' || s[pos] == '+') && pos+1 < len(s) && s[pos+1] >= '0' && s[pos+1] <= '9' {
+		pos++
+	}
 	switch c := s[pos]; {
-	case isNameStart(c):
+	case isNameStart(c) && pos == begin:
 		for pos < len(s) && (isNameStart(s[pos]) || s[pos] >= '0' && s[pos] <= '9') {
 			pos++
 		}

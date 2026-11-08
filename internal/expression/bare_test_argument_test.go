@@ -13,7 +13,7 @@ func TestBareTestArguments(t *testing.T) {
 	}{
 		{`g is sameas true`, true}, {`false is sameas false`, true}, {`none is sameas none`, true},
 		{`g is sameas True`, true}, {`false is sameas False`, true}, {`none is sameas None`, true}, {`True is sameas true`, true}, {`False is sameas false`, true}, {`None is sameas none`, true},
-		{`6 is divisibleby 3`, true}, {`'a' is equalto 'a'`, true}, {`2 is in [1, 2]`, true},
+		{`6 is divisibleby 3`, true}, {`(0 - 1) is equalto -1`, true}, {`6 is divisibleby -3`, true}, {`1 is equalto -1`, false}, {`2 is equalto +2`, true}, {`'a' is equalto 'a'`, true}, {`2 is in [1, 2]`, true},
 		{`g is sameas y.z`, true}, {`g is sameas xs[0]`, true}, {`g is not sameas true`, false},
 		{`['a'] if (g is sameas true) else []`, []interface{}{"a"}},
 		{`['a'] if g is sameas true else []`, []interface{}{"a"}},

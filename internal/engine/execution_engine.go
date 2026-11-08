@@ -939,7 +939,9 @@ func (e *ExecutionEngine) executePlayOn(ctx context.Context, play *types.Play, h
 
 			// Check conditional execution
 			if roleRef.When != "" {
-				conditionVars := e.mergeVariables(playVars, nil)
+				// the role's condition sees the published role defaults and vars
+				scope, _ := playVars[roleScopeKey].(roleVariableScope)
+				conditionVars := e.mergeVariables(scope.defaults, playVars, scope.vars)
 				evalCtx := e.lazyEvaluationContext(ctx, "", conditionVars)
 				holds, err := e.conditionHolds(evalCtx, roleRef.When, conditionVars)
 				if err != nil {
@@ -1587,7 +1589,8 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 	// host that could not be reached
 	if task.IgnoreErrorsExpr != "" && result.Failed {
 		if holds, err := e.conditionHolds(ctx, task.IgnoreErrorsExpr, taskVars); err != nil {
-			result.Error = fmt.Sprintf("ignore_errors: %v", err)
+			// keep why the task failed; the broken ignore_errors comes after
+			result.Error = fmt.Sprintf("%s; ignore_errors: %v", result.Error, err)
 		} else if holds {
 			copy := *task
 			copy.IgnoreErrors = true

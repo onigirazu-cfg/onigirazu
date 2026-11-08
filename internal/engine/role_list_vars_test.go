@@ -217,3 +217,52 @@ func TestBlockRoleVisibilityAcrossHosts(t *testing.T) {
 		})
 	}
 }
+
+// runRolePlay writes files into a temp dir and runs the first play of play.yml
+func runRolePlay(t *testing.T, files map[string]string) *types.PlayResult {
+	t.Helper()
+	e, _ := becomeExprEngine(t)
+	e.moduleRegistry = modules.NewRegistry()
+	dir := t.TempDir()
+	for path, content := range files {
+		path = filepath.Join(dir, path)
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0755))
+		require.NoError(t, os.WriteFile(path, []byte(content), 0600))
+	}
+	p := parser.NewEnhancedParser(e.templateEngine, e.logger)
+	playbook, err := p.ParsePlaybook(context.Background(), filepath.Join(dir, "play.yml"))
+	require.NoError(t, err)
+	result, err := e.executePlayOn(context.Background(), &playbook.Plays[0], []types.Host{twoHosts()[0]})
+	require.NoError(t, err)
+	return result
+}
+
+func TestRoleConditionSeesRoleDefaults(t *testing.T) {
+	result := runRolePlay(t, map[string]string{
+		"roles/a/defaults/main.yml": "enabled: true\n",
+		"roles/a/tasks/main.yml":    "- debug: {msg: ran}\n",
+		"play.yml":                  "- hosts: all\n  gather_facts: false\n  roles:\n    - {role: a, when: enabled}\n",
+	})
+	require.Len(t, result.Hosts, 1)
+	require.Len(t, result.Hosts[0].Tasks, 1)
+	require.False(t, result.Hosts[0].Tasks[0].Skipped)
+	require.Equal(t, "ran", result.Hosts[0].Tasks[0].Output["msg"])
+}
+
+func TestNestedImportRoleDefaultsArePublic(t *testing.T) {
+	result := runRolePlay(t, map[string]string{
+		"roles/a/tasks/main.yml":    "- import_role: {name: b}\n",
+		"roles/b/defaults/main.yml": "bdef: from-b\n",
+		"roles/b/tasks/main.yml":    "- debug: {msg: in-b}\n",
+		"play.yml": `- hosts: all
+  gather_facts: false
+  tasks:
+    - debug: {msg: "before={{ bdef }}"}
+    - import_role: {name: a}
+`,
+	})
+	tasks := result.Hosts[0].Tasks
+	require.NotEmpty(t, tasks)
+	require.False(t, tasks[0].Failed, tasks[0].Error)
+	require.Equal(t, "before=from-b", tasks[0].Output["msg"])
+}
