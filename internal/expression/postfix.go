@@ -130,6 +130,90 @@ func readName(s string, pos int) (string, string, int) {
 	return name, args, pos
 }
 
+// bareTestArgument reads one primary and its attribute/index postfixes.
+// Boolean operators and the inline-if separator cannot start an argument.
+func bareTestArgument(s string, pos int) (string, int) {
+	start := pos
+	for pos < len(s) && (s[pos] == ' ' || s[pos] == '\t' || s[pos] == '\n' || s[pos] == '\r') {
+		pos++
+	}
+	begin := pos
+	if pos >= len(s) {
+		return "", start
+	}
+	switch c := s[pos]; {
+	case isNameStart(c):
+		for pos < len(s) && (isNameStart(s[pos]) || s[pos] >= '0' && s[pos] <= '9') {
+			pos++
+		}
+		switch s[begin:pos] {
+		case "else", "or", "and":
+			return "", start
+		}
+	case c >= '0' && c <= '9':
+		for pos < len(s) && (s[pos] >= '0' && s[pos] <= '9' || s[pos] == '.') {
+			pos++
+		}
+		if pos < len(s) && (s[pos] == 'e' || s[pos] == 'E') {
+			pos++
+			if pos < len(s) && (s[pos] == '+' || s[pos] == '-') {
+				pos++
+			}
+			for pos < len(s) && s[pos] >= '0' && s[pos] <= '9' {
+				pos++
+			}
+		}
+	case c == '\'' || c == '"':
+		pos++
+		for pos < len(s) && s[pos] != c {
+			if s[pos] == '\\' {
+				pos++
+			}
+			pos++
+		}
+		if pos < len(s) {
+			pos++
+		}
+	case c == '[' || c == '{':
+		close := byte(']')
+		if c == '{' {
+			close = '}'
+		}
+		end := matching(s, pos, c, close)
+		if end < 0 {
+			return "", start
+		}
+		pos = end + 1
+	default:
+		return "", start
+	}
+	for pos < len(s) {
+		next := pos
+		for next < len(s) && (s[next] == ' ' || s[next] == '\t' || s[next] == '\n') {
+			next++
+		}
+		if next < len(s) && s[next] == '.' && next+1 < len(s) && isNameStart(s[next+1]) {
+			pos = next + 2
+			for pos < len(s) && (isNameStart(s[pos]) || s[pos] >= '0' && s[pos] <= '9') {
+				pos++
+			}
+		} else if next < len(s) && s[next] == '[' {
+			end := matching(s, next, '[', ']')
+			if end < 0 {
+				break
+			}
+			pos = end + 1
+		} else {
+			break
+		}
+	}
+	arg := s[begin:pos]
+	if arg == "none" {
+		arg = "nil"
+	}
+	return arg, pos
+}
+
 // pipesToCalls rewrites filters into calls bound to their operand
 func pipesToCalls(s string) string {
 	from := 0
@@ -189,6 +273,10 @@ func testsToCalls(s string) string {
 			neg, pos = true, pos+len("not ")
 		}
 		name, args, after := readName(s, pos)
+		// A call, including an empty call, retains its existing semantics.
+		if after == 0 || s[after-1] != ')' {
+			args, after = bareTestArgument(s, after)
+		}
 		if name == "" || start > end {
 			from = i + 1
 			continue

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 )
@@ -212,13 +213,24 @@ func (e *ExecutionEngine) runMeta(task *types.Task, host *types.Host, playResult
 func (e *ExecutionEngine) runIncludedRole(ctx context.Context, task *types.Task, hosts []types.Host,
 	variables map[string]interface{}, playResult *types.PlayResult) error {
 	targets := hosts
+	// a when that cannot be evaluated fails only its own host; the others
+	// still decide for themselves
+	var whenErr error
 	if task.When != "" {
 		targets = nil
 		for i := range hosts {
 			vars := e.mergeVariables(e.hostVariables(&hosts[i], variables), task.Vars)
-			holds, err := e.conditionHolds(ctx, task.When, vars)
+			evalCtx := e.lazyEvaluationContext(ctx, hosts[i].Name, vars)
+			holds, err := e.conditionHolds(evalCtx, task.When, vars)
 			if err != nil {
-				return fmt.Errorf("%s: %w", task.Name, err)
+				ferr := e.finishTask(task, &hosts[i], types.TaskResult{
+					TaskName: task.Name, Host: hosts[i].Name, Module: task.Module,
+					Failed: true, Error: err.Error(), Timestamp: time.Now(),
+				}, playResult)
+				if whenErr == nil {
+					whenErr = ferr
+				}
+				continue
 			}
 			if holds {
 				targets = append(targets, hosts[i])
@@ -238,14 +250,17 @@ func (e *ExecutionEngine) runIncludedRole(ctx context.Context, task *types.Task,
 		}
 	}
 	if len(targets) == 0 {
-		return nil
+		return whenErr
 	}
 	parent := e.scope
 	e.scope = task.Key
 	defer func() { e.scope = parent }()
 	role := *task.IncludedRole
 	role.Params = e.mergeVariables(role.Params, task.Vars)
-	return e.executeRoleWithDependencies(ctx, &role, targets, variables, playResult, task)
+	if err := e.executeRoleWithDependencies(ctx, &role, targets, variables, playResult, task); err != nil {
+		return err
+	}
+	return whenErr
 }
 
 // listensTo tells whether host notified one of the handler's listen topics

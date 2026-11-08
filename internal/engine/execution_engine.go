@@ -913,7 +913,9 @@ func (e *ExecutionEngine) executePlayOn(ctx context.Context, play *types.Play, h
 
 			// Check conditional execution
 			if roleRef.When != "" {
-				holds, err := e.conditionHolds(ctx, roleRef.When, playVars)
+				conditionVars := e.mergeVariables(playVars, nil)
+				evalCtx := e.lazyEvaluationContext(ctx, "", conditionVars)
+				holds, err := e.conditionHolds(evalCtx, roleRef.When, conditionVars)
 				if err != nil {
 					return result, fmt.Errorf("role '%s': %w", roleRef.Name, err)
 				} else if !holds {
@@ -1287,11 +1289,15 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 	}
 
 	taskVars := e.hostVariables(host, variables)
-	unrendered := e.renderLazyVars(ctx, host.Name, taskVars)
+	ctx = e.lazyEvaluationContext(ctx, host.Name, taskVars)
+	unrendered, _ := ctx.Value(unrenderedKey{}).(map[string]unrenderedVar)
 	// task vars come last; their values may use other variables, nested in
 	// lists and maps too, and "{{ a_list }}" stays a list
 	for k, v := range task.Vars {
 		if hasTemplate(v) {
+			if err := checkUnrenderedTemplates(ctx, v, taskVars); err != nil {
+				return failed(err)
+			}
 			rendered, err := e.templateEngine.RenderTaskArgs(ctx, map[string]interface{}{"v": v}, taskVars)
 			if err != nil {
 				return failed(fmt.Errorf("task var %s: %w", k, err))
@@ -1327,6 +1333,19 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 
 	if task.Module == "meta" {
 		return e.runMeta(task, host, playResult)
+	}
+
+	// Check evaluated keyword templates before rendering can consume a bad value.
+	e.mutex.RLock()
+	keywordBecome, keywordEnvironment := effectiveBecome(task, e.playBecome), mergeMaps(e.playEnvironment, task.Environment)
+	e.mutex.RUnlock()
+	for _, value := range []interface{}{task.Args, keywordEnvironment, keywordBecome.Expr, keywordBecome.User, keywordBecome.Method, task.RetriesExpr, task.DelayExpr, task.DelegateTo} {
+		if err := checkUnrenderedTemplates(ctx, value, taskVars); err != nil {
+			return failed(err)
+		}
+	}
+	if err := checkUnrenderedExpression(ctx, task.IgnoreErrorsExpr, taskVars); err != nil {
+		return failed(err)
 	}
 
 	become, err := e.resolveBecome(ctx, task, taskVars)
@@ -1563,7 +1582,7 @@ func (e *ExecutionEngine) executeTaskOnHost(ctx context.Context, task *types.Tas
 		task = &copy
 	}
 	if len(task.RegisterVars) > 0 {
-		e.applyRegisterProjections(task, *host, taskVars, &result)
+		e.applyRegisterProjections(ctx, task, *host, taskVars, &result)
 	}
 
 	e.metricsManager.AddExecutionTime(time.Since(taskStartTime))
@@ -1791,7 +1810,10 @@ func (e *ExecutionEngine) executeTaskWithLoop(ctx context.Context, task *types.T
 // loop keeps each item's result under "results", as Ansible does.
 func (e *ExecutionEngine) runLoopOnHost(ctx context.Context, task *types.Task, host *types.Host,
 	variables map[string]interface{}, playResult *types.PlayResult) error {
-	items, err := e.getLoopItems(ctx, task.Loop, e.hostVariables(host, variables))
+	loopVars := e.mergeVariables(e.hostVariables(host, variables), task.Vars)
+	loopVars = e.mergeVariables(loopVars, e.extraVars)
+	ctx = e.lazyEvaluationContext(ctx, host.Name, loopVars)
+	items, err := e.getLoopItems(ctx, task.Loop, loopVars)
 	if err != nil {
 		return e.finishTask(task, host, types.TaskResult{
 			TaskName: task.Name, Host: host.Name, Module: task.Module,
@@ -1869,6 +1891,12 @@ func (e *ExecutionEngine) runLoopOnHost(ctx context.Context, task *types.Task, h
 			vars := e.mergeVariables(loopVars, map[string]interface{}{"_task": map[string]interface{}{"result": itemResult}})
 			if taskCopy.Register != "" {
 				vars[taskCopy.Register] = itemResult
+			}
+			if err := checkUnrenderedExpression(ctx, task.BreakWhen, vars); err != nil {
+				return e.finishTask(task, host, types.TaskResult{
+					TaskName: task.Name, Host: host.Name, Module: task.Module,
+					Failed: true, Error: err.Error(), Timestamp: time.Now(),
+				}, playResult)
 			}
 			holds, berr := e.conditionHolds(ctx, task.BreakWhen, vars)
 			itemResult["break_when_result"] = holds
@@ -2094,6 +2122,14 @@ func (e *ExecutionEngine) getLoopItems(ctx context.Context, loop *types.Loop, va
 }
 
 func (e *ExecutionEngine) loopItems(ctx context.Context, loop *types.Loop, variables map[string]interface{}) ([]interface{}, error) {
+	if err := checkUnrenderedExpression(ctx, loop.Expr, variables); err != nil {
+		return nil, err
+	}
+	for _, v := range []interface{}{loop.Items, loop.Terms, loop.Range} {
+		if err := checkUnrenderedTemplates(ctx, v, variables); err != nil {
+			return nil, err
+		}
+	}
 	if loop.Items != nil {
 		return e.renderLoopItems(ctx, loop.Items, variables)
 	}
@@ -3327,7 +3363,7 @@ func (e *ExecutionEngine) prefetchLoop(ctx context.Context, task *types.Task, ho
 // value of its expression over _task.result and the task's variables
 // (ansible-core 2.20 register projections); a failing expression fails the
 // task
-func (e *ExecutionEngine) applyRegisterProjections(task *types.Task, host types.Host, taskVars map[string]interface{}, result *types.TaskResult) {
+func (e *ExecutionEngine) applyRegisterProjections(ctx context.Context, task *types.Task, host types.Host, taskVars map[string]interface{}, result *types.TaskResult) {
 	vars := e.mergeVariables(taskVars, map[string]interface{}{"_task": map[string]interface{}{"result": registeredValue(*result)}})
 	names := make([]string, 0, len(task.RegisterVars))
 	for name := range task.RegisterVars {
@@ -3335,7 +3371,11 @@ func (e *ExecutionEngine) applyRegisterProjections(task *types.Task, host types.
 	}
 	sort.Strings(names)
 	for _, name := range names {
-		value, err := expression.Eval(task.RegisterVars[name], e.expressionVariables(vars))
+		err := checkUnrenderedExpression(ctx, task.RegisterVars[name], vars)
+		var value interface{}
+		if err == nil {
+			value, err = expression.Eval(task.RegisterVars[name], e.expressionVariables(vars))
+		}
 		if err != nil {
 			result.Failed, result.Success, result.Error = true, false, fmt.Sprintf("register %s: %v", name, err)
 			return

@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Templates accept bare Jinja test arguments (`x is sameas true`); tasks fail with the variable's render error when conditions, filters or loops use a variable that could not be rendered.
 - `run_once` on `include_tasks` and `include_role` runs the include on the first host of each `serial` batch only, as in Ansible (it ran on every host); `run_once` on `import_tasks`, `import_role` and a `block` passes on to each of their tasks (it was ignored)
 - Delegated task-end events report the inventory host to observers, including loop items, so live progress tracks each host in a batch correctly.
 - serve: a job's `timeout` now limits its run; before, apply's 30m default cut every job at 30 minutes and the cut run could report ok. A play error no host's task carries now makes the run failed.

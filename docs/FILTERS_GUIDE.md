@@ -349,7 +349,7 @@ Not available: `hash`, `default(value, true)` (the second argument is ignored; `
 
 ### Tests
 
-Tests work in any expression (`x is test(args)`, `x is not test(args)`) and in `select`, `reject`, `selectattr` and `rejectattr`: `defined`, `undefined`, `none`, `truthy`, `falsy`, `equalto`/`==`/`eq`, `!=`/`ne`, `>`, `<`, `>=`, `<=` (also `gt`, `lt`, `ge`, `le`), `in`, `contains`, `match`/`search`/`regex`, `string`, `number`.
+Tests work in any expression (`x is test(args)`, `x is not test(args)`, or one bare argument such as `x is sameas true` and `x is not equalto 'a'`) and in `select`, `reject`, `selectattr` and `rejectattr`: `defined`, `undefined`, `none`, `truthy`, `falsy`, `equalto`/`==`/`eq`, `!=`/`ne`, `>`, `<`, `>=`, `<=` (also `gt`, `lt`, `ge`, `le`), `in`, `contains`, `match`/`search`/`regex`, `string`, `number`.
 
 Ansible tests: task results `success`/`succeeded`, `failed`/`failure`, `changed`, `skipped`, `unreachable` (`until: r is success`); `version(other, op)` (loose comparison as Ansible's default: `'22.04' is version('20.04', '>=')`); `mapping`, `sequence`/`iterable`, `boolean`, `integer`, `float`, `lower`, `upper`, `even`, `odd`, `divisibleby(n)`, `subset(list)`, `superset(list)`; paths on the control machine `exists`, `file`, `directory`, `link`, `abs`.
 

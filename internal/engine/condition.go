@@ -13,6 +13,9 @@ import (
 // evaluated as expressions; other text with {{ }} is rendered as a template
 // and the result read as a boolean.
 func (e *ExecutionEngine) conditionHolds(ctx context.Context, condition string, variables map[string]interface{}) (bool, error) {
+	if err := checkUnrenderedExpression(ctx, condition, variables); err != nil {
+		return false, err
+	}
 	condition = strings.TrimSpace(condition)
 	if condition == "" {
 		return true, nil
