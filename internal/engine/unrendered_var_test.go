@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/onigirazu-cfg/onigirazu/internal/modules"
 	"github.com/onigirazu-cfg/onigirazu/pkg/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -29,7 +30,7 @@ func TestUnrenderedUsed(t *testing.T) {
 }
 
 func TestUnrenderedEvaluatedKeywords(t *testing.T) {
-	for _, keyword := range []string{"when", "length", "changed_when", "failed_when", "until", "loop", "with_items", "with_lookup", "break_when", "args_filter", "environment", "delegate_to", "retries", "delay", "become", "register"} {
+	for _, keyword := range []string{"when", "length", "changed_when", "failed_when", "until", "loop", "with_items", "with_lookup", "range", "args_filter", "environment", "delegate_to", "retries", "delay", "become", "become_user", "become_method", "task_var", "ignore_errors", "register"} {
 		t.Run(keyword, func(t *testing.T) {
 			e, module := becomeExprEngine(t)
 			host := twoHosts()[0]
@@ -37,7 +38,7 @@ func TestUnrenderedEvaluatedKeywords(t *testing.T) {
 			task := &types.Task{Name: "probe", Module: "become_probe"}
 			switch keyword {
 			case "when":
-				task.When = "broken"
+				task.When = "broken + 1 > 0"
 			case "length":
 				task.When = "broken | length > 0"
 			case "changed_when":
@@ -50,11 +51,10 @@ func TestUnrenderedEvaluatedKeywords(t *testing.T) {
 				task.Loop = &types.Loop{Expr: "[broken | length]"}
 			case "with_items":
 				task.Loop = &types.Loop{Items: []interface{}{"{{ broken | length }}"}}
+			case "range":
+				task.Loop = &types.Loop{Range: "1-{{ broken | length }}"}
 			case "with_lookup":
 				task.Loop = &types.Loop{Lookup: "nested", Terms: []interface{}{"{{ [broken | length] }}"}}
-			case "break_when":
-				task.Loop = &types.Loop{Items: []interface{}{1}}
-				task.BreakWhen = "broken | length > 0"
 			case "environment":
 				task.Environment = map[string]interface{}{"VALUE": "{{ broken | length }}"}
 			case "delegate_to":
@@ -63,6 +63,15 @@ func TestUnrenderedEvaluatedKeywords(t *testing.T) {
 				task.RetriesExpr = "{{ broken | length }}"
 			case "delay":
 				task.DelayExpr = "{{ broken | length }}"
+			case "become_user":
+				task.Become, task.BecomeUser = true, "{{ broken | length }}"
+			case "become_method":
+				task.Become, task.BecomeMethod = true, "{{ broken | length }}"
+			case "task_var":
+				task.Vars = map[string]interface{}{"value": "{{ broken | length }}"}
+			case "ignore_errors":
+				task.FailedWhen = "true"
+				task.IgnoreErrorsExpr = "broken | length > 0"
 			case "become":
 				task.BecomeExpr, task.BecomeSet = "{{ broken | length > 0 }}", true
 			case "register":
@@ -83,14 +92,14 @@ func TestUnrenderedEvaluatedKeywords(t *testing.T) {
 }
 
 func TestUnrenderedSafeConditions(t *testing.T) {
-	for _, condition := range []string{"broken is defined", "broken is undefined", "broken | default('fallback')", "'broken' | length > 0"} {
+	for _, condition := range []string{"false and broken | length > 0", "true or broken | length > 0", "broken is defined", "broken is undefined", "broken | default('fallback')", "'broken' | length > 0"} {
 		t.Run(condition, func(t *testing.T) {
 			e, _ := becomeExprEngine(t)
 			host := twoHosts()[0]
 			task := &types.Task{Name: "safe", Module: "become_probe", When: condition}
 			result := &types.PlayResult{}
 			require.NoError(t, e.executeTaskOnHost(context.Background(), task, &host, map[string]interface{}{"broken": "{{ .Names }}"}, result))
-			require.Equal(t, condition == "broken is undefined", result.Hosts[0].Tasks[0].Skipped)
+			require.Equal(t, condition == "broken is defined" || condition == "false and broken | length > 0", result.Hosts[0].Tasks[0].Skipped)
 		})
 	}
 }
@@ -98,7 +107,7 @@ func TestUnrenderedSafeConditions(t *testing.T) {
 func TestUnrenderedReferenceDetection(t *testing.T) {
 	bad := map[string]unrenderedVar{"broken": {text: "{{ .Names }}", err: errors.New("render failed")}}
 	ctx := context.WithValue(context.Background(), unrenderedKey{}, bad)
-	vars := map[string]interface{}{"broken": "{{ .Names }}"}
+	vars := map[string]interface{}{}
 	for _, code := range []string{"broken", "not broken", "broken | length > 0", "broken is defined and broken", "broken | default(broken)", "[broken]", "broken.attr"} {
 		require.ErrorContains(t, checkUnrenderedExpression(ctx, code, vars), `variable "broken": render failed`, code)
 	}
@@ -133,4 +142,60 @@ func TestUnrenderedThrottle(t *testing.T) {
 	e, _ := becomeExprEngine(t)
 	_, err := e.throttleSlots(context.Background(), &types.Task{Throttle: "{{ broken | length }}"}, map[string]interface{}{"broken": "{{ .Names }}"})
 	require.ErrorContains(t, err, `variable "broken":`)
+}
+
+func TestUnrenderedDefaultArgument(t *testing.T) {
+	e, _ := becomeExprEngine(t)
+	host := twoHosts()[0]
+	e.moduleRegistry = modules.NewRegistry()
+	vars := map[string]interface{}{"broken": "{{ missing }}"}
+	result := &types.PlayResult{}
+	task := &types.Task{Name: "default", Module: "debug", Args: map[string]interface{}{"msg": "{{ broken | default('d') }}"}}
+	require.NoError(t, e.executeTaskOnHost(context.Background(), task, &host, vars, result))
+	require.Equal(t, "d", result.Hosts[0].Tasks[0].Output["msg"])
+	require.Equal(t, "{{ missing }}", vars["broken"], "the caller's map remains intact")
+}
+
+func TestBreakWhenItemLazyVars(t *testing.T) {
+	for _, stop := range []string{"{{ item == 2 }}", "{{ r is success and item == 2 }}"} {
+		t.Run(stop, func(t *testing.T) {
+			e, module := becomeExprEngine(t)
+			host := twoHosts()[0]
+			task := &types.Task{Name: "probe", Module: "become_probe", Register: "r", BreakWhen: "stop",
+				Vars: map[string]interface{}{"stop": stop}, Loop: &types.Loop{Items: []interface{}{1, 2, 3}}}
+			require.NoError(t, e.runLoopOnHost(context.Background(), task, &host, nil, &types.PlayResult{}))
+			require.Len(t, module.calls, 2)
+			result := e.getHostVar(host.Name, "r").(map[string]interface{})
+			require.Len(t, result["results"], 2)
+		})
+	}
+}
+
+func TestBreakWhenUnrenderedError(t *testing.T) {
+	e, _ := becomeExprEngine(t)
+	host := twoHosts()[0]
+	task := &types.Task{Name: "probe", Module: "become_probe", Register: "r", BreakWhen: "broken | length > 0", Loop: &types.Loop{Items: []interface{}{1}}}
+	require.NoError(t, e.runLoopOnHost(context.Background(), task, &host, map[string]interface{}{"broken": "{{ .Names }}"}, &types.PlayResult{}))
+	result := e.getHostVar(host.Name, "r").(map[string]interface{})["results"].([]interface{})[0].(map[string]interface{})
+	require.Contains(t, result["break_when_suppressed_exception"], `variable "broken":`)
+}
+
+func TestLazyContextRemovesFailedCopies(t *testing.T) {
+	e, _ := becomeExprEngine(t)
+	vars := map[string]interface{}{"broken": "{{ missing }}", "nested": map[string]interface{}{"value": "{{ missing }}"}}
+	ctx := e.lazyEvaluationContext(context.Background(), "", vars)
+	require.Empty(t, vars)
+	bad := ctx.Value(unrenderedKey{}).(map[string]unrenderedVar)
+	require.Len(t, bad, 2)
+}
+
+func TestLoopIgnoreEarlyFailure(t *testing.T) {
+	e, _ := becomeExprEngine(t)
+	host := twoHosts()[0]
+	task := &types.Task{Name: "probe", Module: "become_probe", IgnoreErrorsExpr: "ignore",
+		Vars: map[string]interface{}{"ignore": "{{ item == 1 }}"},
+		Args: map[string]interface{}{"value": "{{ missing }}"}, Loop: &types.Loop{Items: []interface{}{1}}}
+	result := &types.PlayResult{}
+	require.NoError(t, e.runLoopOnHost(context.Background(), task, &host, nil, result))
+	require.True(t, result.Hosts[0].Tasks[0].Failed)
 }

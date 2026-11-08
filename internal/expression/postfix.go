@@ -131,7 +131,7 @@ func readName(s string, pos int) (string, string, int) {
 }
 
 // bareTestArgument reads one primary and its attribute/index postfixes.
-// Boolean operators and the inline-if separator cannot start an argument.
+// Operators and inline-if keywords cannot start an argument.
 func bareTestArgument(s string, pos int) (string, int) {
 	start := pos
 	for pos < len(s) && (s[pos] == ' ' || s[pos] == '\t' || s[pos] == '\n' || s[pos] == '\r') {
@@ -147,7 +147,7 @@ func bareTestArgument(s string, pos int) (string, int) {
 			pos++
 		}
 		switch s[begin:pos] {
-		case "else", "or", "and":
+		case "else", "or", "and", "in", "is", "not", "if":
 			return "", start
 		}
 	case c >= '0' && c <= '9':

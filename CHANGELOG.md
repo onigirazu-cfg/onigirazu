@@ -30,7 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Defaults and vars of a role in `roles:` or `import_role` are visible to the rest of the play, as in Ansible (`include_role` with `public: true`); a later role could not read an earlier role's defaults
+- Defaults and vars of a role in `roles:` or `import_role` are visible to the rest of the play, as in Ansible; a later role could not read an earlier role's defaults
 - `to_json` keeps the key order of dict literals and `combine`, as Ansible does; it sorted keys, so a file written from it changed on every run against an Ansible-written one
 - Templates accept bare Jinja test arguments (`x is sameas true`); tasks fail with the variable's render error when conditions, filters or loops use a variable that could not be rendered.
 - `run_once` on `include_tasks` and `include_role` runs the include on the first host of each `serial` batch only, as in Ansible (it ran on every host); `run_once` on `import_tasks`, `import_role` and a `block` passes on to each of their tasks (it was ignored)

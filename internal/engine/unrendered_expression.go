@@ -3,7 +3,6 @@ package engine
 import (
 	"context"
 	"fmt"
-	"reflect"
 	"regexp"
 	"strings"
 )
@@ -12,8 +11,12 @@ import (
 // result conditions evaluated after the module has run.
 type unrenderedKey struct{}
 
+// vars must be a per-call copy: rendering and removing failed keys mutate it.
 func (e *ExecutionEngine) lazyEvaluationContext(ctx context.Context, host string, vars map[string]interface{}) context.Context {
 	bad := e.renderLazyVars(ctx, host, vars)
+	for name := range bad {
+		delete(vars, name)
+	}
 	if len(bad) == 0 && ctx.Value(unrenderedKey{}) == nil {
 		return ctx
 	}
@@ -27,9 +30,9 @@ func identifierStart(c byte) bool {
 	return c == '_' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
 }
 
-// checkUnrenderedExpression detects uses before filters or comparisons can
-// consume the raw template string. Quoted text, attribute names, filter/test
-// names and presence/default probes are not variable reads.
+// checkUnrenderedExpression finds the original render error after evaluation
+// fails. Quoted text, attribute/filter/test names and safe probes are ignored.
+// A present value overrides a failed variable from an earlier context.
 func checkUnrenderedExpression(ctx context.Context, code string, vars map[string]interface{}) error {
 	bad, _ := ctx.Value(unrenderedKey{}).(map[string]unrenderedVar)
 	if len(bad) == 0 {
@@ -58,7 +61,8 @@ func checkUnrenderedExpression(ctx context.Context, code string, vars map[string
 				i++
 			}
 			name := code[start:i]
-			if u, ok := bad[name]; ok && previous != "." && previous != "|" && previous != "is" && reflect.DeepEqual(vars[name], u.text) && !safeUnrenderedUse.MatchString(code[i:]) {
+			_, present := vars[name]
+			if u, ok := bad[name]; ok && !present && previous != "." && previous != "|" && previous != "is" && !safeUnrenderedUse.MatchString(code[i:]) {
 				return fmt.Errorf("variable %q: %w", name, u.err)
 			}
 			previous = name
@@ -100,4 +104,34 @@ func checkUnrenderedTemplates(ctx context.Context, value interface{}, vars map[s
 		}
 	}
 	return nil
+}
+
+// Enrich only failed evaluations: undefined/default tests and short-circuiting
+// must be handled by the evaluator, without inspecting unevaluated branches.
+func enrichExpressionError(ctx context.Context, code string, vars map[string]interface{}, err error) error {
+	if err != nil {
+		if renderErr := checkUnrenderedExpression(ctx, code, vars); renderErr != nil {
+			return renderErr
+		}
+	}
+	return err
+}
+
+func enrichTemplateError(ctx context.Context, value interface{}, vars map[string]interface{}, err error) error {
+	if err != nil {
+		if renderErr := checkUnrenderedTemplates(ctx, value, vars); renderErr != nil {
+			return renderErr
+		}
+	}
+	return err
+}
+
+func (e *ExecutionEngine) renderEvaluation(ctx context.Context, text string, vars map[string]interface{}) (string, error) {
+	value, err := e.templateEngine.Render(ctx, text, vars)
+	return value, enrichTemplateError(ctx, text, vars, err)
+}
+
+func (e *ExecutionEngine) renderEvaluationArgs(ctx context.Context, args map[string]interface{}, vars map[string]interface{}) (map[string]interface{}, error) {
+	value, err := e.templateEngine.RenderTaskArgs(ctx, args, vars)
+	return value, enrichTemplateError(ctx, args, vars, err)
 }

@@ -129,7 +129,7 @@ func TestIncludedRoleVisibility(t *testing.T) {
 		module, option string
 		public         bool
 	}{
-		{"include_role", "", false}, {"include_role", ", public: true", true}, {"import_role", "", true}, {"import_role", ", public: false", false},
+		{"include_role", "", false}, {"include_role", ", public: true", false}, {"import_role", "", true}, {"import_role", ", public: false", false},
 	} {
 		t.Run(tc.module+tc.option, func(t *testing.T) {
 			e, _ := becomeExprEngine(t)
@@ -165,6 +165,55 @@ func TestIncludedRoleVisibility(t *testing.T) {
 			}
 			require.Equal(t, before, tasks[0].Output["msg"])
 			require.Equal(t, after, tasks[2].Output["msg"])
+		})
+	}
+}
+
+func TestBlockRoleVisibilityAcrossHosts(t *testing.T) {
+	for _, strategy := range []string{"linear", "free"} {
+		t.Run(strategy, func(t *testing.T) {
+			e, _ := becomeExprEngine(t)
+			e.moduleRegistry = modules.NewRegistry()
+			dir := t.TempDir()
+			files := map[string]string{
+				"roles/private/defaults/main.yml": "private_default: private default\n",
+				"roles/private/vars/main.yml":     "private_var: private var\n",
+				"roles/private/tasks/main.yml":    "- debug: {msg: '{{ private_default }} {{ private_var }}'}\n",
+				"roles/public/defaults/main.yml":  "public_default: public default\n",
+				"roles/public/vars/main.yml":      "public_var: public var\n",
+				"roles/public/tasks/main.yml":     "- debug: {msg: '{{ public_default }} {{ public_var }}'}\n",
+				"play.yml": fmt.Sprintf(`- hosts: all
+  gather_facts: false
+  strategy: %s
+  pre_tasks:
+    - debug: {msg: '{{ public_default }} {{ public_var }}'}
+  tasks:
+    - block:
+        - include_role: {name: private, public: true}
+        - import_role: {name: public}
+        - debug: {msg: '{{ private_default | default("hidden") }} {{ private_var | default("hidden") }} {{ public_default }} {{ public_var }}'}
+`, strategy),
+			}
+			for path, content := range files {
+				path = filepath.Join(dir, path)
+				require.NoError(t, os.MkdirAll(filepath.Dir(path), 0755))
+				require.NoError(t, os.WriteFile(path, []byte(content), 0600))
+			}
+			p := parser.NewEnhancedParser(e.templateEngine, e.logger)
+			pb, err := p.ParsePlaybook(context.Background(), filepath.Join(dir, "play.yml"))
+			require.NoError(t, err)
+			result, err := e.executePlayOn(context.Background(), &pb.Plays[0], twoHosts())
+			require.NoError(t, err)
+			require.Len(t, result.Hosts, 2)
+			for _, host := range result.Hosts {
+				require.Len(t, host.Tasks, 4)
+				for _, task := range host.Tasks {
+					require.False(t, task.Failed, task.Error)
+				}
+				require.Equal(t, "public default public var", host.Tasks[0].Output["msg"])
+				require.Equal(t, "private default private var", host.Tasks[1].Output["msg"])
+				require.Equal(t, "hidden hidden public default public var", host.Tasks[3].Output["msg"])
+			}
 		})
 	}
 }

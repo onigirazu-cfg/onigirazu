@@ -28,3 +28,25 @@ func TestBareTestArguments(t *testing.T) {
 		})
 	}
 }
+
+func TestBareTestArgumentBoundaries(t *testing.T) {
+	// These expressions also succeed on origin/main, before bare arguments.
+	for _, tc := range []struct {
+		code string
+		want bool
+	}{
+		{`x is string in [true]`, true},
+		{`x is string is boolean`, true},
+		{`x is string not in [false]`, true},
+		{`x is string if true else false`, true},
+		{`x is string if false else false`, false},
+		{`x is string and true`, true},
+		{`x is string or false`, true},
+	} {
+		t.Run(tc.code, func(t *testing.T) {
+			got, err := Eval(tc.code, map[string]interface{}{"x": "s"})
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got)
+		})
+	}
+}

@@ -13,17 +13,15 @@ import (
 // evaluated as expressions; other text with {{ }} is rendered as a template
 // and the result read as a boolean.
 func (e *ExecutionEngine) conditionHolds(ctx context.Context, condition string, variables map[string]interface{}) (bool, error) {
-	if err := checkUnrenderedExpression(ctx, condition, variables); err != nil {
-		return false, err
-	}
 	condition = strings.TrimSpace(condition)
 	if condition == "" {
 		return true, nil
 	}
 	if _, whole := expression.Unwrap(condition); whole || !strings.Contains(condition, "{{") {
-		return expression.Condition(condition, e.expressionVariables(variables))
+		holds, err := expression.Condition(condition, e.expressionVariables(variables))
+		return holds, enrichExpressionError(ctx, condition, variables, err)
 	}
-	rendered, err := e.templateEngine.Render(ctx, condition, variables)
+	rendered, err := e.renderEvaluation(ctx, condition, variables)
 	if err != nil {
 		return false, fmt.Errorf("condition %q: %w", condition, err)
 	}
