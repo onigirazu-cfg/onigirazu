@@ -199,3 +199,17 @@ func TestLoopIgnoreEarlyFailure(t *testing.T) {
 	require.NoError(t, e.runLoopOnHost(context.Background(), task, &host, nil, result))
 	require.True(t, result.Hosts[0].Tasks[0].Failed)
 }
+
+// registered results are data: a loop over them must not render the braces
+// a command printed, as the item carries them again
+func TestLoopItemsAreData(t *testing.T) {
+	e, module := becomeExprEngine(t)
+	host := twoHosts()[0]
+	e.setHostVar(host.Name, "braces", map[string]interface{}{
+		"results": []interface{}{map[string]interface{}{"stdout": "{{ .Id }}"}},
+	})
+	task := &types.Task{Name: "copy", Module: "become_probe", When: "item.stdout | length > 0",
+		Args: map[string]interface{}{"value": "{{ item.stdout }}"}, Loop: &types.Loop{Expr: "braces.results"}}
+	require.NoError(t, e.executeTask(context.Background(), task, []types.Host{host}, map[string]interface{}{}, &types.PlayResult{}))
+	require.Len(t, module.calls, 1)
+}

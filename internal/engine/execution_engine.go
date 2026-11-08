@@ -1893,6 +1893,11 @@ func (e *ExecutionEngine) runLoopOnHost(ctx context.Context, task *types.Task, h
 			"ansible_loop":     extendedLoopVars(items, i),
 			"ansible_loop_var": itemVar,
 		})
+		// the items were rendered once by loopItems: the loop variables are
+		// data, as registered results are, and never rendered again
+		ctx := context.WithValue(ctx, loopDataKey{}, map[string]bool{
+			itemVar: true, indexVar: true, "loop": true, "ansible_loop": true, "ansible_loop_var": true,
+		})
 		// Preserve per-item ignore_errors for failures before the module runs.
 		if task.IgnoreErrorsExpr != "" {
 			ignoreVars := e.mergeVariables(e.hostVariables(host, loopVars), task.Vars, e.extraVars)
@@ -3172,6 +3177,9 @@ func mergeMaps(a, b map[string]interface{}) map[string]interface{} {
 	return out
 }
 
+// loopDataKey carries the names of the current loop's variables
+type loopDataKey struct{}
+
 // notLazy are the variables renderLazyVars leaves alone: other hosts'
 // variables and the gathered facts
 var notLazy = map[string]bool{"hostvars": true, "groups": true, "ansible_facts": true, "onigirazu_facts": true}
@@ -3190,12 +3198,13 @@ func (e *ExecutionEngine) renderLazyVars(ctx context.Context, host string, vars 
 		runtime[key] = true
 	}
 	e.mutex.RUnlock()
+	loopData, _ := ctx.Value(loopDataKey{}).(map[string]bool)
 	var failed map[string]unrenderedVar
 	for pass := 0; pass < 3; pass++ {
 		changed := false
 		failed = nil
 		for key, value := range vars {
-			if _, fromCLI := e.extraVars[key]; fromCLI || runtime[key] || notLazy[key] || !hasTemplate(value) {
+			if _, fromCLI := e.extraVars[key]; fromCLI || runtime[key] || notLazy[key] || loopData[key] || !hasTemplate(value) {
 				continue
 			}
 			// through RenderTaskArgs: "{{ a_list }}" stays a list
