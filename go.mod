@@ -8,7 +8,7 @@ require (
 	github.com/fatih/color v1.19.0
 	github.com/google/uuid v1.6.0
 	github.com/hashicorp/vault/api v1.23.0
-	github.com/mattn/go-sqlite3 v1.14.52
+	github.com/mattn/go-sqlite3 v1.14.53
 	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/pkg/sftp v1.13.12
 	github.com/prometheus/client_golang v1.25.0
