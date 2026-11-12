@@ -40,10 +40,29 @@ sudo mv onigirazu /usr/local/bin/
 
 ### Verify the download
 
+`checksums.txt` is signed with [cosign](https://docs.sigstore.dev/cosign/system_config/installation/)
+by the release workflow (keyless, the signature is in the public Sigstore log). Check the signature
+first, then the archive:
+
 ```bash
 curl -LO https://github.com/onigirazu-cfg/onigirazu/releases/latest/download/checksums.txt
+curl -LO https://github.com/onigirazu-cfg/onigirazu/releases/latest/download/checksums.txt.sigstore.json
+cosign verify-blob checksums.txt --bundle checksums.txt.sigstore.json \
+  --certificate-identity https://github.com/onigirazu-cfg/onigirazu/.github/workflows/release.yml@refs/heads/main \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
 sha256sum --ignore-missing -c checksums.txt
 ```
+
+The container image is signed the same way:
+
+```bash
+cosign verify ghcr.io/onigirazu-cfg/onigirazu:latest \
+  --certificate-identity https://github.com/onigirazu-cfg/onigirazu/.github/workflows/release.yml@refs/heads/main \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+Every archive has an SPDX SBOM next to it (`<archive>.sbom.json`), and the image carries an SBOM attestation.
+Releases before this change have checksums only.
 
 ## Linux Packages
 

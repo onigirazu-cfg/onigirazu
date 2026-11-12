@@ -162,7 +162,10 @@ jobs:
         cache-dependency-path: go.sum
 
     - name: Install cosign
-      uses: sigstore/cosign-installer@v3
+      uses: sigstore/cosign-installer@v4.1.3
+
+    - name: Install syft
+      uses: anchore/sbom-action/download-syft@v0
 
     - name: Run GoReleaser
       uses: goreleaser/goreleaser-action@v7
@@ -173,8 +176,6 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
-        COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
         FURY_TOKEN: ${{ secrets.FURY_TOKEN }}
 
   docker:
@@ -183,8 +184,10 @@ jobs:
     if: always() && needs.validate.result == 'success' && needs.release.result == 'success'
 
     steps:
-    - name: Checkout
+    - name: Checkout the released tag
       uses: actions/checkout@v7
+      with:
+        ref: refs/tags/${{ needs.validate.outputs.tag }}
 
     - name: Set up QEMU
       uses: docker/setup-qemu-action@v4
@@ -219,9 +222,14 @@ jobs:
           type=semver,pattern={{major}},value=${{ steps.version.outputs.version }}
           type=raw,value=latest
 
+    - name: Install cosign
+      uses: sigstore/cosign-installer@v4.1.3
+
     - name: Build and push Docker image
+      id: build
       uses: docker/build-push-action@v7
       with:
+        sbom: true
         context: .
         platforms: linux/amd64,linux/arm64
         push: true
@@ -233,6 +241,11 @@ jobs:
           VERSION=${{ needs.validate.outputs.tag }}
           COMMIT=${{ github.sha }}
           DATE=${{ github.event.head_commit.timestamp }}
+
+    - name: Sign the image
+      env:
+        DIGEST: ${{ steps.build.outputs.digest }}
+      run: cosign sign --yes "ghcr.io/onigirazu-cfg/onigirazu@${DIGEST}"
 
     - name: Make package public
       run: |
